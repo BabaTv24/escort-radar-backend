@@ -1,0 +1,17 @@
+{
+  "name": "escort-radar-fun",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "Front",
+    "Back"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w Front",
+    "dev:frontend": "npm run dev -w Front",
+    "dev:backend": "npm run dev -w Back",
+    "build": "npm run build -w Front && npm run build -w Back",
+    "start": "npm run start -w Back",
+    "typecheck": "npm run typecheck -w Front && npm run typecheck -w Back"
+  }
+}
