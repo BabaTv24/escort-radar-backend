@@ -49,6 +49,14 @@ export function validateProfileInput(body: Record<string, unknown>) {
       languages: Array.isArray(body.languages)
         ? body.languages.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
         : [],
+      age: optionalNumber(body.age, 18, 99),
+      height: optionalNumber(body.height, 120, 230),
+      orientation: optionalText(body.orientation, 60),
+      audience: optionalArray(body.audience, 6),
+      visit_types: optionalArray(body.visit_types, 8),
+      service_tags: optionalArray(body.service_tags, 16),
+      payment_methods: optionalArray(body.payment_methods, 8),
+      availability_note: optionalText(body.availability_note, 500),
       available_now: Boolean(body.available_now),
       mobile_service: Boolean(body.mobile_service),
       private_studio: Boolean(body.private_studio)
@@ -59,4 +67,16 @@ export function validateProfileInput(body: Record<string, unknown>) {
 export function optionalText(value: unknown, max: number) {
   const text = String(value || '').trim();
   return text ? text.slice(0, max) : null;
+}
+
+function optionalArray(value: unknown, max: number) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter(Boolean).slice(0, max)
+    : [];
+}
+
+function optionalNumber(value: unknown, min: number, max: number) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.min(Math.max(Math.round(number), min), max);
 }

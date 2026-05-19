@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BadgeCheck, MapPin, Radio, Smartphone, LockKeyhole } from 'lucide-react';
+import { BadgeCheck, HeartHandshake, Hotel, Languages, MapPin, Radio, Smartphone, LockKeyhole } from 'lucide-react';
 import type { Profile } from '../types';
 
 export function ProfileCard({ profile }: { profile: Profile }) {
@@ -13,13 +13,17 @@ export function ProfileCard({ profile }: { profile: Profile }) {
       </div>
       <div className="card-body">
         <div>
-          <h3>{profile.display_name}</h3>
+          <h3>{profile.display_name}{profile.age ? <span>{profile.age}</span> : null}</h3>
           <p><MapPin size={15} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}</p>
         </div>
         <div className="badges">
+          {profile.available_now && <span>Available now</span>}
           {profile.verified && <span><BadgeCheck size={14} /> Verified</span>}
           {profile.mobile_service && <span><Smartphone size={14} /> Mobile</span>}
           {profile.private_studio && <span><LockKeyhole size={14} /> Private</span>}
+          {profile.audience?.includes('couples') && <span><HeartHandshake size={14} /> Couples welcome</span>}
+          {profile.visit_types?.includes('hotel') && <span><Hotel size={14} /> Hotel visit</span>}
+          {profile.languages?.length ? <span><Languages size={14} /> {profile.languages.slice(0, 3).join('/')}</span> : null}
           {profile.category && <span><Radio size={14} /> {profile.category}</span>}
         </div>
         <p className="muted line-clamp">{profile.description || 'Private premium profile with details available on profile page.'}</p>
