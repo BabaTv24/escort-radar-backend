@@ -24,6 +24,12 @@ const serviceTagOptions = [
   ['private-meeting', 'discreet']
 ];
 const paymentOptions = [['cash'], ['card'], ['cash', 'card'], ['bank-transfer'], ['cash', 'bank-transfer']];
+const bodyTypes = ['slim', 'athletic', 'curvy', 'classic', 'plus'];
+const hairColors = ['black', 'brown', 'blonde', 'red', 'dark-blonde'];
+const origins = ['local', 'european', 'latin', 'asian', 'mixed', 'international'];
+const experienceTypes = ['newcomer', 'independent', 'premium', 'vip', 'studio'];
+const bodyFeatures = [['tattoos'], ['natural look'], ['piercing'], ['elegant style'], ['fitness style'], ['classic style']];
+const serviceNames = ['Dinner date', 'Social time', 'Hotel visit', 'Outcall', 'Private meeting', 'Events', 'Late night', 'Wellness'];
 const palettes = [
   ['#1a1015', '#f7d46b', '#08f7b8'],
   ['#120f1c', '#c9a34a', '#ff4fb8'],
@@ -51,6 +57,15 @@ function createCityProfiles(city: keyof typeof areas, count: number, offset: num
     const area = areas[city][index % areas[city].length];
     const age = 22 + (seed % 14);
     const languages = ['EN', seed % 2 === 0 ? 'DE' : 'PL', seed % 5 === 0 ? 'ES' : ''].filter(Boolean);
+    const currency = 'EUR';
+    const basePrice = 120 + (seed % 8) * 20;
+    const service_menu = serviceNames.map((serviceName, serviceIndex) => ({
+      name: serviceName,
+      enabled: serviceIndex < 5 || (seed + serviceIndex) % 3 === 0,
+      included: serviceIndex < 2,
+      extra_price: serviceIndex < 2 ? null : 30 + ((seed + serviceIndex) % 5) * 20,
+      note: serviceIndex % 3 === 0 ? 'Demo option, details verified before publication.' : null
+    }));
 
     return {
       id: `demo-${city}-${index + 1}`,
@@ -63,12 +78,24 @@ function createCityProfiles(city: keyof typeof areas, count: number, offset: num
       description: 'Fictional demo profile for layout preview. Real advertiser content appears only after verification and moderation.',
       languages,
       height: 158 + (seed % 24),
+      body_type: bodyTypes[seed % bodyTypes.length],
+      body_features: bodyFeatures[seed % bodyFeatures.length],
+      hair_color: hairColors[seed % hairColors.length],
+      origin: origins[seed % origins.length],
+      experience_type: experienceTypes[seed % experienceTypes.length],
       orientation: orientations[seed % orientations.length],
       audience: audienceOptions[seed % audienceOptions.length],
       visit_types: visitTypeOptions[seed % visitTypeOptions.length],
       service_tags: serviceTagOptions[seed % serviceTagOptions.length],
       payment_methods: paymentOptions[seed % paymentOptions.length],
       availability_note: index % 2 === 0 ? 'Evening availability, schedule confirmed after moderation.' : 'Flexible schedule placeholder for verified advertisers.',
+      price_30min: basePrice,
+      price_1h: basePrice + 80,
+      price_2h: basePrice * 2 + 120,
+      price_night: basePrice * 5,
+      outcall_fee: seed % 2 === 0 ? 40 : 70,
+      currency,
+      service_menu,
       available_now: index % 3 !== 1,
       mobile_service: index % 2 === 0,
       private_studio: index % 4 !== 0,

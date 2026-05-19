@@ -15,6 +15,20 @@ export const serviceTagOptions = [
   'discreet'
 ];
 export const paymentMethodOptions = ['cash', 'card', 'bank-transfer'];
+export const bodyTypeOptions = ['slim', 'athletic', 'curvy', 'classic', 'plus'];
+export const hairColorOptions = ['black', 'brown', 'blonde', 'red', 'dark-blonde', 'other'];
+export const originOptions = ['local', 'european', 'latin', 'asian', 'mixed', 'international'];
+export const experienceTypeOptions = ['newcomer', 'independent', 'premium', 'vip', 'studio'];
+export const defaultServiceMenuNames = [
+  'Dinner date',
+  'Social time',
+  'Hotel visit',
+  'Outcall',
+  'Private meeting',
+  'Events',
+  'Late night',
+  'Wellness'
+];
 
 export function toggleArrayValue(values: string[] = [], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];

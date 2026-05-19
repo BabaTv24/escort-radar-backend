@@ -68,8 +68,16 @@ export function ProfilePage() {
       <section className="profile-info-grid">
         <InfoPanel title="About" icon={<ShieldCheck size={18} />}>
           <p>{profile.age ? `${profile.age} years` : 'Age verified before publication'}{profile.height ? ` / ${profile.height} cm` : ''}</p>
+          <p>{profile.body_type ? `Body type: ${labelize(profile.body_type)}` : 'Body type pending'}</p>
+          <p>{profile.hair_color ? `Hair: ${labelize(profile.hair_color)}` : 'Hair details pending'}</p>
+          <p>{profile.origin ? `Origin: ${labelize(profile.origin)}` : 'Origin pending'}</p>
+          <p>{profile.experience_type ? `Experience: ${labelize(profile.experience_type)}` : 'Experience type pending'}</p>
+          <TagList values={profile.body_features || []} raw />
           <p>{profile.orientation ? labelize(profile.orientation) : 'Orientation not specified'}</p>
           <p>{profile.audience?.length ? `Audience: ${profile.audience.map(labelize).join(', ')}` : 'Audience details pending'}</p>
+        </InfoPanel>
+        <InfoPanel title="Pricing" icon={<LockKeyhole size={18} />}>
+          <PriceList profile={profile} />
         </InfoPanel>
         <InfoPanel title="Availability" icon={<CalendarDays size={18} />}>
           <p>{profile.available_now ? 'Available now' : 'Availability offline'}</p>
@@ -88,6 +96,14 @@ export function ProfilePage() {
         <InfoPanel title="Safety notice" icon={<AlertTriangle size={18} />}>
           <p>All listings must be 18+, consensual, verified, and compliant with local law.</p>
         </InfoPanel>
+      </section>
+
+      <section className="form-panel service-menu-panel">
+        <h2><Tags size={18} /> Service menu</h2>
+        <div className="service-menu-columns">
+          <ServiceMenuList title="Included" services={(profile.service_menu || []).filter((service) => service.enabled && service.included)} currency={profile.currency || 'EUR'} />
+          <ServiceMenuList title="Extra services" services={(profile.service_menu || []).filter((service) => service.enabled && !service.included)} currency={profile.currency || 'EUR'} />
+        </div>
       </section>
 
       <section className="form-panel">
@@ -121,4 +137,38 @@ function InfoPanel({ title, icon, children }: { title: string; icon: ReactNode; 
 function TagList({ values, raw = false }: { values: string[]; raw?: boolean }) {
   if (!values.length) return <p>Details pending.</p>;
   return <div className="tag-list">{values.map((value) => <span key={value}>{raw ? value : labelize(value)}</span>)}</div>;
+}
+
+function PriceList({ profile }: { profile: Profile }) {
+  const currency = profile.currency || 'EUR';
+  const rows = [
+    ['30 min', profile.price_30min],
+    ['1 hour', profile.price_1h],
+    ['2 hours', profile.price_2h],
+    ['Night', profile.price_night],
+    ['Outcall fee', profile.outcall_fee]
+  ];
+
+  return (
+    <div className="price-list">
+      {rows.map(([label, value]) => value ? <div key={label}><span>{label}</span><strong>{value} {currency}</strong></div> : null)}
+    </div>
+  );
+}
+
+function ServiceMenuList({ title, services, currency }: { title: string; services: NonNullable<Profile['service_menu']>; currency: string }) {
+  return (
+    <div className="service-menu-list">
+      <h3>{title}</h3>
+      {services.length ? services.map((service) => (
+        <div className="service-menu-item" key={service.name}>
+          <div>
+            <strong>{service.name}</strong>
+            {service.note && <p>{service.note}</p>}
+          </div>
+          <span>{service.included ? 'Included' : `${service.extra_price || 0} ${currency}`}</span>
+        </div>
+      )) : <p>Details pending.</p>}
+    </div>
+  );
 }

@@ -26,6 +26,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
           {profile.languages?.length ? <span><Languages size={14} /> {profile.languages.slice(0, 3).join('/')}</span> : null}
           {profile.category && <span><Radio size={14} /> {profile.category}</span>}
         </div>
+        {profile.price_1h && <p className="price-line">1h from {profile.price_1h} {profile.currency || 'EUR'}</p>}
         <p className="muted line-clamp">{profile.description || 'Private premium profile with details available on profile page.'}</p>
         <Link to={`/profile/${profile.id}`} className="button full">View profile</Link>
       </div>

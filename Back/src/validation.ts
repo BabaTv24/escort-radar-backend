@@ -51,12 +51,24 @@ export function validateProfileInput(body: Record<string, unknown>) {
         : [],
       age: optionalNumber(body.age, 18, 99),
       height: optionalNumber(body.height, 120, 230),
+      body_type: optionalText(body.body_type, 80),
+      body_features: optionalArray(body.body_features, 12),
+      hair_color: optionalText(body.hair_color, 80),
+      origin: optionalText(body.origin, 80),
+      experience_type: optionalText(body.experience_type, 80),
       orientation: optionalText(body.orientation, 60),
       audience: optionalArray(body.audience, 6),
       visit_types: optionalArray(body.visit_types, 8),
       service_tags: optionalArray(body.service_tags, 16),
       payment_methods: optionalArray(body.payment_methods, 8),
       availability_note: optionalText(body.availability_note, 500),
+      price_30min: optionalMoney(body.price_30min),
+      price_1h: optionalMoney(body.price_1h),
+      price_2h: optionalMoney(body.price_2h),
+      price_night: optionalMoney(body.price_night),
+      outcall_fee: optionalMoney(body.outcall_fee),
+      currency: optionalText(body.currency, 8) || 'EUR',
+      service_menu: optionalServiceMenu(body.service_menu),
       available_now: Boolean(body.available_now),
       mobile_service: Boolean(body.mobile_service),
       private_studio: Boolean(body.private_studio)
@@ -79,4 +91,24 @@ function optionalNumber(value: unknown, min: number, max: number) {
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
   return Math.min(Math.max(Math.round(number), min), max);
+}
+
+function optionalMoney(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return null;
+  return Math.round(number * 100) / 100;
+}
+
+function optionalServiceMenu(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 40).map((item) => {
+    const service = item as Record<string, unknown>;
+    return {
+      name: String(service.name || '').trim().slice(0, 120),
+      enabled: Boolean(service.enabled),
+      included: Boolean(service.included),
+      extra_price: optionalMoney(service.extra_price),
+      note: optionalText(service.note, 300)
+    };
+  }).filter((service) => service.name);
 }

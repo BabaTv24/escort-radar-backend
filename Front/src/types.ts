@@ -6,12 +6,25 @@ export type ProfileImage = {
   is_blurred: boolean;
 };
 
+export type ServiceMenuItem = {
+  name: string;
+  enabled: boolean;
+  included: boolean;
+  extra_price?: number | null;
+  note?: string | null;
+};
+
 export type Profile = {
   id: string;
   user_id?: string;
   display_name: string;
   age?: number;
   height?: number;
+  body_type?: string;
+  body_features?: string[];
+  hair_color?: string;
+  origin?: string;
+  experience_type?: string;
   slug: string;
   city: string;
   area?: string | null;
@@ -24,6 +37,13 @@ export type Profile = {
   service_tags?: string[];
   payment_methods?: string[];
   availability_note?: string;
+  price_30min?: number | null;
+  price_1h?: number | null;
+  price_2h?: number | null;
+  price_night?: number | null;
+  outcall_fee?: number | null;
+  currency?: string;
+  service_menu?: ServiceMenuItem[];
   available_now: boolean;
   mobile_service: boolean;
   private_studio: boolean;

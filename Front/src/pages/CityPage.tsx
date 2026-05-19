@@ -9,9 +9,13 @@ import { cities } from '../data/cities';
 import { getDemoProfiles } from '../data/demoProfiles';
 import {
   audienceOptions,
+  bodyTypeOptions,
   categoryOptions,
+  defaultServiceMenuNames,
+  hairColorOptions,
   labelize,
   orientationOptions,
+  originOptions,
   paymentMethodOptions,
   serviceTagOptions,
   toggleArrayValue,
@@ -26,15 +30,20 @@ type SearchFilters = {
   mobile_service: boolean;
   private_studio: boolean;
   verified: boolean;
+  body_type: string;
+  hair_color: string;
+  origin: string;
   age_from: string;
   age_to: string;
   height_from: string;
   height_to: string;
   languages: string;
+  price_max: string;
   orientation: string;
   audience: string[];
   visit_types: string[];
   service_tags: string[];
+  services: string[];
   payment_methods: string[];
 };
 
@@ -47,15 +56,20 @@ function defaultFilters(city: string): SearchFilters {
     mobile_service: false,
     private_studio: false,
     verified: false,
+    body_type: '',
+    hair_color: '',
+    origin: '',
     age_from: '',
     age_to: '',
     height_from: '',
     height_to: '',
     languages: '',
+    price_max: '',
     orientation: '',
     audience: [],
     visit_types: [],
     service_tags: [],
+    services: [],
     payment_methods: []
   };
 }
@@ -160,6 +174,22 @@ export function CityPage() {
           </div>
           <MultiSelect title="Audience" values={draftFilters.audience} options={audienceOptions} onToggle={(value) => updateFilter('audience', toggleArrayValue(draftFilters.audience, value))} />
           <MultiSelect title="Visit type" values={draftFilters.visit_types} options={visitTypeOptions} onToggle={(value) => updateFilter('visit_types', toggleArrayValue(draftFilters.visit_types, value))} />
+          <div className="range-grid">
+            <select value={draftFilters.body_type} onChange={(event) => updateFilter('body_type', event.target.value)}>
+              <option value="">Any body type</option>
+              {bodyTypeOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+            </select>
+            <select value={draftFilters.hair_color} onChange={(event) => updateFilter('hair_color', event.target.value)}>
+              <option value="">Any hair color</option>
+              {hairColorOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+            </select>
+            <select value={draftFilters.origin} onChange={(event) => updateFilter('origin', event.target.value)}>
+              <option value="">Any origin</option>
+              {originOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+            </select>
+            <input type="number" placeholder="Max 1h price" value={draftFilters.price_max} onChange={(event) => updateFilter('price_max', event.target.value)} />
+          </div>
+          <MultiSelect title="Services" values={draftFilters.services} options={defaultServiceMenuNames} onToggle={(value) => updateFilter('services', toggleArrayValue(draftFilters.services, value))} />
           <MultiSelect title="Services tags" values={draftFilters.service_tags} options={serviceTagOptions} onToggle={(value) => updateFilter('service_tags', toggleArrayValue(draftFilters.service_tags, value))} />
           <MultiSelect title="Payment methods" values={draftFilters.payment_methods} options={paymentMethodOptions} onToggle={(value) => updateFilter('payment_methods', toggleArrayValue(draftFilters.payment_methods, value))} />
         </div>
@@ -206,6 +236,7 @@ function applyFilters(profiles: Profile[], filters: SearchFilters) {
   const toAge = Number(filters.age_to) || 999;
   const fromHeight = Number(filters.height_from) || 0;
   const toHeight = Number(filters.height_to) || 999;
+  const priceMax = Number(filters.price_max) || 0;
 
   return profiles.filter((profile) => {
     if (filters.city && profile.city !== filters.city) return false;
@@ -215,12 +246,17 @@ function applyFilters(profiles: Profile[], filters: SearchFilters) {
     if (filters.mobile_service && !profile.mobile_service) return false;
     if (filters.private_studio && !profile.private_studio) return false;
     if (filters.verified && !profile.verified) return false;
+    if (filters.body_type && profile.body_type !== filters.body_type) return false;
+    if (filters.hair_color && profile.hair_color !== filters.hair_color) return false;
+    if (filters.origin && profile.origin !== filters.origin) return false;
     if (profile.age && (profile.age < fromAge || profile.age > toAge)) return false;
     if (profile.height && (profile.height < fromHeight || profile.height > toHeight)) return false;
+    if (priceMax && profile.price_1h && profile.price_1h > priceMax) return false;
     if (languageTokens.length && !languageTokens.some((token) => profile.languages.some((language) => language.toLowerCase().includes(token)))) return false;
     if (filters.orientation && profile.orientation !== filters.orientation) return false;
     if (filters.audience.length && !filters.audience.some((item) => profile.audience?.includes(item))) return false;
     if (filters.visit_types.length && !filters.visit_types.some((item) => profile.visit_types?.includes(item))) return false;
+    if (filters.services.length && !filters.services.some((item) => profile.service_menu?.some((service) => service.enabled && service.name === item))) return false;
     if (filters.service_tags.length && !filters.service_tags.some((item) => profile.service_tags?.includes(item))) return false;
     if (filters.payment_methods.length && !filters.payment_methods.some((item) => profile.payment_methods?.includes(item))) return false;
     return true;
