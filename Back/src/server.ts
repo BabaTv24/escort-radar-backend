@@ -7,6 +7,7 @@ import { uploadsRouter } from './routes/uploads.js';
 import { reportsRouter } from './routes/reports.js';
 import { adminRouter } from './routes/admin.js';
 import { paymentsRouter } from './routes/payments.js';
+import { bookingRequestsRouter } from './routes/bookingRequests.js';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use('/api/uploads', uploadsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/payments', paymentsRouter);
+app.use('/api/booking-requests', bookingRequestsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });

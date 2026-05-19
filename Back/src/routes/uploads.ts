@@ -18,9 +18,20 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
   if (!profileId) return res.status(400).json({ error: 'profile_id is required' });
   if (!req.file) return res.status(400).json({ error: 'image file is required' });
 
-  const { data: profile } = await supabaseAdmin.from('profiles').select('user_id').eq('id', profileId).single();
+  const { data: profile } = await supabaseAdmin.from('profiles').select('user_id, max_photos').eq('id', profileId).single();
   if (!profile) return res.status(404).json({ error: 'Profile not found' });
   if (profile.user_id !== req.user!.id) return res.status(403).json({ error: 'Not your profile' });
+
+  const maxPhotos = Number(profile.max_photos || 6);
+  const { count, error: countError } = await supabaseAdmin
+    .from('profile_images')
+    .select('id', { count: 'exact', head: true })
+    .eq('profile_id', profileId);
+
+  if (countError) return res.status(400).json({ error: countError.message });
+  if ((count || 0) >= maxPhotos) {
+    return res.status(400).json({ error: `Photo limit reached. Premium listings include up to ${maxPhotos} photos.` });
+  }
 
   const processed = await sharp(req.file.buffer)
     .rotate()

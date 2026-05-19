@@ -1,21 +1,44 @@
 import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { BadgeCheck, Building2, EyeOff, Map, RadioTower, Smartphone } from 'lucide-react';
+import { BadgeCheck, Building2, EyeOff, Map, RadioTower, Smartphone, PlusCircle } from 'lucide-react';
 import { cities } from '../data/cities';
+import { ProfileCard } from '../components/ProfileCard';
+import { getDemoProfiles } from '../data/demoProfiles';
+import { useI18n } from '../i18n';
 
 export function HomePage() {
+  const featured = getDemoProfiles('berlin').slice(0, 8);
+  const { t } = useI18n();
+
   return (
     <div className="page">
       <section className="hero">
         <div className="radar-ring" />
+        <div className="hero-strip">
+          {featured.slice(0, 4).map((profile) => (
+            <img key={profile.id} src={profile.profile_images?.[0]?.public_url} alt="" />
+          ))}
+        </div>
         <div className="hero-content">
-          <p className="eyebrow">18+ verified nightlife marketplace</p>
+          <p className="eyebrow">{t('home.heroEyebrow')}</p>
           <h1>Escort Radar</h1>
-          <p className="tagline">Realtime Private Nightlife Discovery</p>
+          <p className="tagline">{t('home.tagline')}</p>
           <div className="hero-actions">
-            <Link to="/dashboard" className="button primary">Create Profile</Link>
-            <Link to="/city/berlin" className="button">Explore Berlin</Link>
+            <Link to="/dashboard" className="button primary"><PlusCircle size={18} /> {t('home.create')}</Link>
+            <Link to="/city/berlin" className="button">{t('home.explore')}</Link>
           </div>
+          <p className="demo-note">{t('home.demo')}</p>
+        </div>
+      </section>
+
+      <section className="market-section">
+        <div className="section-head compact">
+          <p className="eyebrow">Berlin preview</p>
+          <h2>{t('home.available')}</h2>
+          <Link to="/city/berlin" className="text-link">View all Berlin</Link>
+        </div>
+        <div className="cards-grid marketplace-grid">
+          {featured.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
         </div>
       </section>
 

@@ -50,6 +50,24 @@ export type Profile = {
   verified: boolean;
   status: 'pending' | 'active' | 'rejected' | 'suspended';
   subscription_status: string;
+  listing_plan?: string;
+  listing_price?: number;
+  listing_currency?: string;
+  subscription_started_at?: string | null;
+  subscription_expires_at?: string | null;
+  max_photos?: number;
   trial_ends_at?: string | null;
   profile_images?: ProfileImage[];
+};
+
+export type BookingRequest = {
+  id: string;
+  profile_id: string;
+  requester_email: string;
+  requested_date: string;
+  requested_time: string;
+  duration_minutes: number;
+  message?: string | null;
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+  created_at: string;
 };

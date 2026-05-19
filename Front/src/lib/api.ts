@@ -1,4 +1,4 @@
-import type { Profile } from '../types';
+import type { BookingRequest, Profile } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -40,6 +40,16 @@ export const api = {
   report: (body: Record<string, string>) => request<{ report: unknown }>('/api/reports', {
     method: 'POST',
     body: JSON.stringify(body)
+  }),
+  createBookingRequest: (body: Partial<BookingRequest>) => request<{ booking_request: BookingRequest }>('/api/booking-requests', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }),
+  myBookingRequests: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/booking-requests/me', { token }),
+  setBookingStatus: (token: string, id: string, status: BookingRequest['status']) => request<{ booking_request: BookingRequest }>(`/api/booking-requests/${id}/status`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ status })
   }),
   adminProfiles: (token: string) => request<{ profiles: Profile[]; stats: Record<string, number> }>('/api/admin/profiles', { token }),
   adminReports: (token: string) => request<{ reports: any[]; reports_count: number }>('/api/admin/reports', { token }),

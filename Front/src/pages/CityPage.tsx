@@ -21,6 +21,7 @@ import {
   toggleArrayValue,
   visitTypeOptions
 } from '../data/filterOptions';
+import { useI18n } from '../i18n';
 
 type SearchFilters = {
   city: string;
@@ -83,6 +84,7 @@ export function CityPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { t } = useI18n();
 
   useEffect(() => {
     const next = defaultFilters(city);
@@ -126,18 +128,18 @@ export function CityPage() {
         <p>Premium adult nightlife listings with clear availability, private profile badges, and moderation-first publishing.</p>
         <div className="hero-actions">
           <a href="#profiles" className="button primary">Browse profiles</a>
-          <Link to="/dashboard" className="button">Add listing</Link>
+          <Link to="/dashboard" className="button">{t('buttons.addListing')}</Link>
         </div>
       </section>
 
       <section className="filter-panel">
         <div className="filter-panel-head">
           <div>
-            <p className="eyebrow">Search</p>
-            <h2>Advanced filters</h2>
+            <p className="eyebrow">{t('city.search')}</p>
+            <h2>{t('city.advanced')}</h2>
           </div>
           <button className="button" type="button" onClick={() => setShowAdvanced((value) => !value)}>
-            <SlidersHorizontal size={17} /> {showAdvanced ? 'Hide advanced filters' : 'Show advanced filters'}
+            <SlidersHorizontal size={17} /> {showAdvanced ? t('buttons.hideAdvanced') : t('buttons.showAdvanced')}
           </button>
         </div>
 
@@ -195,14 +197,14 @@ export function CityPage() {
         </div>
 
         <div className="filter-actions">
-          <button className="button primary" type="button" onClick={() => setAppliedFilters(draftFilters)}>Apply filters</button>
-          <button className="button" type="button" onClick={resetFilters}>Reset filters</button>
-          <span>{profiles.length} results</span>
+          <button className="button primary" type="button" onClick={() => setAppliedFilters(draftFilters)}>{t('buttons.apply')}</button>
+          <button className="button" type="button" onClick={resetFilters}>{t('buttons.reset')}</button>
+          <span>{profiles.length} {t('city.results')}</span>
         </div>
       </section>
 
-      <p className="demo-note">Demo profiles are fictional until verified advertisers join.</p>
-      <p className="safety-line">All listings must be 18+, consensual, verified, and compliant with local law.</p>
+      <p className="demo-note">{t('home.demo')}</p>
+      <p className="safety-line">{t('city.safety')}</p>
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}

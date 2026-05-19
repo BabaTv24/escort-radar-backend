@@ -7,12 +7,15 @@ import type { Profile } from '../types';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { getDemoProfile } from '../data/demoProfiles';
 import { labelize } from '../data/filterOptions';
+import { useI18n } from '../i18n';
 
 export function ProfilePage() {
   const { id = '' } = useParams();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState('');
   const [reportMessage, setReportMessage] = useState('');
+  const [bookingMessage, setBookingMessage] = useState('');
+  const { t } = useI18n();
 
   useEffect(() => {
     api.profile(id)
@@ -40,6 +43,21 @@ export function ProfilePage() {
     event.currentTarget.reset();
   }
 
+  async function submitBooking(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await api.createBookingRequest({
+      profile_id: profile!.id,
+      requester_email: String(form.get('email') || ''),
+      requested_date: String(form.get('date') || ''),
+      requested_time: String(form.get('time') || ''),
+      duration_minutes: Number(form.get('duration') || 60),
+      message: String(form.get('message') || '')
+    });
+    setBookingMessage('Booking request sent for advertiser review.');
+    event.currentTarget.reset();
+  }
+
   return (
     <div className="page narrow">
       <section className="profile-hero">
@@ -59,7 +77,7 @@ export function ProfilePage() {
           </div>
           <p>{profile.description || 'Profile description coming soon.'}</p>
           {profile.subscription_status === 'demo' && <p className="demo-note">Demo profiles are fictional until verified advertisers join.</p>}
-          <div className="notice"><LockKeyhole size={18} /> Contact unlock coming soon.</div>
+          <div className="notice"><LockKeyhole size={18} /> {t('profile.contactSoon')}</div>
         </div>
       </section>
 
@@ -76,10 +94,10 @@ export function ProfilePage() {
           <p>{profile.orientation ? labelize(profile.orientation) : 'Orientation not specified'}</p>
           <p>{profile.audience?.length ? `Audience: ${profile.audience.map(labelize).join(', ')}` : 'Audience details pending'}</p>
         </InfoPanel>
-        <InfoPanel title="Pricing" icon={<LockKeyhole size={18} />}>
+        <InfoPanel title={t('profile.pricing')} icon={<LockKeyhole size={18} />}>
           <PriceList profile={profile} />
         </InfoPanel>
-        <InfoPanel title="Availability" icon={<CalendarDays size={18} />}>
+        <InfoPanel title={t('profile.availability')} icon={<CalendarDays size={18} />}>
           <p>{profile.available_now ? 'Available now' : 'Availability offline'}</p>
           <p>{profile.availability_note || 'Schedule placeholder will be confirmed by the advertiser.'}</p>
         </InfoPanel>
@@ -93,17 +111,37 @@ export function ProfilePage() {
           <TagList values={profile.visit_types || []} />
           <TagList values={profile.payment_methods || []} />
         </InfoPanel>
-        <InfoPanel title="Safety notice" icon={<AlertTriangle size={18} />}>
-          <p>All listings must be 18+, consensual, verified, and compliant with local law.</p>
+        <InfoPanel title={t('profile.safety')} icon={<AlertTriangle size={18} />}>
+          <p>{t('city.safety')}</p>
         </InfoPanel>
       </section>
 
       <section className="form-panel service-menu-panel">
-        <h2><Tags size={18} /> Service menu</h2>
+        <h2><Tags size={18} /> {t('profile.serviceMenu')}</h2>
         <div className="service-menu-columns">
-          <ServiceMenuList title="Included" services={(profile.service_menu || []).filter((service) => service.enabled && service.included)} currency={profile.currency || 'EUR'} />
-          <ServiceMenuList title="Extra services" services={(profile.service_menu || []).filter((service) => service.enabled && !service.included)} currency={profile.currency || 'EUR'} />
+          <ServiceMenuList title={t('profile.included')} services={(profile.service_menu || []).filter((service) => service.enabled && service.included)} currency={profile.currency || 'EUR'} />
+          <ServiceMenuList title={t('profile.extra')} services={(profile.service_menu || []).filter((service) => service.enabled && !service.included)} currency={profile.currency || 'EUR'} />
         </div>
+      </section>
+
+      <section className="form-panel booking-panel">
+        <h2><CalendarDays size={18} /> {t('profile.booking')}</h2>
+        <p className="safety-line">{t('city.safety')}</p>
+        <form onSubmit={submitBooking} className="stack">
+          <div className="form-grid">
+            <input name="email" type="email" placeholder={t('form.email')} required />
+            <input name="date" type="date" required />
+            <input name="time" type="time" required />
+            <select name="duration" defaultValue="60">
+              <option value="60">60 min</option>
+              <option value="120">120 min</option>
+              <option value="240">240 min</option>
+            </select>
+          </div>
+          <textarea name="message" placeholder={t('form.message')} />
+          <button className="button primary" type="submit">{t('buttons.sendBooking')}</button>
+          {bookingMessage && <p className="success">{bookingMessage}</p>}
+        </form>
       </section>
 
       <section className="form-panel">

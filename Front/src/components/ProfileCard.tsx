@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
 import { BadgeCheck, HeartHandshake, Hotel, Languages, MapPin, Radio, Smartphone, LockKeyhole } from 'lucide-react';
 import type { Profile } from '../types';
+import { useI18n } from '../i18n';
 
 export function ProfileCard({ profile }: { profile: Profile }) {
+  const { t } = useI18n();
   const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
 
   return (
@@ -28,7 +30,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
         </div>
         {profile.price_1h && <p className="price-line">1h from {profile.price_1h} {profile.currency || 'EUR'}</p>}
         <p className="muted line-clamp">{profile.description || 'Private premium profile with details available on profile page.'}</p>
-        <Link to={`/profile/${profile.id}`} className="button full">View profile</Link>
+        <Link to={`/profile/${profile.id}`} className="button full">{t('buttons.viewProfile')}</Link>
       </div>
     </article>
   );

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { Clock, ImagePlus, Lock, Sparkles, UserRound } from 'lucide-react';
+import { CalendarDays, Clock, CreditCard, ImagePlus, Lock, Sparkles, UserRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import type { Profile } from '../types';
+import type { BookingRequest, Profile } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
+import { useI18n } from '../i18n';
 import {
   audienceOptions,
   bodyTypeOptions,
@@ -64,7 +65,9 @@ export function DashboardPage() {
   const [token, setToken] = useState('');
   const [profile, setProfile] = useState<Partial<Profile>>(emptyProfile);
   const [savedProfile, setSavedProfile] = useState<Profile | null>(null);
+  const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
   const [message, setMessage] = useState('');
+  const { t } = useI18n();
 
   async function signIn(mode: 'sign-in' | 'sign-up') {
     const result = mode === 'sign-up'
@@ -77,6 +80,9 @@ export function DashboardPage() {
     }
 
     setToken(result.data.session?.access_token || '');
+    if (result.data.session?.access_token) {
+      api.myBookingRequests(result.data.session.access_token).then((data) => setBookingRequests(data.booking_requests)).catch(() => setBookingRequests(demoBookingRequests));
+    }
     setMessage(mode === 'sign-up' ? 'Account created. Confirm email if Supabase requires it.' : 'Signed in.');
   }
 
@@ -126,8 +132,19 @@ export function DashboardPage() {
           </section>
 
           <form className="stack" onSubmit={saveProfile}>
+            <section className="subscription-card">
+              <div>
+                <p className="eyebrow">{t('dashboard.subscription')}</p>
+                <h2><CreditCard size={20} /> {t('subscription.title')}</h2>
+                <strong>{t('subscription.price')}</strong>
+                <p>{t('subscription.features')}</p>
+                {savedProfile?.status !== 'active' && <p className="subscription-notice">{t('subscription.notice')}</p>}
+              </div>
+              <button className="button primary" type="button" disabled>{t('subscription.activate')}</button>
+            </section>
+
             <section className="form-panel elevated">
-              <h2><UserRound size={18} /> Basic profile</h2>
+              <h2><UserRound size={18} /> {t('dashboard.basic')}</h2>
               <div className="form-grid">
                 <input placeholder="Display name" value={profile.display_name || ''} onChange={(event) => setProfile({ ...profile, display_name: event.target.value })} required />
                 <select value={profile.city} onChange={(event) => setProfile({ ...profile, city: event.target.value })}>
@@ -146,7 +163,7 @@ export function DashboardPage() {
             </section>
 
             <section className="form-panel elevated">
-              <h2><UserRound size={18} /> Appearance</h2>
+              <h2><UserRound size={18} /> {t('dashboard.appearance')}</h2>
               <div className="form-grid">
                 <input type="number" min="18" placeholder="Age" value={profile.age || ''} onChange={(event) => setProfile({ ...profile, age: Number(event.target.value) })} />
                 <input type="number" min="120" placeholder="Height in cm" value={profile.height || ''} onChange={(event) => setProfile({ ...profile, height: Number(event.target.value) })} />
@@ -176,7 +193,7 @@ export function DashboardPage() {
             </section>
 
             <section className="form-panel elevated">
-              <h2><UserRound size={18} /> Prices</h2>
+              <h2><UserRound size={18} /> {t('dashboard.prices')}</h2>
               <div className="form-grid">
                 <input type="number" placeholder="30 min" value={profile.price_30min || ''} onChange={(event) => setProfile({ ...profile, price_30min: Number(event.target.value) })} />
                 <input type="number" placeholder="1 hour" value={profile.price_1h || ''} onChange={(event) => setProfile({ ...profile, price_1h: Number(event.target.value) })} />
@@ -192,7 +209,7 @@ export function DashboardPage() {
             </section>
 
             <section className="form-panel elevated">
-              <h2><UserRound size={18} /> Services</h2>
+              <h2><UserRound size={18} /> {t('dashboard.services')}</h2>
               <ServiceMenuEditor
                 services={profile.service_menu || []}
                 onChange={(service_menu) => setProfile({ ...profile, service_menu })}
@@ -200,7 +217,7 @@ export function DashboardPage() {
             </section>
 
             <section className="form-panel elevated">
-              <h2><Clock size={18} /> Availability</h2>
+              <h2><Clock size={18} /> {t('dashboard.availability')}</h2>
               <div className="toggle-grid">
                 <label><input type="checkbox" checked={Boolean(profile.available_now)} onChange={(event) => setProfile({ ...profile, available_now: event.target.checked })} /> Available now</label>
                 <label><input type="checkbox" checked={Boolean(profile.mobile_service)} onChange={(event) => setProfile({ ...profile, mobile_service: event.target.checked })} /> Mobile service</label>
@@ -212,10 +229,27 @@ export function DashboardPage() {
           </form>
 
           <section className="form-panel elevated">
-            <h2><ImagePlus size={18} /> Photos</h2>
+            <h2><ImagePlus size={18} /> {t('dashboard.photos')}</h2>
+            <p className="safety-line">{t('photos.counter', { count: savedProfile?.profile_images?.length || 0 })}</p>
             <div className="photo-drop">
-              <input type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile} />
+              <input type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= 6} />
               <button className="button" disabled type="button"><Sparkles size={16} /> Blur face - coming soon</button>
+            </div>
+          </section>
+
+          <section className="form-panel elevated">
+            <h2><CalendarDays size={18} /> {t('dashboard.bookingRequests')}</h2>
+            <div className="booking-list">
+              {(bookingRequests.length ? bookingRequests : demoBookingRequests).map((booking) => (
+                <div className="booking-row" key={booking.id}>
+                  <div>
+                    <strong>{booking.requested_date} / {booking.requested_time}</strong>
+                    <p>{booking.requester_email} · {booking.duration_minutes} min</p>
+                    {booking.message && <p>{booking.message}</p>}
+                  </div>
+                  <span className={`booking-status ${booking.status}`}>{t(`status.${booking.status}`)}</span>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -231,6 +265,20 @@ export function DashboardPage() {
     </div>
   );
 }
+
+const demoBookingRequests: BookingRequest[] = [
+  {
+    id: 'demo-booking-1',
+    profile_id: 'preview',
+    requester_email: 'vip@example.com',
+    requested_date: '2026-06-01',
+    requested_time: '21:00',
+    duration_minutes: 120,
+    message: 'Demo VIP request placeholder for future paid booking workflow.',
+    status: 'pending',
+    created_at: new Date().toISOString()
+  }
+];
 
 function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null): Profile {
   return {

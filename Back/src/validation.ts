@@ -69,6 +69,10 @@ export function validateProfileInput(body: Record<string, unknown>) {
       outcall_fee: optionalMoney(body.outcall_fee),
       currency: optionalText(body.currency, 8) || 'EUR',
       service_menu: optionalServiceMenu(body.service_menu),
+      listing_plan: optionalText(body.listing_plan, 80) || 'premium_monthly',
+      listing_price: optionalMoney(body.listing_price) || 49.99,
+      listing_currency: optionalText(body.listing_currency, 8) || 'EUR',
+      max_photos: optionalNumber(body.max_photos, 1, 6) || 6,
       available_now: Boolean(body.available_now),
       mobile_service: Boolean(body.mobile_service),
       private_studio: Boolean(body.private_studio)
