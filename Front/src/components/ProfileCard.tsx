@@ -13,6 +13,10 @@ export function ProfileCard({ profile }: { profile: Profile }) {
       <div className="card-image">
         {primary?.public_url ? <img src={primary.public_url} alt="" /> : <div className="image-placeholder">{t('app.name')}</div>}
         <span className={`status ${status}`}>{t(`status.${status}`)}</span>
+        <div className="card-overlay">
+          <strong>{profile.display_name}</strong>
+          {profile.distance_km ? <span>~{profile.distance_km} km</span> : null}
+        </div>
       </div>
       <div className="card-body">
         <div>

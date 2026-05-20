@@ -8,10 +8,11 @@ import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import { useState } from 'react';
 import { getCityCenter } from '../lib/geo';
+import { categoryOptions } from '../data/filterOptions';
 
 export function HomePage() {
   const featured = getDemoProfiles('berlin').slice(0, 8);
-  const { t } = useI18n();
+  const { t, option } = useI18n();
   const [radius, setRadius] = useState(25);
   const [radarStatus, setRadarStatus] = useState('all');
   const berlinCenter = { ...getCityCenter('berlin'), source: 'city_fallback' as const };
@@ -30,10 +31,24 @@ export function HomePage() {
           <h1>Escort Radar</h1>
           <p className="tagline">{t('home.tagline')}</p>
           <div className="hero-actions">
-            <Link to="/dashboard" className="button primary"><PlusCircle size={18} /> {t('home.create')}</Link>
-            <Link to="/city/berlin" className="button">{t('home.explore')}</Link>
+            <Link to="/city/berlin" className="button primary"><RadioTower size={18} /> {t('home.openRadar')}</Link>
+            <Link to="/dashboard" className="button"><PlusCircle size={18} /> {t('home.create')}</Link>
           </div>
           <p className="demo-note">{t('home.demo')}</p>
+        </div>
+      </section>
+
+      <section className="market-section">
+        <div className="section-head compact">
+          <p className="eyebrow">{t('home.sections.categories')}</p>
+          <h2>{t('home.sections.categoriesTitle')}</h2>
+        </div>
+        <div className="home-category-grid">
+          {categoryOptions.map((category) => (
+            <Link key={category} to={`/city/berlin?category=${category}`} className="home-category-card">
+              <span>{option(category)}</span>
+            </Link>
+          ))}
         </div>
       </section>
 
@@ -66,6 +81,7 @@ export function HomePage() {
         <Feature icon={<Building2 />} title={t('home.features.clubs.title')} text={t('home.features.clubs.text')} />
         <Feature icon={<BadgeCheck />} title={t('home.features.privacy.title')} text={t('home.features.privacy.text')} />
         <Feature icon={<Map />} title={t('home.features.cities.title')} text={cities.map((city) => city.name).join(' / ')} />
+        <Feature icon={<BadgeCheck />} title={t('home.sections.vip')} text={t('home.sections.vipText')} />
       </section>
     </div>
   );

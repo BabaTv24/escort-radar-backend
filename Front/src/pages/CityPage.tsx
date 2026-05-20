@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Profile } from '../types';
@@ -83,6 +83,8 @@ function defaultFilters(city: string): SearchFilters {
 
 export function CityPage() {
   const { city = 'berlin' } = useParams();
+  const [searchParams] = useSearchParams();
+  const urlCategory = searchParams.get('category');
   const cityLabel = cities.find((item) => item.slug === city)?.name || city;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [draftFilters, setDraftFilters] = useState<SearchFilters>(() => defaultFilters(city));
@@ -96,10 +98,11 @@ export function CityPage() {
 
   useEffect(() => {
     const next = defaultFilters(city);
+    if (urlCategory && categoryOptions.includes(urlCategory)) next.category = urlCategory;
     setDraftFilters(next);
     setAppliedFilters(next);
     setSearcherLocation({ ...getCityCenter(city), source: 'city_fallback' });
-  }, [city]);
+  }, [city, urlCategory]);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -146,6 +149,7 @@ export function CityPage() {
         <p className="eyebrow">{t('city.eyebrow')}</p>
         <h1>{cityLabel}</h1>
         <p>{t('city.copy')}</p>
+        {appliedFilters.category && <div className="active-category-badge">{option(appliedFilters.category)}</div>}
         <div className="hero-actions">
           <a href="#profiles" className="button primary">{t('buttons.viewProfile')}</a>
           <Link to="/dashboard" className="button">{t('buttons.addListing')}</Link>
@@ -175,7 +179,7 @@ export function CityPage() {
           </button>
         </div>
 
-        <div className="category-chips">
+        <div className="category-chips category-chips-prominent">
           <button className={draftFilters.category === '' ? 'chip selected' : 'chip'} type="button" onClick={() => updateFilter('category', '')}>{t('filters.allCategories')}</button>
           {categoryOptions.map((item) => (
             <button key={item} className={draftFilters.category === item ? 'chip selected' : 'chip'} type="button" onClick={() => updateFilter('category', item)}>

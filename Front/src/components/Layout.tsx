@@ -1,32 +1,48 @@
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation, useSearchParams } from 'react-router-dom';
 import { Radar, ShieldCheck, UserRound } from 'lucide-react';
-import { cities } from '../data/cities';
+import { categoryOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 
 export function Layout() {
-  const { lang, setLang, t } = useI18n();
+  const { lang, setLang, t, option } = useI18n();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const activeCategory = searchParams.get('category') || '';
+  const cityMatch = location.pathname.match(/^\/city\/([^/]+)/);
+  const currentCity = cityMatch?.[1] || 'berlin';
 
   return (
     <div className="app-shell">
-      <header className="topbar">
+      <header className="market-header">
         <Link to="/" className="brand">
           <Radar size={24} />
           <span>Escort Radar</span>
         </Link>
-        <nav className="desktop-nav">
-          {cities.slice(0, 3).map((city) => (
-            <NavLink key={city.slug} to={`/city/${city.slug}`}>{city.name}</NavLink>
+        <nav className="category-nav" aria-label="Categories">
+          {categoryOptions.map((category) => (
+            <Link
+              key={category}
+              className={activeCategory === category ? 'category-link active' : 'category-link'}
+              to={`/city/${currentCity}?category=${category}`}
+            >
+              {option(category)}
+            </Link>
           ))}
-          <NavLink to="/dashboard">{t('nav.dashboard')}</NavLink>
         </nav>
-        <div className="language-switcher">
-          {(['de', 'pl', 'en'] as const).map((item) => (
-            <button key={item} className={lang === item ? 'selected' : ''} onClick={() => setLang(item)}>{item.toUpperCase()}</button>
-          ))}
+        <div className="header-actions">
+          <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action">
+            <Radar size={17} />
+            <span>Radar</span>
+          </Link>
+          <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
+            <UserRound size={20} />
+          </Link>
+          <div className="language-switcher">
+            {(['de', 'pl', 'en'] as const).map((item) => (
+              <button key={item} className={lang === item ? 'selected' : ''} onClick={() => setLang(item)}>{item.toUpperCase()}</button>
+            ))}
+          </div>
         </div>
-        <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
-          <UserRound size={20} />
-        </Link>
       </header>
       <main>
         <Outlet />

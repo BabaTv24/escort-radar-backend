@@ -37,22 +37,25 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         <p>{t('radar.subtitle')}</p>
         <p className="safety-line">{t('radar.privacy')}</p>
         {fallbackNotice && <p className="safety-line">{t('radar.fallbackNotice')}</p>}
-        <div className="radar-controls">
-          <label>
-            {t('radar.radius')}
-            <select value={radius} onChange={(event) => onRadiusChange(Number(event.target.value))}>
-              {radiusOptions.map((item) => <option key={item} value={item}>{item} km</option>)}
-            </select>
-          </label>
-          <label>
-            {t('radar.status')}
-            <select value={status} onChange={(event) => onStatusChange(event.target.value)}>
-              <option value="all">{t('status.all')}</option>
-              <option value="available">{t('status.available')}</option>
-              <option value="busy">{t('status.busy')}</option>
-              <option value="unavailable">{t('status.unavailable')}</option>
-            </select>
-          </label>
+        <div className="radar-control-group">
+          <span>{t('radar.radius')}</span>
+          <div className="segmented-pills">
+            {radiusOptions.map((item) => (
+              <button key={item} className={radius === item ? 'selected' : ''} type="button" onClick={() => onRadiusChange(item)}>
+                {item} km
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="radar-control-group">
+          <span>{t('radar.status')}</span>
+          <div className="segmented-pills">
+            {['all', 'available', 'busy', 'unavailable'].map((item) => (
+              <button key={item} className={status === item ? 'selected' : ''} type="button" onClick={() => onStatusChange(item)}>
+                {t(`status.${item}`)}
+              </button>
+            ))}
+          </div>
         </div>
         {onUseLocation && <button className="button" type="button" onClick={onUseLocation}>{t('radar.useLocation')}</button>}
         <p className="safety-line">{t('radar.inRange', { count: visibleProfiles.length })}</p>
