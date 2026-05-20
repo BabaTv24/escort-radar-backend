@@ -44,6 +44,12 @@ export type Profile = {
   outcall_fee?: number | null;
   currency?: string;
   service_menu?: ServiceMenuItem[];
+  availability_status?: 'available' | 'busy' | 'unavailable';
+  service_radius_km?: number;
+  approximate_location_area?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  distance_km?: number | null;
   available_now: boolean;
   mobile_service: boolean;
   private_studio: boolean;

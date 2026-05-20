@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { ShieldCheck } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 export function AgeGate({ children }: { children: ReactNode }) {
   const [accepted, setAccepted] = useState(() => localStorage.getItem('escort-radar-age-ok') === 'yes');
+  const { t } = useI18n();
 
   if (accepted) return <>{children}</>;
 
@@ -11,11 +13,9 @@ export function AgeGate({ children }: { children: ReactNode }) {
     <div className="age-gate">
       <section className="age-panel">
         <ShieldCheck size={34} />
-        <p className="eyebrow">Adults only</p>
-        <h1>18+ access</h1>
-        <p>
-          Escort Radar is an adult marketplace preview. Enter only if you are at least 18 and agree to report illegal, coerced, underage, or non-consensual content.
-        </p>
+        <p className="eyebrow">{t('age.eyebrow')}</p>
+        <h1>{t('age.title')}</h1>
+        <p>{t('age.copy')}</p>
         <button
           className="button primary full"
           onClick={() => {
@@ -23,7 +23,7 @@ export function AgeGate({ children }: { children: ReactNode }) {
             setAccepted(true);
           }}
         >
-          I am 18+
+          {t('age.accept')}
         </button>
       </section>
     </div>

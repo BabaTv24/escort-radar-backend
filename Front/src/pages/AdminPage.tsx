@@ -3,6 +3,7 @@ import { Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import type { Profile } from '../types';
+import { useI18n } from '../i18n';
 
 export function AdminPage() {
   const [token, setToken] = useState('');
@@ -12,6 +13,7 @@ export function AdminPage() {
   const [reports, setReports] = useState<any[]>([]);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [message, setMessage] = useState('');
+  const { t } = useI18n();
 
   async function login() {
     const result = await supabase.auth.signInWithPassword({ email, password });
@@ -47,9 +49,9 @@ export function AdminPage() {
 
       {!token && (
         <section className="form-panel stack">
-          <input type="email" placeholder="Admin email" value={email} onChange={(event) => setEmail(event.target.value)} />
-          <input type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} />
-          <button className="button primary" onClick={login}>Login</button>
+          <input type="email" placeholder={t('admin.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
+          <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
+          <button className="button primary" onClick={login}>{t('buttons.login')}</button>
           {message && <p className="error-text">{message}</p>}
         </section>
       )}
@@ -60,7 +62,7 @@ export function AdminPage() {
             {Object.entries(stats).map(([key, value]) => <div key={key}><strong>{value}</strong><span>{key.replaceAll('_', ' ')}</span></div>)}
           </div>
           <section className="table-panel">
-            <h2>Profiles</h2>
+            <h2>{t('admin.profiles')}</h2>
             {profiles.map((profile) => (
               <div className="admin-row" key={profile.id}>
                 <span>{profile.display_name} / {profile.city}</span>
@@ -71,7 +73,7 @@ export function AdminPage() {
             ))}
           </section>
           <section className="table-panel">
-            <h2>Reports</h2>
+            <h2>{t('admin.reports')}</h2>
             {reports.map((report) => (
               <div className="admin-row" key={report.id}>
                 <span>{report.reason} / {report.profiles?.display_name || 'profile'}</span>

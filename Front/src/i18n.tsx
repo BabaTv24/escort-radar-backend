@@ -10,7 +10,8 @@ const dictionaries = { de, pl, en };
 const I18nContext = createContext({
   lang: 'de' as Lang,
   setLang: (_lang: Lang) => {},
-  t: (key: string, vars?: Record<string, string | number>) => key
+  t: (key: string, vars?: Record<string, string | number>) => key,
+  option: (value: string) => value
 });
 
 export function I18nProvider({ children }: { children: ReactNode }) {
@@ -28,6 +29,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     t: (key: string, vars: Record<string, string | number> = {}) => {
       const text = (dictionaries[lang] as Record<string, string>)[key] || (dictionaries.de as Record<string, string>)[key] || key;
       return Object.entries(vars).reduce((current, [name, val]) => current.replaceAll(`{{${name}}}`, String(val)), text);
+    },
+    option: (value: string) => {
+      const key = `options.${value}`;
+      return (dictionaries[lang] as Record<string, string>)[key] || (dictionaries.de as Record<string, string>)[key] || value.replace(/[-_]/g, ' ');
     }
   }), [lang]);
 

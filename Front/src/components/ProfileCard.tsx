@@ -4,14 +4,15 @@ import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 
 export function ProfileCard({ profile }: { profile: Profile }) {
-  const { t } = useI18n();
+  const { t, option } = useI18n();
   const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
+  const status = profile.availability_status || (profile.available_now ? 'available' : 'unavailable');
 
   return (
     <article className="profile-card">
       <div className="card-image">
-        {primary?.public_url ? <img src={primary.public_url} alt="" /> : <div className="image-placeholder">Radar</div>}
-        <span className={profile.available_now ? 'status live' : 'status'}>{profile.available_now ? 'Available now' : 'Offline'}</span>
+        {primary?.public_url ? <img src={primary.public_url} alt="" /> : <div className="image-placeholder">{t('app.name')}</div>}
+        <span className={`status ${status}`}>{t(`status.${status}`)}</span>
       </div>
       <div className="card-body">
         <div>
@@ -19,17 +20,17 @@ export function ProfileCard({ profile }: { profile: Profile }) {
           <p><MapPin size={15} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}</p>
         </div>
         <div className="badges">
-          {profile.available_now && <span>Available now</span>}
-          {profile.verified && <span><BadgeCheck size={14} /> Verified</span>}
-          {profile.mobile_service && <span><Smartphone size={14} /> Mobile</span>}
-          {profile.private_studio && <span><LockKeyhole size={14} /> Private</span>}
-          {profile.audience?.includes('couples') && <span><HeartHandshake size={14} /> Couples welcome</span>}
-          {profile.visit_types?.includes('hotel') && <span><Hotel size={14} /> Hotel visit</span>}
+          {status === 'available' && <span>{t('badges.availableNow')}</span>}
+          {profile.verified && <span><BadgeCheck size={14} /> {t('badges.verified')}</span>}
+          {profile.mobile_service && <span><Smartphone size={14} /> {t('badges.mobile')}</span>}
+          {profile.private_studio && <span><LockKeyhole size={14} /> {t('badges.private')}</span>}
+          {profile.audience?.includes('couples') && <span><HeartHandshake size={14} /> {t('badges.couples')}</span>}
+          {profile.visit_types?.includes('hotel') && <span><Hotel size={14} /> {t('badges.hotel')}</span>}
           {profile.languages?.length ? <span><Languages size={14} /> {profile.languages.slice(0, 3).join('/')}</span> : null}
-          {profile.category && <span><Radio size={14} /> {profile.category}</span>}
+          {profile.category && <span><Radio size={14} /> {option(profile.category)}</span>}
         </div>
-        {profile.price_1h && <p className="price-line">1h from {profile.price_1h} {profile.currency || 'EUR'}</p>}
-        <p className="muted line-clamp">{profile.description || 'Private premium profile with details available on profile page.'}</p>
+        {profile.price_1h && <p className="price-line">{t('profile.fromPrice', { price: profile.price_1h, currency: profile.currency || 'EUR' })}</p>}
+        <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
         <Link to={`/profile/${profile.id}`} className="button full">{t('buttons.viewProfile')}</Link>
       </div>
     </article>

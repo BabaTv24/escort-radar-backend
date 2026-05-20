@@ -24,7 +24,7 @@ export function Layout() {
             <button key={item} className={lang === item ? 'selected' : ''} onClick={() => setLang(item)}>{item.toUpperCase()}</button>
           ))}
         </div>
-        <Link to="/dashboard" className="icon-link" aria-label="Dashboard">
+        <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
           <UserRound size={20} />
         </Link>
       </header>

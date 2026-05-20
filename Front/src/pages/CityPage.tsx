@@ -13,7 +13,6 @@ import {
   categoryOptions,
   defaultServiceMenuNames,
   hairColorOptions,
-  labelize,
   orientationOptions,
   originOptions,
   paymentMethodOptions,
@@ -22,6 +21,7 @@ import {
   visitTypeOptions
 } from '../data/filterOptions';
 import { useI18n } from '../i18n';
+import { RadarPanel } from '../components/RadarPanel';
 
 type SearchFilters = {
   city: string;
@@ -31,6 +31,8 @@ type SearchFilters = {
   mobile_service: boolean;
   private_studio: boolean;
   verified: boolean;
+  availability_status: string;
+  radius: number;
   body_type: string;
   hair_color: string;
   origin: string;
@@ -57,6 +59,8 @@ function defaultFilters(city: string): SearchFilters {
     mobile_service: false,
     private_studio: false,
     verified: false,
+    availability_status: 'all',
+    radius: 25,
     body_type: '',
     hair_color: '',
     origin: '',
@@ -84,7 +88,7 @@ export function CityPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const { t } = useI18n();
+  const { t, option } = useI18n();
 
   useEffect(() => {
     const next = defaultFilters(city);
@@ -114,6 +118,11 @@ export function CityPage() {
     setDraftFilters((current) => ({ ...current, [key]: value }));
   }
 
+  function updateRadarFilter<K extends 'radius' | 'availability_status'>(key: K, value: SearchFilters[K]) {
+    setDraftFilters((current) => ({ ...current, [key]: value }));
+    setAppliedFilters((current) => ({ ...current, [key]: value }));
+  }
+
   function resetFilters() {
     const next = defaultFilters(city);
     setDraftFilters(next);
@@ -125,12 +134,21 @@ export function CityPage() {
       <section className="city-hero">
         <p className="eyebrow">City radar</p>
         <h1>{cityLabel}</h1>
-        <p>Premium adult nightlife listings with clear availability, private profile badges, and moderation-first publishing.</p>
+        <p>{t('city.copy')}</p>
         <div className="hero-actions">
           <a href="#profiles" className="button primary">Browse profiles</a>
           <Link to="/dashboard" className="button">{t('buttons.addListing')}</Link>
         </div>
       </section>
+
+      <RadarPanel
+        profiles={getDemoProfiles(appliedFilters.city)}
+        radius={draftFilters.radius}
+        status={draftFilters.availability_status}
+        city={appliedFilters.city}
+        onRadiusChange={(value) => updateRadarFilter('radius', value)}
+        onStatusChange={(value) => updateRadarFilter('availability_status', value)}
+      />
 
       <section className="filter-panel">
         <div className="filter-panel-head">
@@ -150,14 +168,20 @@ export function CityPage() {
           <input placeholder="Area" value={draftFilters.area} onChange={(event) => updateFilter('area', event.target.value)} />
           <select value={draftFilters.category} onChange={(event) => updateFilter('category', event.target.value)}>
             <option value="">All categories</option>
-            {categoryOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+            {categoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
           </select>
           {(['available_now', 'mobile_service', 'private_studio', 'verified'] as const).map((key) => (
             <label key={key}>
               <input type="checkbox" checked={Boolean(draftFilters[key])} onChange={(event) => updateFilter(key, event.target.checked)} />
-              {labelize(key)}
+              {t(`badges.${key === 'available_now' ? 'availableNow' : key === 'mobile_service' ? 'mobile' : key === 'private_studio' ? 'private' : 'verified'}`)}
             </label>
           ))}
+          <select value={draftFilters.availability_status} onChange={(event) => updateFilter('availability_status', event.target.value)}>
+            <option value="all">{t('status.all')}</option>
+            <option value="available">{t('status.available')}</option>
+            <option value="busy">{t('status.busy')}</option>
+            <option value="unavailable">{t('status.unavailable')}</option>
+          </select>
         </div>
 
         <div className={showAdvanced ? 'advanced-filters open' : 'advanced-filters'}>
@@ -171,7 +195,7 @@ export function CityPage() {
             <input placeholder="Languages, e.g. EN, DE, PL" value={draftFilters.languages} onChange={(event) => updateFilter('languages', event.target.value)} />
             <select value={draftFilters.orientation} onChange={(event) => updateFilter('orientation', event.target.value)}>
               <option value="">Any orientation</option>
-              {orientationOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+              {orientationOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
             </select>
           </div>
           <MultiSelect title="Audience" values={draftFilters.audience} options={audienceOptions} onToggle={(value) => updateFilter('audience', toggleArrayValue(draftFilters.audience, value))} />
@@ -179,15 +203,15 @@ export function CityPage() {
           <div className="range-grid">
             <select value={draftFilters.body_type} onChange={(event) => updateFilter('body_type', event.target.value)}>
               <option value="">Any body type</option>
-              {bodyTypeOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+              {bodyTypeOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
             </select>
             <select value={draftFilters.hair_color} onChange={(event) => updateFilter('hair_color', event.target.value)}>
               <option value="">Any hair color</option>
-              {hairColorOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+              {hairColorOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
             </select>
             <select value={draftFilters.origin} onChange={(event) => updateFilter('origin', event.target.value)}>
               <option value="">Any origin</option>
-              {originOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+              {originOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
             </select>
             <input type="number" placeholder="Max 1h price" value={draftFilters.price_max} onChange={(event) => updateFilter('price_max', event.target.value)} />
           </div>
@@ -210,7 +234,7 @@ export function CityPage() {
       {error && <ErrorState message={error} />}
       {!loading && !error && (
         <div id="profiles" className="cards-grid marketplace-grid">
-          {profiles.length ? profiles.map((profile) => <ProfileCard key={profile.id} profile={profile} />) : <div className="state-panel">No active profiles yet.</div>}
+          {profiles.length ? profiles.map((profile) => <ProfileCard key={profile.id} profile={profile} />) : <div className="state-panel">{t('states.noProfiles')}</div>}
         </div>
       )}
     </div>
@@ -218,13 +242,14 @@ export function CityPage() {
 }
 
 function MultiSelect({ title, values, options, onToggle }: { title: string; values: string[]; options: string[]; onToggle: (value: string) => void }) {
+  const { option: translateOption } = useI18n();
   return (
     <fieldset className="chip-fieldset">
       <legend>{title}</legend>
       <div className="chip-grid">
-        {options.map((option) => (
-          <button key={option} className={values.includes(option) ? 'chip selected' : 'chip'} type="button" onClick={() => onToggle(option)}>
-            {labelize(option)}
+        {options.map((item) => (
+          <button key={item} className={values.includes(item) ? 'chip selected' : 'chip'} type="button" onClick={() => onToggle(item)}>
+            {translateOption(item)}
           </button>
         ))}
       </div>
@@ -248,6 +273,8 @@ function applyFilters(profiles: Profile[], filters: SearchFilters) {
     if (filters.mobile_service && !profile.mobile_service) return false;
     if (filters.private_studio && !profile.private_studio) return false;
     if (filters.verified && !profile.verified) return false;
+    if (filters.availability_status !== 'all' && profile.availability_status !== filters.availability_status) return false;
+    if ((profile.distance_km ?? 999) > filters.radius) return false;
     if (filters.body_type && profile.body_type !== filters.body_type) return false;
     if (filters.hair_color && profile.hair_color !== filters.hair_color) return false;
     if (filters.origin && profile.origin !== filters.origin) return false;

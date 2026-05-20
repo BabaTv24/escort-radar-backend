@@ -73,6 +73,12 @@ export function validateProfileInput(body: Record<string, unknown>) {
       listing_price: optionalMoney(body.listing_price) || 49.99,
       listing_currency: optionalText(body.listing_currency, 8) || 'EUR',
       max_photos: optionalNumber(body.max_photos, 1, 6) || 6,
+      availability_status: normalizeAvailabilityStatus(body.availability_status),
+      service_radius_km: optionalNumber(body.service_radius_km, 5, 100) || 25,
+      approximate_location_area: optionalText(body.approximate_location_area, 120),
+      latitude: optionalCoordinate(body.latitude, -90, 90),
+      longitude: optionalCoordinate(body.longitude, -180, 180),
+      distance_km: optionalMoney(body.distance_km),
       available_now: Boolean(body.available_now),
       mobile_service: Boolean(body.mobile_service),
       private_studio: Boolean(body.private_studio)
@@ -115,4 +121,15 @@ function optionalServiceMenu(value: unknown) {
       note: optionalText(service.note, 300)
     };
   }).filter((service) => service.name);
+}
+
+function normalizeAvailabilityStatus(value: unknown) {
+  const status = String(value || 'unavailable');
+  return ['available', 'busy', 'unavailable'].includes(status) ? status : 'unavailable';
+}
+
+function optionalCoordinate(value: unknown, min: number, max: number) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.min(Math.max(number, min), max);
 }

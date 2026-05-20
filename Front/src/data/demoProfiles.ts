@@ -29,7 +29,7 @@ const hairColors = ['black', 'brown', 'blonde', 'red', 'dark-blonde'];
 const origins = ['local', 'european', 'latin', 'asian', 'mixed', 'international'];
 const experienceTypes = ['newcomer', 'independent', 'premium', 'vip', 'studio'];
 const bodyFeatures = [['tattoos'], ['natural look'], ['piercing'], ['elegant style'], ['fitness style'], ['classic style']];
-const serviceNames = ['Dinner date', 'Social time', 'Hotel visit', 'Outcall', 'Private meeting', 'Events', 'Late night', 'Wellness'];
+const serviceNames = ['dinner-date', 'social-time', 'hotel', 'outcall', 'private-meeting', 'events', 'late-night', 'wellness'];
 const palettes = [
   ['#1a1015', '#f7d46b', '#08f7b8'],
   ['#120f1c', '#c9a34a', '#ff4fb8'],
@@ -59,6 +59,7 @@ function createCityProfiles(city: keyof typeof areas, count: number, offset: num
     const languages = ['EN', seed % 2 === 0 ? 'DE' : 'PL', seed % 5 === 0 ? 'ES' : ''].filter(Boolean);
     const currency = 'EUR';
     const basePrice = 120 + (seed % 8) * 20;
+    const availability_status = index % 10 < 5 ? 'available' : index % 10 < 8 ? 'busy' : 'unavailable';
     const service_menu = serviceNames.map((serviceName, serviceIndex) => ({
       name: serviceName,
       enabled: serviceIndex < 5 || (seed + serviceIndex) % 3 === 0,
@@ -96,7 +97,13 @@ function createCityProfiles(city: keyof typeof areas, count: number, offset: num
       outcall_fee: seed % 2 === 0 ? 40 : 70,
       currency,
       service_menu,
-      available_now: index % 3 !== 1,
+      availability_status,
+      service_radius_km: [5, 10, 15, 20, 25, 50, 100][seed % 7],
+      approximate_location_area: area,
+      latitude: null,
+      longitude: null,
+      distance_km: 2 + ((seed * 7) % 96),
+      available_now: availability_status === 'available',
       mobile_service: index % 2 === 0,
       private_studio: index % 4 !== 0,
       verified: index % 3 === 0,

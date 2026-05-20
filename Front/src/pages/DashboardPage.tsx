@@ -12,16 +12,17 @@ import {
   defaultServiceMenuNames,
   experienceTypeOptions,
   hairColorOptions,
-  labelize,
   orientationOptions,
   originOptions,
   paymentMethodOptions,
+  radiusOptions,
+  availabilityStatusOptions,
   serviceTagOptions,
   toggleArrayValue,
   visitTypeOptions
 } from '../data/filterOptions';
 
-const emptyProfile = {
+const emptyProfile: Partial<Profile> = {
   display_name: '',
   city: 'berlin',
   area: '',
@@ -41,6 +42,11 @@ const emptyProfile = {
   service_tags: [],
   payment_methods: [],
   availability_note: '',
+  availability_status: 'unavailable',
+  service_radius_km: 25,
+  approximate_location_area: '',
+  latitude: null,
+  longitude: null,
   price_30min: 120,
   price_1h: 200,
   price_2h: 360,
@@ -67,7 +73,7 @@ export function DashboardPage() {
   const [savedProfile, setSavedProfile] = useState<Profile | null>(null);
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
   const [message, setMessage] = useState('');
-  const { t } = useI18n();
+  const { t, option } = useI18n();
 
   async function signIn(mode: 'sign-in' | 'sign-up') {
     const result = mode === 'sign-up'
@@ -83,12 +89,12 @@ export function DashboardPage() {
     if (result.data.session?.access_token) {
       api.myBookingRequests(result.data.session.access_token).then((data) => setBookingRequests(data.booking_requests)).catch(() => setBookingRequests(demoBookingRequests));
     }
-    setMessage(mode === 'sign-up' ? 'Account created. Confirm email if Supabase requires it.' : 'Signed in.');
+    setMessage(mode === 'sign-up' ? t('dashboard.saved') : t('status.active'));
   }
 
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
-    if (!token) return setMessage('Sign in first.');
+    if (!token) return setMessage(t('dashboard.signInFirst'));
 
     const body = { ...profile, languages: String(profile.languages || '').split(',').map((item) => item.trim()).filter(Boolean) };
     const result = savedProfile
@@ -96,7 +102,7 @@ export function DashboardPage() {
       : await api.createProfile(token, body);
 
     setSavedProfile(result.profile);
-    setMessage('Profile saved for moderation review.');
+    setMessage(t('dashboard.saved'));
   }
 
   async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
@@ -106,28 +112,28 @@ export function DashboardPage() {
     form.set('profile_id', savedProfile.id);
     form.set('image', file);
     await api.uploadImage(token, form);
-    setMessage('Image uploaded. EXIF metadata is stripped by backend processing.');
+    setMessage(t('dashboard.imageUploaded'));
   }
 
   return (
     <div className="page dashboard-page">
       <section className="dashboard-hero">
         <p className="eyebrow">Advertiser dashboard</p>
-        <h1>Create private profile</h1>
-        <p>Profiles start as pending and require moderation before public discovery.</p>
+        <h1>{t('dashboard.title')}</h1>
+        <p>{t('dashboard.subtitle')}</p>
       </section>
 
       <div className="dashboard-grid">
         <div className="dashboard-main">
           <section className="form-panel elevated">
-            <h2><Lock size={18} /> Account</h2>
+            <h2><Lock size={18} /> {t('dashboard.account')}</h2>
             <div className="form-grid">
-              <input type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
-              <input type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} />
+              <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
+              <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
             </div>
             <div className="row">
-              <button className="button primary" onClick={() => signIn('sign-in')}>Login</button>
-              <button className="button" onClick={() => signIn('sign-up')}>Register</button>
+              <button className="button primary" onClick={() => signIn('sign-in')}>{t('buttons.login')}</button>
+              <button className="button" onClick={() => signIn('sign-up')}>{t('buttons.register')}</button>
             </div>
           </section>
 
@@ -146,60 +152,76 @@ export function DashboardPage() {
             <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.basic')}</h2>
               <div className="form-grid">
-                <input placeholder="Display name" value={profile.display_name || ''} onChange={(event) => setProfile({ ...profile, display_name: event.target.value })} required />
+                <input placeholder={t('form.displayName')} value={profile.display_name || ''} onChange={(event) => setProfile({ ...profile, display_name: event.target.value })} required />
                 <select value={profile.city} onChange={(event) => setProfile({ ...profile, city: event.target.value })}>
                   {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((city) => <option key={city} value={city}>{city}</option>)}
                 </select>
-                <input placeholder="Area" value={profile.area || ''} onChange={(event) => setProfile({ ...profile, area: event.target.value })} />
-                <input placeholder="Category" value={profile.category || ''} onChange={(event) => setProfile({ ...profile, category: event.target.value })} />
-                <input placeholder="Languages, comma separated" value={String(profile.languages || '')} onChange={(event) => setProfile({ ...profile, languages: event.target.value.split(',') as any })} />
+                <input placeholder={t('form.area')} value={profile.area || ''} onChange={(event) => setProfile({ ...profile, area: event.target.value })} />
+                <input placeholder={t('form.category')} value={profile.category || ''} onChange={(event) => setProfile({ ...profile, category: event.target.value })} />
+                <input placeholder={t('form.languages')} value={String(profile.languages || '')} onChange={(event) => setProfile({ ...profile, languages: event.target.value.split(',') as any })} />
                 <select value={profile.experience_type || ''} onChange={(event) => setProfile({ ...profile, experience_type: event.target.value })}>
-                  <option value="">Experience type</option>
-                  {experienceTypeOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+                  <option value="">{t('options.premium')}</option>
+                  {experienceTypeOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
                 </select>
               </div>
-              <textarea placeholder="Description" value={profile.description || ''} onChange={(event) => setProfile({ ...profile, description: event.target.value })} />
-              <div className="readonly">Verified status: {savedProfile?.verified ? 'Verified' : 'Read-only pending'}</div>
+              <textarea placeholder={t('form.description')} value={profile.description || ''} onChange={(event) => setProfile({ ...profile, description: event.target.value })} />
+              <div className="readonly">{t('dashboard.verifiedStatus', { status: savedProfile?.verified ? t('badges.verified') : t('dashboard.readOnlyPending') })}</div>
             </section>
 
             <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.appearance')}</h2>
               <div className="form-grid">
-                <input type="number" min="18" placeholder="Age" value={profile.age || ''} onChange={(event) => setProfile({ ...profile, age: Number(event.target.value) })} />
-                <input type="number" min="120" placeholder="Height in cm" value={profile.height || ''} onChange={(event) => setProfile({ ...profile, height: Number(event.target.value) })} />
+                <input type="number" min="18" placeholder={t('form.age')} value={profile.age || ''} onChange={(event) => setProfile({ ...profile, age: Number(event.target.value) })} />
+                <input type="number" min="120" placeholder={t('form.height')} value={profile.height || ''} onChange={(event) => setProfile({ ...profile, height: Number(event.target.value) })} />
                 <select value={profile.body_type || ''} onChange={(event) => setProfile({ ...profile, body_type: event.target.value })}>
-                  <option value="">Body type</option>
-                  {bodyTypeOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+                  <option value="">{t('filters.bodyType')}</option>
+                  {bodyTypeOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
                 </select>
                 <select value={profile.hair_color || ''} onChange={(event) => setProfile({ ...profile, hair_color: event.target.value })}>
-                  <option value="">Hair color</option>
-                  {hairColorOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+                  <option value="">{t('filters.hairColor')}</option>
+                  {hairColorOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
                 </select>
                 <select value={profile.origin || ''} onChange={(event) => setProfile({ ...profile, origin: event.target.value })}>
-                  <option value="">Origin</option>
-                  {originOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+                  <option value="">{t('filters.origin')}</option>
+                  {originOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
                 </select>
                 <select value={profile.orientation || ''} onChange={(event) => setProfile({ ...profile, orientation: event.target.value })}>
-                  <option value="">Orientation</option>
-                  {orientationOptions.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+                  <option value="">{t('filters.orientation')}</option>
+                  {orientationOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
                 </select>
-                <input placeholder="Body features, comma separated" value={String(profile.body_features || '')} onChange={(event) => setProfile({ ...profile, body_features: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} />
+                <input placeholder={t('form.bodyFeatures')} value={String(profile.body_features || '')} onChange={(event) => setProfile({ ...profile, body_features: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} />
               </div>
-              <DashboardMultiSelect title="Audience" values={profile.audience || []} options={audienceOptions} onToggle={(value) => setProfile({ ...profile, audience: toggleArrayValue(profile.audience, value) })} />
-              <DashboardMultiSelect title="Visit type" values={profile.visit_types || []} options={visitTypeOptions} onToggle={(value) => setProfile({ ...profile, visit_types: toggleArrayValue(profile.visit_types, value) })} />
-              <DashboardMultiSelect title="Services tags" values={profile.service_tags || []} options={serviceTagOptions} onToggle={(value) => setProfile({ ...profile, service_tags: toggleArrayValue(profile.service_tags, value) })} />
-              <DashboardMultiSelect title="Payment methods" values={profile.payment_methods || []} options={paymentMethodOptions} onToggle={(value) => setProfile({ ...profile, payment_methods: toggleArrayValue(profile.payment_methods, value) })} />
-              <p className="safety-line">All listings must be 18+, consensual, verified, and compliant with local law.</p>
+              <DashboardMultiSelect title={t('filters.audience')} values={profile.audience || []} options={audienceOptions} onToggle={(value) => setProfile({ ...profile, audience: toggleArrayValue(profile.audience, value) })} />
+              <DashboardMultiSelect title={t('filters.visitType')} values={profile.visit_types || []} options={visitTypeOptions} onToggle={(value) => setProfile({ ...profile, visit_types: toggleArrayValue(profile.visit_types, value) })} />
+              <DashboardMultiSelect title={t('filters.serviceTags')} values={profile.service_tags || []} options={serviceTagOptions} onToggle={(value) => setProfile({ ...profile, service_tags: toggleArrayValue(profile.service_tags, value) })} />
+              <DashboardMultiSelect title={t('filters.paymentMethods')} values={profile.payment_methods || []} options={paymentMethodOptions} onToggle={(value) => setProfile({ ...profile, payment_methods: toggleArrayValue(profile.payment_methods, value) })} />
+              <p className="safety-line">{t('city.safety')}</p>
+            </section>
+
+            <section className="form-panel elevated">
+              <h2><Clock size={18} /> {t('dashboard.radarVisibility')}</h2>
+              <div className="form-grid">
+                <select value={profile.availability_status || 'unavailable'} onChange={(event) => setProfile({ ...profile, availability_status: event.target.value as Profile['availability_status'], available_now: event.target.value === 'available' })}>
+                  {availabilityStatusOptions.map((item) => <option key={item} value={item}>{t(`status.${item}`)}</option>)}
+                </select>
+                <select value={profile.service_radius_km || 25} onChange={(event) => setProfile({ ...profile, service_radius_km: Number(event.target.value) })}>
+                  {radiusOptions.map((item) => <option key={item} value={item}>{item} km</option>)}
+                </select>
+                <input placeholder={t('dashboard.approxArea')} value={profile.approximate_location_area || ''} onChange={(event) => setProfile({ ...profile, approximate_location_area: event.target.value })} />
+                <input type="number" placeholder={t('dashboard.latitude')} value={profile.latitude ?? ''} onChange={(event) => setProfile({ ...profile, latitude: event.target.value ? Number(event.target.value) : null })} />
+                <input type="number" placeholder={t('dashboard.longitude')} value={profile.longitude ?? ''} onChange={(event) => setProfile({ ...profile, longitude: event.target.value ? Number(event.target.value) : null })} />
+              </div>
+              <p className="safety-line">{t('radar.privacy')} {t('dashboard.locationHint')}</p>
             </section>
 
             <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.prices')}</h2>
               <div className="form-grid">
-                <input type="number" placeholder="30 min" value={profile.price_30min || ''} onChange={(event) => setProfile({ ...profile, price_30min: Number(event.target.value) })} />
-                <input type="number" placeholder="1 hour" value={profile.price_1h || ''} onChange={(event) => setProfile({ ...profile, price_1h: Number(event.target.value) })} />
-                <input type="number" placeholder="2 hours" value={profile.price_2h || ''} onChange={(event) => setProfile({ ...profile, price_2h: Number(event.target.value) })} />
-                <input type="number" placeholder="Night" value={profile.price_night || ''} onChange={(event) => setProfile({ ...profile, price_night: Number(event.target.value) })} />
-                <input type="number" placeholder="Outcall fee" value={profile.outcall_fee || ''} onChange={(event) => setProfile({ ...profile, outcall_fee: Number(event.target.value) })} />
+                <input type="number" placeholder={t('form.price30')} value={profile.price_30min || ''} onChange={(event) => setProfile({ ...profile, price_30min: Number(event.target.value) })} />
+                <input type="number" placeholder={t('form.price1h')} value={profile.price_1h || ''} onChange={(event) => setProfile({ ...profile, price_1h: Number(event.target.value) })} />
+                <input type="number" placeholder={t('form.price2h')} value={profile.price_2h || ''} onChange={(event) => setProfile({ ...profile, price_2h: Number(event.target.value) })} />
+                <input type="number" placeholder={t('form.priceNight')} value={profile.price_night || ''} onChange={(event) => setProfile({ ...profile, price_night: Number(event.target.value) })} />
+                <input type="number" placeholder={t('form.outcallFee')} value={profile.outcall_fee || ''} onChange={(event) => setProfile({ ...profile, outcall_fee: Number(event.target.value) })} />
                 <select value={profile.currency || 'EUR'} onChange={(event) => setProfile({ ...profile, currency: event.target.value })}>
                   <option value="EUR">EUR</option>
                   <option value="PLN">PLN</option>
@@ -219,12 +241,12 @@ export function DashboardPage() {
             <section className="form-panel elevated">
               <h2><Clock size={18} /> {t('dashboard.availability')}</h2>
               <div className="toggle-grid">
-                <label><input type="checkbox" checked={Boolean(profile.available_now)} onChange={(event) => setProfile({ ...profile, available_now: event.target.checked })} /> Available now</label>
-                <label><input type="checkbox" checked={Boolean(profile.mobile_service)} onChange={(event) => setProfile({ ...profile, mobile_service: event.target.checked })} /> Mobile service</label>
-                <label><input type="checkbox" checked={Boolean(profile.private_studio)} onChange={(event) => setProfile({ ...profile, private_studio: event.target.checked })} /> Private studio</label>
+                <label><input type="checkbox" checked={Boolean(profile.available_now)} onChange={(event) => setProfile({ ...profile, available_now: event.target.checked })} /> {t('badges.availableNow')}</label>
+                <label><input type="checkbox" checked={Boolean(profile.mobile_service)} onChange={(event) => setProfile({ ...profile, mobile_service: event.target.checked })} /> {t('badges.mobile')}</label>
+                <label><input type="checkbox" checked={Boolean(profile.private_studio)} onChange={(event) => setProfile({ ...profile, private_studio: event.target.checked })} /> {t('badges.private')}</label>
               </div>
-              <input placeholder="Availability schedule placeholder" value={profile.availability_note || ''} onChange={(event) => setProfile({ ...profile, availability_note: event.target.value })} />
-              <button className="button primary" type="submit">Save profile</button>
+              <input placeholder={t('form.availabilityNote')} value={profile.availability_note || ''} onChange={(event) => setProfile({ ...profile, availability_note: event.target.value })} />
+              <button className="button primary" type="submit">{t('buttons.saveProfile')}</button>
             </section>
           </form>
 
@@ -233,7 +255,7 @@ export function DashboardPage() {
             <p className="safety-line">{t('photos.counter', { count: savedProfile?.profile_images?.length || 0 })}</p>
             <div className="photo-drop">
               <input type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= 6} />
-              <button className="button" disabled type="button"><Sparkles size={16} /> Blur face - coming soon</button>
+              <button className="button" disabled type="button"><Sparkles size={16} /> {t('photos.blurSoon')}</button>
             </div>
           </section>
 
@@ -274,7 +296,7 @@ const demoBookingRequests: BookingRequest[] = [
     requested_date: '2026-06-01',
     requested_time: '21:00',
     duration_minutes: 120,
-    message: 'Demo VIP request placeholder for future paid booking workflow.',
+    message: '',
     status: 'pending',
     created_at: new Date().toISOString()
   }
@@ -283,7 +305,7 @@ const demoBookingRequests: BookingRequest[] = [
 function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null): Profile {
   return {
     id: savedProfile?.id || 'preview',
-    display_name: profile.display_name || 'Your profile',
+    display_name: profile.display_name || 'Escort Radar',
     age: profile.age || 25,
     height: profile.height || 170,
     body_type: profile.body_type,
@@ -295,7 +317,7 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     city: profile.city || 'berlin',
     area: profile.area || 'Central',
     category: profile.category || 'private',
-    description: profile.description || 'A polished preview helps you understand how your listing will appear after moderation.',
+    description: profile.description || '',
     languages: Array.isArray(profile.languages) ? profile.languages : ['English'],
     orientation: profile.orientation,
     audience: profile.audience || [],
@@ -303,6 +325,12 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     service_tags: profile.service_tags || [],
     payment_methods: profile.payment_methods || [],
     availability_note: profile.availability_note,
+    availability_status: profile.availability_status || 'unavailable',
+    service_radius_km: profile.service_radius_km || 25,
+    approximate_location_area: profile.approximate_location_area || profile.area || 'Central',
+    latitude: profile.latitude ?? null,
+    longitude: profile.longitude ?? null,
+    distance_km: profile.distance_km ?? 8,
     price_30min: profile.price_30min,
     price_1h: profile.price_1h,
     price_2h: profile.price_2h,
@@ -328,6 +356,7 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
 }
 
 function ServiceMenuEditor({ services, onChange }: { services: NonNullable<Profile['service_menu']>; onChange: (services: NonNullable<Profile['service_menu']>) => void }) {
+  const { t, option } = useI18n();
   function update(index: number, patch: Partial<NonNullable<Profile['service_menu']>[number]>) {
     onChange(services.map((service, currentIndex) => currentIndex === index ? { ...service, ...patch } : service));
   }
@@ -336,32 +365,33 @@ function ServiceMenuEditor({ services, onChange }: { services: NonNullable<Profi
     <div className="service-editor">
       {services.map((service, index) => (
         <div className="service-editor-row" key={`${service.name}-${index}`}>
-          <label><input type="checkbox" checked={service.enabled} onChange={(event) => update(index, { enabled: event.target.checked })} /> {service.name}</label>
-          <label><input type="checkbox" checked={service.included} onChange={(event) => update(index, { included: event.target.checked })} /> Included</label>
-          <input placeholder="Service name" value={service.name} onChange={(event) => update(index, { name: event.target.value })} />
-          <input type="number" placeholder="Extra price" value={service.extra_price ?? ''} onChange={(event) => update(index, { extra_price: event.target.value ? Number(event.target.value) : null })} />
-          <input placeholder="Note" value={service.note || ''} onChange={(event) => update(index, { note: event.target.value })} />
+          <label><input type="checkbox" checked={service.enabled} onChange={(event) => update(index, { enabled: event.target.checked })} /> {option(service.name)}</label>
+          <label><input type="checkbox" checked={service.included} onChange={(event) => update(index, { included: event.target.checked })} /> {t('dashboard.included')}</label>
+          <input placeholder={t('dashboard.serviceName')} value={service.name} onChange={(event) => update(index, { name: event.target.value })} />
+          <input type="number" placeholder={t('dashboard.extraPrice')} value={service.extra_price ?? ''} onChange={(event) => update(index, { extra_price: event.target.value ? Number(event.target.value) : null })} />
+          <input placeholder={t('dashboard.note')} value={service.note || ''} onChange={(event) => update(index, { note: event.target.value })} />
         </div>
       ))}
       <button
         className="button"
         type="button"
-        onClick={() => onChange([...services, { name: `Custom service ${services.length + 1}`, enabled: true, included: false, extra_price: null, note: '' }])}
+        onClick={() => onChange([...services, { name: t('dashboard.customService', { count: services.length + 1 }), enabled: true, included: false, extra_price: null, note: '' }])}
       >
-        Add custom service
+        {t('buttons.addCustomService')}
       </button>
     </div>
   );
 }
 
 function DashboardMultiSelect({ title, values, options, onToggle }: { title: string; values: string[]; options: string[]; onToggle: (value: string) => void }) {
+  const { option: translateOption } = useI18n();
   return (
     <fieldset className="chip-fieldset">
       <legend>{title}</legend>
       <div className="chip-grid">
         {options.map((option) => (
           <button key={option} className={values.includes(option) ? 'chip selected' : 'chip'} type="button" onClick={() => onToggle(option)}>
-            {labelize(option)}
+            {translateOption(option)}
           </button>
         ))}
       </div>

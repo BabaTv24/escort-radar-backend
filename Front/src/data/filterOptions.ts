@@ -20,15 +20,17 @@ export const hairColorOptions = ['black', 'brown', 'blonde', 'red', 'dark-blonde
 export const originOptions = ['local', 'european', 'latin', 'asian', 'mixed', 'international'];
 export const experienceTypeOptions = ['newcomer', 'independent', 'premium', 'vip', 'studio'];
 export const defaultServiceMenuNames = [
-  'Dinner date',
-  'Social time',
-  'Hotel visit',
-  'Outcall',
-  'Private meeting',
-  'Events',
-  'Late night',
-  'Wellness'
+  'dinner-date',
+  'social-time',
+  'hotel',
+  'outcall',
+  'private-meeting',
+  'events',
+  'late-night',
+  'wellness'
 ];
+export const radiusOptions = [5, 10, 15, 20, 25, 50, 100];
+export const availabilityStatusOptions = ['available', 'busy', 'unavailable'] as const;
 
 export function toggleArrayValue(values: string[] = [], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
