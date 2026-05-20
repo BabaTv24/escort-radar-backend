@@ -3,7 +3,19 @@ import type { Profile, ProfileImage } from '../types';
 const areas = {
   berlin: ['Mitte', 'Charlottenburg', 'Prenzlauer Berg', 'Kreuzberg', 'Friedrichshain', 'Wilmersdorf'],
   hamburg: ['St. Pauli', 'Eimsbuttel', 'Altona', 'HafenCity', 'Winterhude', 'Sternschanze'],
-  hannover: ['Mitte', 'List', 'Sudstadt', 'Linden', 'Oststadt', 'Zoo']
+  hannover: ['Mitte', 'List', 'Sudstadt', 'Linden', 'Oststadt', 'Zoo'],
+  koeln: ['Innenstadt', 'Ehrenfeld', 'Deutz', 'Nippes', 'Lindenthal', 'Rheinauhafen'],
+  muenchen: ['Altstadt', 'Schwabing', 'Maxvorstadt', 'Glockenbach', 'Haidhausen', 'Bogenhausen'],
+  warszawa: ['Srodmiescie', 'Mokotow', 'Wola', 'Praga', 'Ochota', 'Zoliborz']
+};
+
+const cityCenters = {
+  berlin: { lat: 52.52, lng: 13.405 },
+  hamburg: { lat: 53.5511, lng: 9.9937 },
+  hannover: { lat: 52.3759, lng: 9.732 },
+  koeln: { lat: 50.9375, lng: 6.9603 },
+  muenchen: { lat: 48.1351, lng: 11.582 },
+  warszawa: { lat: 52.2297, lng: 21.0122 }
 };
 
 const names = [
@@ -12,7 +24,7 @@ const names = [
   'Anya', 'Noemi', 'Lara', 'Mina', 'Rosa', 'Clara', 'Yara', 'Nina'
 ];
 
-const categories = ['private', 'studio', 'nightlife', 'vip'];
+const categories = ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'];
 const orientations = ['straight', 'bisexual', 'queer-friendly'];
 const audienceOptions = [['men'], ['women'], ['couples'], ['men', 'couples'], ['women', 'couples']];
 const visitTypeOptions = [['incall', 'private'], ['outcall', 'hotel'], ['incall', 'hotel'], ['private'], ['outcall']];
@@ -60,6 +72,8 @@ function createCityProfiles(city: keyof typeof areas, count: number, offset: num
     const currency = 'EUR';
     const basePrice = 120 + (seed % 8) * 20;
     const availability_status = index % 10 < 5 ? 'available' : index % 10 < 8 ? 'busy' : 'unavailable';
+    const center = cityCenters[city];
+    const coordinateOffset = ((index % 7) - 3) * 0.045;
     const service_menu = serviceNames.map((serviceName, serviceIndex) => ({
       name: serviceName,
       enabled: serviceIndex < 5 || (seed + serviceIndex) % 3 === 0,
@@ -100,9 +114,9 @@ function createCityProfiles(city: keyof typeof areas, count: number, offset: num
       availability_status,
       service_radius_km: [5, 10, 15, 20, 25, 50, 100][seed % 7],
       approximate_location_area: area,
-      latitude: null,
-      longitude: null,
-      distance_km: 2 + ((seed * 7) % 96),
+      latitude: center.lat + coordinateOffset,
+      longitude: center.lng + (((seed % 9) - 4) * 0.055),
+      distance_km: null,
       available_now: availability_status === 'available',
       mobile_service: index % 2 === 0,
       private_studio: index % 4 !== 0,
@@ -118,7 +132,10 @@ function createCityProfiles(city: keyof typeof areas, count: number, offset: num
 export const demoProfiles: Profile[] = [
   ...createCityProfiles('berlin', 24, 1),
   ...createCityProfiles('hamburg', 12, 101),
-  ...createCityProfiles('hannover', 12, 201)
+  ...createCityProfiles('hannover', 12, 201),
+  ...createCityProfiles('koeln', 8, 301),
+  ...createCityProfiles('muenchen', 8, 401),
+  ...createCityProfiles('warszawa', 8, 501)
 ];
 
 export function getDemoProfiles(city?: string) {

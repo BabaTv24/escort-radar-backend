@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 
 export const allowedCities = ['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'];
+export const allowedCategories = ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'];
 export const allowedStatuses = ['pending', 'active', 'rejected', 'suspended'];
 export const allowedReportStatuses = ['open', 'reviewing', 'resolved', 'dismissed'];
 
@@ -44,7 +45,7 @@ export function validateProfileInput(body: Record<string, unknown>) {
       display_name: displayName,
       city,
       area: optionalText(body.area, 80),
-      category: optionalText(body.category, 60),
+      category: normalizeCategory(body.category),
       description: optionalText(body.description, 2000),
       languages: Array.isArray(body.languages)
         ? body.languages.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
@@ -126,6 +127,11 @@ function optionalServiceMenu(value: unknown) {
 function normalizeAvailabilityStatus(value: unknown) {
   const status = String(value || 'unavailable');
   return ['available', 'busy', 'unavailable'].includes(status) ? status : 'unavailable';
+}
+
+function normalizeCategory(value: unknown) {
+  const category = String(value || 'other');
+  return allowedCategories.includes(category) ? category : 'other';
 }
 
 function optionalCoordinate(value: unknown, min: number, max: number) {

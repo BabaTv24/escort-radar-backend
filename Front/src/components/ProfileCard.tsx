@@ -17,7 +17,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
       <div className="card-body">
         <div>
           <h3>{profile.display_name}{profile.age ? <span>{profile.age}</span> : null}</h3>
-          <p><MapPin size={15} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}</p>
+          <p><MapPin size={15} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}{profile.distance_km ? ` · ~${profile.distance_km} km` : ''}</p>
         </div>
         <div className="badges">
           {status === 'available' && <span>{t('badges.availableNow')}</span>}
@@ -30,6 +30,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
           {profile.category && <span><Radio size={14} /> {option(profile.category)}</span>}
         </div>
         {profile.price_1h && <p className="price-line">{t('profile.fromPrice', { price: profile.price_1h, currency: profile.currency || 'EUR' })}</p>}
+        <p className="muted">{t('profile.availableWithin', { radius: profile.service_radius_km || 25 })}</p>
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
         <Link to={`/profile/${profile.id}`} className="button full">{t('buttons.viewProfile')}</Link>
       </div>

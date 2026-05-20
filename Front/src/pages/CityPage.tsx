@@ -22,6 +22,8 @@ import {
 } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
+import type { GeoPoint } from '../lib/geo';
+import { getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange } from '../lib/geo';
 
 type SearchFilters = {
   city: string;
@@ -88,16 +90,19 @@ export function CityPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter(city), source: 'city_fallback' }));
+  const [fallbackNotice, setFallbackNotice] = useState(false);
   const { t, option } = useI18n();
 
   useEffect(() => {
     const next = defaultFilters(city);
     setDraftFilters(next);
     setAppliedFilters(next);
+    setSearcherLocation({ ...getCityCenter(city), source: 'city_fallback' });
   }, [city]);
 
   const query = useMemo(() => {
-    const params = new URLSearchParams({ city: appliedFilters.city || city });
+    const params = new URLSearchParams();
     for (const key of ['category', 'available_now', 'mobile_service', 'private_studio', 'verified'] as const) {
       const value = appliedFilters[key];
       if (value) params.set(key, String(value));
@@ -109,10 +114,10 @@ export function CityPage() {
     setLoading(true);
     setError('');
     api.profiles(query)
-      .then((data) => setProfiles(applyFilters(data.profiles.length ? data.profiles : getDemoProfiles(appliedFilters.city), appliedFilters)))
-      .catch(() => setProfiles(applyFilters(getDemoProfiles(appliedFilters.city), appliedFilters)))
+      .then((data) => setProfiles(applyFilters(data.profiles.length ? data.profiles : getDemoProfiles(), appliedFilters, searcherLocation)))
+      .catch(() => setProfiles(applyFilters(getDemoProfiles(), appliedFilters, searcherLocation)))
       .finally(() => setLoading(false));
-  }, [query, appliedFilters]);
+  }, [query, appliedFilters, searcherLocation]);
 
   function updateFilter<K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) {
     setDraftFilters((current) => ({ ...current, [key]: value }));
@@ -129,25 +134,34 @@ export function CityPage() {
     setAppliedFilters(next);
   }
 
+  async function useLocation() {
+    const location = await getSearcherLocationWithFallback(appliedFilters.city);
+    setSearcherLocation(location);
+    setFallbackNotice(location.source === 'city_fallback');
+  }
+
   return (
     <div className="page city-page">
       <section className="city-hero">
-        <p className="eyebrow">City radar</p>
+        <p className="eyebrow">{t('city.eyebrow')}</p>
         <h1>{cityLabel}</h1>
         <p>{t('city.copy')}</p>
         <div className="hero-actions">
-          <a href="#profiles" className="button primary">Browse profiles</a>
+          <a href="#profiles" className="button primary">{t('buttons.viewProfile')}</a>
           <Link to="/dashboard" className="button">{t('buttons.addListing')}</Link>
         </div>
       </section>
 
       <RadarPanel
-        profiles={getDemoProfiles(appliedFilters.city)}
+        profiles={getDemoProfiles()}
         radius={draftFilters.radius}
         status={draftFilters.availability_status}
         city={appliedFilters.city}
         onRadiusChange={(value) => updateRadarFilter('radius', value)}
         onStatusChange={(value) => updateRadarFilter('availability_status', value)}
+        searcherLocation={searcherLocation}
+        onUseLocation={useLocation}
+        fallbackNotice={fallbackNotice}
       />
 
       <section className="filter-panel">
@@ -161,13 +175,22 @@ export function CityPage() {
           </button>
         </div>
 
+        <div className="category-chips">
+          <button className={draftFilters.category === '' ? 'chip selected' : 'chip'} type="button" onClick={() => updateFilter('category', '')}>{t('filters.allCategories')}</button>
+          {categoryOptions.map((item) => (
+            <button key={item} className={draftFilters.category === item ? 'chip selected' : 'chip'} type="button" onClick={() => updateFilter('category', item)}>
+              {option(item)}
+            </button>
+          ))}
+        </div>
+
         <div className="filters primary-filters">
           <select value={draftFilters.city} onChange={(event) => updateFilter('city', event.target.value)}>
             {cities.map((item) => <option key={item.slug} value={item.slug}>{item.name}</option>)}
           </select>
-          <input placeholder="Area" value={draftFilters.area} onChange={(event) => updateFilter('area', event.target.value)} />
+          <input placeholder={t('filters.area')} value={draftFilters.area} onChange={(event) => updateFilter('area', event.target.value)} />
           <select value={draftFilters.category} onChange={(event) => updateFilter('category', event.target.value)}>
-            <option value="">All categories</option>
+            <option value="">{t('filters.allCategories')}</option>
             {categoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
           </select>
           {(['available_now', 'mobile_service', 'private_studio', 'verified'] as const).map((key) => (
@@ -186,44 +209,44 @@ export function CityPage() {
 
         <div className={showAdvanced ? 'advanced-filters open' : 'advanced-filters'}>
           <div className="range-grid">
-            <input type="number" placeholder="Age from" value={draftFilters.age_from} onChange={(event) => updateFilter('age_from', event.target.value)} />
-            <input type="number" placeholder="Age to" value={draftFilters.age_to} onChange={(event) => updateFilter('age_to', event.target.value)} />
-            <input type="number" placeholder="Height from" value={draftFilters.height_from} onChange={(event) => updateFilter('height_from', event.target.value)} />
-            <input type="number" placeholder="Height to" value={draftFilters.height_to} onChange={(event) => updateFilter('height_to', event.target.value)} />
+            <input type="number" placeholder={t('filters.ageFrom')} value={draftFilters.age_from} onChange={(event) => updateFilter('age_from', event.target.value)} />
+            <input type="number" placeholder={t('filters.ageTo')} value={draftFilters.age_to} onChange={(event) => updateFilter('age_to', event.target.value)} />
+            <input type="number" placeholder={t('filters.heightFrom')} value={draftFilters.height_from} onChange={(event) => updateFilter('height_from', event.target.value)} />
+            <input type="number" placeholder={t('filters.heightTo')} value={draftFilters.height_to} onChange={(event) => updateFilter('height_to', event.target.value)} />
           </div>
           <div className="range-grid">
-            <input placeholder="Languages, e.g. EN, DE, PL" value={draftFilters.languages} onChange={(event) => updateFilter('languages', event.target.value)} />
+            <input placeholder={t('filters.languages')} value={draftFilters.languages} onChange={(event) => updateFilter('languages', event.target.value)} />
             <select value={draftFilters.orientation} onChange={(event) => updateFilter('orientation', event.target.value)}>
-              <option value="">Any orientation</option>
+              <option value="">{t('filters.anyOrientation')}</option>
               {orientationOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
             </select>
           </div>
-          <MultiSelect title="Audience" values={draftFilters.audience} options={audienceOptions} onToggle={(value) => updateFilter('audience', toggleArrayValue(draftFilters.audience, value))} />
-          <MultiSelect title="Visit type" values={draftFilters.visit_types} options={visitTypeOptions} onToggle={(value) => updateFilter('visit_types', toggleArrayValue(draftFilters.visit_types, value))} />
+          <MultiSelect title={t('filters.audience')} values={draftFilters.audience} options={audienceOptions} onToggle={(value) => updateFilter('audience', toggleArrayValue(draftFilters.audience, value))} />
+          <MultiSelect title={t('filters.visitType')} values={draftFilters.visit_types} options={visitTypeOptions} onToggle={(value) => updateFilter('visit_types', toggleArrayValue(draftFilters.visit_types, value))} />
           <div className="range-grid">
             <select value={draftFilters.body_type} onChange={(event) => updateFilter('body_type', event.target.value)}>
-              <option value="">Any body type</option>
+              <option value="">{t('filters.anyBodyType')}</option>
               {bodyTypeOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
             </select>
             <select value={draftFilters.hair_color} onChange={(event) => updateFilter('hair_color', event.target.value)}>
-              <option value="">Any hair color</option>
+              <option value="">{t('filters.anyHairColor')}</option>
               {hairColorOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
             </select>
             <select value={draftFilters.origin} onChange={(event) => updateFilter('origin', event.target.value)}>
-              <option value="">Any origin</option>
+              <option value="">{t('filters.anyOrigin')}</option>
               {originOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
             </select>
-            <input type="number" placeholder="Max 1h price" value={draftFilters.price_max} onChange={(event) => updateFilter('price_max', event.target.value)} />
+            <input type="number" placeholder={t('filters.priceMax')} value={draftFilters.price_max} onChange={(event) => updateFilter('price_max', event.target.value)} />
           </div>
-          <MultiSelect title="Services" values={draftFilters.services} options={defaultServiceMenuNames} onToggle={(value) => updateFilter('services', toggleArrayValue(draftFilters.services, value))} />
-          <MultiSelect title="Services tags" values={draftFilters.service_tags} options={serviceTagOptions} onToggle={(value) => updateFilter('service_tags', toggleArrayValue(draftFilters.service_tags, value))} />
-          <MultiSelect title="Payment methods" values={draftFilters.payment_methods} options={paymentMethodOptions} onToggle={(value) => updateFilter('payment_methods', toggleArrayValue(draftFilters.payment_methods, value))} />
+          <MultiSelect title={t('filters.services')} values={draftFilters.services} options={defaultServiceMenuNames} onToggle={(value) => updateFilter('services', toggleArrayValue(draftFilters.services, value))} />
+          <MultiSelect title={t('filters.serviceTags')} values={draftFilters.service_tags} options={serviceTagOptions} onToggle={(value) => updateFilter('service_tags', toggleArrayValue(draftFilters.service_tags, value))} />
+          <MultiSelect title={t('filters.paymentMethods')} values={draftFilters.payment_methods} options={paymentMethodOptions} onToggle={(value) => updateFilter('payment_methods', toggleArrayValue(draftFilters.payment_methods, value))} />
         </div>
 
         <div className="filter-actions">
           <button className="button primary" type="button" onClick={() => setAppliedFilters(draftFilters)}>{t('buttons.apply')}</button>
           <button className="button" type="button" onClick={resetFilters}>{t('buttons.reset')}</button>
-          <span>{profiles.length} {t('city.results')}</span>
+          <span>{t('radar.inRange', { count: profiles.length })}</span>
         </div>
       </section>
 
@@ -257,7 +280,7 @@ function MultiSelect({ title, values, options, onToggle }: { title: string; valu
   );
 }
 
-function applyFilters(profiles: Profile[], filters: SearchFilters) {
+function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocation: GeoPoint) {
   const languageTokens = filters.languages.split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
   const fromAge = Number(filters.age_from) || 0;
   const toAge = Number(filters.age_to) || 999;
@@ -266,7 +289,10 @@ function applyFilters(profiles: Profile[], filters: SearchFilters) {
   const priceMax = Number(filters.price_max) || 0;
 
   return profiles.filter((profile) => {
-    if (filters.city && profile.city !== filters.city) return false;
+    if (filters.city && profile.city !== filters.city) {
+      const centerRange = isProfileInRadarRange(profile, searcherLocation, filters.radius);
+      if (!centerRange.inRange) return false;
+    }
     if (filters.area && !profile.area?.toLowerCase().includes(filters.area.toLowerCase())) return false;
     if (filters.category && profile.category !== filters.category) return false;
     if (filters.available_now && !profile.available_now) return false;
@@ -274,7 +300,9 @@ function applyFilters(profiles: Profile[], filters: SearchFilters) {
     if (filters.private_studio && !profile.private_studio) return false;
     if (filters.verified && !profile.verified) return false;
     if (filters.availability_status !== 'all' && profile.availability_status !== filters.availability_status) return false;
-    if ((profile.distance_km ?? 999) > filters.radius) return false;
+    const radarRange = isProfileInRadarRange(profile, searcherLocation, filters.radius);
+    if (!radarRange.inRange) return false;
+    profile.distance_km = radarRange.distance_km;
     if (filters.body_type && profile.body_type !== filters.body_type) return false;
     if (filters.hair_color && profile.hair_color !== filters.hair_color) return false;
     if (filters.origin && profile.origin !== filters.origin) return false;

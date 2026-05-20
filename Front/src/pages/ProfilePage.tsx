@@ -69,6 +69,7 @@ export function ProfilePage() {
           <span className={`status ${profile.availability_status || 'unavailable'}`}>{t(`status.${profile.availability_status || 'unavailable'}`)}</span>
           <h1>{profile.display_name}{profile.age ? <span>{profile.age}</span> : null}</h1>
           <p><MapPin size={16} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}</p>
+          <p>{profile.category ? option(profile.category) : option('other')} · {profile.approximate_location_area || profile.area}</p>
           <div className="badges">
             {profile.verified && <span><BadgeCheck size={14} /> {t('badges.verified')}</span>}
             {profile.mobile_service && <span>{t('badges.mobile')}</span>}

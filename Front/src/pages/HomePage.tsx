@@ -7,12 +7,14 @@ import { getDemoProfiles } from '../data/demoProfiles';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import { useState } from 'react';
+import { getCityCenter } from '../lib/geo';
 
 export function HomePage() {
   const featured = getDemoProfiles('berlin').slice(0, 8);
   const { t } = useI18n();
   const [radius, setRadius] = useState(25);
   const [radarStatus, setRadarStatus] = useState('all');
+  const berlinCenter = { ...getCityCenter('berlin'), source: 'city_fallback' as const };
 
   return (
     <div className="page">
@@ -42,6 +44,7 @@ export function HomePage() {
         city="berlin"
         onRadiusChange={setRadius}
         onStatusChange={setRadarStatus}
+        searcherLocation={berlinCenter}
         compact
       />
 

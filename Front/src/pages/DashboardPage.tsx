@@ -9,6 +9,7 @@ import { useI18n } from '../i18n';
 import {
   audienceOptions,
   bodyTypeOptions,
+  categoryOptions,
   defaultServiceMenuNames,
   experienceTypeOptions,
   hairColorOptions,
@@ -26,7 +27,7 @@ const emptyProfile: Partial<Profile> = {
   display_name: '',
   city: 'berlin',
   area: '',
-  category: 'private',
+  category: 'ladies',
   description: '',
   age: 25,
   height: 170,
@@ -157,7 +158,9 @@ export function DashboardPage() {
                   {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((city) => <option key={city} value={city}>{city}</option>)}
                 </select>
                 <input placeholder={t('form.area')} value={profile.area || ''} onChange={(event) => setProfile({ ...profile, area: event.target.value })} />
-                <input placeholder={t('form.category')} value={profile.category || ''} onChange={(event) => setProfile({ ...profile, category: event.target.value })} />
+                <select value={profile.category || 'other'} onChange={(event) => setProfile({ ...profile, category: event.target.value })}>
+                  {categoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
+                </select>
                 <input placeholder={t('form.languages')} value={String(profile.languages || '')} onChange={(event) => setProfile({ ...profile, languages: event.target.value.split(',') as any })} />
                 <select value={profile.experience_type || ''} onChange={(event) => setProfile({ ...profile, experience_type: event.target.value })}>
                   <option value="">{t('options.premium')}</option>

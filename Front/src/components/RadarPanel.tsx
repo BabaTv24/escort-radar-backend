@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom';
 import type { Profile } from '../types';
 import { radiusOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
+import type { GeoPoint } from '../lib/geo';
+import { isProfileInRadarRange } from '../lib/geo';
 
 type RadarPanelProps = {
   profiles: Profile[];
@@ -10,6 +12,9 @@ type RadarPanelProps = {
   city: string;
   onRadiusChange: (radius: number) => void;
   onStatusChange: (status: string) => void;
+  searcherLocation: GeoPoint;
+  onUseLocation?: () => void;
+  fallbackNotice?: boolean;
   compact?: boolean;
 };
 
@@ -18,14 +23,11 @@ const positions = [
   [45, 75], [25, 32], [62, 82], [82, 48], [48, 34], [36, 78]
 ];
 
-export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, compact = false }: RadarPanelProps) {
+export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, fallbackNotice = false, compact = false }: RadarPanelProps) {
   const { t } = useI18n();
-  const visibleProfiles = profiles.filter((profile) => {
-    const distance = profile.distance_km ?? 999;
-    const matchesRadius = distance <= radius;
-    const matchesStatus = status === 'all' || profile.availability_status === status;
-    return matchesRadius && matchesStatus;
-  });
+  const visibleProfiles = profiles
+    .map((profile) => ({ profile, radar: isProfileInRadarRange(profile, searcherLocation, radius) }))
+    .filter(({ profile, radar }) => radar.inRange && (status === 'all' || profile.availability_status === status));
 
   return (
     <section className={compact ? 'radar-panel compact' : 'radar-panel'}>
@@ -34,6 +36,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         <h2>{t('radar.title')}</h2>
         <p>{t('radar.subtitle')}</p>
         <p className="safety-line">{t('radar.privacy')}</p>
+        {fallbackNotice && <p className="safety-line">{t('radar.fallbackNotice')}</p>}
         <div className="radar-controls">
           <label>
             {t('radar.radius')}
@@ -51,6 +54,8 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             </select>
           </label>
         </div>
+        {onUseLocation && <button className="button" type="button" onClick={onUseLocation}>{t('radar.useLocation')}</button>}
+        <p className="safety-line">{t('radar.inRange', { count: visibleProfiles.length })}</p>
         <div className="radar-legend">
           <span><i className="dot available" /> {t('status.available')}</span>
           <span><i className="dot busy" /> {t('status.busy')}</span>
@@ -61,7 +66,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
       <div className="radar-visual" aria-label={t('radar.title')}>
         <div className="radar-sweep" />
         <div className="radar-core" />
-        {visibleProfiles.slice(0, 12).map((profile, index) => {
+        {visibleProfiles.slice(0, 12).map(({ profile, radar }, index) => {
           const [left, top] = positions[index % positions.length];
           return (
             <Link
@@ -69,7 +74,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
               to={`/profile/${profile.id}`}
               className={`radar-point ${profile.availability_status || 'unavailable'}`}
               style={{ left: `${left}%`, top: `${top}%` }}
-              title={`${profile.display_name} · ${profile.distance_km ?? '?'} km`}
+              title={`${profile.display_name} · ~${radar.distance_km} km`}
             />
           );
         })}
