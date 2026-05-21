@@ -97,6 +97,8 @@ export function DashboardPage() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [platformTags, setPlatformTags] = useState<Tag[]>([]);
   const [contentTab, setContentTab] = useState('photos');
+  const [creatorTab, setCreatorTab] = useState('overview');
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -223,6 +225,7 @@ export function DashboardPage() {
 
       setSavedProfile(result.profile);
       setProfile(profileToForm(result.profile));
+      await loadDashboard(token);
       setProfileMode('edit');
       setDashboardStatus('success');
       setMessage(t('dashboard.saved'));
@@ -237,6 +240,7 @@ export function DashboardPage() {
     if (!file || !token || !savedProfile) return;
     setAuthStatus('idle');
     setDashboardStatus('saving');
+    setUploadStatus('uploading');
     setMessage('');
     if (file.size > 8 * 1024 * 1024) {
       setDashboardStatus('error');
@@ -257,12 +261,29 @@ export function DashboardPage() {
       };
       setSavedProfile(nextProfile);
       setProfile(profileToForm(nextProfile));
+      await loadDashboard(token);
       setDashboardStatus('success');
+      setUploadStatus('success');
       setMessage(t('dashboard.imageUploaded'));
       event.target.value = '';
     } catch (error) {
       setDashboardStatus('error');
+      setUploadStatus('error');
       setMessage(error instanceof Error ? error.message : t('photos.uploadFailed'));
+    }
+  }
+
+  async function setCoverImage(imageId: string) {
+    if (!token) return;
+    setDashboardStatus('saving');
+    try {
+      await api.setCoverImage(token, imageId);
+      await loadDashboard(token);
+      setDashboardStatus('success');
+      setMessage(t('creator.coverSaved'));
+    } catch (error) {
+      setDashboardStatus('error');
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     }
   }
 
@@ -341,12 +362,32 @@ export function DashboardPage() {
         onLogout={logout}
       />
 
-      <section className="creator-command-grid">
-        <CreatorMonetizationPanel wallet={wallet} bookings={bookingRequests.length} profile={savedProfile} />
-        <ReferralStudio profile={savedProfile} />
+      <section className="creator-command-bar">
+        <div>
+          <strong>{t('auth.signedInAs', { email: userEmail })}</strong>
+          <span className={dashboardStatus === 'error' ? 'error-text' : 'success'}>{message || t('dashboard.profileLoaded')}</span>
+        </div>
+        <div className="creator-command-actions">
+          <button className="button primary" type="button" onClick={(event) => saveProfile(event as unknown as FormEvent)} disabled={dashboardStatus === 'saving'}>{dashboardStatus === 'saving' ? t('dashboard.saving') : t('buttons.saveProfile')}</button>
+          {savedProfile && <Link className="button" to={`/profile/${savedProfile.id}`}>{t('dashboard.viewPublicProfile')}</Link>}
+          <button className="button danger" type="button" onClick={logout}>{t('buttons.logout')}</button>
+        </div>
       </section>
 
-      <div className="dashboard-grid">
+      <nav className="creator-studio-tabs">
+        {['overview', 'listing', 'media', 'services', 'radar', 'live', 'tokens', 'verification'].map((tab) => (
+          <button key={tab} type="button" className={creatorTab === tab ? 'active' : ''} onClick={() => setCreatorTab(tab)}>
+            {t(`creator.dashboardTabs.${tab}`)}
+          </button>
+        ))}
+      </nav>
+
+      {(creatorTab === 'overview' || creatorTab === 'tokens') && <section className="creator-command-grid">
+        <CreatorMonetizationPanel wallet={wallet} bookings={bookingRequests.length} profile={savedProfile} />
+        <ReferralStudio profile={savedProfile} />
+      </section>}
+
+      {creatorTab !== 'media' && creatorTab !== 'live' && creatorTab !== 'tokens' && <div className="dashboard-grid">
         <div className="dashboard-main">
           <section className="form-panel elevated">
             <h2><Lock size={18} /> {t('dashboard.account')}</h2>
@@ -365,7 +406,7 @@ export function DashboardPage() {
           </section>
 
           <form className="stack" onSubmit={saveProfile}>
-            <section className="form-panel elevated">
+            {creatorTab === 'overview' && <section className="form-panel elevated">
               <h2>{t('wizard.step1')} · {t('dashboard.accountType')}</h2>
               <div className="account-type-grid">
                 {accountTypeOptions.map((item) => (
@@ -383,9 +424,9 @@ export function DashboardPage() {
               {profile.account_type === 'private' && <p className="subscription-notice">{t('phone.privateWarning')}</p>}
               <label className="premium-check"><input type="checkbox" checked={Boolean(profile.phone_rule_confirmed)} onChange={(event) => setProfile({ ...profile, phone_rule_confirmed: event.target.checked })} /> {t('phone.confirmSameOwner')}</label>
               {savedProfile?.phone_conflict_status && savedProfile.phone_conflict_status !== 'clear' && <p className="error-text">{t(`phoneConflict.${savedProfile.phone_conflict_status}`)}</p>}
-            </section>
+            </section>}
 
-            <section className="listing-status-panel">
+            {(creatorTab === 'overview' || creatorTab === 'verification') && <section className="listing-status-panel">
               <div>
                 <p className="eyebrow">{profileMode === 'edit' ? t('dashboard.editListing') : t('dashboard.createListing')}</p>
                 <h2>{t('dashboard.listingStatus')}</h2>
@@ -404,9 +445,9 @@ export function DashboardPage() {
                   <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(`https://escort-radar.fun/r/${savedProfile.referral_code}`)}>{t('referral.copy')}</button>
                 </div>
               )}
-            </section>
+            </section>}
 
-            <section className="subscription-card">
+            {(creatorTab === 'overview' || creatorTab === 'verification') && <section className="subscription-card">
               <div>
                 <p className="eyebrow">{t('dashboard.subscription')}</p>
                 <h2><CreditCard size={20} /> {t('subscription.title')}</h2>
@@ -417,9 +458,9 @@ export function DashboardPage() {
                 </p>
               </div>
               <button className="button primary" type="button" disabled>{t('subscription.activate')}</button>
-            </section>
+            </section>}
 
-            <section className="form-panel elevated">
+            {creatorTab === 'listing' && <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.basic')}</h2>
               <div className="form-grid">
                 <input placeholder={t('form.displayName')} value={profile.display_name || ''} onChange={(event) => setProfile({ ...profile, display_name: event.target.value })} required />
@@ -438,9 +479,9 @@ export function DashboardPage() {
               </div>
               <textarea placeholder={t('form.description')} value={profile.description || ''} onChange={(event) => setProfile({ ...profile, description: event.target.value })} />
               <div className="readonly">{t('dashboard.verifiedStatus', { status: savedProfile?.verified ? t('badges.verified') : t('dashboard.readOnlyPending') })}</div>
-            </section>
+            </section>}
 
-            <section className="form-panel elevated">
+            {creatorTab === 'listing' && <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.appearance')}</h2>
               <div className="form-grid">
                 <input type="number" min="18" placeholder={t('form.age')} value={profile.age || ''} onChange={(event) => setProfile({ ...profile, age: Number(event.target.value) })} />
@@ -469,9 +510,9 @@ export function DashboardPage() {
               <DashboardTagPicker tags={platformTags} selected={profile.tag_ids || []} onToggle={(value) => setProfile({ ...profile, tag_ids: toggleArrayValue(profile.tag_ids, value) })} />
               <DashboardMultiSelect title={t('filters.paymentMethods')} values={profile.payment_methods || []} options={paymentMethodOptions} onToggle={(value) => setProfile({ ...profile, payment_methods: toggleArrayValue(profile.payment_methods, value) })} />
               <p className="safety-line">{t('city.safety')}</p>
-            </section>
+            </section>}
 
-            <section className="form-panel elevated">
+            {creatorTab === 'radar' && <section className="form-panel elevated">
               <h2><Clock size={18} /> {t('dashboard.radarVisibility')}</h2>
               <div className="form-grid">
                 <select value={profile.availability_status || 'unavailable'} onChange={(event) => setProfile({ ...profile, availability_status: event.target.value as Profile['availability_status'], available_now: event.target.value === 'available' })}>
@@ -485,9 +526,9 @@ export function DashboardPage() {
                 <input type="number" placeholder={t('dashboard.longitude')} value={profile.longitude ?? ''} onChange={(event) => setProfile({ ...profile, longitude: event.target.value ? Number(event.target.value) : null })} />
               </div>
               <p className="safety-line">{t('radar.privacy')} {t('dashboard.locationHint')}</p>
-            </section>
+            </section>}
 
-            <section className="form-panel elevated">
+            {creatorTab === 'services' && <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.prices')}</h2>
               <div className="form-grid">
                 <input type="number" placeholder={t('form.price30')} value={profile.price_30min || ''} onChange={(event) => setProfile({ ...profile, price_30min: Number(event.target.value) })} />
@@ -501,17 +542,17 @@ export function DashboardPage() {
                   <option value="CHF">CHF</option>
                 </select>
               </div>
-            </section>
+            </section>}
 
-            <section className="form-panel elevated">
+            {creatorTab === 'services' && <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.services')}</h2>
               <ServiceMenuEditor
                 services={profile.service_menu || []}
                 onChange={(service_menu) => setProfile({ ...profile, service_menu })}
               />
-            </section>
+            </section>}
 
-            <section className="form-panel elevated">
+            {creatorTab === 'services' && <section className="form-panel elevated">
               <h2><Clock size={18} /> {t('dashboard.availability')}</h2>
               <div className="toggle-grid">
                 <label><input type="checkbox" checked={Boolean(profile.available_now)} onChange={(event) => setProfile({ ...profile, available_now: event.target.checked })} /> {t('badges.availableNow')}</label>
@@ -519,7 +560,7 @@ export function DashboardPage() {
                 <label><input type="checkbox" checked={Boolean(profile.private_studio)} onChange={(event) => setProfile({ ...profile, private_studio: event.target.checked })} /> {t('badges.private')}</label>
               </div>
               <input placeholder={t('form.availabilityNote')} value={profile.availability_note || ''} onChange={(event) => setProfile({ ...profile, availability_note: event.target.value })} />
-            </section>
+            </section>}
 
             <div className="dashboard-action-bar">
               <button className="button primary" type="submit" disabled={dashboardStatus === 'saving' || !token}>
@@ -530,7 +571,7 @@ export function DashboardPage() {
             </div>
           </form>
 
-          <section className="form-panel elevated">
+          {creatorTab === 'media' && <section className="form-panel elevated">
             <h2><ImagePlus size={18} /> {t('dashboard.photos')}</h2>
             <p className="safety-line">{t('photos.counter', { count: savedProfile?.profile_images?.length || 0, max: savedProfile?.max_photos || 6 })}</p>
             <div className="photo-drop">
@@ -543,9 +584,9 @@ export function DashboardPage() {
               ))}
               {!savedProfile?.profile_images?.length && <p className="muted">{t('photos.empty')}</p>}
             </div>
-          </section>
+          </section>}
 
-          <section className="form-panel elevated">
+          {(creatorTab === 'overview' || creatorTab === 'verification') && <section className="form-panel elevated">
             <h2><CalendarDays size={18} /> {t('dashboard.bookingRequests')}</h2>
             <div className="booking-list">
               {(bookingRequests.length ? bookingRequests : demoBookingRequests).map((booking) => (
@@ -559,7 +600,7 @@ export function DashboardPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </section>}
 
           {message && authStatus === 'idle' && <div className={dashboardStatus === 'error' ? 'state-panel error-text' : 'state-panel success'}>{message}</div>}
         </div>
@@ -567,16 +608,18 @@ export function DashboardPage() {
         <aside className="dashboard-preview">
           <LivePreviewCard profile={previewProfile(profile, savedProfile)} />
         </aside>
-      </div>
+      </div>}
 
-      <CreatorContentManager
+      {creatorTab === 'media' && <CreatorContentManager
         tab={contentTab}
         onTab={setContentTab}
         savedProfile={savedProfile}
         uploadImage={uploadImage}
-      />
+        uploadStatus={uploadStatus}
+        setCoverImage={setCoverImage}
+      />}
 
-      <LiveCreatorControls />
+      {creatorTab === 'live' && <LiveCreatorControls />}
 
       <MobileCreatorDock
         savedProfile={savedProfile}
@@ -723,11 +766,13 @@ function LivePreviewCard({ profile }: { profile: Profile }) {
   );
 }
 
-function CreatorContentManager({ tab, onTab, savedProfile, uploadImage }: {
+function CreatorContentManager({ tab, onTab, savedProfile, uploadImage, uploadStatus, setCoverImage }: {
   tab: string;
   onTab: (tab: string) => void;
   savedProfile: Profile | null;
   uploadImage: (event: ChangeEvent<HTMLInputElement>) => void;
+  uploadStatus: 'idle' | 'uploading' | 'success' | 'error';
+  setCoverImage: (imageId: string) => void;
 }) {
   const { t } = useI18n();
   const tabs = ['photos', 'videos', 'liveCam', 'privateGallery', 'stories', 'verification'];
@@ -744,7 +789,7 @@ function CreatorContentManager({ tab, onTab, savedProfile, uploadImage }: {
         <input id="creator-media-upload" type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= (savedProfile.max_photos || 6)} />
         <UploadCloud size={28} />
         <h3>{t('creator.dragDrop')}</h3>
-        <p>{t('photos.counter', { count: savedProfile?.profile_images?.length || 0, max: savedProfile?.max_photos || 6 })}</p>
+        <p>{uploadStatus === 'uploading' ? t('photos.uploading') : t('photos.counter', { count: savedProfile?.profile_images?.length || 0, max: savedProfile?.max_photos || 6 })}</p>
       </div>
       <div className="creator-gallery-grid">
         {(savedProfile?.profile_images || []).map((image, index) => (
@@ -752,7 +797,7 @@ function CreatorContentManager({ tab, onTab, savedProfile, uploadImage }: {
             {image.public_url ? <img src={image.public_url} alt="" /> : <div className="image-placeholder" />}
             <span>{index === 0 ? t('creator.coverImage') : t('creator.galleryImage')}</span>
             <div className="creator-media-actions">
-              <button>{t('creator.cover')}</button>
+              <button type="button" onClick={() => setCoverImage(image.id)}>{image.is_cover || image.is_primary ? t('creator.coverImage') : t('creator.cover')}</button>
               <button>{t('creator.locked')}</button>
               <button>{t('creator.blur')}</button>
             </div>

@@ -404,6 +404,12 @@
   "visibility.missingCityCategory": "Jeszcze niewidoczne publicznie: brakuje miasta lub kategorii.",
   "visibility.notActive": "Jeszcze niewidoczne publicznie: status ogłoszenia nie jest aktywny.",
   "visibility.public": "Widoczność publiczna jest aktywna w mieście i wynikach radaru.",
+  "visibility.visible": "Widoczne publicznie.",
+  "visibility.missing_payment": "Niewidoczne: brak aktywnej płatności/subskrypcji.",
+  "visibility.pending_verification": "Niewidoczne: trwa ręczna weryfikacja.",
+  "visibility.blocked": "Niewidoczne: profil zablokowany.",
+  "visibility.missing_required_fields": "Niewidoczne: brakuje wymaganych danych.",
+  "visibility.no_images": "Niewidoczne: dodaj minimum jedno zdjęcie.",
   "form.email": "Email",
   "form.username": "Nazwa użytkownika",
   "form.password": "Hasło",
@@ -605,4 +611,14 @@
   "creator.privateShowTicket": "Ticket private show",
   "creator.onlineSchedule": "Online schedule",
   "creator.liveNow": "Live now"
+  ,"creator.dashboardTabs.overview": "Overview",
+  "creator.dashboardTabs.listing": "Ogłoszenie",
+  "creator.dashboardTabs.media": "Media",
+  "creator.dashboardTabs.services": "Usługi i ceny",
+  "creator.dashboardTabs.radar": "Radar",
+  "creator.dashboardTabs.live": "Live i chat",
+  "creator.dashboardTabs.tokens": "Tokeny i referral",
+  "creator.dashboardTabs.verification": "Weryfikacja",
+  "creator.coverSaved": "Zdjęcie główne zapisane",
+  "photos.uploading": "Upload w toku..."
 }

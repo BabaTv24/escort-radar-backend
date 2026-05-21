@@ -39,6 +39,10 @@ export const api = {
     token,
     body: form
   }),
+  setCoverImage: (token: string, id: string) => request<{ image: unknown }>(`/api/uploads/profile-image/${id}/cover`, {
+    method: 'PATCH',
+    token
+  }),
   report: (body: Record<string, string>) => request<{ report: unknown }>('/api/reports', {
     method: 'POST',
     body: JSON.stringify(body)

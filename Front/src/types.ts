@@ -1,9 +1,13 @@
 export type ProfileImage = {
   id: string;
+  profile_id?: string;
   storage_path: string;
   public_url?: string;
   is_primary: boolean;
+  is_cover?: boolean;
   is_blurred: boolean;
+  moderation_status?: 'pending' | 'approved' | 'rejected' | 'blocked';
+  created_at?: string;
 };
 
 export type ServiceMenuItem = {
@@ -83,6 +87,13 @@ export type Profile = {
   max_photos?: number;
   trial_ends_at?: string | null;
   profile_images?: ProfileImage[];
+  images?: ProfileImage[];
+  visibility_reason?: 'visible' | 'missing_payment' | 'pending_verification' | 'suspended' | 'blocked' | 'missing_required_fields' | 'no_images';
+  wallet_summary?: {
+    escort_token_balance: number;
+    referral_balance: number;
+    public_wallet_id?: string;
+  };
 };
 
 export type Tag = {

@@ -56,7 +56,8 @@ profilesRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
     .maybeSingle();
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ profile: data ? withImageUrls(data) : null });
+  const wallet = await getOrCreateWallet(req.user!.id);
+  res.json({ profile: data ? withImageUrls(data, wallet) : null, wallet });
 }));
 
 profilesRouter.get('/:id', asyncHandler(async (req, res) => {
@@ -67,7 +68,9 @@ profilesRouter.get('/:id', asyncHandler(async (req, res) => {
     .single();
 
   if (error || !data) return res.status(404).json({ error: 'Profile not found' });
-  if (data.status !== 'active') return res.status(404).json({ error: 'Profile not found' });
+  if (data.status !== 'active' || data.shadowbanned || ['blocked', 'suspended'].includes(data.moderation_status)) {
+    return res.status(404).json({ error: 'Profile not found' });
+  }
 
   res.json({ profile: withImageUrls(data) });
 }));
@@ -103,7 +106,8 @@ profilesRouter.post('/', verifyUser, asyncHandler(async (req, res) => {
   await syncProfileTags(data.id, tag_ids);
   const hydrated = await fetchProfile(data.id);
 
-  res.status(201).json({ profile: withImageUrls(hydrated || data) });
+  const wallet = await getOrCreateWallet(req.user!.id);
+  res.status(201).json({ profile: withImageUrls(hydrated || data, wallet), wallet });
 }));
 
 profilesRouter.put('/:id', verifyUser, asyncHandler(async (req, res) => {
@@ -141,7 +145,8 @@ profilesRouter.put('/:id', verifyUser, asyncHandler(async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
   await syncProfileTags(data.id, tag_ids);
   const hydrated = await fetchProfile(data.id);
-  res.json({ profile: withImageUrls(hydrated || data) });
+  const wallet = await getOrCreateWallet(req.user!.id);
+  res.json({ profile: withImageUrls(hydrated || data, wallet), wallet });
 }));
 
 profilesRouter.delete('/:id', verifyUser, asyncHandler(async (req, res) => {
@@ -154,15 +159,38 @@ profilesRouter.delete('/:id', verifyUser, asyncHandler(async (req, res) => {
   res.status(204).send();
 }));
 
-function withImageUrls(profile: any) {
+function withImageUrls(profile: any, wallet?: any) {
   const images = (profile.profile_images || []).map((image: any) => {
     const { data } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
-    return { ...image, public_url: data.publicUrl };
+    return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
   });
 
   const tags = (profile.profile_tags || []).map((row: any) => row.tags).filter(Boolean);
   const tag_ids = (profile.profile_tags || []).map((row: any) => row.tag_id).filter(Boolean);
-  return { ...profile, profile_images: images, tags, tag_ids };
+  return {
+    ...profile,
+    profile_images: images,
+    images,
+    tags,
+    tag_ids,
+    wallet_summary: wallet ? {
+      escort_token_balance: Number(wallet.escort_token_balance || 0),
+      referral_balance: Number(wallet.referral_balance || 0),
+      public_wallet_id: wallet.public_wallet_id
+    } : undefined,
+    visibility_reason: getVisibilityReason({ ...profile, profile_images: images })
+  };
+}
+
+function getVisibilityReason(profile: any) {
+  if (profile.moderation_status === 'blocked') return 'blocked';
+  if (profile.moderation_status === 'suspended' || profile.status === 'suspended') return 'suspended';
+  if (!profile.display_name || !profile.city || !profile.category) return 'missing_required_fields';
+  if (!profile.profile_images?.length) return 'no_images';
+  if (!profile.is_test_account && profile.subscription_status !== 'active') return 'missing_payment';
+  if (!profile.verified && profile.verification_status !== 'verified') return 'pending_verification';
+  if (profile.status !== 'active') return 'pending_verification';
+  return 'visible';
 }
 
 function splitProfileTags(data: Record<string, any>) {
@@ -240,4 +268,17 @@ async function generateUniqueValue(column: 'public_user_id' | 'referral_code', g
     if (!data) return value;
   }
   return generator();
+}
+
+async function getOrCreateWallet(userId: string) {
+  const { data } = await supabaseAdmin.from('wallets').select('*').eq('user_id', userId).maybeSingle();
+  if (data) return data;
+
+  const { data: wallet, error } = await supabaseAdmin
+    .from('wallets')
+    .insert({ user_id: userId, public_wallet_id: `ERW-${crypto.randomUUID().slice(0, 8).toUpperCase()}` })
+    .select()
+    .single();
+  if (error) return null;
+  return wallet;
 }

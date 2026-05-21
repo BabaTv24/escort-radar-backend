@@ -40,6 +40,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
         ) : null}
         {profile.price_1h && <p className="price-line">{t('profile.fromPrice', { price: profile.price_1h, currency: profile.currency || 'EUR' })}</p>}
         <p className="muted">{t('profile.availableWithin', { radius: profile.service_radius_km || 25 })}</p>
+        {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
         <Link to={`/profile/${profile.id}`} className="button full">{t('buttons.viewProfile')}</Link>
       </div>
