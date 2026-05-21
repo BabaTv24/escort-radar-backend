@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { CalendarDays, Clock, CreditCard, ImagePlus, Lock, Sparkles, UserRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -70,31 +70,82 @@ export function DashboardPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
+  const [userEmail, setUserEmail] = useState('');
   const [profile, setProfile] = useState<Partial<Profile>>(emptyProfile);
   const [savedProfile, setSavedProfile] = useState<Profile | null>(null);
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
   const [message, setMessage] = useState('');
+  const [authStatus, setAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const { t, option } = useI18n();
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      const session = data.session;
+      setToken(session?.access_token || '');
+      setUserEmail(session?.user.email || '');
+      if (session?.access_token) {
+        loadBookingRequests(session.access_token);
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setToken(session?.access_token || '');
+      setUserEmail(session?.user.email || '');
+      if (session?.access_token) {
+        loadBookingRequests(session.access_token);
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
   async function signIn(mode: 'sign-in' | 'sign-up') {
-    const result = mode === 'sign-up'
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
+    setAuthStatus('loading');
+    setMessage('');
 
-    if (result.error) {
-      setMessage(result.error.message);
-      return;
-    }
+    try {
+      const normalizedEmail = email.trim();
+      const result = mode === 'sign-up'
+        ? await supabase.auth.signUp({ email: normalizedEmail, password })
+        : await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
 
-    setToken(result.data.session?.access_token || '');
-    if (result.data.session?.access_token) {
-      api.myBookingRequests(result.data.session.access_token).then((data) => setBookingRequests(data.booking_requests)).catch(() => setBookingRequests(demoBookingRequests));
+      if (result.error) {
+        setAuthStatus('error');
+        setMessage(getAuthErrorMessage(result.error.message, mode, t));
+        return;
+      }
+
+      const session = result.data.session;
+      setToken(session?.access_token || '');
+      setUserEmail(result.data.user?.email || normalizedEmail);
+
+      if (session?.access_token) {
+        await loadBookingRequests(session.access_token);
+        setAuthStatus('success');
+        setMessage(mode === 'sign-up' ? t('auth.registerSuccess') : t('auth.loginSuccess'));
+        return;
+      }
+
+      setAuthStatus('success');
+      setMessage(t('auth.emailConfirmationRequired'));
+    } catch (error) {
+      setAuthStatus('error');
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     }
-    setMessage(mode === 'sign-up' ? t('dashboard.saved') : t('status.active'));
+  }
+
+  async function loadBookingRequests(accessToken: string) {
+    try {
+      const data = await api.myBookingRequests(accessToken);
+      setBookingRequests(data.booking_requests);
+    } catch {
+      setBookingRequests(demoBookingRequests);
+    }
   }
 
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
+    setAuthStatus('idle');
     if (!token) return setMessage(t('dashboard.signInFirst'));
 
     const body = { ...profile, languages: String(profile.languages || '').split(',').map((item) => item.trim()).filter(Boolean) };
@@ -109,6 +160,7 @@ export function DashboardPage() {
   async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !token || !savedProfile) return;
+    setAuthStatus('idle');
     const form = new FormData();
     form.set('profile_id', savedProfile.id);
     form.set('image', file);
@@ -133,9 +185,15 @@ export function DashboardPage() {
               <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
             </div>
             <div className="row">
-              <button className="button primary" onClick={() => signIn('sign-in')}>{t('buttons.login')}</button>
-              <button className="button" onClick={() => signIn('sign-up')}>{t('buttons.register')}</button>
+              <button className="button primary" type="button" disabled={authStatus === 'loading'} onClick={() => signIn('sign-in')}>
+                {authStatus === 'loading' ? t('states.loading') : t('buttons.login')}
+              </button>
+              <button className="button" type="button" disabled={authStatus === 'loading'} onClick={() => signIn('sign-up')}>
+                {authStatus === 'loading' ? t('states.loading') : t('buttons.register')}
+              </button>
             </div>
+            {userEmail && <p className="success">{t('auth.signedInAs', { email: userEmail })}</p>}
+            {message && <p className={authStatus === 'error' ? 'error-text' : 'success'}>{message}</p>}
           </section>
 
           <form className="stack" onSubmit={saveProfile}>
@@ -278,7 +336,7 @@ export function DashboardPage() {
             </div>
           </section>
 
-          {message && <div className="state-panel">{message}</div>}
+          {message && authStatus === 'idle' && <div className="state-panel">{message}</div>}
         </div>
 
         <aside className="dashboard-preview">
@@ -289,6 +347,20 @@ export function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function getAuthErrorMessage(message: string, mode: 'sign-in' | 'sign-up', t: (key: string, vars?: Record<string, string | number>) => string) {
+  const lower = message.toLowerCase();
+  if (lower.includes('email not confirmed') || lower.includes('confirm')) {
+    return t('auth.emailConfirmationRequired');
+  }
+  if (lower.includes('invalid login credentials')) {
+    return t('auth.invalidCredentials');
+  }
+  if (lower.includes('already registered') || lower.includes('user already registered')) {
+    return t('auth.alreadyRegistered');
+  }
+  return mode === 'sign-up' ? t('auth.registerFailed', { message }) : t('auth.loginFailed', { message });
 }
 
 const demoBookingRequests: BookingRequest[] = [
