@@ -80,12 +80,17 @@ export function AdminPage() {
   return (
     <div className="page admin-page">
       <section className="admin-hero">
+        <div className="baba-admin-badge">
+          <span className="baba-wordmark">BABA AI</span>
+          <strong>{t('baba.adminConsole')}</strong>
+        </div>
         <p className="eyebrow">{t('admin.eyebrow')}</p>
         <h1><Shield size={30} /> {t('admin.title')}</h1>
         <p>{t('admin.subtitle')}</p>
         <div className="admin-notice-row">
           <span><BadgeCheck size={16} /> {t('admin.manualVerification')}</span>
           <span><AlertTriangle size={16} /> {t('admin.sensitiveCases')}</span>
+          <span>{t('baba.manualModeration')}</span>
         </div>
       </section>
 

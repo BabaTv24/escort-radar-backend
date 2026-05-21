@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { BadgeCheck, Building2, EyeOff, Map, RadioTower, Smartphone, PlusCircle } from 'lucide-react';
+import { BadgeCheck, Building2, Cpu, EyeOff, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch } from 'lucide-react';
 import { cities } from '../data/cities';
 import { ProfileCard } from '../components/ProfileCard';
 import { getDemoProfiles } from '../data/demoProfiles';
@@ -82,6 +82,19 @@ export function HomePage() {
         <Feature icon={<BadgeCheck />} title={t('home.features.privacy.title')} text={t('home.features.privacy.text')} />
         <Feature icon={<Map />} title={t('home.features.cities.title')} text={cities.map((city) => city.name).join(' / ')} />
         <Feature icon={<BadgeCheck />} title={t('home.sections.vip')} text={t('home.sections.vipText')} />
+      </section>
+
+      <section className="baba-tech-section">
+        <div className="section-head compact">
+          <p className="eyebrow">{t('baba.homeEyebrow')}</p>
+          <h2>{t('baba.homeTitle')}</h2>
+        </div>
+        <div className="baba-tech-grid">
+          <Feature icon={<Cpu />} title={t('baba.cards.moderation')} text={t('baba.cards.moderationText')} />
+          <Feature icon={<ScanSearch />} title={t('baba.cards.geo')} text={t('baba.cards.geoText')} />
+          <Feature icon={<Network />} title={t('baba.cards.marketplace')} text={t('baba.cards.marketplaceText')} />
+          <Feature icon={<ShieldCheck />} title={t('baba.cards.privacy')} text={t('baba.cards.privacyText')} />
+        </div>
       </section>
     </div>
   );

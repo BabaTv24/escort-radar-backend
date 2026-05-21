@@ -52,6 +52,13 @@ export function Layout() {
           <strong>{t('footer.title')}</strong>
           <span>{t('footer.notice')}</span>
         </div>
+        <a className="baba-footer-badge" href="https://www.baba-ai.de" target="_blank" rel="noreferrer">
+          <span className="baba-wordmark">BABA AI</span>
+          <span>
+            <strong>{t('baba.powered')}</strong>
+            <small>{t('baba.infrastructure')}</small>
+          </span>
+        </a>
         <div className="footer-links">
           <Link to="/legal/terms">{t('nav.terms')}</Link>
           <Link to="/legal/privacy">{t('nav.privacy')}</Link>

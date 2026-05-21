@@ -180,6 +180,7 @@ export function DashboardPage() {
         <div className="dashboard-main">
           <section className="form-panel elevated">
             <h2><Lock size={18} /> {t('dashboard.account')}</h2>
+            <p className="baba-auth-line">{t('baba.builtWith')}</p>
             <div className="form-grid">
               <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
               <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
