@@ -244,8 +244,23 @@ textarea { min-height: 8rem; resize: vertical; }
 .creator-media-card, .ai-privacy-card { border: 1px solid rgba(247,212,107,.16); border-radius: .75rem; padding: .65rem; background: rgba(255,255,255,.035); }
 .creator-media-card img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: .55rem; filter: saturate(1.08); }
 .creator-media-card span, .ai-privacy-card span { display: block; color: #08f7b8; font-size: .74rem; text-transform: uppercase; margin: .45rem 0; }
+.media-badge-row { display: flex; flex-wrap: wrap; gap: .35rem; }
+.media-badge-row span { border: 1px solid rgba(56,232,224,.22); border-radius: 999px; padding: .25rem .42rem; background: rgba(56,232,224,.07); }
 .creator-media-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
 .creator-media-actions button { border: 1px solid rgba(247,212,107,.14); border-radius: 999px; background: rgba(247,212,107,.06); color: #f7d46b; padding: .28rem .45rem; font-size: .75rem; }
+.creator-media-actions button.danger { border-color: rgba(255,74,105,.3); background: rgba(255,74,105,.1); color: #ffb0bb; }
+.premium-field { display: grid; gap: .35rem; }
+.premium-field span { color: #fff6df; font-weight: 800; font-size: .86rem; }
+.premium-field small { color: #a99f8b; line-height: 1.35; }
+.dev-debug-box { margin: 1rem 0 5rem; padding: .85rem; border: 1px dashed rgba(56,232,224,.32); border-radius: .75rem; background: rgba(56,232,224,.05); color: #cffffb; }
+.dev-debug-box summary { cursor: pointer; color: #38e8e0; font-weight: 800; }
+.dev-debug-box dl { display: grid; grid-template-columns: 140px 1fr; gap: .35rem .75rem; margin: .75rem 0 0; }
+.dev-debug-box dt { color: #f7d46b; }
+.dev-debug-box dd { margin: 0; overflow-wrap: anywhere; }
+.visibility-checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; margin-top: .75rem; }
+.visibility-checklist span { border: 1px solid rgba(247,212,107,.12); border-radius: 999px; padding: .38rem .55rem; font-size: .82rem; }
+.visibility-checklist .ok { color: #08f7b8; background: rgba(8,247,184,.07); border-color: rgba(8,247,184,.22); }
+.visibility-checklist .missing { color: #ffb0bb; background: rgba(255,74,105,.07); border-color: rgba(255,74,105,.22); }
 .ai-privacy-grid { margin-top: 1rem; }
 .ai-privacy-card { min-height: 140px; display: grid; align-content: start; gap: .35rem; border-color: rgba(56,232,224,.22); }
 .ai-privacy-card svg { color: #f7d46b; }

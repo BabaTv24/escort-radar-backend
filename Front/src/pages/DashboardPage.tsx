@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ChangeEvent, FormEvent } from 'react';
+import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarDays, Clock, Copy, CreditCard, Flame, Gem, ImagePlus, Lock, LogOut, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -97,8 +97,9 @@ export function DashboardPage() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [platformTags, setPlatformTags] = useState<Tag[]>([]);
   const [contentTab, setContentTab] = useState('photos');
-  const [creatorTab, setCreatorTab] = useState('overview');
+  const [creatorTab, setCreatorTab] = useState('listing');
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [lastApiError, setLastApiError] = useState('');
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -229,9 +230,12 @@ export function DashboardPage() {
       setProfileMode('edit');
       setDashboardStatus('success');
       setMessage(t('dashboard.saved'));
+      setLastApiError('');
     } catch (error) {
       setDashboardStatus('error');
-      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      const nextError = error instanceof Error ? error.message : t('states.requestFailed');
+      setMessage(nextError);
+      setLastApiError(nextError);
     }
   }
 
@@ -244,7 +248,13 @@ export function DashboardPage() {
     setMessage('');
     if (file.size > 8 * 1024 * 1024) {
       setDashboardStatus('error');
+      setUploadStatus('error');
       return setMessage(t('photos.fileTooLarge'));
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setDashboardStatus('error');
+      setUploadStatus('error');
+      return setMessage(t('photos.unsupportedFormat'));
     }
     if ((savedProfile.profile_images?.length || 0) >= (savedProfile.max_photos || 6)) {
       setDashboardStatus('error');
@@ -265,11 +275,14 @@ export function DashboardPage() {
       setDashboardStatus('success');
       setUploadStatus('success');
       setMessage(t('dashboard.imageUploaded'));
+      setLastApiError('');
       event.target.value = '';
     } catch (error) {
       setDashboardStatus('error');
       setUploadStatus('error');
-      setMessage(error instanceof Error ? error.message : t('photos.uploadFailed'));
+      const nextError = error instanceof Error ? error.message : t('photos.uploadFailed');
+      setMessage(nextError);
+      setLastApiError(nextError);
     }
   }
 
@@ -281,9 +294,29 @@ export function DashboardPage() {
       await loadDashboard(token);
       setDashboardStatus('success');
       setMessage(t('creator.coverSaved'));
+      setLastApiError('');
     } catch (error) {
       setDashboardStatus('error');
-      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      const nextError = error instanceof Error ? error.message : t('states.requestFailed');
+      setMessage(nextError);
+      setLastApiError(nextError);
+    }
+  }
+
+  async function deleteImage(imageId: string) {
+    if (!token) return;
+    setDashboardStatus('saving');
+    try {
+      await api.deleteImage(token, imageId);
+      await loadDashboard(token);
+      setDashboardStatus('success');
+      setMessage(t('photos.deleted'));
+      setLastApiError('');
+    } catch (error) {
+      setDashboardStatus('error');
+      const nextError = error instanceof Error ? error.message : t('states.requestFailed');
+      setMessage(nextError);
+      setLastApiError(nextError);
     }
   }
 
@@ -375,19 +408,19 @@ export function DashboardPage() {
       </section>
 
       <nav className="creator-studio-tabs">
-        {['overview', 'listing', 'media', 'services', 'radar', 'live', 'tokens', 'verification'].map((tab) => (
+        {['listing', 'media', 'services', 'pricing', 'live', 'referral', 'privacy', 'visibility'].map((tab) => (
           <button key={tab} type="button" className={creatorTab === tab ? 'active' : ''} onClick={() => setCreatorTab(tab)}>
             {t(`creator.dashboardTabs.${tab}`)}
           </button>
         ))}
       </nav>
 
-      {(creatorTab === 'overview' || creatorTab === 'tokens') && <section className="creator-command-grid">
+      {creatorTab === 'referral' && <section className="creator-command-grid">
         <CreatorMonetizationPanel wallet={wallet} bookings={bookingRequests.length} profile={savedProfile} />
         <ReferralStudio profile={savedProfile} />
       </section>}
 
-      {creatorTab !== 'media' && creatorTab !== 'live' && creatorTab !== 'tokens' && <div className="dashboard-grid">
+      {creatorTab !== 'media' && creatorTab !== 'live' && creatorTab !== 'referral' && creatorTab !== 'privacy' && <div className="dashboard-grid">
         <div className="dashboard-main">
           <section className="form-panel elevated">
             <h2><Lock size={18} /> {t('dashboard.account')}</h2>
@@ -406,7 +439,7 @@ export function DashboardPage() {
           </section>
 
           <form className="stack" onSubmit={saveProfile}>
-            {creatorTab === 'overview' && <section className="form-panel elevated">
+            {creatorTab === 'visibility' && <section className="form-panel elevated">
               <h2>{t('wizard.step1')} · {t('dashboard.accountType')}</h2>
               <div className="account-type-grid">
                 {accountTypeOptions.map((item) => (
@@ -426,7 +459,7 @@ export function DashboardPage() {
               {savedProfile?.phone_conflict_status && savedProfile.phone_conflict_status !== 'clear' && <p className="error-text">{t(`phoneConflict.${savedProfile.phone_conflict_status}`)}</p>}
             </section>}
 
-            {(creatorTab === 'overview' || creatorTab === 'verification') && <section className="listing-status-panel">
+            {creatorTab === 'visibility' && <section className="listing-status-panel">
               <div>
                 <p className="eyebrow">{profileMode === 'edit' ? t('dashboard.editListing') : t('dashboard.createListing')}</p>
                 <h2>{t('dashboard.listingStatus')}</h2>
@@ -437,6 +470,7 @@ export function DashboardPage() {
                 <span>{t(`admin.verification.${savedProfile?.verification_status || 'pending'}`)}</span>
                 <span>{t(`status.${savedProfile?.status || 'pending'}`)}</span>
               </div>
+              <VisibilityChecklist profile={savedProfile} />
               {savedProfile?.public_user_id && (
                 <div className="referral-box">
                   <span>{t('referral.myId')}: {savedProfile.public_user_id}</span>
@@ -447,7 +481,7 @@ export function DashboardPage() {
               )}
             </section>}
 
-            {(creatorTab === 'overview' || creatorTab === 'verification') && <section className="subscription-card">
+            {creatorTab === 'visibility' && <section className="subscription-card">
               <div>
                 <p className="eyebrow">{t('dashboard.subscription')}</p>
                 <h2><CreditCard size={20} /> {t('subscription.title')}</h2>
@@ -512,7 +546,7 @@ export function DashboardPage() {
               <p className="safety-line">{t('city.safety')}</p>
             </section>}
 
-            {creatorTab === 'radar' && <section className="form-panel elevated">
+            {creatorTab === 'visibility' && <section className="form-panel elevated">
               <h2><Clock size={18} /> {t('dashboard.radarVisibility')}</h2>
               <div className="form-grid">
                 <select value={profile.availability_status || 'unavailable'} onChange={(event) => setProfile({ ...profile, availability_status: event.target.value as Profile['availability_status'], available_now: event.target.value === 'available' })}>
@@ -528,19 +562,19 @@ export function DashboardPage() {
               <p className="safety-line">{t('radar.privacy')} {t('dashboard.locationHint')}</p>
             </section>}
 
-            {creatorTab === 'services' && <section className="form-panel elevated">
+            {creatorTab === 'pricing' && <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.prices')}</h2>
               <div className="form-grid">
-                <input type="number" placeholder={t('form.price30')} value={profile.price_30min || ''} onChange={(event) => setProfile({ ...profile, price_30min: Number(event.target.value) })} />
-                <input type="number" placeholder={t('form.price1h')} value={profile.price_1h || ''} onChange={(event) => setProfile({ ...profile, price_1h: Number(event.target.value) })} />
-                <input type="number" placeholder={t('form.price2h')} value={profile.price_2h || ''} onChange={(event) => setProfile({ ...profile, price_2h: Number(event.target.value) })} />
-                <input type="number" placeholder={t('form.priceNight')} value={profile.price_night || ''} onChange={(event) => setProfile({ ...profile, price_night: Number(event.target.value) })} />
-                <input type="number" placeholder={t('form.outcallFee')} value={profile.outcall_fee || ''} onChange={(event) => setProfile({ ...profile, outcall_fee: Number(event.target.value) })} />
-                <select value={profile.currency || 'EUR'} onChange={(event) => setProfile({ ...profile, currency: event.target.value })}>
-                  <option value="EUR">EUR</option>
-                  <option value="PLN">PLN</option>
-                  <option value="CHF">CHF</option>
-                </select>
+                <Field label={t('form.price30')} helper={t('pricing.helper30')}><input type="number" placeholder="120" value={profile.price_30min || ''} onChange={(event) => setProfile({ ...profile, price_30min: Number(event.target.value) })} /></Field>
+                <Field label={t('form.price1h')} helper={t('pricing.helper1h')}><input type="number" placeholder="200" value={profile.price_1h || ''} onChange={(event) => setProfile({ ...profile, price_1h: Number(event.target.value) })} /></Field>
+                <Field label={t('form.price2h')} helper={t('pricing.helper2h')}><input type="number" placeholder="360" value={profile.price_2h || ''} onChange={(event) => setProfile({ ...profile, price_2h: Number(event.target.value) })} /></Field>
+                <Field label={t('form.priceNight')} helper={t('pricing.helperNight')}><input type="number" placeholder="900" value={profile.price_night || ''} onChange={(event) => setProfile({ ...profile, price_night: Number(event.target.value) })} /></Field>
+                <Field label={t('form.outcallFee')} helper={t('pricing.helperOutcall')}><input type="number" placeholder="50" value={profile.outcall_fee || ''} onChange={(event) => setProfile({ ...profile, outcall_fee: Number(event.target.value) })} /></Field>
+                <Field label={t('form.currency')} helper={t('pricing.helperCurrency')}><select value={profile.currency || 'EUR'} onChange={(event) => setProfile({ ...profile, currency: event.target.value })}>
+                    <option value="EUR">EUR</option>
+                    <option value="PLN">PLN</option>
+                    <option value="CHF">CHF</option>
+                  </select></Field>
               </div>
             </section>}
 
@@ -552,7 +586,7 @@ export function DashboardPage() {
               />
             </section>}
 
-            {creatorTab === 'services' && <section className="form-panel elevated">
+            {creatorTab === 'pricing' && <section className="form-panel elevated">
               <h2><Clock size={18} /> {t('dashboard.availability')}</h2>
               <div className="toggle-grid">
                 <label><input type="checkbox" checked={Boolean(profile.available_now)} onChange={(event) => setProfile({ ...profile, available_now: event.target.checked })} /> {t('badges.availableNow')}</label>
@@ -586,7 +620,7 @@ export function DashboardPage() {
             </div>
           </section>}
 
-          {(creatorTab === 'overview' || creatorTab === 'verification') && <section className="form-panel elevated">
+          {creatorTab === 'visibility' && <section className="form-panel elevated">
             <h2><CalendarDays size={18} /> {t('dashboard.bookingRequests')}</h2>
             <div className="booking-list">
               {(bookingRequests.length ? bookingRequests : demoBookingRequests).map((booking) => (
@@ -617,9 +651,12 @@ export function DashboardPage() {
         uploadImage={uploadImage}
         uploadStatus={uploadStatus}
         setCoverImage={setCoverImage}
+        deleteImage={deleteImage}
       />}
 
       {creatorTab === 'live' && <LiveCreatorControls />}
+      {creatorTab === 'privacy' && <section className="creator-panel"><AiPrivacyTools /></section>}
+      <DevDebugBox userEmail={userEmail} profile={savedProfile} wallet={wallet} uploadStatus={uploadStatus} lastApiError={lastApiError} />
 
       <MobileCreatorDock
         savedProfile={savedProfile}
@@ -724,6 +761,23 @@ function CreatorMonetizationPanel({ wallet, bookings, profile }: { wallet: Walle
 function ReferralStudio({ profile }: { profile: Profile | null }) {
   const { t } = useI18n();
   const referralUrl = profile?.referral_code ? `https://escort-radar.fun/r/${profile.referral_code}` : t('referral.pending');
+  function shareReferral() {
+    if (navigator.share && profile?.referral_code) {
+      navigator.share({ title: 'Escort Radar', url: referralUrl }).catch(() => undefined);
+    } else {
+      navigator.clipboard?.writeText(referralUrl);
+    }
+  }
+  function downloadQr() {
+    const code = profile?.referral_code || 'ESCORT-RADAR';
+    const cells = Array.from({ length: 49 }, (_, index) => ((code.charCodeAt(index % code.length) + index * 7) % 3) !== 0);
+    const rects = cells.map((active, index) => active ? `<rect x="${(index % 7) * 12}" y="${Math.floor(index / 7) * 12}" width="10" height="10" fill="#050505"/>` : '').join('');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 84 84"><rect width="84" height="84" fill="#f7d46b"/>${rects}</svg>`;
+    const link = document.createElement('a');
+    link.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    link.download = `escort-radar-${code}.svg`;
+    link.click();
+  }
   return (
     <section className="creator-panel referral-studio">
       <div>
@@ -740,8 +794,8 @@ function ReferralStudio({ profile }: { profile: Profile | null }) {
       </div>
       <div className="creator-share-row">
         <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(referralUrl)}>{t('referral.copy')}</button>
-        <button className="button" type="button">{t('creator.share')}</button>
-        <button className="button" type="button">{t('creator.downloadQr')}</button>
+        <button className="button" type="button" onClick={shareReferral}>{t('creator.share')}</button>
+        <button className="button" type="button" onClick={downloadQr}>{t('creator.downloadQr')}</button>
       </div>
     </section>
   );
@@ -766,13 +820,14 @@ function LivePreviewCard({ profile }: { profile: Profile }) {
   );
 }
 
-function CreatorContentManager({ tab, onTab, savedProfile, uploadImage, uploadStatus, setCoverImage }: {
+function CreatorContentManager({ tab, onTab, savedProfile, uploadImage, uploadStatus, setCoverImage, deleteImage }: {
   tab: string;
   onTab: (tab: string) => void;
   savedProfile: Profile | null;
   uploadImage: (event: ChangeEvent<HTMLInputElement>) => void;
   uploadStatus: 'idle' | 'uploading' | 'success' | 'error';
   setCoverImage: (imageId: string) => void;
+  deleteImage: (imageId: string) => void;
 }) {
   const { t } = useI18n();
   const tabs = ['photos', 'videos', 'liveCam', 'privateGallery', 'stories', 'verification'];
@@ -795,11 +850,15 @@ function CreatorContentManager({ tab, onTab, savedProfile, uploadImage, uploadSt
         {(savedProfile?.profile_images || []).map((image, index) => (
           <article className="creator-media-card" key={image.id}>
             {image.public_url ? <img src={image.public_url} alt="" /> : <div className="image-placeholder" />}
-            <span>{index === 0 ? t('creator.coverImage') : t('creator.galleryImage')}</span>
+            <div className="media-badge-row">
+              <span>{image.is_cover || image.is_primary ? t('creator.coverImage') : t('creator.galleryImage')}</span>
+              <span>{t(`photoModeration.${image.moderation_status || 'pending'}`)}</span>
+            </div>
             <div className="creator-media-actions">
               <button type="button" onClick={() => setCoverImage(image.id)}>{image.is_cover || image.is_primary ? t('creator.coverImage') : t('creator.cover')}</button>
               <button>{t('creator.locked')}</button>
               <button>{t('creator.blur')}</button>
+              <button className="danger" type="button" onClick={() => deleteImage(image.id)}>{t('buttons.delete')}</button>
             </div>
           </article>
         ))}
@@ -851,6 +910,32 @@ function LiveCreatorControls() {
   );
 }
 
+function DevDebugBox({ userEmail, profile, wallet, uploadStatus, lastApiError }: {
+  userEmail: string;
+  profile: Profile | null;
+  wallet: Wallet | null;
+  uploadStatus: string;
+  lastApiError: string;
+}) {
+  const isDev = import.meta.env.DEV || ['mtvx007@gmail.com', 'babatv24@proton.me'].includes(userEmail.toLowerCase());
+  if (!isDev) return null;
+  return (
+    <details className="dev-debug-box">
+      <summary>DEV DEBUG</summary>
+      <dl>
+        <dt>User</dt><dd>{userEmail || '-'}</dd>
+        <dt>Profile</dt><dd>{profile?.id || '-'}</dd>
+        <dt>Wallet</dt><dd>{wallet?.id || profile?.wallet_summary?.public_wallet_id || '-'}</dd>
+        <dt>Images</dt><dd>{profile?.profile_images?.length || 0}</dd>
+        <dt>Tags</dt><dd>{profile?.tag_ids?.length || 0}</dd>
+        <dt>Visibility</dt><dd>{profile?.visibility_reason || '-'}</dd>
+        <dt>Upload</dt><dd>{uploadStatus}</dd>
+        <dt>Last error</dt><dd>{lastApiError || '-'}</dd>
+      </dl>
+    </details>
+  );
+}
+
 function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile: Profile | null; onUpload: () => void; onLogout: () => void }) {
   const { t } = useI18n();
   return (
@@ -861,6 +946,25 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
       {savedProfile ? <Link to={`/profile/${savedProfile.id}`}>{t('nav.profile')}</Link> : <button type="button">{t('nav.profile')}</button>}
       <button type="button" onClick={onLogout}><LogOut size={17} />{t('buttons.logout')}</button>
     </nav>
+  );
+}
+
+function VisibilityChecklist({ profile }: { profile: Profile | null }) {
+  const { t } = useI18n();
+  const items = [
+    ['visibilityChecklist.photo', Boolean(profile?.profile_images?.length)],
+    ['visibilityChecklist.description', Boolean(profile?.description)],
+    ['visibilityChecklist.pricing', Boolean(profile?.price_1h || profile?.price_30min)],
+    ['visibilityChecklist.location', Boolean(profile?.city && profile?.category)],
+    ['visibilityChecklist.moderation', profile?.verification_status === 'verified' || profile?.is_test_account],
+    ['visibilityChecklist.subscription', profile?.subscription_status === 'active' || profile?.is_test_account]
+  ];
+  return (
+    <div className="visibility-checklist">
+      {items.map(([key, ok]) => (
+        <span key={String(key)} className={ok ? 'ok' : 'missing'}>{ok ? '✓' : '•'} {t(String(key))}</span>
+      ))}
+    </div>
   );
 }
 
@@ -992,6 +1096,7 @@ function prepareProfilePayload(profile: Partial<Profile>, savedProfile: Profile 
 
 function getVisibilityReason(profile: Profile | null, t: (key: string, vars?: Record<string, string | number>) => string) {
   if (!profile) return t('visibility.noProfile');
+  if (profile.visibility_reason) return t(`visibility.${profile.visibility_reason}`);
   if (profile.moderation_status === 'blocked' || profile.moderation_status === 'suspended' || profile.status === 'suspended') return t('visibility.suspended');
   if (!profile.city || !profile.category) return t('visibility.missingCityCategory');
   if (!profile.is_test_account && profile.subscription_status !== 'active') return t('visibility.noPayment');
@@ -1012,9 +1117,9 @@ function ServiceMenuEditor({ services, onChange }: { services: NonNullable<Profi
         <div className="service-editor-row" key={`${service.name}-${index}`}>
           <label><input type="checkbox" checked={service.enabled} onChange={(event) => update(index, { enabled: event.target.checked })} /> {option(service.name)}</label>
           <label><input type="checkbox" checked={service.included} onChange={(event) => update(index, { included: event.target.checked })} /> {t('dashboard.included')}</label>
-          <input placeholder={t('dashboard.serviceName')} value={service.name} onChange={(event) => update(index, { name: event.target.value })} />
-          <input type="number" placeholder={t('dashboard.extraPrice')} value={service.extra_price ?? ''} onChange={(event) => update(index, { extra_price: event.target.value ? Number(event.target.value) : null })} />
-          <input placeholder={t('dashboard.note')} value={service.note || ''} onChange={(event) => update(index, { note: event.target.value })} />
+          <Field label={t('dashboard.serviceName')} helper={t('services.nameHelper')}><input placeholder={t('dashboard.serviceName')} value={service.name} onChange={(event) => update(index, { name: event.target.value })} /></Field>
+          <Field label={t('dashboard.extraPrice')} helper={t('services.priceHelper')}><input type="number" placeholder={t('dashboard.extraPrice')} value={service.extra_price ?? ''} onChange={(event) => update(index, { extra_price: event.target.value ? Number(event.target.value) : null })} /></Field>
+          <Field label={t('dashboard.note')} helper={t('services.noteHelper')}><input placeholder={t('dashboard.note')} value={service.note || ''} onChange={(event) => update(index, { note: event.target.value })} /></Field>
         </div>
       ))}
       <button
@@ -1025,6 +1130,16 @@ function ServiceMenuEditor({ services, onChange }: { services: NonNullable<Profi
         {t('buttons.addCustomService')}
       </button>
     </div>
+  );
+}
+
+function Field({ label, helper, children }: { label: string; helper: string; children: ReactNode }) {
+  return (
+    <label className="premium-field">
+      <span>{label}</span>
+      {children}
+      <small>{helper}</small>
+    </label>
   );
 }
 

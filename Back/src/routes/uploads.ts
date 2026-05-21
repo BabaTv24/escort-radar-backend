@@ -18,6 +18,9 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
   const profileId = String(req.body.profile_id || '');
   if (!profileId) return res.status(400).json({ error: 'profile_id is required' });
   if (!req.file) return res.status(400).json({ error: 'image file is required' });
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(req.file.mimetype)) {
+    return res.status(415).json({ error: 'Unsupported image format. Use JPG, PNG, or WEBP.' });
+  }
 
   const { data: profile } = await supabaseAdmin.from('profiles').select('user_id, max_photos').eq('id', profileId).single();
   if (!profile) return res.status(404).json({ error: 'Profile not found' });
@@ -45,7 +48,12 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
     .from(config.storageBucket)
     .upload(storagePath, processed, { contentType: 'image/jpeg' });
 
-  if (uploadResult.error) return res.status(400).json({ error: uploadResult.error.message });
+  if (uploadResult.error) {
+    const message = uploadResult.error.message.toLowerCase().includes('bucket')
+      ? `Storage bucket "${config.storageBucket}" is missing or not accessible.`
+      : uploadResult.error.message;
+    return res.status(400).json({ error: message });
+  }
 
   const isCover = (existingImages?.length || 0) === 0;
   const { data, error } = await supabaseAdmin
@@ -90,6 +98,35 @@ uploadsRouter.patch('/profile-image/:id/cover', verifyUser, asyncHandler(async (
   if (error) return res.status(400).json({ error: error.message });
   const { data: publicUrl } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(data.storage_path);
   res.json({ image: { ...data, public_url: publicUrl.publicUrl, is_cover: true } });
+}));
+
+uploadsRouter.delete('/profile-image/:id', verifyUser, asyncHandler(async (req, res) => {
+  const imageId = String(req.params.id || '');
+  const { data: image, error: imageError } = await supabaseAdmin
+    .from('profile_images')
+    .select('*, profiles(user_id)')
+    .eq('id', imageId)
+    .single();
+
+  if (imageError || !image) return res.status(404).json({ error: 'Image not found' });
+  if ((image.profiles as any)?.user_id !== req.user!.id) return res.status(403).json({ error: 'Not your image' });
+
+  await supabaseAdmin.storage.from(config.storageBucket).remove([image.storage_path]);
+  const { error } = await supabaseAdmin.from('profile_images').delete().eq('id', imageId);
+  if (error) return res.status(400).json({ error: error.message });
+
+  const { data: remaining } = await supabaseAdmin
+    .from('profile_images')
+    .select('*')
+    .eq('profile_id', image.profile_id)
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (image.is_primary && remaining?.[0]) {
+    await supabaseAdmin.from('profile_images').update({ is_primary: true }).eq('id', remaining[0].id);
+  }
+
+  res.status(204).send();
 }));
 
 uploadsRouter.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {

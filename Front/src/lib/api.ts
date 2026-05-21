@@ -43,6 +43,10 @@ export const api = {
     method: 'PATCH',
     token
   }),
+  deleteImage: (token: string, id: string) => request<void>(`/api/uploads/profile-image/${id}`, {
+    method: 'DELETE',
+    token
+  }),
   report: (body: Record<string, string>) => request<{ report: unknown }>('/api/reports', {
     method: 'POST',
     body: JSON.stringify(body)
