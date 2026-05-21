@@ -1,4 +1,4 @@
-import type { BookingRequest, Profile } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, Profile } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -51,16 +51,45 @@ export const api = {
     token,
     body: JSON.stringify({ status })
   }),
+  adminStats: (token: string) => request<{ stats: Record<string, number>; latest_activity: AdminActivity[] }>('/api/admin/stats', { token }),
   adminProfiles: (token: string) => request<{ profiles: Profile[]; stats: Record<string, number> }>('/api/admin/profiles', { token }),
-  adminReports: (token: string) => request<{ reports: any[]; reports_count: number }>('/api/admin/reports', { token }),
+  adminProfile: (token: string, id: string) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, { token }),
+  adminReports: (token: string) => request<{ reports: AdminReport[]; reports_count: number }>('/api/admin/reports', { token }),
+  adminBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/admin/bookings', { token }),
+  adminSettings: (token: string) => request<{ settings: Record<string, unknown> }>('/api/admin/settings', { token }),
   setProfileStatus: (token: string, id: string, status: string) => request(`/api/admin/profiles/${id}/status`, {
     method: 'PATCH',
     token,
     body: JSON.stringify({ status })
   }),
-  setReportStatus: (token: string, id: string, status: string) => request(`/api/admin/reports/${id}/status`, {
+  setProfileVerification: (token: string, id: string, verification_status: string, moderation_status?: string) => request(`/api/admin/profiles/${id}/verification`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ verification_status, moderation_status })
+  }),
+  setProfileTestAccount: (token: string, id: string, body: Record<string, unknown>) => request(`/api/admin/profiles/${id}/test-account`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
+  setProfileAdminNote: (token: string, id: string, admin_note: string) => request(`/api/admin/profiles/${id}/admin-note`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ admin_note })
+  }),
+  setReportStatus: (token: string, id: string, body: Record<string, unknown>) => request(`/api/admin/reports/${id}/status`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
+  setAdminBookingStatus: (token: string, id: string, status: string) => request(`/api/admin/bookings/${id}/status`, {
     method: 'PATCH',
     token,
     body: JSON.stringify({ status })
+  }),
+  updateAdminSettings: (token: string, settings: Record<string, unknown>) => request<{ settings: Record<string, unknown> }>('/api/admin/settings', {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ settings })
   })
 };

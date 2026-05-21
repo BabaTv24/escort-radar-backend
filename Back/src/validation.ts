@@ -4,6 +4,9 @@ export const allowedCities = ['berlin', 'hamburg', 'hannover', 'koeln', 'muenche
 export const allowedCategories = ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'];
 export const allowedStatuses = ['pending', 'active', 'rejected', 'suspended'];
 export const allowedReportStatuses = ['open', 'reviewing', 'resolved', 'dismissed'];
+export const allowedVerificationStatuses = ['pending', 'verified', 'rejected', 'changes_requested'];
+export const allowedModerationStatuses = ['clean', 'review', 'suspended', 'blocked'];
+export const allowedAdminReportStatuses = ['open', 'investigating', 'resolved', 'escalated'];
 
 export function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => {

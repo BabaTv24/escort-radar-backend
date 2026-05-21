@@ -55,6 +55,13 @@ export type Profile = {
   private_studio: boolean;
   verified: boolean;
   status: 'pending' | 'active' | 'rejected' | 'suspended';
+  verification_status?: 'pending' | 'verified' | 'rejected' | 'changes_requested';
+  moderation_status?: 'clean' | 'review' | 'suspended' | 'blocked';
+  is_test_account?: boolean;
+  admin_note?: string | null;
+  verified_at?: string | null;
+  suspended_at?: string | null;
+  blocked_at?: string | null;
   subscription_status: string;
   listing_plan?: string;
   listing_price?: number;
@@ -75,5 +82,34 @@ export type BookingRequest = {
   duration_minutes: number;
   message?: string | null;
   status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+  created_at: string;
+};
+
+export type AdminReport = {
+  id: string;
+  profile_id: string;
+  reporter_email?: string | null;
+  reason: string;
+  message?: string | null;
+  status: string;
+  admin_status?: 'open' | 'investigating' | 'resolved' | 'escalated';
+  admin_note?: string | null;
+  escalated_to_authorities?: boolean;
+  resolved_at?: string | null;
+  created_at: string;
+  profiles?: {
+    display_name?: string;
+    city?: string;
+    status?: string;
+    moderation_status?: string;
+  };
+};
+
+export type AdminActivity = {
+  id: string;
+  admin_email?: string | null;
+  action: string;
+  target_type: string;
+  target_id?: string | null;
   created_at: string;
 };

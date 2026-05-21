@@ -32,7 +32,7 @@ export function Layout() {
         <div className="header-actions">
           <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action">
             <Radar size={17} />
-            <span>Radar</span>
+            <span>{t('nav.radar')}</span>
           </Link>
           <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
             <UserRound size={20} />
