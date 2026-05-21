@@ -55,6 +55,8 @@ export const api = {
   }),
   adminStats: (token: string) => request<{ stats: Record<string, number>; latest_activity: AdminActivity[] }>('/api/admin/stats', { token }),
   adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number> }>(`/api/admin/profiles${params}`, { token }),
+  adminUsers: (token: string) => request<{ users: Record<string, unknown>[] }>('/api/admin/users', { token }),
+  adminSubscriptions: (token: string) => request<{ subscriptions: Record<string, unknown>[] }>('/api/admin/subscriptions', { token }),
   adminProfile: (token: string, id: string) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, { token }),
   adminReports: (token: string) => request<{ reports: AdminReport[]; reports_count: number }>('/api/admin/reports', { token }),
   adminBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/admin/bookings', { token }),
@@ -107,6 +109,17 @@ export const api = {
     body: JSON.stringify({ package_id })
   }),
   adminTokenStats: (token: string) => request<{ stats: Record<string, number> }>('/api/admin/tokens/stats', { token }),
+  adminTags: (token: string) => request<{ tags: Tag[] }>('/api/admin/tags', { token }),
+  createAdminTag: (token: string, body: Partial<Tag>) => request<{ tag: Tag }>('/api/admin/tags', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
+  updateAdminTag: (token: string, id: string, body: Partial<Tag>) => request<{ tag: Tag }>(`/api/admin/tags/${id}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
   adminWallets: (token: string) => request<{ wallets: Wallet[] }>('/api/admin/wallets', { token }),
   adminTokenTransactions: (token: string) => request<{ transactions: TokenTransaction[] }>('/api/admin/token-transactions', { token }),
   adminPurchaseRequests: (token: string) => request<{ purchase_requests: TokenPurchaseRequest[] }>('/api/admin/token-purchase-requests', { token }),

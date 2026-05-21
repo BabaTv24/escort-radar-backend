@@ -1,56 +1,107 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, BadgeCheck, Ban, CalendarDays, FlaskConical, NotebookPen, Settings, Shield, Video } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Ban, BarChart3, Camera, Coins, FlaskConical, LogOut, MessageSquare, Settings, Shield, Tags, Users, WalletCards } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
 
-type AdminTab = 'dashboard' | 'profiles' | 'verification' | 'reports' | 'tests' | 'lab' | 'settings';
+type AdminUser = Record<string, any>;
+type SubscriptionRow = Record<string, any>;
 
-const tabs: AdminTab[] = ['dashboard', 'profiles', 'verification', 'reports', 'tests', 'lab', 'settings'];
-const profileStatuses = ['pending', 'active', 'rejected', 'suspended'];
-const verificationStatuses = ['pending', 'verified', 'changes_requested', 'rejected'];
-const moderationStatuses = ['clean', 'review', 'suspended', 'blocked'];
-const reportStatuses = ['open', 'investigating', 'resolved', 'escalated'];
-const bookingStatuses = ['pending', 'accepted', 'rejected', 'cancelled'];
 const adminEmails = ['mtvx007@gmail.com', 'babatv24@proton.me'];
 
+const sections = [
+  {
+    title: 'PRZEGLAD',
+    items: [
+      ['dashboard', '/admin', BarChart3],
+      ['users', '/admin/users', Users],
+      ['profiles', '/admin/profiles', Shield],
+      ['subscriptions', '/admin/subscriptions', Coins],
+      ['token-transactions', '/admin/token-transactions', Coins],
+      ['wallets', '/admin/wallets', WalletCards],
+      ['referrals', '/admin/referrals', Users]
+    ]
+  },
+  {
+    title: 'TRESCI',
+    items: [
+      ['photos', '/admin/photos', Camera],
+      ['tags', '/admin/tags', Tags],
+      ['reports', '/admin/reports', Ban],
+      ['reviews', '/admin/reviews', MessageSquare],
+      ['live-cam', '/admin/live-cam', Camera],
+      ['video-manager', '/admin/video-manager', Camera]
+    ]
+  },
+  {
+    title: 'KOMUNIKACJA',
+    items: [
+      ['email-center', '/admin/email-center', MessageSquare],
+      ['chat-manager', '/admin/chat-manager', MessageSquare],
+      ['push', '/admin/push', MessageSquare],
+      ['sms-center', '/admin/sms-center', MessageSquare]
+    ]
+  },
+  {
+    title: 'SYSTEM',
+    items: [
+      ['settings', '/admin/settings', Settings],
+      ['live-lab', '/admin/live-lab', FlaskConical],
+      ['moderation', '/admin/moderation', Shield],
+      ['activity-logs', '/admin/activity-logs', BarChart3]
+    ]
+  }
+] as const;
+
 export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
-  const [token, setToken] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [reports, setReports] = useState<AdminReport[]>([]);
-  const [bookings, setBookings] = useState<BookingRequest[]>([]);
-  const [activity, setActivity] = useState<AdminActivity[]>([]);
-  const [settings, setSettings] = useState<Record<string, unknown>>({});
-  const [stats, setStats] = useState<Record<string, number>>({});
-  const [tokenStats, setTokenStats] = useState<Record<string, number>>({});
-  const [wallets, setWallets] = useState<Wallet[]>([]);
-  const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
-  const [purchaseRequests, setPurchaseRequests] = useState<TokenPurchaseRequest[]>([]);
-  const [masterWallets, setMasterWallets] = useState<MasterAdminWallet[]>([]);
-  const [photos, setPhotos] = useState<unknown[]>([]);
-  const [liveSessions, setLiveSessions] = useState<unknown[]>([]);
-  const [chatSessions, setChatSessions] = useState<unknown[]>([]);
-  const [selectedId, setSelectedId] = useState('');
-  const [phoneSearch, setPhoneSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const [token, setToken] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const { t, option } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { t, option } = useI18n();
 
-  const selectedProfile = useMemo(() => profiles.find((profile) => profile.id === selectedId) || profiles[0], [profiles, selectedId]);
+  const [stats, setStats] = useState<Record<string, number>>({});
+  const [tokenStats, setTokenStats] = useState<Record<string, number>>({});
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
+  const [reports, setReports] = useState<AdminReport[]>([]);
+  const [bookings, setBookings] = useState<BookingRequest[]>([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
+  const [purchases, setPurchases] = useState<TokenPurchaseRequest[]>([]);
+  const [masterWallets, setMasterWallets] = useState<MasterAdminWallet[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [photos, setPhotos] = useState<Record<string, any>[]>([]);
+  const [activity, setActivity] = useState<AdminActivity[]>([]);
+  const [query, setQuery] = useState('');
+  const [modal, setModal] = useState<{ title: string; body: string } | null>(null);
+  const [newTag, setNewTag] = useState({ label: '', group_key: 'premium' });
+
+  const view = getAdminView(location.pathname);
+  const filteredProfiles = profiles.filter((profile) => JSON.stringify(profile).toLowerCase().includes(query.toLowerCase()));
+  const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      const accessToken = data.session?.access_token || '';
-      if (!accessToken || token) return;
-      setToken(accessToken);
-      load(accessToken);
+      const session = data.session;
+      const signedEmail = session?.user.email?.toLowerCase() || '';
+      if (!session?.access_token) {
+        if (!accessMode) navigate('/admin/login', { replace: true });
+        return;
+      }
+      if (!adminEmails.includes(signedEmail)) {
+        setMessage('Brak dostepu administratora');
+        return;
+      }
+      setToken(session.access_token);
+      load(session.access_token);
     });
   }, []);
 
@@ -58,448 +109,371 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     setLoading(true);
     setMessage('');
     const result = await supabase.auth.signInWithPassword({ email, password });
-    if (result.error) {
-      setLoading(false);
-      return setMessage(result.error.message);
-    }
+    setLoading(false);
+    if (result.error) return setMessage(result.error.message);
     const signedEmail = result.data.user?.email?.toLowerCase() || '';
-    if (accessMode && !adminEmails.includes(signedEmail)) {
-      setLoading(false);
-      return setMessage(t('adminAccess.noAccess'));
-    }
+    if (!adminEmails.includes(signedEmail)) return setMessage('Brak dostepu administratora');
     const accessToken = result.data.session?.access_token || '';
     setToken(accessToken);
     await load(accessToken);
-    setLoading(false);
-    if (accessMode) navigate('/admin', { replace: true });
+    navigate('/admin', { replace: true });
+  }
+
+  async function logout() {
+    await supabase.auth.signOut();
+    setToken('');
+    navigate('/admin/login', { replace: true });
   }
 
   async function load(accessToken = token) {
-    const [statsData, profileData, reportData, bookingData, settingsData, tokenData, walletData, transactionData, purchaseData, masterData, photoData, liveData, chatData] = await Promise.all([
+    setLoading(true);
+    const [
+      statsData,
+      tokenData,
+      usersData,
+      profileData,
+      subscriptionData,
+      reportData,
+      bookingData,
+      walletData,
+      transactionData,
+      purchaseData,
+      masterData,
+      tagData,
+      photoData
+    ] = await Promise.all([
       api.adminStats(accessToken),
-      api.adminProfiles(accessToken, phoneSearch ? `?phone=${encodeURIComponent(phoneSearch)}` : ''),
+      api.adminTokenStats(accessToken),
+      api.adminUsers(accessToken),
+      api.adminProfiles(accessToken),
+      api.adminSubscriptions(accessToken),
       api.adminReports(accessToken),
       api.adminBookings(accessToken),
-      api.adminSettings(accessToken),
-      api.adminTokenStats(accessToken),
       api.adminWallets(accessToken),
       api.adminTokenTransactions(accessToken),
       api.adminPurchaseRequests(accessToken),
       api.adminMasterWallets(accessToken),
-      api.adminPhotos(accessToken),
-      api.adminLiveSessions(accessToken),
-      api.adminChatSessions(accessToken)
+      api.adminTags(accessToken),
+      api.adminPhotos(accessToken)
     ]);
-    setStats({ ...profileData.stats, ...statsData.stats, reports: reportData.reports_count });
-    setActivity(statsData.latest_activity);
+
+    setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
+    setTokenStats(tokenData.stats);
+    setUsers(usersData.users);
     setProfiles(profileData.profiles);
+    setSubscriptions(subscriptionData.subscriptions);
     setReports(reportData.reports);
     setBookings(bookingData.booking_requests);
-    setSettings(settingsData.settings);
-    setTokenStats(tokenData.stats);
     setWallets(walletData.wallets);
     setTransactions(transactionData.transactions);
-    setPurchaseRequests(purchaseData.purchase_requests);
+    setPurchases(purchaseData.purchase_requests);
     setMasterWallets(masterData.master_wallets);
-    setPhotos(photoData.photos);
-    setLiveSessions(liveData.live_sessions);
-    setChatSessions(chatData.chat_sessions);
-    if (!selectedId && profileData.profiles[0]) setSelectedId(profileData.profiles[0].id);
+    setTags(tagData.tags);
+    setPhotos(photoData.photos as Record<string, any>[]);
+    setActivity(statsData.latest_activity);
+    setLoading(false);
   }
 
-  async function adminAction(action: () => Promise<unknown>) {
-    setLoading(true);
-    setMessage('');
+  async function action(fn: () => Promise<unknown>) {
     try {
-      await action();
+      await fn();
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
-    } finally {
-      setLoading(false);
     }
   }
 
-  if (accessMode && !token) {
+  if (accessMode || location.pathname === '/admin/login') {
     return (
-      <div className="admin-access-shell">
-        <div className="admin-access-grid-bg" />
-        <section className="admin-access-hero">
-          <div>
-            <div className="baba-admin-badge">
-              <span className="baba-wordmark">BABA AI</span>
-              <strong>{t('baba.adminConsole')}</strong>
-            </div>
-            <p className="eyebrow">{t('adminAccess.eyebrow')}</p>
-            <h1><Shield size={34} /> {t('adminAccess.headline')}</h1>
-            <p>{t('adminAccess.subtitle')}</p>
-            <div className="admin-access-metrics">
-              <span>{t('adminAccess.metricVerification')}</span>
-              <span>{t('adminAccess.metricReports')}</span>
-              <span>{t('adminAccess.metricInfrastructure')}</span>
-            </div>
-          </div>
-          <div className="admin-access-card">
-            <h2>{t('adminAccess.loginTitle')}</h2>
-            <input type="email" placeholder={t('admin.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
-            <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
-            <input placeholder={t('adminAccess.twoFactor')} disabled />
-            <p>{t('adminAccess.auditNotice')}</p>
-            <button className="button primary full" disabled={loading} onClick={login}>{loading ? t('states.loading') : t('buttons.login')}</button>
-            {message && <p className="error-text">{message}</p>}
-          </div>
-        </section>
+      <div className="admin-login-page">
+        <div className="admin-login-card">
+          <span className="baba-wordmark">BABA AI</span>
+          <p className="eyebrow">Escort Radar Admin Console</p>
+          <h1>Control Center</h1>
+          <p>Tylko dla administratorow i moderatorow.</p>
+          <input type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          <input type="password" placeholder="Haslo" value={password} onChange={(event) => setPassword(event.target.value)} />
+          <button className="button primary full" disabled={loading} onClick={login}>{loading ? t('states.loading') : 'Login'}</button>
+          {message && <p className="error-text">{message}</p>}
+        </div>
       </div>
     );
   }
 
+  if (!token) return null;
+
   return (
-    <div className={accessMode ? 'page admin-page admin-page-access' : 'page admin-page'}>
-      <section className="admin-hero">
-        <div className="baba-admin-badge">
+    <div className="admin-shell">
+      <aside className="admin-sidebar">
+        <Link to="/admin" className="admin-brand">
           <span className="baba-wordmark">BABA AI</span>
-          <strong>{t('baba.adminConsole')}</strong>
-        </div>
-        <p className="eyebrow">{t('admin.eyebrow')}</p>
-        <h1><Shield size={30} /> {t('admin.title')}</h1>
-        <p>{t('admin.subtitle')}</p>
-        <div className="admin-notice-row">
-          <span><BadgeCheck size={16} /> {t('admin.manualVerification')}</span>
-          <span><AlertTriangle size={16} /> {t('admin.sensitiveCases')}</span>
-          <span>{t('baba.manualModeration')}</span>
-        </div>
-      </section>
+          <strong>Escort Radar</strong>
+        </Link>
+        {sections.map((section) => (
+          <div className="admin-sidebar-section" key={section.title}>
+            <small>{section.title}</small>
+            {section.items.map(([key, path, Icon]) => (
+              <Link key={key} to={path} className={view === key || (view === 'dashboard' && key === 'dashboard') ? 'active' : ''}>
+                <Icon size={16} /> {adminLabel(key)}
+              </Link>
+            ))}
+          </div>
+        ))}
+        <button className="admin-logout" onClick={logout}><LogOut size={16} /> Wyloguj</button>
+      </aside>
 
-      {!token && (
-        <section className="admin-login glass-panel">
-          <h2>{t('admin.loginTitle')}</h2>
-          <input type="email" placeholder={t('admin.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
-          <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
-          <button className="button primary" disabled={loading} onClick={login}>{loading ? t('states.loading') : t('buttons.login')}</button>
-          {message && <p className="error-text">{message}</p>}
-        </section>
+      <main className="admin-content">
+        <header className="admin-topbar">
+          <div>
+            <p className="eyebrow">Premium Control Center</p>
+            <h1>{adminLabel(view)}</h1>
+          </div>
+          <div className="admin-search">
+            <input placeholder="Filtruj rekordy..." value={query} onChange={(event) => setQuery(event.target.value)} />
+            <button className="button" onClick={() => load()}>{loading ? t('states.loading') : 'Odśwież'}</button>
+          </div>
+        </header>
+
+        {message && <p className="error-text">{message}</p>}
+        {renderView()}
+      </main>
+
+      {modal && (
+        <div className="admin-modal-backdrop" onClick={() => setModal(null)}>
+          <article className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <h2>{modal.title}</h2>
+            <pre>{modal.body}</pre>
+            <button className="button primary" onClick={() => setModal(null)}>Zamknij</button>
+          </article>
+        </div>
       )}
+    </div>
+  );
 
-      {token && (
+  function renderView() {
+    if (view === 'dashboard') {
+      const cards = [
+        ['Dzienny przychod', tokenStats.approved_purchase_value || 0],
+        ['Miesieczny przychod', tokenStats.revenue_estimate_eur || tokenStats.approved_purchase_value || 0],
+        ['Transakcje', transactions.length],
+        ['Konwersja', `${users.length ? Math.round((purchases.length / users.length) * 100) : 0}%`],
+        ['Aktywni uzytkownicy', users.filter((user) => user.status === 'active').length],
+        ['Profile lacznie', stats.total_profiles || profiles.length],
+        ['Do weryfikacji', stats.pending_verification || 0],
+        ['Aktywne profile', stats.active_profiles || 0],
+        ['Zawieszone', stats.suspended_profiles || 0],
+        ['Konta testowe', stats.test_accounts || users.filter((user) => user.is_test_account).length],
+        ['Tokeny w obiegu', tokenStats.token_circulation || 0],
+        ['Rezerwa TATACoin', tokenStats.master_reserve_tatacoin || 500000],
+        ['Requesty rezerwacji', bookings.length],
+        ['Zgloszenia naduzyc', reports.length]
+      ];
+      return (
         <>
-          <nav className="admin-tabs" aria-label={t('admin.title')}>
-            {tabs.map((tab) => (
-              <button key={tab} className={activeTab === tab ? 'selected' : ''} onClick={() => setActiveTab(tab)}>
-                {t(`admin.tabs.${tab}`)}
-              </button>
-            ))}
-          </nav>
-
-          {message && <p className="error-text">{message}</p>}
-
-          <section className="ops-monitor-grid">
-            <div className="ops-card"><strong>{stats.pending_verification || 0}</strong><span>{t('adminOps.pendingVerification')}</span></div>
-            <div className="ops-card danger"><strong>{stats.reports || 0}</strong><span>{t('adminOps.reportedProfiles')}</span></div>
-            <div className="ops-card live"><strong>{profiles.filter((profile) => profile.availability_status === 'available').length}</strong><span>{t('adminOps.onlineProfiles')}</span></div>
-            <div className="ops-card warn"><strong>{profiles.filter((profile) => profile.availability_status === 'busy').length}</strong><span>{t('adminOps.busyProfiles')}</span></div>
-            <div className="ops-card danger"><strong>{profiles.filter((profile) => profile.availability_status === 'unavailable').length}</strong><span>{t('adminOps.offlineProfiles')}</span></div>
-            <div className="ops-card"><strong>{bookings.length}</strong><span>{t('adminOps.vipBookings')}</span></div>
-            <div className="ops-card"><strong>{profiles.filter((profile) => profile.verification_status === 'pending').length}</strong><span>{t('adminOps.manualQueue')}</span></div>
-            <div className="ops-card"><strong>{profiles.length}</strong><span>{t('adminOps.marketplaceStats')}</span></div>
-            <div className="ops-card lab"><strong>{stats.test_accounts || 0}</strong><span>{t('adminOps.testAccounts')}</span></div>
-            <div className="ops-card lab"><strong>0</strong><span>{t('adminOps.liveChat')}</span></div>
-            <div className="ops-card lab"><strong>0</strong><span>{t('adminOps.liveCam')}</span></div>
-            <div className="ops-card danger"><strong>{reports.filter((report) => report.admin_status === 'open' || report.admin_status === 'investigating').length}</strong><span>{t('adminOps.abuseReports')}</span></div>
+          <section className="admin-metric-grid">{cards.map(([label, value]) => <AdminStatCard key={label} label={String(label)} value={value} />)}</section>
+          <section className="admin-chart-grid">
+            {['Przychody 7 dni', 'Wzrost liczby uzytkownikow', 'Ruch na stronie', 'Top kategorie', 'Top tagi', 'Top miasta'].map((title) => <ChartPlaceholder key={title} title={title} />)}
           </section>
-
-          <section className="token-control-grid">
-            {['token_circulation', 'eur_spent', 'active_streams', 'stream_viewers', 'premium_unlock_value', 'master_reserve_tatacoin'].map((key) => (
-              <div className="token-control-card" key={key}>
-                <span>{t(`tokens.admin.${key}`)}</span>
-                <strong>{Math.round(Number(tokenStats[key] || 0)).toLocaleString()}</strong>
-              </div>
-            ))}
-          </section>
-
-          <section className="admin-ops-grid">
-            <article className="glass-panel">
-              <h2>{t('adminTokens.masterWallet')}</h2>
-              {masterWallets.map((wallet) => (
-                <div className="admin-info-grid" key={wallet.id}>
-                  <Info label={wallet.reserve_asset} value={Number(wallet.reserve_amount || 0).toLocaleString()} />
-                  <Info label={t('adminTokens.distributed')} value={Number(wallet.distributed_amount || 0).toLocaleString()} />
-                  <Info label={t('adminTokens.locked')} value={Number(wallet.locked_amount || 0).toLocaleString()} />
-                  <Info label={t('adminTokens.revenue')} value={`${Number(wallet.revenue_estimate_eur || 0).toLocaleString()} EUR`} />
-                  <input placeholder={t('adminTokens.solanaAddress')} defaultValue={wallet.solana_wallet_address || ''} onBlur={(event) => adminAction(() => api.updateMasterWallet(token, wallet.id, { ...wallet, solana_wallet_address: event.target.value }))} />
-                </div>
-              ))}
-            </article>
-            <article className="glass-panel">
-              <h2>{t('adminTokens.purchaseRequests')}</h2>
-              {purchaseRequests.slice(0, 8).map((request) => (
-                <div className="booking-row" key={request.id}>
-                  <div>
-                    <strong>{request.token_amount + request.bonus_tokens} ER</strong>
-                    <p>{request.eur_price} EUR · {request.status}</p>
-                  </div>
-                  <div className="admin-actions">
-                    <button onClick={() => adminAction(() => api.setPurchaseRequestStatus(token, request.id, 'approved'))}>{t('adminTokens.approve')}</button>
-                    <button className="danger" onClick={() => adminAction(() => api.setPurchaseRequestStatus(token, request.id, 'failed'))}>{t('adminTokens.fail')}</button>
-                  </div>
-                </div>
-              ))}
-            </article>
-            <article className="glass-panel">
-              <h2>{t('adminTokens.wallets')}</h2>
-              {wallets.slice(0, 8).map((wallet) => (
-                <div className="booking-row" key={wallet.id}>
-                  <div>
-                    <strong>{wallet.public_wallet_id}</strong>
-                    <p>{Math.round(Number(wallet.escort_token_balance || 0))} ER · {wallet.frozen ? t('adminTokens.frozen') : t('adminTokens.active')}</p>
-                  </div>
-                  <button className={wallet.frozen ? 'button' : 'button danger'} onClick={() => adminAction(() => api.adminWallets(token))}>{t('adminTokens.review')}</button>
-                </div>
-              ))}
-            </article>
-            <article className="glass-panel">
-              <h2>{t('adminTokens.platformObjects')}</h2>
-              <div className="admin-info-grid">
-                <Info label={t('adminTokens.transactions')} value={String(transactions.length)} />
-                <Info label={t('adminTokens.photos')} value={String(photos.length)} />
-                <Info label={t('adminTokens.liveSessions')} value={String(liveSessions.length)} />
-                <Info label={t('adminTokens.chatSessions')} value={String(chatSessions.length)} />
-              </div>
-            </article>
-          </section>
-
-          <section className="glass-panel admin-phone-search">
-            <h2>{t('admin.phoneSearch')}</h2>
-            <div className="row">
-              <input placeholder={t('form.primaryPhone')} value={phoneSearch} onChange={(event) => setPhoneSearch(event.target.value)} />
-              <button className="button" onClick={() => load()}>{t('buttons.apply')}</button>
-            </div>
-          </section>
-
-          {activeTab === 'dashboard' && (
-            <section className="admin-grid">
-              <div className="admin-stat-grid">
-                {['total_profiles', 'pending_verification', 'active_profiles', 'suspended_profiles', 'booking_requests', 'reports', 'test_accounts'].map((key) => (
-                  <div className="admin-stat-card" key={key}>
-                    <strong>{stats[key] || 0}</strong>
-                    <span>{t(`admin.stats.${key}`)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="glass-panel">
-                <h2>{t('admin.latestActivity')}</h2>
-                <div className="admin-activity-list">
-                  {activity.length ? activity.map((item) => (
-                    <div key={item.id}>
-                      <strong>{item.action}</strong>
-                      <span>{item.admin_email || 'admin'} · {new Date(item.created_at).toLocaleString()}</span>
-                    </div>
-                  )) : <p className="muted">{t('admin.emptyActivity')}</p>}
-                </div>
-              </div>
-            </section>
-          )}
-
-          {activeTab === 'profiles' && (
-            <section className="glass-panel">
-              <PanelTitle icon={<NotebookPen size={18} />} title={t('admin.profilesManagement')} text={t('admin.legalNotice')} />
-              <div className="admin-profile-list">
-                {profiles.map((profile) => (
-                  <article className="admin-profile-row" key={profile.id}>
-                    <div>
-                      <strong>{profile.display_name}</strong>
-                      <span>{profile.user_id || t('admin.noEmail')}</span>
-                      <p>{option(profile.category || 'other')} · {profile.city} · {t(`status.${profile.availability_status || 'unavailable'}`)}</p>
-                    </div>
-                    <div className="admin-chip-row">
-                      <StatusChip label={t(`status.${profile.status}`)} tone={profile.status === 'active' ? 'good' : profile.status === 'suspended' ? 'danger' : 'warn'} />
-                      <StatusChip label={t(`admin.verification.${profile.verification_status || 'pending'}`)} tone={profile.verification_status === 'verified' ? 'good' : 'warn'} />
-                      {profile.is_test_account && <StatusChip label={t('admin.testAccount')} tone="lab" />}
-                      {profile.phone_conflict_status && profile.phone_conflict_status !== 'clear' && <StatusChip label={t(`phoneConflict.${profile.phone_conflict_status}`)} tone="danger" />}
-                    </div>
-                    <div className="admin-actions">
-                      <button onClick={() => { setSelectedId(profile.id); setActiveTab('verification'); }}>{t('admin.actions.view')}</button>
-                      <button onClick={() => adminAction(() => api.setProfileStatus(token, profile.id, 'active'))}>{t('admin.actions.approve')}</button>
-                      <button onClick={() => adminAction(() => api.setProfileVerification(token, profile.id, 'verified'))}>{t('admin.actions.markVerified')}</button>
-                      <button className="danger" onClick={() => adminAction(() => api.setProfileVerification(token, profile.id, profile.verification_status || 'pending', 'suspended'))}>{t('admin.actions.suspend')}</button>
-                      <button className="danger" onClick={() => adminAction(() => api.setProfileVerification(token, profile.id, profile.verification_status || 'pending', 'blocked'))}>{t('admin.actions.block')}</button>
-                      <button onClick={() => adminAction(() => api.setPhoneConflictStatus(token, profile.id, 'warning'))}>{t('admin.actions.phoneWarning')}</button>
-                      <button className="danger" onClick={() => adminAction(() => api.setPhoneConflictStatus(token, profile.id, 'conflict'))}>{t('admin.actions.phoneConflict')}</button>
-                      <button onClick={() => adminAction(() => api.setProfilePromotion(token, profile.id, { days: 7, shadowbanned: false }))}>{t('admin.actions.promote')}</button>
-                      <button className="danger" onClick={() => adminAction(() => api.setProfilePromotion(token, profile.id, { days: 1, shadowbanned: true }))}>{t('admin.actions.shadowban')}</button>
-                      <button onClick={() => adminAction(() => api.setProfileTestAccount(token, profile.id, { is_test_account: !profile.is_test_account, activate_without_payment: true, availability_status: 'available' }))}>{t('admin.actions.test')}</button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {activeTab === 'verification' && selectedProfile && (
-            <section className="admin-verification-grid">
-              <article className="glass-panel">
-                <PanelTitle icon={<BadgeCheck size={18} />} title={t('admin.manualVerification')} text={t('admin.sensitiveCases')} />
-                <div className="admin-preview">
-                  <strong>{selectedProfile.display_name}</strong>
-                  <span>{option(selectedProfile.category || 'other')} · {selectedProfile.city} · {selectedProfile.area || selectedProfile.approximate_location_area || '-'}</span>
-                  <p>{selectedProfile.description || t('states.noProfiles')}</p>
-                </div>
-                <div className="admin-detail-grid">
-                  <Info label={t('admin.fields.price')} value={`${selectedProfile.price_1h || '-'} ${selectedProfile.currency || 'EUR'} / 1h`} />
-                  <Info label={t('admin.fields.subscription')} value={selectedProfile.subscription_status || 'trial'} />
-                  <Info label={t('admin.fields.radar')} value={`${selectedProfile.service_radius_km || 25} km · ${t(`status.${selectedProfile.availability_status || 'unavailable'}`)}`} />
-                  <Info label={t('admin.fields.photos')} value={`${selectedProfile.profile_images?.length || 0}/${selectedProfile.max_photos || 6}`} />
-                </div>
-                <div className="admin-service-list">
-                  {(selectedProfile.service_menu || []).slice(0, 8).map((service) => (
-                    <span key={service.name}>{service.name} · {service.included ? t('admin.included') : `${service.extra_price || 0} ${selectedProfile.currency || 'EUR'}`}</span>
-                  ))}
-                </div>
-                <label>
-                  {t('admin.adminNotes')}
-                  <textarea defaultValue={selectedProfile.admin_note || ''} onBlur={(event) => adminAction(() => api.setProfileAdminNote(token, selectedProfile.id, event.target.value))} />
-                </label>
-                <div className="admin-checklist">
-                  <span>{t('admin.checklist.age')}</span>
-                  <span>{t('admin.checklist.consent')}</span>
-                  <span>{t('admin.checklist.images')}</span>
-                  <span>{t('admin.checklist.legal')}</span>
-                </div>
-                <div className="admin-actions wide">
-                  <button onClick={() => adminAction(() => api.setProfileVerification(token, selectedProfile.id, 'verified', 'clean'))}>{t('admin.actions.approve')}</button>
-                  <button onClick={() => adminAction(() => api.setProfileVerification(token, selectedProfile.id, 'changes_requested', 'review'))}>{t('admin.actions.requestChanges')}</button>
-                  <button className="danger" onClick={() => adminAction(() => api.setProfileVerification(token, selectedProfile.id, 'rejected', 'review'))}>{t('admin.actions.reject')}</button>
-                  <button className="danger" onClick={() => adminAction(() => api.setProfileVerification(token, selectedProfile.id, selectedProfile.verification_status || 'pending', 'suspended'))}>{t('admin.actions.suspend')}</button>
-                </div>
-              </article>
-              <aside className="glass-panel">
-                <h2>{t('admin.profiles')}</h2>
-                {profiles.map((profile) => (
-                  <button className={profile.id === selectedProfile.id ? 'admin-select-row selected' : 'admin-select-row'} key={profile.id} onClick={() => setSelectedId(profile.id)}>
-                    <span>{profile.display_name}</span>
-                    <small>{t(`admin.verification.${profile.verification_status || 'pending'}`)}</small>
-                  </button>
-                ))}
-              </aside>
-            </section>
-          )}
-
-          {activeTab === 'reports' && (
-            <section className="glass-panel">
-              <PanelTitle icon={<Ban size={18} />} title={t('admin.reportsAbuse')} text={t('admin.legalNotice')} />
-              <div className="admin-profile-list">
-                {reports.map((report) => (
-                  <article className="admin-profile-row report-row" key={report.id}>
-                    <div>
-                      <strong>{report.reason}</strong>
-                      <span>{report.profiles?.display_name || t('admin.profile')} · {report.reporter_email || t('form.emailOptional')}</span>
-                      <p>{report.message || '-'}</p>
-                    </div>
-                    <StatusChip label={t(`admin.reportStatus.${report.admin_status || 'open'}`)} tone={report.admin_status === 'escalated' ? 'danger' : report.admin_status === 'resolved' ? 'good' : 'warn'} />
-                    <div className="admin-actions">
-                      {reportStatuses.map((status) => (
-                        <button key={status} className={status === 'escalated' ? 'danger' : ''} onClick={() => adminAction(() => api.setReportStatus(token, report.id, { admin_status: status, escalated_to_authorities: status === 'escalated', admin_note: status === 'escalated' ? t('admin.escalationPlaceholder') : report.admin_note || '' }))}>
-                          {t(`admin.reportStatus.${status}`)}
-                        </button>
-                      ))}
-                      {report.profile_id && <button className="danger" onClick={() => adminAction(() => api.setProfileVerification(token, report.profile_id, 'pending', 'suspended'))}>{t('admin.actions.suspend')}</button>}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {activeTab === 'tests' && (
-            <section className="glass-panel">
-              <PanelTitle icon={<FlaskConical size={18} />} title={t('admin.testAccounts')} text={t('admin.testAccountsText')} />
-              <div className="admin-profile-list">
-                {profiles.map((profile) => (
-                  <article className="admin-profile-row" key={profile.id}>
-                    <div>
-                      <strong>{profile.display_name}</strong>
-                      <span>{profile.city} · {t(`status.${profile.availability_status || 'unavailable'}`)}</span>
-                    </div>
-                    <div className="admin-actions">
-                      {['available', 'busy', 'unavailable'].map((status) => (
-                        <button key={status} onClick={() => adminAction(() => api.setProfileTestAccount(token, profile.id, { is_test_account: true, activate_without_payment: true, availability_status: status }))}>{t(`status.${status}`)}</button>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {activeTab === 'lab' && (
-            <section className="admin-lab-grid">
-              {['liveChat', 'videoCall', 'bookingCalendar', 'notificationTest', 'visibilityTest'].map((item) => (
-                <article className="glass-panel lab-card" key={item}>
-                  <Video size={22} />
-                  <h2>{t(`admin.lab.${item}`)}</h2>
-                  <p>{t('admin.comingSoon')}</p>
-                </article>
-              ))}
-              <div className="glass-panel">
-                <h2>{t('admin.bookingRequests')}</h2>
-                {bookings.slice(0, 8).map((booking) => (
-                  <div className="booking-row" key={booking.id}>
-                    <div>
-                      <strong>{booking.requested_date} · {booking.requested_time}</strong>
-                      <p>{booking.requester_email}</p>
-                    </div>
-                    <select value={booking.status} onChange={(event) => adminAction(() => api.setAdminBookingStatus(token, booking.id, event.target.value))}>
-                      {bookingStatuses.map((status) => <option key={status} value={status}>{t(`status.${status}`)}</option>)}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {activeTab === 'settings' && (
-            <section className="glass-panel">
-              <PanelTitle icon={<Settings size={18} />} title={t('admin.settings')} text={t('admin.settingsText')} />
-              <div className="admin-settings-grid">
-                <Info label={t('admin.settingsFields.price')} value={`${String(settings.listing_price || 49.99)} EUR`} />
-                <Info label={t('admin.settingsFields.maxPhotos')} value={String(settings.max_photos || 6)} />
-                <Info label={t('admin.settingsFields.defaultLanguage')} value={String(settings.default_language || 'DE')} />
-                <Info label={t('admin.settingsFields.languages')} value={Array.isArray(settings.supported_languages) ? settings.supported_languages.join(' / ') : 'DE / PL / EN'} />
-                <button onClick={() => adminAction(() => api.updateAdminSettings(token, {
-                  listing_price: 49.99,
-                  max_photos: 6,
-                  default_language: 'DE',
-                  supported_languages: ['DE', 'PL', 'EN'],
-                  enable_demo_profiles: true,
-                  enable_bookings: true,
-                  enable_live_cam_placeholder: true
-                }))}>{t('admin.actions.saveDefaults')}</button>
-              </div>
-            </section>
-          )}
         </>
-      )}
-    </div>
-  );
+      );
+    }
+
+    if (view === 'users') {
+      return <AdminTable rows={filteredUsers} columns={['email', 'role', 'account_type', 'public_user_id', 'referral_code', 'token_balance', 'profile_count', 'created_at', 'status']} actions={(user) => (
+        <>
+          <Action onClick={() => setModal({ title: String(user.email), body: JSON.stringify(user, null, 2) })}>View</Action>
+          <Action onClick={() => setModal({ title: 'Edit user', body: JSON.stringify(user, null, 2) })}>Edit</Action>
+          <Action onClick={() => setModal({ title: 'Token balance editor', body: `${user.email}: ${user.token_balance}` })}>Add tokens</Action>
+          <Action danger onClick={() => setModal({ title: 'Suspend placeholder', body: String(user.email) })}>Suspend</Action>
+        </>
+      )} />;
+    }
+
+    if (view === 'profiles') {
+      return <AdminTable rows={filteredProfiles} columns={['display_name', 'user_id', 'city', 'category', 'status', 'verification_status', 'moderation_status', 'availability_status', 'primary_phone', 'phone_conflict_status', 'created_at']} format={(key, value) => key === 'category' ? option(String(value || 'other')) : value} actions={(profile) => (
+        <>
+          <Action onClick={() => setModal({ title: profile.display_name, body: JSON.stringify(profile, null, 2) })}>View</Action>
+          <Action onClick={() => action(() => api.setProfileStatus(token, profile.id, 'active'))}>Approve</Action>
+          <Action onClick={() => action(() => api.setProfileVerification(token, profile.id, 'verified'))}>Verify</Action>
+          <Action danger onClick={() => action(() => api.setProfileVerification(token, profile.id, profile.verification_status || 'pending', 'suspended'))}>Suspend</Action>
+          <Action danger onClick={() => action(() => api.setProfilePromotion(token, profile.id, { days: 1, shadowbanned: true }))}>Shadowban</Action>
+          <Action onClick={() => action(() => api.setProfilePromotion(token, profile.id, { days: 7, shadowbanned: false }))}>Promote</Action>
+          <Link className="admin-action-btn" to={`/profile/${profile.id}`}>Public</Link>
+        </>
+      )} />;
+    }
+
+    if (view === 'subscriptions') {
+      return <AdminTable rows={subscriptions} columns={['display_name', 'listing_plan', 'subscription_status', 'subscription_started_at', 'subscription_expires_at', 'listing_price', 'listing_currency', 'is_test_account', 'admin_note']} />;
+    }
+
+    if (view === 'token-transactions') {
+      return (
+        <>
+          <AdminTable rows={purchases} columns={['id', 'user_id', 'token_amount', 'eur_price', 'bonus_tokens', 'status', 'created_at']} actions={(purchase) => (
+            <>
+              <Action onClick={() => action(() => api.setPurchaseRequestStatus(token, purchase.id, 'approved'))}>Approve</Action>
+              <Action danger onClick={() => action(() => api.setPurchaseRequestStatus(token, purchase.id, 'failed'))}>Reject</Action>
+            </>
+          )} />
+          <AdminTable rows={transactions} columns={['id', 'from_wallet_id', 'to_wallet_id', 'transaction_type', 'amount', 'status', 'created_at']} />
+        </>
+      );
+    }
+
+    if (view === 'wallets') {
+      return (
+        <>
+          <section className="admin-metric-grid">
+            {masterWallets.map((wallet) => (
+              <article className="admin-card" key={wallet.id}>
+                <h2>Master Wallet</h2>
+                <p>{wallet.reserve_asset}: {Number(wallet.reserve_amount).toLocaleString()}</p>
+                <p>Distributed: {Number(wallet.distributed_amount).toLocaleString()}</p>
+                <p>Locked: {Number(wallet.locked_amount).toLocaleString()}</p>
+                <input defaultValue={wallet.solana_wallet_address || ''} placeholder="Master Solana Wallet Address" onBlur={(event) => action(() => api.updateMasterWallet(token, wallet.id, { ...wallet, solana_wallet_address: event.target.value }))} />
+              </article>
+            ))}
+          </section>
+          <AdminTable rows={wallets} columns={['public_wallet_id', 'user_id', 'escort_token_balance', 'eur_spent', 'referral_balance', 'frozen', 'created_at']} />
+        </>
+      );
+    }
+
+    if (view === 'tags') {
+      return (
+        <>
+          <section className="admin-card admin-inline-form">
+            <input placeholder="Tag label" value={newTag.label} onChange={(event) => setNewTag({ ...newTag, label: event.target.value })} />
+            <input placeholder="Group" value={newTag.group_key} onChange={(event) => setNewTag({ ...newTag, group_key: event.target.value })} />
+            <button className="button primary" onClick={() => action(() => api.createAdminTag(token, newTag).then(() => setNewTag({ label: '', group_key: 'premium' })))}>Dodaj tag</button>
+          </section>
+          <AdminTable rows={tags} columns={['label', 'slug', 'group_key', 'sort_order', 'active', 'created_at']} actions={(tag) => (
+            <Action onClick={() => action(() => api.updateAdminTag(token, tag.id, { ...tag, active: !tag.active }))}>{tag.active ? 'Disable' : 'Enable'}</Action>
+          )} />
+        </>
+      );
+    }
+
+    if (view === 'photos') {
+      return <AdminTable rows={photos} columns={['id', 'profile_id', 'storage_path', 'moderation_status', 'created_at']} actions={(photo) => (
+        <>
+          <Action onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'approved'))}>Approve</Action>
+          <Action danger onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'rejected'))}>Reject</Action>
+          <Action danger onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'blocked'))}>Block</Action>
+        </>
+      )} />;
+    }
+
+    if (view === 'reports') {
+      return <AdminTable rows={reports} columns={['profile_id', 'reason', 'message', 'reporter_email', 'admin_status', 'escalated_to_authorities', 'created_at']} actions={(report) => (
+        <>
+          <Action onClick={() => action(() => api.setReportStatus(token, report.id, { admin_status: 'investigating' }))}>Investigating</Action>
+          <Action onClick={() => action(() => api.setReportStatus(token, report.id, { admin_status: 'resolved' }))}>Resolved</Action>
+          <Action danger onClick={() => action(() => api.setReportStatus(token, report.id, { admin_status: 'escalated', escalated_to_authorities: true }))}>Escalate</Action>
+        </>
+      )} />;
+    }
+
+    if (view === 'settings') {
+      return <section className="admin-settings-grid">
+        <AdminStatCard label="Listing price" value="49.99 EUR" />
+        <AdminStatCard label="Token price" value="0.15 EUR" />
+        <AdminStatCard label="Max photos" value="6" />
+        <AdminStatCard label="Default language" value="DE" />
+        <AdminStatCard label="Demo profiles" value="enabled" />
+        <AdminStatCard label="Bookings" value="enabled" />
+        <AdminStatCard label="Live cam placeholder" value="enabled" />
+        <AdminStatCard label="Token shop" value="enabled" />
+        <AdminStatCard label="Admin emails" value={adminEmails.join(', ')} />
+      </section>;
+    }
+
+    if (view === 'live-lab') {
+      return <section className="admin-chart-grid">{['purchase', 'token_transfer', 'unlock', 'stream', 'booking', 'moderation'].map((item) => <article className="admin-card" key={item}><h2>{item}</h2><button className="button" onClick={() => action(() => api.simulateLiveLab(token, item))}>Symuluj</button></article>)}</section>;
+    }
+
+    if (view === 'activity-logs') {
+      return <AdminTable rows={activity} columns={['admin_email', 'action', 'target_type', 'target_id', 'created_at']} />;
+    }
+
+    return <section className="admin-card"><h2>{adminLabel(view)}</h2><p>Modul przygotowany jako placeholder control center.</p></section>;
+  }
 }
 
-function PanelTitle({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
+function getAdminView(pathname: string) {
+  const value = pathname.replace('/admin/', '').replace('/admin', '') || 'dashboard';
+  return value || 'dashboard';
+}
+
+function adminLabel(key: string) {
+  const labels: Record<string, string> = {
+    dashboard: 'Dashboard',
+    users: 'Uzytkownicy',
+    profiles: 'Profile / Ogloszenia',
+    subscriptions: 'Subskrypcje',
+    'token-transactions': 'Transakcje tokenow',
+    wallets: 'Portfele',
+    referrals: 'Drzewo polecen',
+    photos: 'Zdjecia',
+    tags: 'Tagi',
+    reports: 'Zgloszenia',
+    reviews: 'Opinie',
+    'live-cam': 'Live Cam',
+    'video-manager': 'Video Manager',
+    'email-center': 'Email Center',
+    'chat-manager': 'Chat Manager',
+    push: 'PUSH',
+    'sms-center': 'SMS Center',
+    settings: 'Ustawienia',
+    'live-lab': 'Live Lab',
+    moderation: 'Moderacja',
+    'activity-logs': 'Logi aktywnosci'
+  };
+  return labels[key] || key;
+}
+
+function AdminStatCard({ label, value }: { label: string; value: unknown }) {
+  return <article className="admin-card stat"><span>{label}</span><strong>{String(value ?? 0)}</strong></article>;
+}
+
+function ChartPlaceholder({ title }: { title: string }) {
+  return <article className="admin-card chart"><h2>{title}</h2><div className="chart-bars">{[42, 68, 51, 78, 62, 88, 74].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div></article>;
+}
+
+function AdminTable<T extends Record<string, any>>({ rows, columns, actions, format }: { rows: T[]; columns: string[]; actions?: (row: T) => ReactNode; format?: (key: string, value: unknown, row: T) => unknown }) {
   return (
-    <div className="admin-panel-title">
-      <h2>{icon} {title}</h2>
-      <p>{text}</p>
-    </div>
+    <section className="admin-table-card">
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}{actions && <th>Actions</th>}</tr></thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={row.id || index}>
+                {columns.map((column) => <td key={column}><CellValue value={format ? format(column, row[column], row) : row[column]} /></td>)}
+                {actions && <td><div className="admin-actions-row">{actions(row)}</div></td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!rows.length && <p className="muted">Brak rekordow.</p>}
+    </section>
   );
 }
 
-function StatusChip({ label, tone }: { label: string; tone: 'good' | 'warn' | 'danger' | 'lab' }) {
-  return <span className={`admin-status-chip ${tone}`}>{label}</span>;
+function CellValue({ value }: { value: unknown }) {
+  if (typeof value === 'boolean') return <StatusBadge value={value ? 'yes' : 'no'} />;
+  if (typeof value === 'string' && ['active', 'pending', 'verified', 'suspended', 'blocked', 'rejected', 'conflict', 'approved', 'failed'].includes(value)) return <StatusBadge value={value} />;
+  if (value === null || value === undefined || value === '') return <>-</>;
+  if (typeof value === 'object') return <>{JSON.stringify(value).slice(0, 80)}</>;
+  return <>{String(value).slice(0, 120)}</>;
 }
 
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="admin-info">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
+function StatusBadge({ value }: { value: string }) {
+  return <span className={`admin-status ${value}`}>{value}</span>;
+}
+
+function Action({ children, onClick, danger = false }: { children: ReactNode; onClick: () => void; danger?: boolean }) {
+  return <button className={danger ? 'admin-action-btn danger' : 'admin-action-btn'} onClick={onClick}>{children}</button>;
 }

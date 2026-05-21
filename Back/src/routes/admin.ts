@@ -74,6 +74,105 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
   });
 }));
 
+adminRouter.get('/users', asyncHandler(async (_req, res) => {
+  const [{ data: authUsers, error: authError }, { data: profiles }, { data: wallets }] = await Promise.all([
+    supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    supabaseAdmin.from('profiles').select('id, user_id, account_type, public_user_id, referral_code, is_test_account, status, created_at').limit(2000),
+    supabaseAdmin.from('wallets').select('*').limit(2000)
+  ]);
+
+  if (authError) return res.status(500).json({ error: authError.message });
+
+  const profileRows = profiles || [];
+  const walletRows = wallets || [];
+  const users = (authUsers.users || []).map((user) => {
+    const userProfiles = profileRows.filter((profile) => profile.user_id === user.id);
+    const wallet = walletRows.find((row) => row.user_id === user.id);
+    const primaryProfile = userProfiles[0];
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.app_metadata?.role || 'user',
+      account_type: primaryProfile?.account_type || user.user_metadata?.account_type || 'private',
+      public_user_id: primaryProfile?.public_user_id || null,
+      referral_code: primaryProfile?.referral_code || null,
+      token_balance: Number(wallet?.escort_token_balance || 0),
+      wallet_id: wallet?.id || null,
+      wallet_frozen: Boolean(wallet?.frozen),
+      profile_count: userProfiles.length,
+      is_test_account: userProfiles.some((profile) => profile.is_test_account) || String(user.email || '').includes('+test'),
+      created_at: user.created_at,
+      status: user.banned_until ? 'suspended' : 'active'
+    };
+  });
+
+  res.json({ users });
+}));
+
+adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, user_id, display_name, listing_plan, listing_price, listing_currency, subscription_status, subscription_started_at, subscription_expires_at, is_test_account, admin_note, created_at')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ subscriptions: data || [] });
+}));
+
+adminRouter.get('/tags', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('tags')
+    .select('*')
+    .order('group_key', { ascending: true })
+    .order('sort_order', { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ tags: data || [] });
+}));
+
+adminRouter.post('/tags', asyncHandler(async (req, res) => {
+  const slug = String(req.body.slug || req.body.label || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const label = optionalText(req.body.label, 80);
+  if (!slug || !label) return res.status(400).json({ error: 'Tag slug and label are required' });
+
+  const { data, error } = await supabaseAdmin
+    .from('tags')
+    .insert({
+      slug,
+      label,
+      group_key: optionalText(req.body.group_key, 60) || 'premium',
+      sort_order: Number(req.body.sort_order || 100),
+      active: req.body.active !== false
+    })
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'tag_created', 'tag', data.id, data);
+  res.status(201).json({ tag: data });
+}));
+
+adminRouter.patch('/tags/:id', asyncHandler(async (req, res) => {
+  const patch = {
+    label: optionalText(req.body.label, 80),
+    group_key: optionalText(req.body.group_key, 60) || 'premium',
+    sort_order: Number(req.body.sort_order || 100),
+    active: req.body.active !== false
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('tags')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'tag_updated', 'tag', req.params.id, patch);
+  res.json({ tag: data });
+}));
+
 adminRouter.patch('/profiles/:id/phone-conflict-status', asyncHandler(async (req, res) => {
   const status = String(req.body.phone_conflict_status || '');
   if (!['clear', 'warning', 'conflict'].includes(status)) return res.status(400).json({ error: 'Invalid phone conflict status' });

@@ -17,6 +17,8 @@ export function App() {
     <AgeGate>
       <Routes>
         <Route path="/admin-access" element={<AdminAccessPage />} />
+        <Route path="/admin/login" element={<AdminAccessPage />} />
+        <Route path="/admin/*" element={<AdminPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
@@ -25,7 +27,6 @@ export function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/tokens" element={<TokenShopPage />} />
           <Route path="/r/:referralCode" element={<ReferralPage />} />
-          <Route path="/admin" element={<AdminPage />} />
           <Route path="/legal/:page" element={<LegalPage />} />
         </Route>
       </Routes>
