@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
 import { verifyUser } from '../middleware/auth.js';
@@ -57,3 +58,11 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
   const { data: publicUrl } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(storagePath);
   res.status(201).json({ image: { ...data, public_url: publicUrl.publicUrl } });
 }));
+
+uploadsRouter.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'File too large. Maximum image size is 8 MB.' });
+  }
+
+  next(error);
+});

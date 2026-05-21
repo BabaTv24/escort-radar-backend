@@ -22,6 +22,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 export const api = {
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
   profile: (id: string) => request<{ profile: Profile }>(`/api/profiles/${id}`),
+  myProfile: (token: string) => request<{ profile: Profile | null }>('/api/profiles/me', { token }),
   createProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile }>('/api/profiles', {
     method: 'POST',
     token,

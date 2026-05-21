@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { CalendarDays, Clock, CreditCard, ImagePlus, Lock, Sparkles, UserRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import type { BookingRequest, Profile } from '../types';
+import type { BookingRequest, Profile, ProfileImage } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
 import {
@@ -76,6 +77,8 @@ export function DashboardPage() {
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
   const [message, setMessage] = useState('');
   const [authStatus, setAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [dashboardStatus, setDashboardStatus] = useState<'idle' | 'loading' | 'saving' | 'success' | 'error'>('idle');
+  const [profileMode, setProfileMode] = useState<'create' | 'edit'>('create');
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -84,7 +87,7 @@ export function DashboardPage() {
       setToken(session?.access_token || '');
       setUserEmail(session?.user.email || '');
       if (session?.access_token) {
-        loadBookingRequests(session.access_token);
+        loadDashboard(session.access_token);
       }
     });
 
@@ -92,7 +95,7 @@ export function DashboardPage() {
       setToken(session?.access_token || '');
       setUserEmail(session?.user.email || '');
       if (session?.access_token) {
-        loadBookingRequests(session.access_token);
+        loadDashboard(session.access_token);
       }
     });
 
@@ -120,7 +123,7 @@ export function DashboardPage() {
       setUserEmail(result.data.user?.email || normalizedEmail);
 
       if (session?.access_token) {
-        await loadBookingRequests(session.access_token);
+        await loadDashboard(session.access_token);
         setAuthStatus('success');
         setMessage(mode === 'sign-up' ? t('auth.registerSuccess') : t('auth.loginSuccess'));
         return;
@@ -143,35 +146,100 @@ export function DashboardPage() {
     }
   }
 
+  async function loadDashboard(accessToken: string) {
+    setDashboardStatus('loading');
+    try {
+      const [profileData] = await Promise.all([
+        api.myProfile(accessToken),
+        loadBookingRequests(accessToken)
+      ]);
+
+      if (profileData.profile) {
+        setSavedProfile(profileData.profile);
+        setProfile(profileToForm(profileData.profile));
+        setProfileMode('edit');
+        setMessage(t('dashboard.profileLoaded'));
+      } else {
+        setSavedProfile(null);
+        setProfile({ ...emptyProfile });
+        setProfileMode('create');
+        setMessage(t('dashboard.noProfileYet'));
+      }
+      setDashboardStatus('success');
+    } catch (error) {
+      setDashboardStatus('error');
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
+  }
+
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
     setAuthStatus('idle');
+    setDashboardStatus('saving');
+    setMessage(t('dashboard.saving'));
     if (!token) return setMessage(t('dashboard.signInFirst'));
 
-    const body = { ...profile, languages: String(profile.languages || '').split(',').map((item) => item.trim()).filter(Boolean) };
-    const result = savedProfile
-      ? await api.updateProfile(token, savedProfile.id, body)
-      : await api.createProfile(token, body);
+    try {
+      const body = prepareProfilePayload(profile, savedProfile);
+      const result = savedProfile
+        ? await api.updateProfile(token, savedProfile.id, body)
+        : await api.createProfile(token, body);
 
-    setSavedProfile(result.profile);
-    setMessage(t('dashboard.saved'));
+      setSavedProfile(result.profile);
+      setProfile(profileToForm(result.profile));
+      setProfileMode('edit');
+      setDashboardStatus('success');
+      setMessage(t('dashboard.saved'));
+    } catch (error) {
+      setDashboardStatus('error');
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
   }
 
   async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !token || !savedProfile) return;
     setAuthStatus('idle');
+    setDashboardStatus('saving');
+    setMessage('');
+    if (file.size > 8 * 1024 * 1024) {
+      setDashboardStatus('error');
+      return setMessage(t('photos.fileTooLarge'));
+    }
+    if ((savedProfile.profile_images?.length || 0) >= (savedProfile.max_photos || 6)) {
+      setDashboardStatus('error');
+      return setMessage(t('photos.maxReached'));
+    }
     const form = new FormData();
     form.set('profile_id', savedProfile.id);
     form.set('image', file);
-    await api.uploadImage(token, form);
-    setMessage(t('dashboard.imageUploaded'));
+    try {
+      const result = await api.uploadImage(token, form);
+      const nextProfile = {
+        ...savedProfile,
+        profile_images: [...(savedProfile.profile_images || []), result.image as ProfileImage]
+      };
+      setSavedProfile(nextProfile);
+      setProfile(profileToForm(nextProfile));
+      setDashboardStatus('success');
+      setMessage(t('dashboard.imageUploaded'));
+      event.target.value = '';
+    } catch (error) {
+      setDashboardStatus('error');
+      setMessage(error instanceof Error ? error.message : t('photos.uploadFailed'));
+    }
+  }
+
+  function resetChanges() {
+    setProfile(savedProfile ? profileToForm(savedProfile) : { ...emptyProfile });
+    setMessage(savedProfile ? t('dashboard.profileLoaded') : t('dashboard.noProfileYet'));
+    setDashboardStatus('idle');
   }
 
   return (
     <div className="page dashboard-page">
       <section className="dashboard-hero">
-        <p className="eyebrow">Advertiser dashboard</p>
+        <p className="eyebrow">{t('dashboard.eyebrow')}</p>
         <h1>{t('dashboard.title')}</h1>
         <p>{t('dashboard.subtitle')}</p>
       </section>
@@ -198,13 +266,28 @@ export function DashboardPage() {
           </section>
 
           <form className="stack" onSubmit={saveProfile}>
+            <section className="listing-status-panel">
+              <div>
+                <p className="eyebrow">{profileMode === 'edit' ? t('dashboard.editListing') : t('dashboard.createListing')}</p>
+                <h2>{t('dashboard.listingStatus')}</h2>
+                <p>{getVisibilityReason(savedProfile, t)}</p>
+              </div>
+              <div className="badges">
+                <span>{savedProfile?.is_test_account ? t('dashboard.testAccount') : t('dashboard.standardAccount')}</span>
+                <span>{t(`admin.verification.${savedProfile?.verification_status || 'pending'}`)}</span>
+                <span>{t(`status.${savedProfile?.status || 'pending'}`)}</span>
+              </div>
+            </section>
+
             <section className="subscription-card">
               <div>
                 <p className="eyebrow">{t('dashboard.subscription')}</p>
                 <h2><CreditCard size={20} /> {t('subscription.title')}</h2>
                 <strong>{t('subscription.price')}</strong>
                 <p>{t('subscription.features')}</p>
-                {savedProfile?.status !== 'active' && <p className="subscription-notice">{t('subscription.notice')}</p>}
+                <p className="subscription-notice">
+                  {savedProfile?.is_test_account ? t('subscription.testNotice') : t('subscription.notice')}
+                </p>
               </div>
               <button className="button primary" type="button" disabled>{t('subscription.activate')}</button>
             </section>
@@ -308,16 +391,29 @@ export function DashboardPage() {
                 <label><input type="checkbox" checked={Boolean(profile.private_studio)} onChange={(event) => setProfile({ ...profile, private_studio: event.target.checked })} /> {t('badges.private')}</label>
               </div>
               <input placeholder={t('form.availabilityNote')} value={profile.availability_note || ''} onChange={(event) => setProfile({ ...profile, availability_note: event.target.value })} />
-              <button className="button primary" type="submit">{t('buttons.saveProfile')}</button>
             </section>
+
+            <div className="dashboard-action-bar">
+              <button className="button primary" type="submit" disabled={dashboardStatus === 'saving' || !token}>
+                {dashboardStatus === 'saving' ? t('dashboard.saving') : t('buttons.saveProfile')}
+              </button>
+              {savedProfile && <Link className="button" to={`/profile/${savedProfile.id}`}>{t('dashboard.viewPublicProfile')}</Link>}
+              <button className="button" type="button" onClick={resetChanges}>{t('dashboard.resetChanges')}</button>
+            </div>
           </form>
 
           <section className="form-panel elevated">
             <h2><ImagePlus size={18} /> {t('dashboard.photos')}</h2>
-            <p className="safety-line">{t('photos.counter', { count: savedProfile?.profile_images?.length || 0 })}</p>
+            <p className="safety-line">{t('photos.counter', { count: savedProfile?.profile_images?.length || 0, max: savedProfile?.max_photos || 6 })}</p>
             <div className="photo-drop">
-              <input type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= 6} />
+              <input type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= (savedProfile.max_photos || 6)} />
               <button className="button" disabled type="button"><Sparkles size={16} /> {t('photos.blurSoon')}</button>
+            </div>
+            <div className="photo-preview-grid">
+              {(savedProfile?.profile_images || []).map((image) => (
+                <img key={image.id} src={image.public_url} alt={t('dashboard.photos')} />
+              ))}
+              {!savedProfile?.profile_images?.length && <p className="muted">{t('photos.empty')}</p>}
             </div>
           </section>
 
@@ -337,13 +433,13 @@ export function DashboardPage() {
             </div>
           </section>
 
-          {message && authStatus === 'idle' && <div className="state-panel">{message}</div>}
+          {message && authStatus === 'idle' && <div className={dashboardStatus === 'error' ? 'state-panel error-text' : 'state-panel success'}>{message}</div>}
         </div>
 
         <aside className="dashboard-preview">
-          <p className="eyebrow">Live preview</p>
+          <p className="eyebrow">{t('dashboard.livePreview')}</p>
           <ProfileCard profile={previewProfile(profile, savedProfile)} />
-          <p className="demo-note">Preview uses neutral placeholder imagery until you upload verified photos.</p>
+          <p className="demo-note">{t('dashboard.previewHint')}</p>
         </aside>
       </div>
     </div>
@@ -379,9 +475,10 @@ const demoBookingRequests: BookingRequest[] = [
 ];
 
 function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null): Profile {
+  const images = savedProfile?.profile_images?.length ? savedProfile.profile_images : [];
   return {
     id: savedProfile?.id || 'preview',
-    display_name: profile.display_name || 'Escort Radar',
+    display_name: profile.display_name || 'Preview profile',
     age: profile.age || 25,
     height: profile.height || 170,
     body_type: profile.body_type,
@@ -392,9 +489,9 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     slug: 'preview',
     city: profile.city || 'berlin',
     area: profile.area || 'Central',
-    category: profile.category || 'private',
+    category: profile.category || 'ladies',
     description: profile.description || '',
-    languages: Array.isArray(profile.languages) ? profile.languages : ['English'],
+    languages: Array.isArray(profile.languages) ? profile.languages : ['EN'],
     orientation: profile.orientation,
     audience: profile.audience || [],
     visit_types: profile.visit_types || [],
@@ -418,10 +515,13 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     mobile_service: Boolean(profile.mobile_service),
     private_studio: Boolean(profile.private_studio),
     verified: Boolean(savedProfile?.verified),
-    status: 'pending',
-    subscription_status: 'preview',
+    status: savedProfile?.status || 'pending',
+    subscription_status: savedProfile?.subscription_status || 'preview',
+    is_test_account: savedProfile?.is_test_account,
+    verification_status: savedProfile?.verification_status,
+    moderation_status: savedProfile?.moderation_status,
     trial_ends_at: null,
-    profile_images: [{
+    profile_images: images.length ? images : [{
       id: 'preview-image',
       storage_path: 'preview',
       public_url: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20640%20860%22%3E%3Crect%20width%3D%22640%22%20height%3D%22860%22%20fill%3D%22%23090909%22/%3E%3Ccircle%20cx%3D%22320%22%20cy%3D%22280%22%20r%3D%22130%22%20fill%3D%22%23150f14%22%20stroke%3D%22%23f7d46b%22%20stroke-width%3D%228%22/%3E%3Cpath%20d%3D%22M145%20762c24-170%20326-170%20350%200%22%20fill%3D%22%23150f14%22%20stroke%3D%22%23f7d46b%22%20stroke-width%3D%228%22/%3E%3Ctext%20x%3D%2250%22%20y%3D%22808%22%20fill%3D%22%23f7d46b%22%20font-family%3D%22Arial%22%20font-size%3D%2232%22%20font-weight%3D%22700%22%3EPreview%3C/text%3E%3C/svg%3E',
@@ -429,6 +529,42 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
       is_blurred: false
     }]
   };
+}
+
+function profileToForm(profile: Profile): Partial<Profile> {
+  return {
+    ...emptyProfile,
+    ...profile,
+    languages: Array.isArray(profile.languages) ? profile.languages : [],
+    body_features: profile.body_features || [],
+    audience: profile.audience || [],
+    visit_types: profile.visit_types || [],
+    service_tags: profile.service_tags || [],
+    payment_methods: profile.payment_methods || [],
+    service_menu: profile.service_menu?.length ? profile.service_menu : emptyProfile.service_menu,
+    profile_images: profile.profile_images || []
+  };
+}
+
+function prepareProfilePayload(profile: Partial<Profile>, savedProfile: Profile | null): Partial<Profile> {
+  return {
+    ...profile,
+    languages: Array.isArray(profile.languages)
+      ? profile.languages.map((item) => String(item).trim()).filter(Boolean)
+      : String(profile.languages || '').split(',').map((item) => item.trim()).filter(Boolean),
+    is_test_account: Boolean(savedProfile?.is_test_account),
+    available_now: profile.availability_status === 'available' || Boolean(profile.available_now)
+  };
+}
+
+function getVisibilityReason(profile: Profile | null, t: (key: string, vars?: Record<string, string | number>) => string) {
+  if (!profile) return t('visibility.noProfile');
+  if (profile.moderation_status === 'blocked' || profile.moderation_status === 'suspended' || profile.status === 'suspended') return t('visibility.suspended');
+  if (!profile.city || !profile.category) return t('visibility.missingCityCategory');
+  if (!profile.is_test_account && profile.subscription_status !== 'active') return t('visibility.noPayment');
+  if (!profile.verified && profile.verification_status !== 'verified') return t('visibility.notVerified');
+  if (profile.status !== 'active') return t('visibility.notActive');
+  return t('visibility.public');
 }
 
 function ServiceMenuEditor({ services, onChange }: { services: NonNullable<Profile['service_menu']>; onChange: (services: NonNullable<Profile['service_menu']>) => void }) {
