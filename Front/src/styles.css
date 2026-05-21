@@ -51,10 +51,10 @@ h1 { margin: 0; gap: .5rem; font-size: clamp(2.8rem, 12vw, 6.8rem); line-height:
 .button:disabled { opacity: .45; cursor: not-allowed; }
 .text-button { border: 0; background: transparent; color: #f7d46b; cursor: pointer; font-weight: 800; padding: .2rem; }
 
-.onboarding-shell, .admin-access-shell { position: relative; min-height: 100vh; overflow: hidden; background: #050507; }
+.onboarding-shell, .admin-access-shell, .dashboard-guest-shell { position: relative; min-height: 100vh; overflow: hidden; background: #050507; }
 .onboarding-bg, .admin-access-grid-bg { position: absolute; inset: 0; background: radial-gradient(circle at 12% 12%, rgba(211,49,255,.26), transparent 24rem), radial-gradient(circle at 78% 18%, rgba(255,45,170,.18), transparent 22rem), radial-gradient(circle at 65% 82%, rgba(8,247,184,.14), transparent 24rem), linear-gradient(135deg, #050507, #0f0714 48%, #050505); }
 .onboarding-bg::after, .admin-access-grid-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px); background-size: 46px 46px; mask-image: linear-gradient(to bottom, rgba(0,0,0,.8), transparent); }
-.onboarding-hero, .admin-access-hero { position: relative; z-index: 1; min-height: 100vh; display: grid; align-items: center; gap: 1.4rem; padding: 1rem; }
+.onboarding-hero, .admin-access-hero, .dashboard-guest-hero { position: relative; z-index: 1; min-height: 100vh; display: grid; align-items: center; gap: 1.4rem; padding: 1rem; }
 .onboarding-copy h1, .admin-access-hero h1 { font-size: clamp(3.1rem, 12vw, 7.5rem); line-height: .9; max-width: 780px; text-shadow: 0 0 44px rgba(211,49,255,.22); }
 .onboarding-copy p, .admin-access-hero p { max-width: 660px; color: #e4d8ef; font-size: 1.08rem; }
 .onboarding-points, .admin-access-metrics { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: 1.2rem; }
@@ -311,6 +311,7 @@ textarea { min-height: 8rem; resize: vertical; }
 
 @media (min-width: 720px) {
   .onboarding-hero, .admin-access-hero { grid-template-columns: 1.1fr .9fr; padding: 2rem; }
+  .dashboard-guest-hero { grid-template-columns: 1.1fr .9fr; padding: 2rem; }
   .desktop-nav { display: flex; }
   .home-category-grid { grid-template-columns: repeat(3, 1fr); }
   .quick-grid { grid-template-columns: repeat(3, 1fr); }

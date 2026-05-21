@@ -82,6 +82,7 @@ export function DashboardPage() {
   const [accountType, setAccountType] = useState('private');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [confirmedAdult, setConfirmedAdult] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   const [token, setToken] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [profile, setProfile] = useState<Partial<Profile>>(emptyProfile);
@@ -269,40 +270,35 @@ export function DashboardPage() {
 
   if (!token) {
     return (
-      <div className="onboarding-shell">
+      <div className="dashboard-guest-shell">
         <div className="onboarding-bg" />
-        <section className="onboarding-hero">
+        <section className="dashboard-guest-hero">
           <div className="onboarding-copy">
-            <p className="eyebrow">{t('onboarding.step1')}</p>
-            <h1>{t('onboarding.headline')}</h1>
-            <p>{t('onboarding.subtitle')}</p>
+            <p className="eyebrow">{t('dashboard.guestEyebrow')}</p>
+            <h1>{t('dashboard.guestTitle')}</h1>
+            <p>{t('dashboard.guestSubtitle')}</p>
             <div className="onboarding-points">
-              <span>{t('onboarding.pointRadar')}</span>
-              <span>{t('onboarding.pointVip')}</span>
-              <span>{t('onboarding.pointPrivacy')}</span>
+              <span>{t('subscription.price')}</span>
+              <span>{t('tokens.title')}</span>
+              <span>{t('baba.manualModeration')}</span>
+            </div>
+            <div className="hero-actions">
+              <Link to="/register" className="button primary">{t('dashboard.createAccountFirst')}</Link>
+              <button className="button" type="button" onClick={() => setShowLogin(true)}>{t('dashboard.haveAccountLogin')}</button>
             </div>
           </div>
-          <div className="onboarding-card">
-            <p className="eyebrow">{t('onboarding.registerCard')}</p>
-            <h2>{t('onboarding.createAccess')}</h2>
-            <input placeholder={t('form.username')} value={username} onChange={(event) => setUsername(event.target.value)} />
-            <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
-            <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
-            <input type="password" placeholder={t('form.repeatPassword')} value={repeatPassword} onChange={(event) => setRepeatPassword(event.target.value)} />
-            <select value={accountType} onChange={(event) => setAccountType(event.target.value)}>
-              {accountTypeOptions.map((item) => <option key={item} value={item}>{t(`accountType.${item}`)}</option>)}
-            </select>
-            <label className="premium-check"><input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} /> {t('onboarding.acceptTerms')}</label>
-            <label className="premium-check"><input type="checkbox" checked={confirmedAdult} onChange={(event) => setConfirmedAdult(event.target.checked)} /> {t('onboarding.confirm18')}</label>
-            <button className="button primary full" disabled={authStatus === 'loading'} onClick={() => signIn('sign-up')}>
-              {authStatus === 'loading' ? t('states.loading') : t('onboarding.continue')}
-            </button>
-            <div className="onboarding-login-line">
-              <span>{t('onboarding.already')}</span>
-              <button className="text-button" disabled={authStatus === 'loading'} onClick={() => signIn('sign-in')}>{t('buttons.login')}</button>
+          {showLogin && (
+            <div className="onboarding-card login-modal-card">
+              <p className="eyebrow">{t('dashboard.loginModal')}</p>
+              <h2>{t('buttons.login')}</h2>
+              <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
+              <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
+              <button className="button primary full" disabled={authStatus === 'loading'} onClick={() => signIn('sign-in')}>
+                {authStatus === 'loading' ? t('states.loading') : t('buttons.login')}
+              </button>
+              {message && <p className={authStatus === 'error' ? 'error-text' : 'success'}>{message}</p>}
             </div>
-            {message && <p className={authStatus === 'error' ? 'error-text' : 'success'}>{message}</p>}
-          </div>
+          )}
         </section>
       </div>
     );

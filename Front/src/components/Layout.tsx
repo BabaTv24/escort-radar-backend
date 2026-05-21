@@ -38,6 +38,8 @@ export function Layout() {
             <Coins size={17} />
             <span>{t('nav.tokens')}</span>
           </Link>
+          <Link to="/register" className="radar-action">{t('buttons.register')}</Link>
+          <Link to="/dashboard" className="radar-action">{t('buttons.login')}</Link>
           <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
             <UserRound size={20} />
           </Link>
@@ -68,6 +70,7 @@ export function Layout() {
           <Link to="/legal/privacy">{t('nav.privacy')}</Link>
           <Link to="/legal/content-policy">{t('nav.policy')}</Link>
           <Link to="/legal/report-abuse"><ShieldCheck size={16} /> {t('nav.report')}</Link>
+          <Link to="/admin-access">{t('nav.admin')}</Link>
         </div>
       </footer>
     </div>

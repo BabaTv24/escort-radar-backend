@@ -15,6 +15,7 @@ const verificationStatuses = ['pending', 'verified', 'changes_requested', 'rejec
 const moderationStatuses = ['clean', 'review', 'suspended', 'blocked'];
 const reportStatuses = ['open', 'investigating', 'resolved', 'escalated'];
 const bookingStatuses = ['pending', 'accepted', 'rejected', 'cancelled'];
+const adminEmails = ['mtvx007@gmail.com', 'babatv24@proton.me'];
 
 export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const [token, setToken] = useState('');
@@ -53,6 +54,11 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     if (result.error) {
       setLoading(false);
       return setMessage(result.error.message);
+    }
+    const signedEmail = result.data.user?.email?.toLowerCase() || '';
+    if (accessMode && !adminEmails.includes(signedEmail)) {
+      setLoading(false);
+      return setMessage(t('adminAccess.noAccess'));
     }
     const accessToken = result.data.session?.access_token || '';
     setToken(accessToken);

@@ -9,6 +9,7 @@ import { AdminAccessPage } from './pages/AdminAccessPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { LegalPage } from './pages/LegalPage';
 import { TokenShopPage } from './pages/TokenShopPage';
+import { ReferralPage } from './pages/ReferralPage';
 import { AgeGate } from './components/AgeGate';
 
 export function App() {
@@ -23,6 +24,7 @@ export function App() {
           <Route path="/profile/:id" element={<ProfilePage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/tokens" element={<TokenShopPage />} />
+          <Route path="/r/:referralCode" element={<ReferralPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/legal/:page" element={<LegalPage />} />
         </Route>
