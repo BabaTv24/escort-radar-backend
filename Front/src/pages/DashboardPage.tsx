@@ -414,6 +414,13 @@ export function DashboardPage() {
           </button>
         ))}
       </nav>
+      <div className="creator-onboarding-progress">
+        {['account', 'profileType', 'photos', 'location', 'pricing', 'services', 'live', 'visibility', 'publish'].map((step, index) => (
+          <button key={step} type="button" className={getWizardStepClass(index, creatorTab)} onClick={() => setCreatorTab(mapWizardStepToTab(step))}>
+            <span>{index + 1}</span>{t(`creator.wizard.${step}`)}
+          </button>
+        ))}
+      </div>
 
       {creatorTab === 'referral' && <section className="creator-command-grid">
         <CreatorMonetizationPanel wallet={wallet} bookings={bookingRequests.length} profile={savedProfile} />
@@ -1103,6 +1110,28 @@ function getVisibilityReason(profile: Profile | null, t: (key: string, vars?: Re
   if (!profile.verified && profile.verification_status !== 'verified') return t('visibility.notVerified');
   if (profile.status !== 'active') return t('visibility.notActive');
   return t('visibility.public');
+}
+
+function mapWizardStepToTab(step: string) {
+  const map: Record<string, string> = {
+    account: 'visibility',
+    profileType: 'listing',
+    photos: 'media',
+    location: 'visibility',
+    pricing: 'pricing',
+    services: 'services',
+    live: 'live',
+    visibility: 'visibility',
+    publish: 'visibility'
+  };
+  return map[step] || 'listing';
+}
+
+function getWizardStepClass(index: number, creatorTab: string) {
+  const activeIndex = ['visibility', 'listing', 'media', 'visibility', 'pricing', 'services', 'live', 'visibility', 'visibility'].findIndex((tab) => tab === creatorTab);
+  if (index === activeIndex) return 'active';
+  if (activeIndex > -1 && index < activeIndex) return 'done';
+  return '';
 }
 
 function ServiceMenuEditor({ services, onChange }: { services: NonNullable<Profile['service_menu']>; onChange: (services: NonNullable<Profile['service_menu']>) => void }) {

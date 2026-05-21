@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertTriangle, BadgeCheck, CalendarDays, Flag, Languages, LockKeyhole, MapPin, ShieldCheck, Tags } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, CalendarDays, ChevronLeft, ChevronRight, Flag, Languages, LockKeyhole, MapPin, MessageCircle, ShieldCheck, Star, Tags, Video, X } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Profile } from '../types';
 import { ErrorState, LoadingState } from '../components/LoadingState';
@@ -14,6 +14,8 @@ export function ProfilePage() {
   const [error, setError] = useState('');
   const [reportMessage, setReportMessage] = useState('');
   const [bookingMessage, setBookingMessage] = useState('');
+  const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -28,6 +30,7 @@ export function ProfilePage() {
 
   if (error) return <div className="page narrow"><ErrorState message={error} /></div>;
   if (!profile) return <div className="page narrow"><LoadingState /></div>;
+  const galleryImages = profile.profile_images || [];
 
   async function submitReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,15 +61,24 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="page narrow">
-      <section className="profile-hero">
-        <div className="gallery">
-          {(profile.profile_images?.length ? profile.profile_images : [{ id: 'placeholder' } as any]).map((image) => (
-            image.public_url ? <img key={image.id} src={image.public_url} alt="" /> : <div key={image.id} className="image-placeholder large">{t('profile.noImage')}</div>
-          ))}
+    <div className="page premium-profile-page">
+      <section className="premium-profile-hero">
+        <div className="profile-media-slider">
+          {galleryImages.length ? galleryImages.slice(0, 4).map((image, index) => (
+            <button key={image.id} className={index === 0 ? 'profile-media-main' : 'profile-media-thumb'} type="button" onClick={() => setGalleryIndex(index)}>
+              {image.public_url ? <img src={image.public_url} alt="" loading={index === 0 ? 'eager' : 'lazy'} /> : <div className="image-placeholder large">{t('profile.noImage')}</div>}
+              {index === 0 && <span className="media-counter">{index + 1}/{galleryImages.length}</span>}
+              {index === 3 && galleryImages.length > 4 && <span className="premium-unlock-overlay">+{galleryImages.length - 4}</span>}
+            </button>
+          )) : <div className="image-placeholder large">{t('profile.noImage')}</div>}
+          <div className="locked-media-teaser">
+            <LockKeyhole size={18} />
+            <strong>{t('profile.lockedMediaTeaser')}</strong>
+            <button className="button primary" type="button">{t('creator.unlockWithTokens')}</button>
+          </div>
         </div>
         <div className="profile-summary">
-          <span className={`status ${profile.availability_status || 'unavailable'}`}>{t(`status.${profile.availability_status || 'unavailable'}`)}</span>
+          <span className={`status ${profile.availability_status || 'unavailable'}`}>{profile.availability_status === 'available' ? t('profile.liveNow') : t(`status.${profile.availability_status || 'unavailable'}`)}</span>
           <h1>{profile.display_name}{profile.age ? <span>{profile.age}</span> : null}</h1>
           <p><MapPin size={16} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}</p>
           <p>{profile.category ? option(profile.category) : option('other')} · {profile.approximate_location_area || profile.area}</p>
@@ -74,12 +86,22 @@ export function ProfilePage() {
             {profile.verified && <span><BadgeCheck size={14} /> {t('badges.verified')}</span>}
             {profile.mobile_service && <span>{t('badges.mobile')}</span>}
             {profile.private_studio && <span>{t('badges.private')}</span>}
+            <span><Star size={14} /> {t('profile.popularTonight')}</span>
           </div>
           <p>{profile.description || t('profile.fallbackDescription')}</p>
+          <div className="conversion-row">
+            <span>{t('profile.currentlyOnline')}</span>
+            <span>{t('profile.lastBooking')}</span>
+            <span>{t('profile.limitedAvailability')}</span>
+          </div>
           {profile.subscription_status === 'demo' && <p className="demo-note">{t('home.demo')}</p>}
           <p className="safety-line">{t('profile.availableWithin', { radius: profile.service_radius_km || 25 })}</p>
           <p className="safety-line">{t('radar.privacy')}</p>
-          <div className="notice"><LockKeyhole size={18} /> {t('profile.contactSoon')}</div>
+          <div className="profile-cta-grid">
+            <a href="#booking" className="button primary"><CalendarDays size={16} /> {t('profile.bookNow')}</a>
+            <button className="button" type="button"><MessageCircle size={16} /> {t('creator.privateChatCta')}</button>
+            <button className="button" type="button"><Video size={16} /> {t('creator.liveCamCta')}</button>
+          </div>
         </div>
       </section>
 
@@ -127,7 +149,7 @@ export function ProfilePage() {
         </div>
       </section>
 
-      <section className="form-panel booking-panel">
+      <section className="form-panel booking-panel" id="booking">
         <h2><CalendarDays size={18} /> {t('profile.booking')}</h2>
         <p className="safety-line">{t('city.safety')}</p>
         <form onSubmit={submitBooking} className="stack">
@@ -147,6 +169,15 @@ export function ProfilePage() {
         </form>
       </section>
 
+      <section className="profile-info-grid">
+        <InfoPanel title={t('profile.reviews')} icon={<Star size={18} />}>
+          <p>{t('profile.reviewsPlaceholder')}</p>
+        </InfoPanel>
+        <InfoPanel title={t('profile.similarCreators')} icon={<Tags size={18} />}>
+          <p>{t('profile.similarPlaceholder')}</p>
+        </InfoPanel>
+      </section>
+
       <section className="form-panel">
         <h2><Flag size={18} /> {t('profile.reportTitle')}</h2>
         <form onSubmit={submitReport} className="stack">
@@ -162,6 +193,23 @@ export function ProfilePage() {
           {reportMessage && <p className="success">{reportMessage}</p>}
         </form>
       </section>
+      {galleryIndex !== null && galleryImages.length > 0 && (
+        <FullscreenGallery
+          images={galleryImages}
+          index={galleryIndex}
+          profile={profile}
+          onIndex={setGalleryIndex}
+          onClose={() => setGalleryIndex(null)}
+          touchStart={touchStart}
+          setTouchStart={setTouchStart}
+        />
+      )}
+      <nav className="profile-floating-cta">
+        <button type="button"><MessageCircle size={17} /> {t('creator.privateChatCta')}</button>
+        <button type="button"><Video size={17} /> {t('creator.liveCamCta')}</button>
+        <a href="#booking"><CalendarDays size={17} /> {t('profile.bookNow')}</a>
+        <button type="button"><LockKeyhole size={17} /> {t('creator.unlockWithTokens')}</button>
+      </nav>
     </div>
   );
 }
@@ -172,6 +220,70 @@ function InfoPanel({ title, icon, children }: { title: string; icon: ReactNode; 
       <h2>{icon} {title}</h2>
       {children}
     </article>
+  );
+}
+
+function FullscreenGallery({ images, index, profile, onIndex, onClose, touchStart, setTouchStart }: {
+  images: NonNullable<Profile['profile_images']>;
+  index: number;
+  profile: Profile;
+  onIndex: (index: number) => void;
+  onClose: () => void;
+  touchStart: number | null;
+  setTouchStart: (value: number | null) => void;
+}) {
+  const { t } = useI18n();
+  const image = images[index];
+  const previous = () => onIndex((index - 1 + images.length) % images.length);
+  const next = () => onIndex((index + 1) % images.length);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'ArrowLeft') previous();
+      if (event.key === 'ArrowRight') next();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [index, images.length]);
+
+  useEffect(() => {
+    const nextImage = images[(index + 1) % images.length]?.public_url;
+    if (nextImage) {
+      const preload = new Image();
+      preload.src = nextImage;
+    }
+  }, [index, images]);
+
+  return (
+    <div className="fullscreen-gallery" onClick={onClose}>
+      <button className="gallery-close" type="button" onClick={onClose}><X /></button>
+      <button className="gallery-nav left" type="button" onClick={(event) => { event.stopPropagation(); previous(); }}><ChevronLeft /></button>
+      <figure
+        onClick={(event) => event.stopPropagation()}
+        onTouchStart={(event) => setTouchStart(event.touches[0].clientX)}
+        onTouchEnd={(event) => {
+          if (touchStart === null) return;
+          const delta = event.changedTouches[0].clientX - touchStart;
+          if (delta > 40) previous();
+          if (delta < -40) next();
+          setTouchStart(null);
+        }}
+      >
+        {image?.public_url && <img src={image.public_url} alt="" />}
+        <figcaption>
+          <span>{index + 1}/{images.length}</span>
+          <strong>{profile.display_name}</strong>
+          <small>{t('profile.galleryHint')}</small>
+        </figcaption>
+      </figure>
+      <button className="gallery-nav right" type="button" onClick={(event) => { event.stopPropagation(); next(); }}><ChevronRight /></button>
+      <div className="gallery-creator-overlay">
+        <strong>{profile.display_name}</strong>
+        <span>{t(`status.${profile.availability_status || 'unavailable'}`)}</span>
+        <button className="button primary" type="button">{t('creator.unlockWithTokens')}</button>
+      </div>
+    </div>
   );
 }
 
