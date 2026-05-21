@@ -76,6 +76,22 @@ VITE_SUPABASE_ANON_KEY
    - setting `ADMIN_EMAILS` on the backend, or
    - adding `role: "admin"` to Supabase user app metadata.
 
+## Test Account Seed
+
+Use only for MVP QA/test environments. The script deactivates old test profiles (`+test` emails or `is_test_account=true`) and creates 25 fresh test accounts from `mtvx007+test1@gmail.com` to `mtvx007+test25@gmail.com` with password `12345678`.
+
+```bash
+cd Back
+npm run seed:test-accounts
+```
+
+In production-like environments set `ALLOW_TEST_SEED=true` explicitly:
+
+```bash
+cd Back
+ALLOW_TEST_SEED=true npm run seed:test-accounts
+```
+
 ## MVP Scope
 
 - Public city discovery pages for Berlin, Hamburg, Hannover, Koeln, Muenchen, and Warszawa.
