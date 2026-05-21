@@ -9,6 +9,7 @@ import { adminRouter } from './routes/admin.js';
 import { paymentsRouter } from './routes/payments.js';
 import { bookingRequestsRouter } from './routes/bookingRequests.js';
 import { tokensRouter } from './routes/tokens.js';
+import { tagsRouter } from './routes/tags.js';
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/booking-requests', bookingRequestsRouter);
 app.use('/api/tokens', tokensRouter);
+app.use('/api/tags', tagsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });

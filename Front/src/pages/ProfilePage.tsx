@@ -105,6 +105,7 @@ export function ProfilePage() {
         </InfoPanel>
         <InfoPanel title={t('profile.servicesTags')} icon={<Tags size={18} />}>
           <TagList values={profile.service_tags || []} />
+          {profile.tags?.length ? <div className="tag-list premium-tags">{profile.tags.map((tag) => <span key={tag.id}>{tag.label}</span>)}</div> : null}
         </InfoPanel>
         <InfoPanel title={t('profile.languages')} icon={<Languages size={18} />}>
           <TagList values={profile.languages || []} raw />

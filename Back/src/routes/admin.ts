@@ -90,6 +90,25 @@ adminRouter.patch('/profiles/:id/phone-conflict-status', asyncHandler(async (req
   res.json({ profile: data });
 }));
 
+adminRouter.patch('/profiles/:id/promotion', asyncHandler(async (req, res) => {
+  const days = Number(req.body.days || 7);
+  const patch = {
+    promoted_until: new Date(Date.now() + Math.max(1, Math.min(days, 90)) * 24 * 60 * 60 * 1000).toISOString(),
+    shadowbanned: Boolean(req.body.shadowbanned)
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'profile_promotion_updated', 'profile', req.params.id, patch);
+  res.json({ profile: data });
+}));
+
 adminRouter.get('/profiles/:id', asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('profiles')
@@ -262,17 +281,21 @@ adminRouter.get('/settings', asyncHandler(async (_req, res) => {
 }));
 
 adminRouter.get('/tokens/stats', asyncHandler(async (_req, res) => {
-  const [wallets, transactions, streams, unlocks] = await Promise.all([
+  const [wallets, transactions, streams, unlocks, masterWallets, purchaseRequests] = await Promise.all([
     supabaseAdmin.from('wallets').select('escort_token_balance, eur_spent, referral_balance, frozen').limit(5000),
     supabaseAdmin.from('token_transactions').select('amount, transaction_type, status').limit(5000),
     supabaseAdmin.from('live_stream_sessions').select('status, viewer_count').limit(1000),
-    supabaseAdmin.from('premium_unlocks').select('token_cost').limit(5000)
+    supabaseAdmin.from('premium_unlocks').select('token_cost').limit(5000),
+    supabaseAdmin.from('master_admin_wallets').select('*').eq('active', true).limit(1),
+    supabaseAdmin.from('token_purchase_requests').select('status, token_amount, eur_price').limit(5000)
   ]);
 
   const walletRows = wallets.data || [];
   const transactionRows = transactions.data || [];
   const streamRows = streams.data || [];
   const unlockRows = unlocks.data || [];
+  const masterWallet = masterWallets.data?.[0] || {};
+  const purchaseRows = purchaseRequests.data || [];
 
   res.json({
     stats: {
@@ -285,9 +308,175 @@ adminRouter.get('/tokens/stats', asyncHandler(async (_req, res) => {
       active_streams: streamRows.filter((stream) => stream.status === 'live').length,
       stream_viewers: streamRows.reduce((sum, stream) => sum + Number(stream.viewer_count || 0), 0),
       premium_unlock_value: unlockRows.reduce((sum, unlock) => sum + Number(unlock.token_cost || 0), 0),
-      master_reserve_tatacoin: 500000
+      pending_purchases: purchaseRows.filter((purchase) => purchase.status === 'pending').length,
+      approved_purchase_value: purchaseRows.filter((purchase) => purchase.status === 'approved').reduce((sum, purchase) => sum + Number(purchase.eur_price || 0), 0),
+      master_reserve_tatacoin: Number(masterWallet.reserve_amount || 500000),
+      distributed_amount: Number(masterWallet.distributed_amount || 0),
+      burned_amount: Number(masterWallet.burned_amount || 0),
+      locked_amount: Number(masterWallet.locked_amount || 0),
+      revenue_estimate_eur: Number(masterWallet.revenue_estimate_eur || 0)
     }
   });
+}));
+
+adminRouter.get('/wallets', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('wallets')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ wallets: data || [] });
+}));
+
+adminRouter.get('/token-transactions', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('token_transactions')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ transactions: data || [] });
+}));
+
+adminRouter.get('/token-purchase-requests', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('token_purchase_requests')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ purchase_requests: data || [] });
+}));
+
+adminRouter.patch('/token-purchase-requests/:id/status', asyncHandler(async (req, res) => {
+  const status = String(req.body.status || '');
+  if (!['pending', 'approved', 'failed', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid purchase status' });
+
+  const { data: purchase, error: fetchError } = await supabaseAdmin
+    .from('token_purchase_requests')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
+  if (fetchError || !purchase) return res.status(404).json({ error: fetchError?.message || 'Purchase request not found' });
+
+  const patch = { status, admin_note: optionalText(req.body.admin_note, 1000), updated_at: new Date().toISOString() };
+  const { data, error } = await supabaseAdmin
+    .from('token_purchase_requests')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  if (status === 'approved' && purchase.wallet_id) {
+    const amount = Number(purchase.token_amount || 0) + Number(purchase.bonus_tokens || 0);
+    const { data: wallet } = await supabaseAdmin.from('wallets').select('*').eq('id', purchase.wallet_id).single();
+    await supabaseAdmin
+      .from('wallets')
+      .update({
+        escort_token_balance: Number(wallet?.escort_token_balance || 0) + amount,
+        eur_spent: Number(wallet?.eur_spent || 0) + Number(purchase.eur_price || 0)
+      })
+      .eq('id', purchase.wallet_id);
+    await supabaseAdmin.from('token_transactions').insert({
+      to_wallet_id: purchase.wallet_id,
+      amount,
+      transaction_type: 'manual_purchase_approval',
+      status: 'completed',
+      metadata: { purchase_request_id: purchase.id, eur_price: purchase.eur_price }
+    });
+    const { data: masterWallet } = await supabaseAdmin.from('master_admin_wallets').select('*').eq('active', true).limit(1).maybeSingle();
+    if (masterWallet) {
+      await supabaseAdmin
+        .from('master_admin_wallets')
+        .update({
+          distributed_amount: Number(masterWallet.distributed_amount || 0) + amount,
+          revenue_estimate_eur: Number(masterWallet.revenue_estimate_eur || 0) + Number(purchase.eur_price || 0),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', masterWallet.id);
+    }
+  }
+
+  await logAdminAction(req.user?.email, 'token_purchase_status_updated', 'token_purchase_request', req.params.id, patch);
+  res.json({ purchase_request: data });
+}));
+
+adminRouter.get('/master-wallets', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin.from('master_admin_wallets').select('*').order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ master_wallets: data || [] });
+}));
+
+adminRouter.patch('/master-wallets/:id', asyncHandler(async (req, res) => {
+  const patch = {
+    reserve_amount: Number(req.body.reserve_amount || 0),
+    distributed_amount: Number(req.body.distributed_amount || 0),
+    burned_amount: Number(req.body.burned_amount || 0),
+    locked_amount: Number(req.body.locked_amount || 0),
+    revenue_estimate_eur: Number(req.body.revenue_estimate_eur || 0),
+    solana_wallet_address: optionalText(req.body.solana_wallet_address, 120),
+    phantom_connected: Boolean(req.body.phantom_connected),
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await supabaseAdmin.from('master_admin_wallets').update(patch).eq('id', req.params.id).select().single();
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'master_wallet_updated', 'master_admin_wallet', req.params.id, patch);
+  res.json({ master_wallet: data });
+}));
+
+adminRouter.get('/photos', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('profile_images')
+    .select('*, profiles(display_name, city, user_id)')
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ photos: data || [] });
+}));
+
+adminRouter.patch('/photos/:id/status', asyncHandler(async (req, res) => {
+  const status = String(req.body.moderation_status || req.body.status || '');
+  if (!['pending', 'approved', 'rejected', 'blocked'].includes(status)) return res.status(400).json({ error: 'Invalid photo status' });
+  const { data, error } = await supabaseAdmin
+    .from('profile_images')
+    .update({ moderation_status: status, admin_note: optionalText(req.body.admin_note, 1000) })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'photo_moderation_updated', 'profile_image', req.params.id, { moderation_status: status });
+  res.json({ photo: data });
+}));
+
+adminRouter.get('/live-sessions', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin.from('live_stream_sessions').select('*, profiles(display_name, city)').order('created_at', { ascending: false }).limit(300);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ live_sessions: data || [] });
+}));
+
+adminRouter.patch('/live-sessions/:id/status', asyncHandler(async (req, res) => {
+  const status = String(req.body.status || 'suspended');
+  const { data, error } = await supabaseAdmin.from('live_stream_sessions').update({ status }).eq('id', req.params.id).select().single();
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'live_session_status_updated', 'live_stream_session', req.params.id, { status });
+  res.json({ live_session: data });
+}));
+
+adminRouter.get('/chat-sessions', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin.from('private_chat_sessions').select('*, profiles(display_name, city)').order('created_at', { ascending: false }).limit(300);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ chat_sessions: data || [] });
+}));
+
+adminRouter.post('/live-lab/simulate', asyncHandler(async (req, res) => {
+  const simulation = String(req.body.simulation || 'purchase');
+  await logAdminAction(req.user?.email, `live_lab_${simulation}`, 'live_lab', null, { simulation });
+  res.status(201).json({ simulation, status: 'completed' });
 }));
 
 adminRouter.patch('/wallets/:id/balance', asyncHandler(async (req, res) => {

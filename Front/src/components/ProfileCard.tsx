@@ -33,6 +33,11 @@ export function ProfileCard({ profile }: { profile: Profile }) {
           {profile.languages?.length ? <span><Languages size={14} /> {profile.languages.slice(0, 3).join('/')}</span> : null}
           {profile.category && <span><Radio size={14} /> {option(profile.category)}</span>}
         </div>
+        {profile.tags?.length ? (
+          <div className="tag-list compact">
+            {profile.tags.slice(0, 5).map((tag) => <span key={tag.id}>{tag.label}</span>)}
+          </div>
+        ) : null}
         {profile.price_1h && <p className="price-line">{t('profile.fromPrice', { price: profile.price_1h, currency: profile.currency || 'EUR' })}</p>}
         <p className="muted">{t('profile.availableWithin', { radius: profile.service_radius_km || 25 })}</p>
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>

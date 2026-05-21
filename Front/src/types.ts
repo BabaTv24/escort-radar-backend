@@ -45,6 +45,8 @@ export type Profile = {
   audience?: string[];
   visit_types?: string[];
   service_tags?: string[];
+  tag_ids?: string[];
+  tags?: Tag[];
   payment_methods?: string[];
   availability_note?: string;
   price_30min?: number | null;
@@ -81,6 +83,15 @@ export type Profile = {
   max_photos?: number;
   trial_ends_at?: string | null;
   profile_images?: ProfileImage[];
+};
+
+export type Tag = {
+  id: string;
+  slug: string;
+  label: string;
+  group_key: string;
+  active: boolean;
+  sort_order: number;
 };
 
 export type BookingRequest = {
@@ -135,6 +146,43 @@ export type Wallet = {
   phantom_connected?: boolean;
   frozen?: boolean;
   created_at: string;
+};
+
+export type TokenTransaction = {
+  id: string;
+  from_wallet_id?: string | null;
+  to_wallet_id?: string | null;
+  amount: number;
+  transaction_type: string;
+  status: string;
+  created_at: string;
+};
+
+export type TokenPurchaseRequest = {
+  id: string;
+  user_id: string;
+  wallet_id?: string | null;
+  package_id?: string | null;
+  token_amount: number;
+  eur_price: number;
+  bonus_tokens: number;
+  status: 'pending' | 'approved' | 'failed' | 'cancelled';
+  admin_note?: string | null;
+  created_at: string;
+};
+
+export type MasterAdminWallet = {
+  id: string;
+  name: string;
+  reserve_asset: string;
+  reserve_amount: number;
+  distributed_amount: number;
+  burned_amount: number;
+  locked_amount: number;
+  revenue_estimate_eur: number;
+  solana_wallet_address?: string | null;
+  phantom_connected?: boolean;
+  active: boolean;
 };
 
 export type TokenPackage = {

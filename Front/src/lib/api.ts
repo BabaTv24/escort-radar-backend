@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, BookingRequest, Profile, TokenPackage, Wallet } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -21,6 +21,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
 export const api = {
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
+  tags: () => request<{ tags: Tag[] }>('/api/tags'),
   profile: (id: string) => request<{ profile: Profile }>(`/api/profiles/${id}`),
   myProfile: (token: string) => request<{ profile: Profile | null }>('/api/profiles/me', { token }),
   createProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile }>('/api/profiles', {
@@ -105,5 +106,37 @@ export const api = {
     token,
     body: JSON.stringify({ package_id })
   }),
-  adminTokenStats: (token: string) => request<{ stats: Record<string, number> }>('/api/admin/tokens/stats', { token })
+  adminTokenStats: (token: string) => request<{ stats: Record<string, number> }>('/api/admin/tokens/stats', { token }),
+  adminWallets: (token: string) => request<{ wallets: Wallet[] }>('/api/admin/wallets', { token }),
+  adminTokenTransactions: (token: string) => request<{ transactions: TokenTransaction[] }>('/api/admin/token-transactions', { token }),
+  adminPurchaseRequests: (token: string) => request<{ purchase_requests: TokenPurchaseRequest[] }>('/api/admin/token-purchase-requests', { token }),
+  setPurchaseRequestStatus: (token: string, id: string, status: string, admin_note = '') => request(`/api/admin/token-purchase-requests/${id}/status`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ status, admin_note })
+  }),
+  adminMasterWallets: (token: string) => request<{ master_wallets: MasterAdminWallet[] }>('/api/admin/master-wallets', { token }),
+  updateMasterWallet: (token: string, id: string, body: Partial<MasterAdminWallet>) => request<{ master_wallet: MasterAdminWallet }>(`/api/admin/master-wallets/${id}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
+  setProfilePromotion: (token: string, id: string, body: Record<string, unknown>) => request(`/api/admin/profiles/${id}/promotion`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
+  adminPhotos: (token: string) => request<{ photos: unknown[] }>('/api/admin/photos', { token }),
+  setPhotoStatus: (token: string, id: string, moderation_status: string) => request(`/api/admin/photos/${id}/status`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ moderation_status })
+  }),
+  adminLiveSessions: (token: string) => request<{ live_sessions: unknown[] }>('/api/admin/live-sessions', { token }),
+  adminChatSessions: (token: string) => request<{ chat_sessions: unknown[] }>('/api/admin/chat-sessions', { token }),
+  simulateLiveLab: (token: string, simulation: string) => request('/api/admin/live-lab/simulate', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ simulation })
+  })
 };

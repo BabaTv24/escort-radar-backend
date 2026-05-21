@@ -126,6 +126,12 @@ textarea { min-height: 8rem; resize: vertical; }
 .chip-grid { display: flex; flex-wrap: wrap; gap: .5rem; }
 .chip { border: 1px solid rgba(247,212,107,.16); border-radius: 999px; background: rgba(255,255,255,.035); color: #e9dfc9; padding: .48rem .7rem; cursor: pointer; }
 .chip.selected { border-color: rgba(8,247,184,.52); color: #08f7b8; background: rgba(8,247,184,.1); }
+.premium-tag-picker { border-color: rgba(56,232,224,.22); background: linear-gradient(135deg, rgba(247,212,107,.06), rgba(195,79,255,.05)); }
+.premium-tag-picker input { margin: .45rem 0 .75rem; }
+.tag-group { display: grid; gap: .5rem; margin-top: .75rem; }
+.tag-group strong { color: #38e8e0; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+.chip.neon { border-color: rgba(56,232,224,.28); box-shadow: 0 0 18px rgba(56,232,224,.06); }
+.chip.neon.selected { border-color: rgba(255,58,212,.6); box-shadow: 0 0 24px rgba(255,58,212,.18); }
 .filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding-top: .75rem; }
 .filter-actions span, .safety-line { color: #cfc5ae; font-size: .9rem; }
 
@@ -162,6 +168,7 @@ textarea { min-height: 8rem; resize: vertical; }
 .info-panel h2 { display: flex; align-items: center; gap: .45rem; margin: 0 0 .7rem; font-size: 1rem; color: #fff8e6; }
 .info-panel p { margin: .35rem 0; color: #d8d0bd; }
 .tag-list { display: flex; flex-wrap: wrap; gap: .45rem; }
+.tag-list.compact, .tag-list.premium-tags { margin-top: .65rem; }
 .tag-list span { border: 1px solid rgba(247,212,107,.16); border-radius: 999px; padding: .36rem .58rem; color: #f4dc8f; background: rgba(255,255,255,.035); font-size: .82rem; }
 .price-list { display: grid; gap: .45rem; }
 .price-list div, .service-menu-item { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid rgba(247,212,107,.1); }
@@ -237,6 +244,8 @@ textarea { min-height: 8rem; resize: vertical; }
 .ops-card.warn strong { color: #ffb040; }
 .ops-card.danger strong { color: #ff7777; }
 .ops-card.lab strong { color: #f2a9ff; }
+.admin-ops-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin: 1rem 0; }
+.admin-info-grid { display: grid; grid-template-columns: 1fr; gap: .65rem; }
 .admin-grid, .admin-verification-grid, .admin-lab-grid { display: grid; gap: 1rem; }
 .admin-stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; }
 .admin-stat-card { min-height: 7rem; padding: 1rem; border: 1px solid rgba(247,212,107,.16); border-radius: .65rem; background: radial-gradient(circle at 12% 0, rgba(247,212,107,.18), transparent 9rem), rgba(11,11,13,.92); }
@@ -317,6 +326,8 @@ textarea { min-height: 8rem; resize: vertical; }
   .quick-grid { grid-template-columns: repeat(3, 1fr); }
   .baba-tech-grid { grid-template-columns: repeat(2, 1fr); }
   .token-package-grid, .token-use-grid, .token-control-grid { grid-template-columns: repeat(3, 1fr); }
+  .admin-ops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-info-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .radar-panel { grid-template-columns: .9fr 1.1fr; align-items: center; padding: 1.2rem; }
   .cards-grid { grid-template-columns: repeat(2, 1fr); }
   .filter-panel-head { flex-direction: row; align-items: center; justify-content: space-between; }

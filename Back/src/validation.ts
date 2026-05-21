@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 
 export const allowedCities = ['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'];
 export const allowedCategories = ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'];
+export const allowedAccountTypes = ['private', 'agency', 'massage_salon', 'club_party', 'live_cam'];
 export const allowedStatuses = ['pending', 'active', 'rejected', 'suspended'];
 export const allowedReportStatuses = ['open', 'reviewing', 'resolved', 'dismissed'];
 export const allowedVerificationStatuses = ['pending', 'verified', 'rejected', 'changes_requested'];
@@ -46,6 +47,12 @@ export function validateProfileInput(body: Record<string, unknown>) {
   return {
     data: {
       display_name: displayName,
+      account_type: normalizeAccountType(body.account_type),
+      primary_phone: optionalText(body.primary_phone, 40),
+      additional_phones: optionalArray(body.additional_phones, 8),
+      phone_owner_identity_label: optionalText(body.phone_owner_identity_label, 120),
+      phone_rule_confirmed: Boolean(body.phone_rule_confirmed),
+      referred_by_code: optionalText(body.referred_by_code, 40),
       city,
       area: optionalText(body.area, 80),
       category: normalizeCategory(body.category),
@@ -64,6 +71,7 @@ export function validateProfileInput(body: Record<string, unknown>) {
       audience: optionalArray(body.audience, 6),
       visit_types: optionalArray(body.visit_types, 8),
       service_tags: optionalArray(body.service_tags, 16),
+      tag_ids: optionalArray(body.tag_ids, 60),
       payment_methods: optionalArray(body.payment_methods, 8),
       availability_note: optionalText(body.availability_note, 500),
       price_30min: optionalMoney(body.price_30min),
@@ -135,6 +143,11 @@ function normalizeAvailabilityStatus(value: unknown) {
 function normalizeCategory(value: unknown) {
   const category = String(value || 'other');
   return allowedCategories.includes(category) ? category : 'other';
+}
+
+function normalizeAccountType(value: unknown) {
+  const accountType = String(value || 'private');
+  return allowedAccountTypes.includes(accountType) ? accountType : 'private';
 }
 
 function optionalCoordinate(value: unknown, min: number, max: number) {

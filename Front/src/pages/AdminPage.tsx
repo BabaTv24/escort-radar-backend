@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, BadgeCheck, Ban, CalendarDays, FlaskConical, NotebookPen, Settings, Shield, Video } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import type { AdminActivity, AdminReport, BookingRequest, Profile } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
 
 type AdminTab = 'dashboard' | 'profiles' | 'verification' | 'reports' | 'tests' | 'lab' | 'settings';
@@ -28,6 +28,13 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const [settings, setSettings] = useState<Record<string, unknown>>({});
   const [stats, setStats] = useState<Record<string, number>>({});
   const [tokenStats, setTokenStats] = useState<Record<string, number>>({});
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
+  const [purchaseRequests, setPurchaseRequests] = useState<TokenPurchaseRequest[]>([]);
+  const [masterWallets, setMasterWallets] = useState<MasterAdminWallet[]>([]);
+  const [photos, setPhotos] = useState<unknown[]>([]);
+  const [liveSessions, setLiveSessions] = useState<unknown[]>([]);
+  const [chatSessions, setChatSessions] = useState<unknown[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [phoneSearch, setPhoneSearch] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
@@ -68,13 +75,20 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   }
 
   async function load(accessToken = token) {
-    const [statsData, profileData, reportData, bookingData, settingsData, tokenData] = await Promise.all([
+    const [statsData, profileData, reportData, bookingData, settingsData, tokenData, walletData, transactionData, purchaseData, masterData, photoData, liveData, chatData] = await Promise.all([
       api.adminStats(accessToken),
       api.adminProfiles(accessToken, phoneSearch ? `?phone=${encodeURIComponent(phoneSearch)}` : ''),
       api.adminReports(accessToken),
       api.adminBookings(accessToken),
       api.adminSettings(accessToken),
-      api.adminTokenStats(accessToken)
+      api.adminTokenStats(accessToken),
+      api.adminWallets(accessToken),
+      api.adminTokenTransactions(accessToken),
+      api.adminPurchaseRequests(accessToken),
+      api.adminMasterWallets(accessToken),
+      api.adminPhotos(accessToken),
+      api.adminLiveSessions(accessToken),
+      api.adminChatSessions(accessToken)
     ]);
     setStats({ ...profileData.stats, ...statsData.stats, reports: reportData.reports_count });
     setActivity(statsData.latest_activity);
@@ -83,6 +97,13 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     setBookings(bookingData.booking_requests);
     setSettings(settingsData.settings);
     setTokenStats(tokenData.stats);
+    setWallets(walletData.wallets);
+    setTransactions(transactionData.transactions);
+    setPurchaseRequests(purchaseData.purchase_requests);
+    setMasterWallets(masterData.master_wallets);
+    setPhotos(photoData.photos);
+    setLiveSessions(liveData.live_sessions);
+    setChatSessions(chatData.chat_sessions);
     if (!selectedId && profileData.profiles[0]) setSelectedId(profileData.profiles[0].id);
   }
 
@@ -195,6 +216,57 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
             ))}
           </section>
 
+          <section className="admin-ops-grid">
+            <article className="glass-panel">
+              <h2>{t('adminTokens.masterWallet')}</h2>
+              {masterWallets.map((wallet) => (
+                <div className="admin-info-grid" key={wallet.id}>
+                  <Info label={wallet.reserve_asset} value={Number(wallet.reserve_amount || 0).toLocaleString()} />
+                  <Info label={t('adminTokens.distributed')} value={Number(wallet.distributed_amount || 0).toLocaleString()} />
+                  <Info label={t('adminTokens.locked')} value={Number(wallet.locked_amount || 0).toLocaleString()} />
+                  <Info label={t('adminTokens.revenue')} value={`${Number(wallet.revenue_estimate_eur || 0).toLocaleString()} EUR`} />
+                  <input placeholder={t('adminTokens.solanaAddress')} defaultValue={wallet.solana_wallet_address || ''} onBlur={(event) => adminAction(() => api.updateMasterWallet(token, wallet.id, { ...wallet, solana_wallet_address: event.target.value }))} />
+                </div>
+              ))}
+            </article>
+            <article className="glass-panel">
+              <h2>{t('adminTokens.purchaseRequests')}</h2>
+              {purchaseRequests.slice(0, 8).map((request) => (
+                <div className="booking-row" key={request.id}>
+                  <div>
+                    <strong>{request.token_amount + request.bonus_tokens} ER</strong>
+                    <p>{request.eur_price} EUR · {request.status}</p>
+                  </div>
+                  <div className="admin-actions">
+                    <button onClick={() => adminAction(() => api.setPurchaseRequestStatus(token, request.id, 'approved'))}>{t('adminTokens.approve')}</button>
+                    <button className="danger" onClick={() => adminAction(() => api.setPurchaseRequestStatus(token, request.id, 'failed'))}>{t('adminTokens.fail')}</button>
+                  </div>
+                </div>
+              ))}
+            </article>
+            <article className="glass-panel">
+              <h2>{t('adminTokens.wallets')}</h2>
+              {wallets.slice(0, 8).map((wallet) => (
+                <div className="booking-row" key={wallet.id}>
+                  <div>
+                    <strong>{wallet.public_wallet_id}</strong>
+                    <p>{Math.round(Number(wallet.escort_token_balance || 0))} ER · {wallet.frozen ? t('adminTokens.frozen') : t('adminTokens.active')}</p>
+                  </div>
+                  <button className={wallet.frozen ? 'button' : 'button danger'} onClick={() => adminAction(() => api.adminWallets(token))}>{t('adminTokens.review')}</button>
+                </div>
+              ))}
+            </article>
+            <article className="glass-panel">
+              <h2>{t('adminTokens.platformObjects')}</h2>
+              <div className="admin-info-grid">
+                <Info label={t('adminTokens.transactions')} value={String(transactions.length)} />
+                <Info label={t('adminTokens.photos')} value={String(photos.length)} />
+                <Info label={t('adminTokens.liveSessions')} value={String(liveSessions.length)} />
+                <Info label={t('adminTokens.chatSessions')} value={String(chatSessions.length)} />
+              </div>
+            </article>
+          </section>
+
           <section className="glass-panel admin-phone-search">
             <h2>{t('admin.phoneSearch')}</h2>
             <div className="row">
@@ -252,6 +324,8 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
                       <button className="danger" onClick={() => adminAction(() => api.setProfileVerification(token, profile.id, profile.verification_status || 'pending', 'blocked'))}>{t('admin.actions.block')}</button>
                       <button onClick={() => adminAction(() => api.setPhoneConflictStatus(token, profile.id, 'warning'))}>{t('admin.actions.phoneWarning')}</button>
                       <button className="danger" onClick={() => adminAction(() => api.setPhoneConflictStatus(token, profile.id, 'conflict'))}>{t('admin.actions.phoneConflict')}</button>
+                      <button onClick={() => adminAction(() => api.setProfilePromotion(token, profile.id, { days: 7, shadowbanned: false }))}>{t('admin.actions.promote')}</button>
+                      <button className="danger" onClick={() => adminAction(() => api.setProfilePromotion(token, profile.id, { days: 1, shadowbanned: true }))}>{t('admin.actions.shadowban')}</button>
                       <button onClick={() => adminAction(() => api.setProfileTestAccount(token, profile.id, { is_test_account: !profile.is_test_account, activate_without_payment: true, availability_status: 'available' }))}>{t('admin.actions.test')}</button>
                     </div>
                   </article>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../lib/api';
-import type { Profile } from '../types';
+import type { Profile, Tag } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { cities } from '../data/cities';
@@ -48,6 +48,7 @@ type SearchFilters = {
   audience: string[];
   visit_types: string[];
   service_tags: string[];
+  tag_ids: string[];
   services: string[];
   payment_methods: string[];
 };
@@ -76,6 +77,7 @@ function defaultFilters(city: string): SearchFilters {
     audience: [],
     visit_types: [],
     service_tags: [],
+    tag_ids: [],
     services: [],
     payment_methods: []
   };
@@ -87,6 +89,7 @@ export function CityPage() {
   const urlCategory = searchParams.get('category');
   const cityLabel = cities.find((item) => item.slug === city)?.name || city;
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [platformTags, setPlatformTags] = useState<Tag[]>([]);
   const [draftFilters, setDraftFilters] = useState<SearchFilters>(() => defaultFilters(city));
   const [appliedFilters, setAppliedFilters] = useState<SearchFilters>(() => defaultFilters(city));
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -95,6 +98,10 @@ export function CityPage() {
   const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter(city), source: 'city_fallback' }));
   const [fallbackNotice, setFallbackNotice] = useState(false);
   const { t, option } = useI18n();
+
+  useEffect(() => {
+    api.tags().then((data) => setPlatformTags(data.tags)).catch(() => setPlatformTags([]));
+  }, []);
 
   useEffect(() => {
     const next = defaultFilters(city);
@@ -108,8 +115,9 @@ export function CityPage() {
     const params = new URLSearchParams();
     for (const key of ['category', 'available_now', 'mobile_service', 'private_studio', 'verified'] as const) {
       const value = appliedFilters[key];
-      if (value) params.set(key, String(value));
+    if (value) params.set(key, String(value));
     }
+    if (appliedFilters.tag_ids.length) params.set('tags', appliedFilters.tag_ids.join(','));
     return `?${params.toString()}`;
   }, [city, appliedFilters]);
 
@@ -244,6 +252,7 @@ export function CityPage() {
           </div>
           <MultiSelect title={t('filters.services')} values={draftFilters.services} options={defaultServiceMenuNames} onToggle={(value) => updateFilter('services', toggleArrayValue(draftFilters.services, value))} />
           <MultiSelect title={t('filters.serviceTags')} values={draftFilters.service_tags} options={serviceTagOptions} onToggle={(value) => updateFilter('service_tags', toggleArrayValue(draftFilters.service_tags, value))} />
+          <TagSelect title={t('tags.title')} tags={platformTags} values={draftFilters.tag_ids} onToggle={(value) => updateFilter('tag_ids', toggleArrayValue(draftFilters.tag_ids, value))} />
           <MultiSelect title={t('filters.paymentMethods')} values={draftFilters.payment_methods} options={paymentMethodOptions} onToggle={(value) => updateFilter('payment_methods', toggleArrayValue(draftFilters.payment_methods, value))} />
         </div>
 
@@ -277,6 +286,21 @@ function MultiSelect({ title, values, options, onToggle }: { title: string; valu
         {options.map((item) => (
           <button key={item} className={values.includes(item) ? 'chip selected' : 'chip'} type="button" onClick={() => onToggle(item)}>
             {translateOption(item)}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function TagSelect({ title, values, tags, onToggle }: { title: string; values: string[]; tags: Tag[]; onToggle: (value: string) => void }) {
+  return (
+    <fieldset className="chip-fieldset premium-tag-picker">
+      <legend>{title}</legend>
+      <div className="chip-grid">
+        {tags.map((tag) => (
+          <button key={tag.id} className={values.includes(tag.id) ? 'chip selected neon' : 'chip neon'} type="button" onClick={() => onToggle(tag.id)}>
+            {tag.label}
           </button>
         ))}
       </div>
@@ -319,6 +343,7 @@ function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocat
     if (filters.visit_types.length && !filters.visit_types.some((item) => profile.visit_types?.includes(item))) return false;
     if (filters.services.length && !filters.services.some((item) => profile.service_menu?.some((service) => service.enabled && service.name === item))) return false;
     if (filters.service_tags.length && !filters.service_tags.some((item) => profile.service_tags?.includes(item))) return false;
+    if (filters.tag_ids.length && !filters.tag_ids.some((item) => profile.tag_ids?.includes(item))) return false;
     if (filters.payment_methods.length && !filters.payment_methods.some((item) => profile.payment_methods?.includes(item))) return false;
     return true;
   });

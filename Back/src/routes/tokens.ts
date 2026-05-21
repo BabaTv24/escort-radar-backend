@@ -36,10 +36,29 @@ tokensRouter.post('/purchase-intent', verifyUser, asyncHandler(async (req, res) 
     ? await supabaseAdmin.from('token_packages').select('*').eq('id', packageId).single()
     : { data: null };
 
+  const selectedPackage = tokenPackage || defaultPackages[0];
+  const wallet = await getOrCreateWallet(req.user!.id);
+  const { data: purchaseRequest, error } = await supabaseAdmin
+    .from('token_purchase_requests')
+    .insert({
+      user_id: req.user!.id,
+      wallet_id: wallet.id,
+      package_id: tokenPackage?.id || null,
+      token_amount: selectedPackage.token_amount,
+      eur_price: selectedPackage.eur_price,
+      bonus_tokens: selectedPackage.bonus_tokens,
+      status: 'pending'
+    })
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+
   res.status(201).json({
-    status: 'coming_soon',
-    package: tokenPackage,
-    message: 'Token package checkout is prepared as a closed marketplace credit flow.'
+    status: 'pending',
+    purchase_request: purchaseRequest,
+    package: selectedPackage,
+    message: 'Token package request is pending manual marketplace approval.'
   });
 }));
 

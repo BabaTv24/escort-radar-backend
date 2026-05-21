@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { CalendarDays, Clock, CreditCard, ImagePlus, Lock, Sparkles, UserRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import type { BookingRequest, Profile, ProfileImage } from '../types';
+import type { BookingRequest, Profile, ProfileImage, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
@@ -49,6 +49,7 @@ const emptyProfile: Partial<Profile> = {
   audience: [],
   visit_types: [],
   service_tags: [],
+  tag_ids: [],
   payment_methods: [],
   availability_note: '',
   availability_status: 'unavailable',
@@ -94,9 +95,11 @@ export function DashboardPage() {
   const [profileMode, setProfileMode] = useState<'create' | 'edit'>('create');
   const [activeWizardStep, setActiveWizardStep] = useState(1);
   const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [platformTags, setPlatformTags] = useState<Tag[]>([]);
   const { t, option } = useI18n();
 
   useEffect(() => {
+    api.tags().then((data) => setPlatformTags(data.tags)).catch(() => setPlatformTags([]));
     supabase.auth.getSession().then(({ data }) => {
       const session = data.session;
       setToken(session?.access_token || '');
@@ -439,6 +442,7 @@ export function DashboardPage() {
               <DashboardMultiSelect title={t('filters.audience')} values={profile.audience || []} options={audienceOptions} onToggle={(value) => setProfile({ ...profile, audience: toggleArrayValue(profile.audience, value) })} />
               <DashboardMultiSelect title={t('filters.visitType')} values={profile.visit_types || []} options={visitTypeOptions} onToggle={(value) => setProfile({ ...profile, visit_types: toggleArrayValue(profile.visit_types, value) })} />
               <DashboardMultiSelect title={t('filters.serviceTags')} values={profile.service_tags || []} options={serviceTagOptions} onToggle={(value) => setProfile({ ...profile, service_tags: toggleArrayValue(profile.service_tags, value) })} />
+              <DashboardTagPicker tags={platformTags} selected={profile.tag_ids || []} onToggle={(value) => setProfile({ ...profile, tag_ids: toggleArrayValue(profile.tag_ids, value) })} />
               <DashboardMultiSelect title={t('filters.paymentMethods')} values={profile.payment_methods || []} options={paymentMethodOptions} onToggle={(value) => setProfile({ ...profile, payment_methods: toggleArrayValue(profile.payment_methods, value) })} />
               <p className="safety-line">{t('city.safety')}</p>
             </section>
@@ -596,6 +600,8 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     audience: profile.audience || [],
     visit_types: profile.visit_types || [],
     service_tags: profile.service_tags || [],
+    tag_ids: profile.tag_ids || [],
+    tags: profile.tags || [],
     payment_methods: profile.payment_methods || [],
     availability_note: profile.availability_note,
     availability_status: profile.availability_status || 'unavailable',
@@ -640,6 +646,8 @@ function profileToForm(profile: Profile): Partial<Profile> {
     audience: profile.audience || [],
     visit_types: profile.visit_types || [],
     service_tags: profile.service_tags || [],
+    tag_ids: profile.tag_ids || [],
+    tags: profile.tags || [],
     payment_methods: profile.payment_methods || [],
     service_menu: profile.service_menu?.length ? profile.service_menu : emptyProfile.service_menu,
     profile_images: profile.profile_images || []
@@ -707,6 +715,33 @@ function DashboardMultiSelect({ title, values, options, onToggle }: { title: str
           </button>
         ))}
       </div>
+    </fieldset>
+  );
+}
+
+function DashboardTagPicker({ tags, selected, onToggle }: { tags: Tag[]; selected: string[]; onToggle: (value: string) => void }) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState('');
+  const filtered = tags.filter((tag) => `${tag.label} ${tag.group_key}`.toLowerCase().includes(query.toLowerCase()));
+  const groups = [...new Set(filtered.map((tag) => tag.group_key))];
+
+  return (
+    <fieldset className="chip-fieldset premium-tag-picker">
+      <legend>{t('tags.title')}</legend>
+      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('tags.search')} />
+      {!tags.length && <p className="muted">{t('tags.loading')}</p>}
+      {groups.map((group) => (
+        <div className="tag-group" key={group}>
+          <strong>{t(`tags.groups.${group}`)}</strong>
+          <div className="chip-grid">
+            {filtered.filter((tag) => tag.group_key === group).map((tag) => (
+              <button key={tag.id} className={selected.includes(tag.id) ? 'chip selected neon' : 'chip neon'} type="button" onClick={() => onToggle(tag.id)}>
+                {tag.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </fieldset>
   );
 }

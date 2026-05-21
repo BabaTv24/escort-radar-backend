@@ -26,7 +26,7 @@ export function TokenShopPage() {
     const { data } = await supabase.auth.getSession();
     if (!data.session?.access_token) return setMessage(t('tokens.loginRequired'));
     await api.tokenPurchaseIntent(data.session.access_token, tokenPackage.id);
-    setMessage(t('tokens.checkoutSoon'));
+    setMessage(t('tokens.checkoutPending'));
   }
 
   return (
