@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, Clock, CreditCard, ImagePlus, Lock, Sparkles, UserRound } from 'lucide-react';
+import { CalendarDays, Clock, Copy, CreditCard, Flame, Gem, ImagePlus, Lock, LogOut, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import type { BookingRequest, Profile, ProfileImage, Tag } from '../types';
@@ -96,6 +96,7 @@ export function DashboardPage() {
   const [activeWizardStep, setActiveWizardStep] = useState(1);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [platformTags, setPlatformTags] = useState<Tag[]>([]);
+  const [contentTab, setContentTab] = useState('photos');
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -271,6 +272,15 @@ export function DashboardPage() {
     setDashboardStatus('idle');
   }
 
+  async function logout() {
+    await supabase.auth.signOut();
+    setToken('');
+    setUserEmail('');
+    setSavedProfile(null);
+    setProfile({ ...emptyProfile });
+    setWallet(null);
+  }
+
   if (!token) {
     return (
       <div className="dashboard-guest-shell">
@@ -320,6 +330,20 @@ export function DashboardPage() {
             </button>
           ))}
         </div>
+      </section>
+
+      <CreatorHeroPanel
+        profile={profile}
+        savedProfile={savedProfile}
+        wallet={wallet}
+        userEmail={userEmail}
+        onUpload={() => document.getElementById('creator-media-upload')?.click()}
+        onLogout={logout}
+      />
+
+      <section className="creator-command-grid">
+        <CreatorMonetizationPanel wallet={wallet} bookings={bookingRequests.length} profile={savedProfile} />
+        <ReferralStudio profile={savedProfile} />
       </section>
 
       <div className="dashboard-grid">
@@ -541,11 +565,24 @@ export function DashboardPage() {
         </div>
 
         <aside className="dashboard-preview">
-          <p className="eyebrow">{t('dashboard.livePreview')}</p>
-          <ProfileCard profile={previewProfile(profile, savedProfile)} />
-          <p className="demo-note">{t('dashboard.previewHint')}</p>
+          <LivePreviewCard profile={previewProfile(profile, savedProfile)} />
         </aside>
       </div>
+
+      <CreatorContentManager
+        tab={contentTab}
+        onTab={setContentTab}
+        savedProfile={savedProfile}
+        uploadImage={uploadImage}
+      />
+
+      <LiveCreatorControls />
+
+      <MobileCreatorDock
+        savedProfile={savedProfile}
+        onUpload={() => document.getElementById('creator-media-upload')?.click()}
+        onLogout={logout}
+      />
     </div>
   );
 }
@@ -562,6 +599,249 @@ function getAuthErrorMessage(message: string, mode: 'sign-in' | 'sign-up', t: (k
     return t('auth.alreadyRegistered');
   }
   return mode === 'sign-up' ? t('auth.registerFailed', { message }) : t('auth.loginFailed', { message });
+}
+
+function CreatorHeroPanel({ profile, savedProfile, wallet, userEmail, onUpload, onLogout }: {
+  profile: Partial<Profile>;
+  savedProfile: Profile | null;
+  wallet: Wallet | null;
+  userEmail: string;
+  onUpload: () => void;
+  onLogout: () => void;
+}) {
+  const { t, option } = useI18n();
+  const primary = savedProfile?.profile_images?.find((image) => image.is_primary) || savedProfile?.profile_images?.[0];
+  const completeness = getProfileCompleteness(profile, savedProfile);
+  const status = profile.availability_status || 'unavailable';
+  const referralUrl = savedProfile?.referral_code ? `https://escort-radar.fun/r/${savedProfile.referral_code}` : t('referral.pending');
+
+  return (
+    <section className="creator-hero-panel">
+      <div className="creator-avatar-wrap">
+        {primary?.public_url ? <img src={primary.public_url} alt="" /> : <div className="creator-avatar-fallback"><Sparkles /></div>}
+        <span className={`creator-live-dot ${status}`} />
+      </div>
+      <div className="creator-hero-copy">
+        <p className="eyebrow">{t('creator.heroEyebrow')}</p>
+        <h2>{profile.display_name || t('creator.unnamed')}</h2>
+        <p>{userEmail} · {option(profile.category || 'ladies')} · {profile.city || 'Berlin'}</p>
+        <div className="creator-badge-row">
+          <span>{t(`status.${status}`)}</span>
+          <span><Gem size={14} /> {t('creator.premiumBadge')}</span>
+          <span><Flame size={14} /> {t('creator.visibilityScore', { score: Math.max(12, completeness) })}</span>
+          <span><RadioTower size={14} /> {t('creator.liveBadge')}</span>
+        </div>
+      </div>
+      <div className="creator-hero-stats">
+        <Metric label={t('creator.completeness')} value={`${completeness}%`} />
+        <Metric label={t('tokens.balance')} value={`${Math.round(Number(wallet?.escort_token_balance || 0))} ER`} />
+        <Metric label={t('creator.referralEarnings')} value={`${Math.round(Number(wallet?.referral_balance || 0))} ER`} />
+      </div>
+      <div className="creator-referral-mini">
+        <QrVisual seed={savedProfile?.referral_code || 'ESCORT-RADAR'} />
+        <span>{savedProfile?.public_user_id || 'ER-XXXXXX'}</span>
+        <button className="admin-action-btn" type="button" onClick={() => navigator.clipboard?.writeText(referralUrl)}><Copy size={13} /> {t('referral.copy')}</button>
+      </div>
+      <div className="creator-quick-actions">
+        <button className="button primary" type="button"><Video size={16} /> {t('creator.goLive')}</button>
+        <button className="button" type="button" onClick={onUpload}><UploadCloud size={16} /> {t('creator.uploadMedia')}</button>
+        <button className="button" type="button"><Flame size={16} /> {t('creator.promoteProfile')}</button>
+        <Link className="button" to="/tokens"><Gem size={16} /> {t('creator.buyTokens')}</Link>
+        {savedProfile && <Link className="button" to={`/profile/${savedProfile.id}`}>{t('dashboard.viewPublicProfile')}</Link>}
+        <button className="button danger" type="button" onClick={onLogout}><LogOut size={16} /> {t('buttons.logout')}</button>
+      </div>
+    </section>
+  );
+}
+
+function CreatorMonetizationPanel({ wallet, bookings, profile }: { wallet: Wallet | null; bookings: number; profile: Profile | null }) {
+  const { t } = useI18n();
+  const rows = [
+    ['creator.tokenEarnings', Math.round(Number(wallet?.escort_token_balance || 0))],
+    ['creator.unlockRevenue', `${Math.round(Number(wallet?.eur_spent || 0) * 0.22)} EUR`],
+    ['creator.bookingRequests', bookings],
+    ['creator.privateChatRevenue', '0 EUR'],
+    ['creator.referralRevenue', `${Math.round(Number(wallet?.referral_balance || 0))} ER`],
+    ['creator.activeFans', profile?.referral_count || 0],
+    ['creator.fanClubMembers', 0]
+  ];
+  return (
+    <section className="creator-panel">
+      <div className="creator-panel-head">
+        <p className="eyebrow">{t('creator.monetization')}</p>
+        <h2>{t('creator.quickMonetization')}</h2>
+      </div>
+      <div className="creator-metric-grid">
+        {rows.map(([label, value]) => <Metric key={label} label={t(String(label))} value={value} />)}
+      </div>
+    </section>
+  );
+}
+
+function ReferralStudio({ profile }: { profile: Profile | null }) {
+  const { t } = useI18n();
+  const referralUrl = profile?.referral_code ? `https://escort-radar.fun/r/${profile.referral_code}` : t('referral.pending');
+  return (
+    <section className="creator-panel referral-studio">
+      <div>
+        <p className="eyebrow">{t('creator.referralStudio')}</p>
+        <h2>{t('referral.myLink')}</h2>
+        <p>{referralUrl}</p>
+      </div>
+      <QrVisual seed={profile?.referral_code || 'ER'} />
+      <div className="creator-metric-grid compact">
+        <Metric label={t('creator.refClicks')} value="0" />
+        <Metric label={t('creator.refSignups')} value={profile?.referral_count || 0} />
+        <Metric label={t('creator.refTokenRevenue')} value="0 ER" />
+        <Metric label={t('creator.refVipConversions')} value="0" />
+      </div>
+      <div className="creator-share-row">
+        <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(referralUrl)}>{t('referral.copy')}</button>
+        <button className="button" type="button">{t('creator.share')}</button>
+        <button className="button" type="button">{t('creator.downloadQr')}</button>
+      </div>
+    </section>
+  );
+}
+
+function LivePreviewCard({ profile }: { profile: Profile }) {
+  const { t } = useI18n();
+  return (
+    <div className="creator-live-preview">
+      <p className="eyebrow">{t('dashboard.livePreview')}</p>
+      <ProfileCard profile={profile} />
+      <div className="locked-preview-strip">
+        <div><Lock size={16} /> {t('creator.lockedMedia')}</div>
+        <button className="button primary" type="button">{t('creator.unlockWithTokens')}</button>
+      </div>
+      <div className="creator-preview-actions">
+        <button className="button" type="button"><Video size={15} /> {t('creator.liveCamCta')}</button>
+        <button className="button" type="button"><MessageCircle size={15} /> {t('creator.privateChatCta')}</button>
+      </div>
+      <p className="demo-note">{t('dashboard.previewHint')}</p>
+    </div>
+  );
+}
+
+function CreatorContentManager({ tab, onTab, savedProfile, uploadImage }: {
+  tab: string;
+  onTab: (tab: string) => void;
+  savedProfile: Profile | null;
+  uploadImage: (event: ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const { t } = useI18n();
+  const tabs = ['photos', 'videos', 'liveCam', 'privateGallery', 'stories', 'verification'];
+  return (
+    <section className="creator-panel content-manager">
+      <div className="creator-panel-head">
+        <p className="eyebrow">{t('creator.contentManager')}</p>
+        <h2>{t('creator.mediaVault')}</h2>
+      </div>
+      <nav className="creator-tabs">
+        {tabs.map((item) => <button key={item} className={tab === item ? 'active' : ''} onClick={() => onTab(item)}>{t(`creator.tabs.${item}`)}</button>)}
+      </nav>
+      <div className="media-dropzone">
+        <input id="creator-media-upload" type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= (savedProfile.max_photos || 6)} />
+        <UploadCloud size={28} />
+        <h3>{t('creator.dragDrop')}</h3>
+        <p>{t('photos.counter', { count: savedProfile?.profile_images?.length || 0, max: savedProfile?.max_photos || 6 })}</p>
+      </div>
+      <div className="creator-gallery-grid">
+        {(savedProfile?.profile_images || []).map((image, index) => (
+          <article className="creator-media-card" key={image.id}>
+            {image.public_url ? <img src={image.public_url} alt="" /> : <div className="image-placeholder" />}
+            <span>{index === 0 ? t('creator.coverImage') : t('creator.galleryImage')}</span>
+            <div className="creator-media-actions">
+              <button>{t('creator.cover')}</button>
+              <button>{t('creator.locked')}</button>
+              <button>{t('creator.blur')}</button>
+            </div>
+          </article>
+        ))}
+        {!savedProfile?.profile_images?.length && <p className="muted">{t('photos.empty')}</p>}
+      </div>
+      <AiPrivacyTools />
+    </section>
+  );
+}
+
+function AiPrivacyTools() {
+  const { t } = useI18n();
+  const tools = ['blurFace', 'distortTattoos', 'hideBackground', 'aiMask', 'watermark'];
+  return (
+    <div className="ai-privacy-grid">
+      {tools.map((tool) => (
+        <article className="ai-privacy-card" key={tool}>
+          <span>{t('creator.babaPrivacyLayer')}</span>
+          <Wand2 size={18} />
+          <strong>{t(`creator.ai.${tool}`)}</strong>
+          <p>{t('creator.aiPlaceholder')}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function LiveCreatorControls() {
+  const { t } = useI18n();
+  return (
+    <section className="creator-panel live-controls">
+      <div className="creator-panel-head">
+        <p className="eyebrow">{t('creator.liveFeature')}</p>
+        <h2>{t('creator.liveControls')}</h2>
+      </div>
+      <div className="form-grid">
+        <label className="premium-check"><input type="checkbox" /> {t('creator.enableLiveCam')}</label>
+        <label className="premium-check"><input type="checkbox" /> {t('creator.enablePrivateChat')}</label>
+        <input type="number" placeholder={t('creator.tokenPerMinute')} />
+        <input type="number" placeholder={t('creator.privateShowTicket')} />
+        <input placeholder={t('creator.onlineSchedule')} />
+        <select defaultValue="offline">
+          <option value="live">{t('creator.liveNow')}</option>
+          <option value="busy">{t('status.busy')}</option>
+          <option value="offline">{t('status.offline')}</option>
+        </select>
+      </div>
+    </section>
+  );
+}
+
+function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile: Profile | null; onUpload: () => void; onLogout: () => void }) {
+  const { t } = useI18n();
+  return (
+    <nav className="mobile-creator-dock">
+      <button type="button"><Video size={17} />{t('creator.goLive')}</button>
+      <button type="button" onClick={onUpload}><UploadCloud size={17} />{t('creator.uploadMedia')}</button>
+      <Link to="/tokens"><Gem size={17} />{t('tokens.short')}</Link>
+      {savedProfile ? <Link to={`/profile/${savedProfile.id}`}>{t('nav.profile')}</Link> : <button type="button">{t('nav.profile')}</button>}
+      <button type="button" onClick={onLogout}><LogOut size={17} />{t('buttons.logout')}</button>
+    </nav>
+  );
+}
+
+function QrVisual({ seed }: { seed: string }) {
+  const bits = Array.from({ length: 49 }, (_, index) => ((seed.charCodeAt(index % seed.length) + index * 7) % 3) !== 0);
+  return <div className="qr-visual" aria-label="QR">{bits.map((active, index) => <span key={index} className={active ? 'on' : ''} />)}</div>;
+}
+
+function Metric({ label, value }: { label: string; value: unknown }) {
+  return <div className="creator-metric"><span>{label}</span><strong>{String(value)}</strong></div>;
+}
+
+function getProfileCompleteness(profile: Partial<Profile>, savedProfile: Profile | null) {
+  const checks = [
+    profile.display_name,
+    profile.description,
+    profile.city,
+    profile.category,
+    profile.age,
+    profile.service_radius_km,
+    profile.price_1h,
+    profile.service_menu?.some((service) => service.enabled),
+    savedProfile?.profile_images?.length,
+    savedProfile?.verified
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
 const demoBookingRequests: BookingRequest[] = [
