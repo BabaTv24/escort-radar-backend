@@ -18,6 +18,16 @@ export type Profile = {
   id: string;
   user_id?: string;
   display_name: string;
+  account_type?: 'private' | 'agency' | 'massage_salon' | 'club_party' | 'live_cam';
+  primary_phone?: string | null;
+  additional_phones?: string[];
+  phone_owner_identity_label?: string | null;
+  phone_rule_confirmed?: boolean;
+  phone_conflict_status?: 'clear' | 'warning' | 'conflict';
+  public_user_id?: string | null;
+  referral_code?: string | null;
+  referred_by_code?: string | null;
+  referral_count?: number;
   age?: number;
   height?: number;
   body_type?: string;
@@ -112,4 +122,27 @@ export type AdminActivity = {
   target_type: string;
   target_id?: string | null;
   created_at: string;
+};
+
+export type Wallet = {
+  id: string;
+  user_id: string;
+  escort_token_balance: number;
+  eur_spent: number;
+  referral_balance: number;
+  public_wallet_id: string;
+  solana_wallet_address?: string | null;
+  phantom_connected?: boolean;
+  frozen?: boolean;
+  created_at: string;
+};
+
+export type TokenPackage = {
+  id?: string;
+  name: string;
+  token_amount: number;
+  eur_price: number;
+  bonus_tokens: number;
+  featured: boolean;
+  active?: boolean;
 };

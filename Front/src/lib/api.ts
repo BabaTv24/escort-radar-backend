@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, BookingRequest, Profile } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, Profile, TokenPackage, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -53,7 +53,7 @@ export const api = {
     body: JSON.stringify({ status })
   }),
   adminStats: (token: string) => request<{ stats: Record<string, number>; latest_activity: AdminActivity[] }>('/api/admin/stats', { token }),
-  adminProfiles: (token: string) => request<{ profiles: Profile[]; stats: Record<string, number> }>('/api/admin/profiles', { token }),
+  adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number> }>(`/api/admin/profiles${params}`, { token }),
   adminProfile: (token: string, id: string) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, { token }),
   adminReports: (token: string) => request<{ reports: AdminReport[]; reports_count: number }>('/api/admin/reports', { token }),
   adminBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/admin/bookings', { token }),
@@ -78,6 +78,11 @@ export const api = {
     token,
     body: JSON.stringify({ admin_note })
   }),
+  setPhoneConflictStatus: (token: string, id: string, phone_conflict_status: string) => request(`/api/admin/profiles/${id}/phone-conflict-status`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ phone_conflict_status })
+  }),
   setReportStatus: (token: string, id: string, body: Record<string, unknown>) => request(`/api/admin/reports/${id}/status`, {
     method: 'PATCH',
     token,
@@ -92,5 +97,13 @@ export const api = {
     method: 'PATCH',
     token,
     body: JSON.stringify({ settings })
-  })
+  }),
+  tokenPackages: () => request<{ packages: TokenPackage[] }>('/api/tokens/packages'),
+  myWallet: (token: string) => request<{ wallet: Wallet }>('/api/tokens/wallet/me', { token }),
+  tokenPurchaseIntent: (token: string, package_id?: string) => request('/api/tokens/purchase-intent', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ package_id })
+  }),
+  adminTokenStats: (token: string) => request<{ stats: Record<string, number> }>('/api/admin/tokens/stats', { token })
 };

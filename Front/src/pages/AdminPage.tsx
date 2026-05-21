@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, BadgeCheck, Ban, CalendarDays, FlaskConical, NotebookPen, Settings, Shield, Video } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
@@ -15,7 +16,7 @@ const moderationStatuses = ['clean', 'review', 'suspended', 'blocked'];
 const reportStatuses = ['open', 'investigating', 'resolved', 'escalated'];
 const bookingStatuses = ['pending', 'accepted', 'rejected', 'cancelled'];
 
-export function AdminPage() {
+export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const [token, setToken] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,13 +26,25 @@ export function AdminPage() {
   const [activity, setActivity] = useState<AdminActivity[]>([]);
   const [settings, setSettings] = useState<Record<string, unknown>>({});
   const [stats, setStats] = useState<Record<string, number>>({});
+  const [tokenStats, setTokenStats] = useState<Record<string, number>>({});
   const [selectedId, setSelectedId] = useState('');
+  const [phoneSearch, setPhoneSearch] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const { t, option } = useI18n();
+  const navigate = useNavigate();
 
   const selectedProfile = useMemo(() => profiles.find((profile) => profile.id === selectedId) || profiles[0], [profiles, selectedId]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      const accessToken = data.session?.access_token || '';
+      if (!accessToken || token) return;
+      setToken(accessToken);
+      load(accessToken);
+    });
+  }, []);
 
   async function login() {
     setLoading(true);
@@ -45,15 +58,17 @@ export function AdminPage() {
     setToken(accessToken);
     await load(accessToken);
     setLoading(false);
+    if (accessMode) navigate('/admin', { replace: true });
   }
 
   async function load(accessToken = token) {
-    const [statsData, profileData, reportData, bookingData, settingsData] = await Promise.all([
+    const [statsData, profileData, reportData, bookingData, settingsData, tokenData] = await Promise.all([
       api.adminStats(accessToken),
-      api.adminProfiles(accessToken),
+      api.adminProfiles(accessToken, phoneSearch ? `?phone=${encodeURIComponent(phoneSearch)}` : ''),
       api.adminReports(accessToken),
       api.adminBookings(accessToken),
-      api.adminSettings(accessToken)
+      api.adminSettings(accessToken),
+      api.adminTokenStats(accessToken)
     ]);
     setStats({ ...profileData.stats, ...statsData.stats, reports: reportData.reports_count });
     setActivity(statsData.latest_activity);
@@ -61,6 +76,7 @@ export function AdminPage() {
     setReports(reportData.reports);
     setBookings(bookingData.booking_requests);
     setSettings(settingsData.settings);
+    setTokenStats(tokenData.stats);
     if (!selectedId && profileData.profiles[0]) setSelectedId(profileData.profiles[0].id);
   }
 
@@ -77,8 +93,41 @@ export function AdminPage() {
     }
   }
 
+  if (accessMode && !token) {
+    return (
+      <div className="admin-access-shell">
+        <div className="admin-access-grid-bg" />
+        <section className="admin-access-hero">
+          <div>
+            <div className="baba-admin-badge">
+              <span className="baba-wordmark">BABA AI</span>
+              <strong>{t('baba.adminConsole')}</strong>
+            </div>
+            <p className="eyebrow">{t('adminAccess.eyebrow')}</p>
+            <h1><Shield size={34} /> {t('adminAccess.headline')}</h1>
+            <p>{t('adminAccess.subtitle')}</p>
+            <div className="admin-access-metrics">
+              <span>{t('adminAccess.metricVerification')}</span>
+              <span>{t('adminAccess.metricReports')}</span>
+              <span>{t('adminAccess.metricInfrastructure')}</span>
+            </div>
+          </div>
+          <div className="admin-access-card">
+            <h2>{t('adminAccess.loginTitle')}</h2>
+            <input type="email" placeholder={t('admin.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
+            <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
+            <input placeholder={t('adminAccess.twoFactor')} disabled />
+            <p>{t('adminAccess.auditNotice')}</p>
+            <button className="button primary full" disabled={loading} onClick={login}>{loading ? t('states.loading') : t('buttons.login')}</button>
+            {message && <p className="error-text">{message}</p>}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
-    <div className="page admin-page">
+    <div className={accessMode ? 'page admin-page admin-page-access' : 'page admin-page'}>
       <section className="admin-hero">
         <div className="baba-admin-badge">
           <span className="baba-wordmark">BABA AI</span>
@@ -115,6 +164,38 @@ export function AdminPage() {
           </nav>
 
           {message && <p className="error-text">{message}</p>}
+
+          <section className="ops-monitor-grid">
+            <div className="ops-card"><strong>{stats.pending_verification || 0}</strong><span>{t('adminOps.pendingVerification')}</span></div>
+            <div className="ops-card danger"><strong>{stats.reports || 0}</strong><span>{t('adminOps.reportedProfiles')}</span></div>
+            <div className="ops-card live"><strong>{profiles.filter((profile) => profile.availability_status === 'available').length}</strong><span>{t('adminOps.onlineProfiles')}</span></div>
+            <div className="ops-card warn"><strong>{profiles.filter((profile) => profile.availability_status === 'busy').length}</strong><span>{t('adminOps.busyProfiles')}</span></div>
+            <div className="ops-card danger"><strong>{profiles.filter((profile) => profile.availability_status === 'unavailable').length}</strong><span>{t('adminOps.offlineProfiles')}</span></div>
+            <div className="ops-card"><strong>{bookings.length}</strong><span>{t('adminOps.vipBookings')}</span></div>
+            <div className="ops-card"><strong>{profiles.filter((profile) => profile.verification_status === 'pending').length}</strong><span>{t('adminOps.manualQueue')}</span></div>
+            <div className="ops-card"><strong>{profiles.length}</strong><span>{t('adminOps.marketplaceStats')}</span></div>
+            <div className="ops-card lab"><strong>{stats.test_accounts || 0}</strong><span>{t('adminOps.testAccounts')}</span></div>
+            <div className="ops-card lab"><strong>0</strong><span>{t('adminOps.liveChat')}</span></div>
+            <div className="ops-card lab"><strong>0</strong><span>{t('adminOps.liveCam')}</span></div>
+            <div className="ops-card danger"><strong>{reports.filter((report) => report.admin_status === 'open' || report.admin_status === 'investigating').length}</strong><span>{t('adminOps.abuseReports')}</span></div>
+          </section>
+
+          <section className="token-control-grid">
+            {['token_circulation', 'eur_spent', 'active_streams', 'stream_viewers', 'premium_unlock_value', 'master_reserve_tatacoin'].map((key) => (
+              <div className="token-control-card" key={key}>
+                <span>{t(`tokens.admin.${key}`)}</span>
+                <strong>{Math.round(Number(tokenStats[key] || 0)).toLocaleString()}</strong>
+              </div>
+            ))}
+          </section>
+
+          <section className="glass-panel admin-phone-search">
+            <h2>{t('admin.phoneSearch')}</h2>
+            <div className="row">
+              <input placeholder={t('form.primaryPhone')} value={phoneSearch} onChange={(event) => setPhoneSearch(event.target.value)} />
+              <button className="button" onClick={() => load()}>{t('buttons.apply')}</button>
+            </div>
+          </section>
 
           {activeTab === 'dashboard' && (
             <section className="admin-grid">
@@ -155,6 +236,7 @@ export function AdminPage() {
                       <StatusChip label={t(`status.${profile.status}`)} tone={profile.status === 'active' ? 'good' : profile.status === 'suspended' ? 'danger' : 'warn'} />
                       <StatusChip label={t(`admin.verification.${profile.verification_status || 'pending'}`)} tone={profile.verification_status === 'verified' ? 'good' : 'warn'} />
                       {profile.is_test_account && <StatusChip label={t('admin.testAccount')} tone="lab" />}
+                      {profile.phone_conflict_status && profile.phone_conflict_status !== 'clear' && <StatusChip label={t(`phoneConflict.${profile.phone_conflict_status}`)} tone="danger" />}
                     </div>
                     <div className="admin-actions">
                       <button onClick={() => { setSelectedId(profile.id); setActiveTab('verification'); }}>{t('admin.actions.view')}</button>
@@ -162,6 +244,8 @@ export function AdminPage() {
                       <button onClick={() => adminAction(() => api.setProfileVerification(token, profile.id, 'verified'))}>{t('admin.actions.markVerified')}</button>
                       <button className="danger" onClick={() => adminAction(() => api.setProfileVerification(token, profile.id, profile.verification_status || 'pending', 'suspended'))}>{t('admin.actions.suspend')}</button>
                       <button className="danger" onClick={() => adminAction(() => api.setProfileVerification(token, profile.id, profile.verification_status || 'pending', 'blocked'))}>{t('admin.actions.block')}</button>
+                      <button onClick={() => adminAction(() => api.setPhoneConflictStatus(token, profile.id, 'warning'))}>{t('admin.actions.phoneWarning')}</button>
+                      <button className="danger" onClick={() => adminAction(() => api.setPhoneConflictStatus(token, profile.id, 'conflict'))}>{t('admin.actions.phoneConflict')}</button>
                       <button onClick={() => adminAction(() => api.setProfileTestAccount(token, profile.id, { is_test_account: !profile.is_test_account, activate_without_payment: true, availability_status: 'available' }))}>{t('admin.actions.test')}</button>
                     </div>
                   </article>

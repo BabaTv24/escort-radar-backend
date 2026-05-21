@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useSearchParams } from 'react-router-dom';
-import { Radar, ShieldCheck, UserRound } from 'lucide-react';
+import { Coins, Radar, ShieldCheck, UserRound } from 'lucide-react';
 import { categoryOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 
@@ -33,6 +33,10 @@ export function Layout() {
           <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action">
             <Radar size={17} />
             <span>{t('nav.radar')}</span>
+          </Link>
+          <Link to="/tokens" className="radar-action">
+            <Coins size={17} />
+            <span>{t('nav.tokens')}</span>
           </Link>
           <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
             <UserRound size={20} />

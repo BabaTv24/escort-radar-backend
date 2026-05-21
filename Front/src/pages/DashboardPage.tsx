@@ -5,6 +5,7 @@ import { CalendarDays, Clock, CreditCard, ImagePlus, Lock, Sparkles, UserRound }
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import type { BookingRequest, Profile, ProfileImage } from '../types';
+import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
 import {
@@ -19,6 +20,7 @@ import {
   paymentMethodOptions,
   radiusOptions,
   availabilityStatusOptions,
+  accountTypeOptions,
   serviceTagOptions,
   toggleArrayValue,
   visitTypeOptions
@@ -26,6 +28,11 @@ import {
 
 const emptyProfile: Partial<Profile> = {
   display_name: '',
+  account_type: 'private',
+  primary_phone: '',
+  additional_phones: [],
+  phone_owner_identity_label: '',
+  phone_rule_confirmed: false,
   city: 'berlin',
   area: '',
   category: 'ladies',
@@ -70,6 +77,11 @@ const emptyProfile: Partial<Profile> = {
 export function DashboardPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [repeatPassword, setRepeatPassword] = useState('');
+  const [accountType, setAccountType] = useState('private');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [confirmedAdult, setConfirmedAdult] = useState(false);
   const [token, setToken] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [profile, setProfile] = useState<Partial<Profile>>(emptyProfile);
@@ -79,6 +91,8 @@ export function DashboardPage() {
   const [authStatus, setAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [dashboardStatus, setDashboardStatus] = useState<'idle' | 'loading' | 'saving' | 'success' | 'error'>('idle');
   const [profileMode, setProfileMode] = useState<'create' | 'edit'>('create');
+  const [activeWizardStep, setActiveWizardStep] = useState(1);
+  const [wallet, setWallet] = useState<Wallet | null>(null);
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -106,10 +120,23 @@ export function DashboardPage() {
     setAuthStatus('loading');
     setMessage('');
 
+    if (mode === 'sign-up') {
+      if (password !== repeatPassword) {
+        setAuthStatus('error');
+        setMessage(t('onboarding.passwordMismatch'));
+        return;
+      }
+      if (!acceptedTerms || !confirmedAdult) {
+        setAuthStatus('error');
+        setMessage(t('onboarding.acceptRequired'));
+        return;
+      }
+    }
+
     try {
       const normalizedEmail = email.trim();
       const result = mode === 'sign-up'
-        ? await supabase.auth.signUp({ email: normalizedEmail, password })
+        ? await supabase.auth.signUp({ email: normalizedEmail, password, options: { data: { username, account_type: accountType } } })
         : await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
 
       if (result.error) {
@@ -123,6 +150,9 @@ export function DashboardPage() {
       setUserEmail(result.data.user?.email || normalizedEmail);
 
       if (session?.access_token) {
+        if (mode === 'sign-up' && username) {
+          setProfile((current) => ({ ...current, display_name: current.display_name || username }));
+        }
         await loadDashboard(session.access_token);
         setAuthStatus('success');
         setMessage(mode === 'sign-up' ? t('auth.registerSuccess') : t('auth.loginSuccess'));
@@ -151,7 +181,8 @@ export function DashboardPage() {
     try {
       const [profileData] = await Promise.all([
         api.myProfile(accessToken),
-        loadBookingRequests(accessToken)
+        loadBookingRequests(accessToken),
+        api.myWallet(accessToken).then((data) => setWallet(data.wallet)).catch(() => undefined)
       ]);
 
       if (profileData.profile) {
@@ -236,12 +267,60 @@ export function DashboardPage() {
     setDashboardStatus('idle');
   }
 
+  if (!token) {
+    return (
+      <div className="onboarding-shell">
+        <div className="onboarding-bg" />
+        <section className="onboarding-hero">
+          <div className="onboarding-copy">
+            <p className="eyebrow">{t('onboarding.step1')}</p>
+            <h1>{t('onboarding.headline')}</h1>
+            <p>{t('onboarding.subtitle')}</p>
+            <div className="onboarding-points">
+              <span>{t('onboarding.pointRadar')}</span>
+              <span>{t('onboarding.pointVip')}</span>
+              <span>{t('onboarding.pointPrivacy')}</span>
+            </div>
+          </div>
+          <div className="onboarding-card">
+            <p className="eyebrow">{t('onboarding.registerCard')}</p>
+            <h2>{t('onboarding.createAccess')}</h2>
+            <input placeholder={t('form.username')} value={username} onChange={(event) => setUsername(event.target.value)} />
+            <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
+            <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
+            <input type="password" placeholder={t('form.repeatPassword')} value={repeatPassword} onChange={(event) => setRepeatPassword(event.target.value)} />
+            <select value={accountType} onChange={(event) => setAccountType(event.target.value)}>
+              {accountTypeOptions.map((item) => <option key={item} value={item}>{t(`accountType.${item}`)}</option>)}
+            </select>
+            <label className="premium-check"><input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} /> {t('onboarding.acceptTerms')}</label>
+            <label className="premium-check"><input type="checkbox" checked={confirmedAdult} onChange={(event) => setConfirmedAdult(event.target.checked)} /> {t('onboarding.confirm18')}</label>
+            <button className="button primary full" disabled={authStatus === 'loading'} onClick={() => signIn('sign-up')}>
+              {authStatus === 'loading' ? t('states.loading') : t('onboarding.continue')}
+            </button>
+            <div className="onboarding-login-line">
+              <span>{t('onboarding.already')}</span>
+              <button className="text-button" disabled={authStatus === 'loading'} onClick={() => signIn('sign-in')}>{t('buttons.login')}</button>
+            </div>
+            {message && <p className={authStatus === 'error' ? 'error-text' : 'success'}>{message}</p>}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="page dashboard-page">
       <section className="dashboard-hero">
-        <p className="eyebrow">{t('dashboard.eyebrow')}</p>
+        <p className="eyebrow">{t('onboarding.step2')}</p>
         <h1>{t('dashboard.title')}</h1>
         <p>{t('dashboard.subtitle')}</p>
+        <div className="wizard-progress">
+          {Array.from({ length: 8 }, (_, index) => index + 1).map((step) => (
+            <button key={step} className={activeWizardStep === step ? 'active' : activeWizardStep > step ? 'done' : ''} type="button" onClick={() => setActiveWizardStep(step)}>
+              {step} {t(`wizard.step${step}`)}
+            </button>
+          ))}
+        </div>
       </section>
 
       <div className="dashboard-grid">
@@ -249,23 +328,40 @@ export function DashboardPage() {
           <section className="form-panel elevated">
             <h2><Lock size={18} /> {t('dashboard.account')}</h2>
             <p className="baba-auth-line">{t('baba.builtWith')}</p>
-            <div className="form-grid">
-              <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
-              <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
-            </div>
-            <div className="row">
-              <button className="button primary" type="button" disabled={authStatus === 'loading'} onClick={() => signIn('sign-in')}>
-                {authStatus === 'loading' ? t('states.loading') : t('buttons.login')}
-              </button>
-              <button className="button" type="button" disabled={authStatus === 'loading'} onClick={() => signIn('sign-up')}>
-                {authStatus === 'loading' ? t('states.loading') : t('buttons.register')}
-              </button>
-            </div>
             {userEmail && <p className="success">{t('auth.signedInAs', { email: userEmail })}</p>}
             {message && <p className={authStatus === 'error' ? 'error-text' : 'success'}>{message}</p>}
           </section>
 
+          <section className="token-mini-panel">
+            <div>
+              <p className="eyebrow">{t('tokens.eyebrow')}</p>
+              <h2>{t('tokens.balance')}</h2>
+            </div>
+            <strong>{Math.round(Number(wallet?.escort_token_balance || 0))} {t('tokens.short')}</strong>
+            <Link className="button" to="/tokens">{t('tokens.openShop')}</Link>
+          </section>
+
           <form className="stack" onSubmit={saveProfile}>
+            <section className="form-panel elevated">
+              <h2>{t('wizard.step1')} · {t('dashboard.accountType')}</h2>
+              <div className="account-type-grid">
+                {accountTypeOptions.map((item) => (
+                  <button key={item} type="button" className={profile.account_type === item ? 'account-type-card selected' : 'account-type-card'} onClick={() => setProfile({ ...profile, account_type: item as Profile['account_type'] })}>
+                    <strong>{t(`accountType.${item}`)}</strong>
+                    {item === 'private' && <span>{t('accountType.privateDescription')}</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="form-grid">
+                <input placeholder={t('form.primaryPhone')} value={profile.primary_phone || ''} onChange={(event) => setProfile({ ...profile, primary_phone: event.target.value })} />
+                <input placeholder={t('form.additionalPhones')} value={(profile.additional_phones || []).join(', ')} onChange={(event) => setProfile({ ...profile, additional_phones: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} />
+                <input placeholder={t('form.phoneOwnerIdentity')} value={profile.phone_owner_identity_label || ''} onChange={(event) => setProfile({ ...profile, phone_owner_identity_label: event.target.value })} />
+              </div>
+              {profile.account_type === 'private' && <p className="subscription-notice">{t('phone.privateWarning')}</p>}
+              <label className="premium-check"><input type="checkbox" checked={Boolean(profile.phone_rule_confirmed)} onChange={(event) => setProfile({ ...profile, phone_rule_confirmed: event.target.checked })} /> {t('phone.confirmSameOwner')}</label>
+              {savedProfile?.phone_conflict_status && savedProfile.phone_conflict_status !== 'clear' && <p className="error-text">{t(`phoneConflict.${savedProfile.phone_conflict_status}`)}</p>}
+            </section>
+
             <section className="listing-status-panel">
               <div>
                 <p className="eyebrow">{profileMode === 'edit' ? t('dashboard.editListing') : t('dashboard.createListing')}</p>
@@ -277,6 +373,14 @@ export function DashboardPage() {
                 <span>{t(`admin.verification.${savedProfile?.verification_status || 'pending'}`)}</span>
                 <span>{t(`status.${savedProfile?.status || 'pending'}`)}</span>
               </div>
+              {savedProfile?.public_user_id && (
+                <div className="referral-box">
+                  <span>{t('referral.myId')}: {savedProfile.public_user_id}</span>
+                  <span>{t('referral.myLink')}: https://escort-radar.fun/r/{savedProfile.referral_code}</span>
+                  <span>{t('referral.count')}: {savedProfile.referral_count || 0}</span>
+                  <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(`https://escort-radar.fun/r/${savedProfile.referral_code}`)}>{t('referral.copy')}</button>
+                </div>
+              )}
             </section>
 
             <section className="subscription-card">

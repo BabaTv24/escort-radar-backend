@@ -9,6 +9,7 @@ import {
   asyncHandler,
   optionalText
 } from '../validation.js';
+import { normalizePhone } from '../utils/identity.js';
 
 export const adminRouter = Router();
 
@@ -44,12 +45,19 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   });
 }));
 
-adminRouter.get('/profiles', asyncHandler(async (_req, res) => {
-  const { data, error } = await supabaseAdmin
+adminRouter.get('/profiles', asyncHandler(async (req, res) => {
+  const phone = normalizePhone(req.query.phone);
+  let query = supabaseAdmin
     .from('profiles')
     .select('*, profile_images(*)')
     .order('created_at', { ascending: false })
     .limit(300);
+
+  if (phone) {
+    query = query.or(`primary_phone.eq.${phone},additional_phones.cs.{${phone}}`);
+  }
+
+  const { data, error } = await query;
 
   if (error) return res.status(500).json({ error: error.message });
 
@@ -64,6 +72,22 @@ adminRouter.get('/profiles', asyncHandler(async (_req, res) => {
       test_accounts: rows.filter((profile) => profile.is_test_account).length
     }
   });
+}));
+
+adminRouter.patch('/profiles/:id/phone-conflict-status', asyncHandler(async (req, res) => {
+  const status = String(req.body.phone_conflict_status || '');
+  if (!['clear', 'warning', 'conflict'].includes(status)) return res.status(400).json({ error: 'Invalid phone conflict status' });
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update({ phone_conflict_status: status })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'profile_phone_conflict_updated', 'profile', req.params.id, { phone_conflict_status: status });
+  res.json({ profile: data });
 }));
 
 adminRouter.get('/profiles/:id', asyncHandler(async (req, res) => {
@@ -235,6 +259,51 @@ adminRouter.get('/settings', asyncHandler(async (_req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ settings: normalizeSettings(data || []) });
+}));
+
+adminRouter.get('/tokens/stats', asyncHandler(async (_req, res) => {
+  const [wallets, transactions, streams, unlocks] = await Promise.all([
+    supabaseAdmin.from('wallets').select('escort_token_balance, eur_spent, referral_balance, frozen').limit(5000),
+    supabaseAdmin.from('token_transactions').select('amount, transaction_type, status').limit(5000),
+    supabaseAdmin.from('live_stream_sessions').select('status, viewer_count').limit(1000),
+    supabaseAdmin.from('premium_unlocks').select('token_cost').limit(5000)
+  ]);
+
+  const walletRows = wallets.data || [];
+  const transactionRows = transactions.data || [];
+  const streamRows = streams.data || [];
+  const unlockRows = unlocks.data || [];
+
+  res.json({
+    stats: {
+      token_circulation: walletRows.reduce((sum, wallet) => sum + Number(wallet.escort_token_balance || 0), 0),
+      eur_spent: walletRows.reduce((sum, wallet) => sum + Number(wallet.eur_spent || 0), 0),
+      referral_balance: walletRows.reduce((sum, wallet) => sum + Number(wallet.referral_balance || 0), 0),
+      frozen_wallets: walletRows.filter((wallet) => wallet.frozen).length,
+      token_transfers: transactionRows.length,
+      completed_transactions: transactionRows.filter((transaction) => transaction.status === 'completed').length,
+      active_streams: streamRows.filter((stream) => stream.status === 'live').length,
+      stream_viewers: streamRows.reduce((sum, stream) => sum + Number(stream.viewer_count || 0), 0),
+      premium_unlock_value: unlockRows.reduce((sum, unlock) => sum + Number(unlock.token_cost || 0), 0),
+      master_reserve_tatacoin: 500000
+    }
+  });
+}));
+
+adminRouter.patch('/wallets/:id/balance', asyncHandler(async (req, res) => {
+  const balance = Number(req.body.escort_token_balance);
+  if (!Number.isFinite(balance) || balance < 0) return res.status(400).json({ error: 'Invalid token balance' });
+
+  const { data, error } = await supabaseAdmin
+    .from('wallets')
+    .update({ escort_token_balance: balance, frozen: Boolean(req.body.frozen) })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'wallet_balance_adjusted', 'wallet', req.params.id, { escort_token_balance: balance });
+  res.json({ wallet: data });
 }));
 
 adminRouter.patch('/settings', asyncHandler(async (req, res) => {
