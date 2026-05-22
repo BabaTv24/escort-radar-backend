@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { BadgeCheck, Building2, Camera, Clapperboard, Cpu, Crown, Diamond, EyeOff, Gem, Heart, Hotel, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch, Sparkles, Wand2, Waves } from 'lucide-react';
+import { BadgeCheck, Building2, Cpu, EyeOff, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch } from 'lucide-react';
 import { cities } from '../data/cities';
 import { ProfileCard } from '../components/ProfileCard';
 import { getDemoProfiles } from '../data/demoProfiles';
@@ -128,23 +128,23 @@ function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: 
   );
 }
 
-const categoryIconMap = {
-  ladies: Crown,
-  gay: Diamond,
-  couples: Heart,
-  trans: Wand2,
-  massage: Waves,
-  house_hotel: Hotel,
-  live_cam: Camera,
-  clubs_parties: Clapperboard,
-  other: Sparkles
+const categoryIconMap: Record<string, string> = {
+  ladies: '/category-icons/ladies.png',
+  gay: '/category-icons/gay.png',
+  couples: '/category-icons/couples.png',
+  trans: '/category-icons/trans.png',
+  massage: '/category-icons/massage.png',
+  house_hotel: '/category-icons/house_hotel.png',
+  live_cam: '/category-icons/live_cam.png',
+  clubs_parties: '/category-icons/clubs_parties.png',
+  other: '/Logo_Escort_3.png'
 };
 
 function CategoryIcon({ category }: { category: string }) {
-  const Icon = categoryIconMap[category as keyof typeof categoryIconMap] || Gem;
+  const src = categoryIconMap[category] || categoryIconMap.other;
   return (
     <span className="category-lux-icon">
-      <Icon size={22} />
+      <img src={src} alt="" loading="lazy" />
     </span>
   );
 }
