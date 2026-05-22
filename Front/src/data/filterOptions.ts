@@ -31,6 +31,7 @@ export const defaultServiceMenuNames = [
 ];
 export const radiusOptions = [5, 10, 15, 20, 25, 50, 100];
 export const availabilityStatusOptions = ['available', 'busy', 'unavailable'] as const;
+export const accountTypeOptions = ['private', 'agency', 'massage_salon', 'club_party', 'live_cam'];
 
 export function toggleArrayValue(values: string[] = [], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
