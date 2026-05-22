@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { BadgeCheck, Building2, Cpu, EyeOff, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch } from 'lucide-react';
+import { BadgeCheck, Building2, Camera, Clapperboard, Cpu, Crown, Diamond, EyeOff, Gem, Heart, Hotel, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch, Sparkles, Wand2, Waves } from 'lucide-react';
 import { cities } from '../data/cities';
 import { ProfileCard } from '../components/ProfileCard';
 import { getDemoProfiles } from '../data/demoProfiles';
@@ -43,6 +43,7 @@ export function HomePage() {
           ))}
         </div>
         <div className="hero-content">
+          <img className="hero-brand-mark" src="/Logo_Escort_3.png" alt="" />
           <p className="eyebrow">{t('home.heroEyebrow')}</p>
           <h1>Escort Radar</h1>
           <p className="tagline">{t('home.tagline')}</p>
@@ -62,6 +63,7 @@ export function HomePage() {
         <div className="home-category-grid">
           {categoryOptions.map((category) => (
             <Link key={category} to={`/city/berlin?category=${category}`} className="home-category-card">
+              <CategoryIcon category={category} />
               <span>{option(category)}</span>
             </Link>
           ))}
@@ -123,5 +125,26 @@ function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: 
       <h2>{title}</h2>
       <p>{text}</p>
     </article>
+  );
+}
+
+const categoryIconMap = {
+  ladies: Crown,
+  gay: Diamond,
+  couples: Heart,
+  trans: Wand2,
+  massage: Waves,
+  house_hotel: Hotel,
+  live_cam: Camera,
+  clubs_parties: Clapperboard,
+  other: Sparkles
+};
+
+function CategoryIcon({ category }: { category: string }) {
+  const Icon = categoryIconMap[category as keyof typeof categoryIconMap] || Gem;
+  return (
+    <span className="category-lux-icon">
+      <Icon size={22} />
+    </span>
   );
 }

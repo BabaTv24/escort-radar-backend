@@ -1219,3 +1219,310 @@ body::before {
     transition-duration: .001ms !important;
   }
 }
+
+/* Final money-weekend polish: mobile, brand assets, category icons */
+.app-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 15% 32%, rgba(128,34,69,.32), transparent 18rem),
+    radial-gradient(ellipse at 80% 28%, rgba(212,175,55,.14), transparent 18rem),
+    radial-gradient(ellipse at 72% 76%, rgba(56,245,221,.12), transparent 24rem),
+    linear-gradient(115deg, transparent 0 44%, rgba(255,255,255,.035) 48%, transparent 54%);
+  filter: saturate(1.06);
+  opacity: .86;
+}
+
+.brand {
+  min-height: 3.1rem;
+  padding-right: .35rem;
+}
+.brand-logo-img {
+  width: 2.9rem;
+  height: 2.9rem;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1px solid rgba(212,175,55,.45);
+  box-shadow: 0 0 26px rgba(212,175,55,.28), 0 0 42px rgba(128,34,69,.16);
+}
+.hero-brand-mark {
+  width: clamp(5.5rem, 15vw, 9rem);
+  height: clamp(5.5rem, 15vw, 9rem);
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1px solid rgba(212,175,55,.45);
+  box-shadow: 0 0 46px rgba(212,175,55,.25), 0 18px 80px rgba(0,0,0,.7);
+  margin-bottom: 1rem;
+}
+
+.hero-cinema-bg {
+  background:
+    radial-gradient(ellipse at 78% 22%, rgba(255,216,126,.24), transparent 18rem),
+    radial-gradient(ellipse at 82% 58%, rgba(192,24,114,.34), transparent 24rem),
+    radial-gradient(ellipse at 55% 18%, rgba(56,245,221,.16), transparent 22rem),
+    linear-gradient(115deg, rgba(5,5,5,.98) 0%, rgba(13,7,12,.92) 42%, rgba(24,8,19,.84) 65%, rgba(5,5,5,.98) 100%),
+    url("/Logo_Escort_3.png");
+  background-size: auto, auto, auto, auto, min(76vw, 820px);
+  background-position: center, center, center, center, right 7% center;
+  background-repeat: no-repeat;
+}
+.hero-cinema-bg::after {
+  content: "";
+  position: absolute;
+  right: 2%;
+  bottom: -8%;
+  width: min(52vw, 620px);
+  aspect-ratio: 1 / 1.25;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(244,215,127,.16), transparent 18%),
+    radial-gradient(ellipse at 50% 52%, rgba(192,24,114,.24), transparent 42%),
+    linear-gradient(180deg, transparent 0 22%, rgba(255,255,255,.035) 22% 58%, transparent 72%);
+  filter: blur(20px);
+  opacity: .75;
+  mask-image: radial-gradient(ellipse at center, #000 0 45%, transparent 72%);
+}
+
+.home-category-grid {
+  align-items: stretch;
+}
+.home-category-card {
+  position: relative;
+  display: grid;
+  align-content: end;
+  gap: .8rem;
+  overflow: hidden;
+  min-height: 9.2rem;
+  padding: 1rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+.home-category-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.13), transparent 32%),
+    radial-gradient(circle at 70% 18%, rgba(212,175,55,.22), transparent 7rem),
+    radial-gradient(circle at 20% 86%, rgba(192,24,114,.26), transparent 8rem);
+  opacity: .72;
+  transition: opacity .25s ease, transform .45s ease;
+}
+.home-category-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 1rem .75rem 1rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(244,215,127,.82), transparent);
+  transform: scaleX(.28);
+  opacity: .65;
+  transition: transform .25s ease, opacity .25s ease;
+}
+.home-category-card:hover::before {
+  opacity: 1;
+  transform: scale(1.05);
+}
+.home-category-card:hover::after {
+  transform: scaleX(1);
+  opacity: 1;
+}
+.home-category-card span {
+  position: relative;
+  z-index: 1;
+}
+.category-lux-icon {
+  width: 3.1rem;
+  height: 3.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(212,175,55,.42);
+  background:
+    radial-gradient(circle at 32% 20%, rgba(255,255,255,.28), transparent 24%),
+    linear-gradient(135deg, rgba(212,175,55,.28), rgba(192,24,114,.12), rgba(56,245,221,.12));
+  color: #fff4c5;
+  box-shadow: 0 0 32px rgba(212,175,55,.2), inset 0 1px 0 rgba(255,255,255,.18);
+}
+
+.btn:hover, .button:hover, .radar-action:hover, .admin-action-btn:hover,
+.luxury-bottom-nav a:hover, .profile-floating-cta a:hover, .profile-floating-cta button:hover,
+.mobile-creator-dock a:hover, .mobile-creator-dock button:hover {
+  border-color: rgba(244,215,127,.72);
+  background:
+    linear-gradient(135deg, rgba(244,215,127,.2), rgba(192,24,114,.13), rgba(56,245,221,.12));
+  color: #fff;
+  box-shadow:
+    0 18px 70px rgba(0,0,0,.54),
+    0 0 34px rgba(212,175,55,.24),
+    0 0 18px rgba(56,245,221,.14),
+    inset 0 1px 0 rgba(255,255,255,.16);
+}
+.button.primary:hover, .btn-primary:hover {
+  background: linear-gradient(135deg, #fff3bc, #d4af37 38%, #50ffe9 100%);
+  color: #090704;
+  box-shadow: 0 20px 78px rgba(212,175,55,.36), 0 0 34px rgba(56,245,221,.22);
+}
+
+.baba-image-badge {
+  max-width: min(100%, 560px);
+  border-radius: 1rem;
+}
+.baba-image-badge img {
+  width: 8.2rem;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: .75rem;
+  border: 1px solid rgba(212,175,55,.32);
+  box-shadow: 0 0 34px rgba(212,175,55,.18);
+}
+.baba-admin-logo {
+  width: min(100%, 17rem);
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: .9rem;
+  border: 1px solid rgba(212,175,55,.3);
+  box-shadow: 0 0 42px rgba(212,175,55,.18);
+}
+.baba-admin-logo.compact {
+  width: 5.6rem;
+  border-radius: .65rem;
+}
+
+@media (max-width: 900px) {
+  .page { padding-inline: .75rem; }
+  .market-header {
+    backdrop-filter: blur(22px);
+  }
+  .category-nav {
+    gap: .45rem;
+    padding-bottom: .72rem;
+  }
+  .category-link {
+    min-height: 2.85rem;
+    padding-inline: .9rem;
+  }
+  .home-category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .7rem;
+  }
+  .marketplace-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .brand span {
+    max-width: 9.5rem;
+    font-size: .95rem;
+  }
+  .brand-logo-img {
+    width: 2.55rem;
+    height: 2.55rem;
+  }
+  .header-actions {
+    max-width: 48vw;
+  }
+  .header-actions .radar-action {
+    width: 2.85rem;
+    min-width: 2.85rem;
+    padding-inline: 0;
+  }
+  .header-actions .radar-action span {
+    display: none;
+  }
+  .language-switcher {
+    display: none;
+  }
+  .hero-cinema-bg {
+    background-size: auto, auto, auto, auto, 118vw;
+    background-position: center, center, center, center, center 18%;
+    opacity: .86;
+  }
+  .hero-content {
+    min-height: 74dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .hero-brand-mark {
+    width: 5.3rem;
+    height: 5.3rem;
+  }
+  .hero-actions {
+    margin-top: 1rem;
+  }
+  .hero-actions .button {
+    min-height: 3.35rem;
+  }
+  .home-category-grid, .marketplace-grid {
+    grid-template-columns: 1fr;
+  }
+  .home-category-card {
+    min-height: 6.8rem;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    align-content: center;
+  }
+  .card-body {
+    gap: .6rem;
+  }
+  .badges {
+    max-height: 5.9rem;
+    overflow: hidden;
+  }
+  .profile-floating-cta {
+    bottom: calc(4.65rem + env(safe-area-inset-bottom));
+  }
+  .mobile-creator-dock {
+    bottom: calc(4.65rem + env(safe-area-inset-bottom));
+  }
+  .baba-image-badge {
+    width: 100%;
+    align-items: center;
+  }
+  .baba-image-badge img {
+    width: 7rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .page { padding-inline: .55rem; }
+  .market-header {
+    padding-inline: .55rem;
+  }
+  .hero {
+    padding-inline: .65rem;
+  }
+  .hero h1 {
+    font-size: clamp(3.1rem, 20vw, 4.7rem);
+  }
+  .tagline {
+    font-size: .96rem;
+  }
+  .hero-profile-preview {
+    width: calc(100vw - 1.4rem);
+  }
+  .preview-2 {
+    display: none;
+  }
+  .home-category-card {
+    min-height: 6.3rem;
+    padding: .85rem;
+  }
+  .category-lux-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+  .profile-card {
+    border-radius: .9rem;
+  }
+  .card-body h3 {
+    font-size: 1rem;
+  }
+  .baba-image-badge {
+    grid-template-columns: 1fr;
+  }
+}

@@ -187,7 +187,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     return (
       <div className="admin-login-page">
         <div className="admin-login-card">
-          <span className="baba-wordmark">BABA AI</span>
+          <img className="baba-admin-logo" src="/Sektion_1_4.png" alt="BABA AI" />
           <p className="eyebrow">Escort Radar Admin Console</p>
           <h1>Control Center</h1>
           <p>Tylko dla administratorow i moderatorow.</p>
@@ -206,7 +206,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     <div className="admin-shell">
       <aside className="admin-sidebar">
         <Link to="/admin" className="admin-brand">
-          <span className="baba-wordmark">BABA AI</span>
+          <img className="baba-admin-logo compact" src="/Sektion_1_4.png" alt="BABA AI" />
           <strong>Escort Radar</strong>
         </Link>
         {sections.map((section) => (

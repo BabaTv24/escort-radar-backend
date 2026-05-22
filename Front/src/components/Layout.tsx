@@ -15,7 +15,7 @@ export function Layout() {
     <div className="app-shell">
       <header className="market-header">
         <Link to="/" className="brand">
-          <Radar size={24} />
+          <img className="brand-logo-img" src="/Logo_Escort_3.png" alt="" />
           <span>Escort Radar</span>
         </Link>
         <nav className="category-nav" aria-label="Categories">
@@ -72,8 +72,8 @@ export function Layout() {
           <strong>{t('footer.title')}</strong>
           <span>{t('footer.notice')}</span>
         </div>
-        <a className="baba-footer-badge" href="https://www.baba-ai.de" target="_blank" rel="noreferrer">
-          <span className="baba-wordmark">BABA AI</span>
+        <a className="baba-footer-badge baba-image-badge" href="https://www.baba-ai.de" target="_blank" rel="noreferrer">
+          <img src="/Sektion_1_4.png" alt="BABA AI" />
           <span>
             <strong>{t('baba.powered')}</strong>
             <small>{t('baba.infrastructure')}</small>

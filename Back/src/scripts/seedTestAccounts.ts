@@ -67,7 +67,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 async function main() {
-  const targetEmails = Array.from({ length: 25 }, (_, index) => `mtvx007+test${index + 1}@gmail.com`);
+  const targetEmails = Array.from({ length: 3 }, (_, index) => `mtvx007+test${index + 1}@gmail.com`);
   console.log('Escort Radar test account seed');
   console.log(`Environment: NODE_ENV=${NODE_ENV}, ALLOW_TEST_SEED=${ALLOW_TEST_SEED}`);
   console.log(`Will deactivate old test profiles where email contains "+test" or is_test_account=true.`);
@@ -84,7 +84,7 @@ async function main() {
     const email = targetEmails[index];
     const user = await createOrUpdateUser(email, users);
     await createProfileForUser(user.id, email, index);
-    console.log(`Created test profile ${index + 1}/25 for ${email}`);
+    console.log(`Created test profile ${index + 1}/${targetEmails.length} for ${email}`);
   }
 
   console.log('Done. Test accounts are ready for live QA.');
