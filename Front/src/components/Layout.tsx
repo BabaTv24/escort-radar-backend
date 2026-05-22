@@ -53,6 +53,20 @@ export function Layout() {
       <main>
         <Outlet />
       </main>
+      <nav className="luxury-bottom-nav" aria-label="Mobile navigation">
+        <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`}>
+          <Radar size={18} />
+          <span>{t('nav.radar')}</span>
+        </Link>
+        <Link to="/tokens">
+          <Coins size={18} />
+          <span>{t('nav.tokens')}</span>
+        </Link>
+        <Link to="/dashboard">
+          <UserRound size={18} />
+          <span>{t('nav.dashboard')}</span>
+        </Link>
+      </nav>
       <footer className="footer">
         <div>
           <strong>{t('footer.title')}</strong>

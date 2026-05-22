@@ -11,7 +11,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
   return (
     <article className="profile-card">
       <div className="card-image">
-        {primary?.public_url ? <img src={primary.public_url} alt="" /> : <div className="image-placeholder">{t('app.name')}</div>}
+        {primary?.public_url ? <img src={primary.public_url} alt="" loading="lazy" /> : <div className="image-placeholder">{t('app.name')}</div>}
         <span className={`status ${status}`}>{t(`status.${status}`)}</span>
         <div className="card-overlay">
           <strong>{profile.display_name}</strong>
@@ -21,11 +21,14 @@ export function ProfileCard({ profile }: { profile: Profile }) {
       <div className="card-body">
         <div>
           <h3>{profile.display_name}{profile.age ? <span>{profile.age}</span> : null}</h3>
-          <p><MapPin size={15} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}{profile.distance_km ? ` · ~${profile.distance_km} km` : ''}</p>
+          <p><MapPin size={15} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}{profile.distance_km ? ` - ~${profile.distance_km} km` : ''}</p>
         </div>
         <div className="badges">
           {status === 'available' && <span>{t('badges.availableNow')}</span>}
           {profile.verified && <span><BadgeCheck size={14} /> {t('badges.verified')}</span>}
+          <span><LockKeyhole size={14} /> Private gallery</span>
+          <span>Live tonight</span>
+          {profile.price_1h && <span>VIP</span>}
           {profile.mobile_service && <span><Smartphone size={14} /> {t('badges.mobile')}</span>}
           {profile.private_studio && <span><LockKeyhole size={14} /> {t('badges.private')}</span>}
           {profile.audience?.includes('couples') && <span><HeartHandshake size={14} /> {t('badges.couples')}</span>}
@@ -42,7 +45,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
         <p className="muted">{t('profile.availableWithin', { radius: profile.service_radius_km || 25 })}</p>
         {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
-        <Link to={`/profile/${profile.id}`} className="button full">{t('buttons.viewProfile')}</Link>
+        <Link to={`/profile/${profile.id}`} className="button full">Private access</Link>
       </div>
     </article>
   );

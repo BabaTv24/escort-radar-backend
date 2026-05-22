@@ -20,10 +20,26 @@ export function HomePage() {
   return (
     <div className="page">
       <section className="hero">
+        <div className="hero-cinema-bg" aria-hidden="true" />
+        <div className="hero-light-leak" aria-hidden="true" />
         <div className="radar-ring" />
+        <div className="hero-particles" aria-hidden="true">
+          {Array.from({ length: 14 }, (_, index) => <span key={index} />)}
+        </div>
         <div className="hero-strip">
           {featured.slice(0, 4).map((profile) => (
             <img key={profile.id} src={profile.profile_images?.[0]?.public_url} alt="" />
+          ))}
+        </div>
+        <div className="hero-floating-profiles" aria-hidden="true">
+          {featured.slice(0, 3).map((profile, index) => (
+            <div className={`hero-profile-preview preview-${index + 1}`} key={profile.id}>
+              {profile.profile_images?.[0]?.public_url ? <img src={profile.profile_images[0].public_url} alt="" /> : null}
+              <div>
+                <strong>{profile.display_name}</strong>
+                <span>{profile.availability_status === 'available' ? 'Available now' : 'Live tonight'}</span>
+              </div>
+            </div>
           ))}
         </div>
         <div className="hero-content">
