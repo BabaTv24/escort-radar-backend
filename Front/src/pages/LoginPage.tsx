@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LogIn, Radar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -12,7 +13,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
 
-  async function login() {
+  async function login(event: FormEvent) {
+    event.preventDefault();
     setLoading(true);
     setMessage('');
     const result = await supabase.auth.signInWithPassword({ email: email.trim(), password });
@@ -27,7 +29,7 @@ export function LoginPage() {
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/dashboard` }
     });
-    if (error) setMessage(error.message);
+    if (error) setMessage('Google login is not configured yet. Please use email login or try later.');
   }
 
   return (
@@ -47,11 +49,13 @@ export function LoginPage() {
         <div className="onboarding-card">
           <p className="eyebrow">{t('buttons.login')}</p>
           <h2>{t('auth.loginTitle')}</h2>
-          <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
-          <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
-          <button className="button primary full" disabled={loading} onClick={login}>
-            <LogIn size={17} /> {loading ? t('states.loading') : t('buttons.login')}
-          </button>
+          <form className="stack" onSubmit={login}>
+            <input type="email" required placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
+            <input type="password" required placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
+            <button className="button primary full" type="submit" disabled={loading}>
+              <LogIn size={17} /> {loading ? t('states.loading') : t('buttons.login')}
+            </button>
+          </form>
           <button className="button full" type="button" disabled={loading} onClick={signInWithGoogle}>{t('auth.continueWithGoogle')}</button>
           <Link className="text-link" to="/register">{t('auth.needAccount')}</Link>
           {message && <p className="error-text">{message}</p>}

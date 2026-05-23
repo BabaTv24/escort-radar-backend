@@ -47,7 +47,10 @@ export function RegisterPage() {
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/dashboard` }
     });
-    if (error) setMessage(error.message);
+    if (error) {
+      localStorage.removeItem(authIntentStorageKey);
+      setMessage('Google login is not configured yet. Please use email login or try later.');
+    }
   }
 
   return (

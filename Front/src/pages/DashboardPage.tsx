@@ -80,14 +80,6 @@ const allowedAuthAccountTypes = ['client', 'escort', 'business'];
 const allowedIdentities = ['male', 'female', 'trans'];
 
 export function DashboardPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [repeatPassword, setRepeatPassword] = useState('');
-  const [accountType, setAccountType] = useState('private');
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [confirmedAdult, setConfirmedAdult] = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
   const [token, setToken] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [profile, setProfile] = useState<Partial<Profile>>(emptyProfile);
@@ -149,57 +141,6 @@ export function DashboardPage() {
       if (!error) localStorage.removeItem(authIntentStorageKey);
     } catch {
       return;
-    }
-  }
-
-  async function signIn(mode: 'sign-in' | 'sign-up') {
-    setAuthStatus('loading');
-    setMessage('');
-
-    if (mode === 'sign-up') {
-      if (password !== repeatPassword) {
-        setAuthStatus('error');
-        setMessage(t('onboarding.passwordMismatch'));
-        return;
-      }
-      if (!acceptedTerms || !confirmedAdult) {
-        setAuthStatus('error');
-        setMessage(t('onboarding.acceptRequired'));
-        return;
-      }
-    }
-
-    try {
-      const normalizedEmail = email.trim();
-      const result = mode === 'sign-up'
-        ? await supabase.auth.signUp({ email: normalizedEmail, password, options: { data: { username, account_type: accountType } } })
-        : await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
-
-      if (result.error) {
-        setAuthStatus('error');
-        setMessage(getAuthErrorMessage(result.error.message, mode, t));
-        return;
-      }
-
-      const session = result.data.session;
-      setToken(session?.access_token || '');
-      setUserEmail(result.data.user?.email || normalizedEmail);
-
-      if (session?.access_token) {
-        if (mode === 'sign-up' && username) {
-          setProfile((current) => ({ ...current, display_name: current.display_name || username }));
-        }
-        await loadDashboard(session.access_token);
-        setAuthStatus('success');
-        setMessage(mode === 'sign-up' ? t('auth.registerSuccess') : t('auth.loginSuccess'));
-        return;
-      }
-
-      setAuthStatus('success');
-      setMessage(t('auth.emailConfirmationRequired'));
-    } catch (error) {
-      setAuthStatus('error');
-      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     }
   }
 
@@ -379,21 +320,9 @@ export function DashboardPage() {
             </div>
             <div className="hero-actions">
               <Link to="/register" className="button primary">{t('dashboard.createAccountFirst')}</Link>
-              <button className="button" type="button" onClick={() => setShowLogin(true)}>{t('dashboard.haveAccountLogin')}</button>
+              <Link to="/login" className="button">{t('dashboard.haveAccountLogin')}</Link>
             </div>
           </div>
-          {showLogin && (
-            <div className="onboarding-card login-modal-card">
-              <p className="eyebrow">{t('dashboard.loginModal')}</p>
-              <h2>{t('buttons.login')}</h2>
-              <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
-              <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
-              <button className="button primary full" disabled={authStatus === 'loading'} onClick={() => signIn('sign-in')}>
-                {authStatus === 'loading' ? t('states.loading') : t('buttons.login')}
-              </button>
-              {message && <p className={authStatus === 'error' ? 'error-text' : 'success'}>{message}</p>}
-            </div>
-          )}
         </section>
       </div>
     );
@@ -700,20 +629,6 @@ export function DashboardPage() {
       />
     </div>
   );
-}
-
-function getAuthErrorMessage(message: string, mode: 'sign-in' | 'sign-up', t: (key: string, vars?: Record<string, string | number>) => string) {
-  const lower = message.toLowerCase();
-  if (lower.includes('email not confirmed') || lower.includes('confirm')) {
-    return t('auth.emailConfirmationRequired');
-  }
-  if (lower.includes('invalid login credentials')) {
-    return t('auth.invalidCredentials');
-  }
-  if (lower.includes('already registered') || lower.includes('user already registered')) {
-    return t('auth.alreadyRegistered');
-  }
-  return mode === 'sign-up' ? t('auth.registerFailed', { message }) : t('auth.loginFailed', { message });
 }
 
 function CreatorHeroPanel({ profile, savedProfile, wallet, userEmail, onUpload, onLogout }: {
