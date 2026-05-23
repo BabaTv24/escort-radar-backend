@@ -75,6 +75,10 @@ const emptyProfile: Partial<Profile> = {
   private_studio: false
 };
 
+const authIntentStorageKey = 'escortRadar.authIntent';
+const allowedAuthAccountTypes = ['client', 'escort', 'business'];
+const allowedIdentities = ['male', 'female', 'trans'];
+
 export function DashboardPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -104,25 +108,49 @@ export function DashboardPage() {
 
   useEffect(() => {
     api.tags().then((data) => setPlatformTags(data.tags)).catch(() => setPlatformTags([]));
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       const session = data.session;
       setToken(session?.access_token || '');
       setUserEmail(session?.user.email || '');
       if (session?.access_token) {
+        await syncStoredAuthIntent();
         loadDashboard(session.access_token);
       }
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setToken(session?.access_token || '');
       setUserEmail(session?.user.email || '');
       if (session?.access_token) {
+        await syncStoredAuthIntent();
         loadDashboard(session.access_token);
       }
     });
 
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  async function syncStoredAuthIntent() {
+    const stored = localStorage.getItem(authIntentStorageKey);
+    if (!stored) return;
+
+    try {
+      const parsed = JSON.parse(stored) as Record<string, unknown>;
+      const metadata: Record<string, string> = {};
+      if (allowedAuthAccountTypes.includes(String(parsed.auth_account_type))) {
+        metadata.auth_account_type = String(parsed.auth_account_type);
+      }
+      if (allowedIdentities.includes(String(parsed.identity))) {
+        metadata.identity = String(parsed.identity);
+      }
+      if (!Object.keys(metadata).length) return;
+
+      const { error } = await supabase.auth.updateUser({ data: metadata });
+      if (!error) localStorage.removeItem(authIntentStorageKey);
+    } catch {
+      return;
+    }
+  }
 
   async function signIn(mode: 'sign-in' | 'sign-up') {
     setAuthStatus('loading');

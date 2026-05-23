@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
 import { AdminAccessPage } from './pages/AdminAccessPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { LoginPage } from './pages/LoginPage';
 import { LegalPage } from './pages/LegalPage';
 import { TokenShopPage } from './pages/TokenShopPage';
 import { ReferralPage } from './pages/ReferralPage';
@@ -20,6 +21,7 @@ export function App() {
         <Route path="/admin/login" element={<AdminAccessPage />} />
         <Route path="/admin/*" element={<AdminPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/city/:city" element={<CityPage />} />
