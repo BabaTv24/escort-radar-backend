@@ -127,14 +127,17 @@ alter table public.tags enable row level security;
 alter table public.profile_tags enable row level security;
 alter table public.token_purchase_requests enable row level security;
 
+drop policy if exists "Anyone can read active tags" on public.tags;
 create policy "Anyone can read active tags"
 on public.tags for select
 using (active = true);
 
+drop policy if exists "Anyone can read profile tags" on public.profile_tags;
 create policy "Anyone can read profile tags"
 on public.profile_tags for select
 using (true);
 
+drop policy if exists "Users can read own token purchase requests" on public.token_purchase_requests;
 create policy "Users can read own token purchase requests"
 on public.token_purchase_requests for select
 using (auth.uid() = user_id);
