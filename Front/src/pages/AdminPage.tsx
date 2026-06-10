@@ -62,7 +62,6 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<Record<string, unknown> | null>(null);
   const [admin, setAdmin] = useState<Record<string, unknown> | null>(null);
-  const [error, setError] = useState('');
   const [authRestoring, setAuthRestoring] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
@@ -92,91 +91,61 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
-    console.log('ADMIN PAGE', {
-      loading,
-      user,
-      admin,
-      error
-    });
-  }, [loading, user, admin, error]);
-
-  useEffect(() => {
-    if (token && location.pathname === '/admin/login') {
-      navigate('/admin', { replace: true });
-    }
-  }, [token, location.pathname, navigate]);
-
-  useEffect(() => {
     let active = true;
-    const sessionTimeout = window.setTimeout(() => {
-      console.log('SESSION TIMEOUT');
-    }, 5000);
 
-    async function handleSession(session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) {
-      console.log('SUPABASE SESSION', session);
-      console.log('LOCAL STORAGE KEYS', Object.keys(localStorage));
+    async function restoreAdminSession() {
+      setAuthRestoring(true);
+      const { data: { session } } = await supabase.auth.getSession();
 
       if (!active) return;
-      setUser(session?.user ? {
-        id: session.user.id,
-        email: session.user.email,
-        app_metadata: session.user.app_metadata
-      } : null);
-
       if (!session?.access_token) {
         setToken('');
+        setUser(null);
         setAdmin(null);
-        setError('No active admin session');
         setAuthRestoring(false);
         if (!accessMode && location.pathname !== '/admin/login') navigate('/admin/login', { replace: true });
         return;
       }
 
       const adminCheck = await api.adminMe(session.access_token).catch((adminError) => {
-        setError(adminError instanceof Error ? adminError.message : 'Admin check failed');
-        return null;
+        setMessage(adminError instanceof Error ? adminError.message : 'Brak dostepu administratora');
+        return undefined;
       });
       if (!active) return;
 
       if (!adminCheck?.admin) {
         setToken('');
+        setUser(null);
         setAdmin(null);
-        setError('Admin check failed or user is not admin');
         setMessage('Brak dostepu administratora');
         setAuthRestoring(false);
         return;
       }
 
       setAdmin(adminCheck.admin);
-      setError('');
+      setUser({
+        id: session.user.id,
+        email: session.user.email,
+        app_metadata: session.user.app_metadata
+      });
+      setMessage('');
       setToken(session.access_token);
       setAuthRestoring(false);
+      if (location.pathname === '/admin/login') navigate('/admin', { replace: true });
       load(session.access_token);
     }
 
-    async function restoreSession() {
-      try {
-        const result = await supabase.auth.getSession();
-        console.log('GET SESSION RESULT', result);
-        const { data: { session } } = result;
-        await handleSession(session);
-      } catch (sessionError) {
-        console.log('GET SESSION RESULT', sessionError);
-        if (!active) return;
-        setError(sessionError instanceof Error ? sessionError.message : 'Supabase session restore failed');
-        setAuthRestoring(false);
-      }
-    }
-
-    restoreSession();
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      handleSession(session);
+    restoreAdminSession().catch((sessionError) => {
+      if (!active) return;
+      setToken('');
+      setUser(null);
+      setAdmin(null);
+      setMessage(sessionError instanceof Error ? sessionError.message : 'Brak dostepu administratora');
+      setAuthRestoring(false);
     });
 
     return () => {
       active = false;
-      window.clearTimeout(sessionTimeout);
-      listener.subscription.unsubscribe();
     };
   }, [accessMode, location.pathname, navigate]);
 
@@ -193,16 +162,15 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       app_metadata: result.data.user.app_metadata
     } : null);
     const adminCheck = await api.adminMe(accessToken).catch((adminError) => {
-      setError(adminError instanceof Error ? adminError.message : 'Admin check failed');
-      return null;
+      setMessage(adminError instanceof Error ? adminError.message : 'Brak dostepu administratora');
+      return undefined;
     });
     if (!adminCheck?.admin) {
       setAdmin(null);
-      setError('Admin check failed or user is not admin');
       return setMessage('Brak dostepu administratora');
     }
     setAdmin(adminCheck.admin);
-    setError('');
+    setMessage('');
     setToken(accessToken);
     await load(accessToken);
     navigate('/admin', { replace: true });
@@ -275,6 +243,17 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     }
   }
 
+  if (authRestoring) {
+    return (
+      <div className="admin-login-page">
+        <div className="admin-login-card">
+          <p className="eyebrow">Escort Radar Admin Console</p>
+          <h1>Ładowanie panelu administratora...</h1>
+        </div>
+      </div>
+    );
+  }
+
   if ((accessMode || location.pathname === '/admin/login') && !token) {
     return (
       <div className="admin-login-page">
@@ -292,21 +271,15 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     );
   }
 
-  if (authRestoring) {
-    return (
-      <div style={{ padding: 20, color: 'white', background: '#050505', minHeight: '100vh' }}>
-        <h1>Admin Debug</h1>
-        <p>Restoring Supabase session...</p>
-        <pre>{JSON.stringify({ loading, user, admin, error, message, path: location.pathname }, null, 2)}</pre>
-      </div>
-    );
-  }
-
   if (!token) {
     return (
-      <div style={{ padding: 20, color: 'white', background: '#050505', minHeight: '100vh' }}>
-        <h1>Admin Debug</h1>
-        <pre>{JSON.stringify({ loading, user, admin, error, message, path: location.pathname }, null, 2)}</pre>
+      <div className="admin-login-page">
+        <div className="admin-login-card">
+          <p className="eyebrow">Escort Radar Admin Console</p>
+          <h1>Brak dostepu administratora</h1>
+          <p>{message || 'Zaloguj sie kontem administratora.'}</p>
+          <Link className="button primary full" to="/admin/login">Przejdz do logowania</Link>
+        </div>
       </div>
     );
   }
