@@ -102,6 +102,9 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
 
   useEffect(() => {
     let active = true;
+    const sessionTimeout = window.setTimeout(() => {
+      console.log('SESSION TIMEOUT');
+    }, 5000);
 
     async function handleSession(session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) {
       console.log('SUPABASE SESSION', session);
@@ -146,8 +149,17 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     }
 
     async function restoreSession() {
-      const { data: { session } } = await supabase.auth.getSession();
-      await handleSession(session);
+      try {
+        const result = await supabase.auth.getSession();
+        console.log('GET SESSION RESULT', result);
+        const { data: { session } } = result;
+        await handleSession(session);
+      } catch (sessionError) {
+        console.log('GET SESSION RESULT', sessionError);
+        if (!active) return;
+        setError(sessionError instanceof Error ? sessionError.message : 'Supabase session restore failed');
+        setAuthRestoring(false);
+      }
     }
 
     restoreSession();
@@ -157,6 +169,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
 
     return () => {
       active = false;
+      window.clearTimeout(sessionTimeout);
       listener.subscription.unsubscribe();
     };
   }, [accessMode, location.pathname, navigate]);
