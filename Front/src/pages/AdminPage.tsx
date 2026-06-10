@@ -54,15 +54,16 @@ const sections = [
   }
 ] as const;
 
-export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
+export function AdminPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
   const [user, setUser] = useState<Record<string, unknown> | null>(null);
   const [admin, setAdmin] = useState<Record<string, unknown> | null>(null);
-  const [authRestoring, setAuthRestoring] = useState(true);
+  const [authRestoring, setAuthRestoring] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { t, option } = useI18n();
@@ -87,10 +88,16 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const [newTag, setNewTag] = useState({ label: '', group_key: 'premium' });
 
   const view = getAdminView(location.pathname);
+  const isLoginRoute = location.pathname === '/admin/login';
   const filteredProfiles = profiles.filter((profile) => JSON.stringify(profile).toLowerCase().includes(query.toLowerCase()));
   const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
+    if (isLoginRoute) {
+      setAuthRestoring(false);
+      return;
+    }
+
     let active = true;
 
     async function restoreAdminSession() {
@@ -110,7 +117,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
         setAdmin(null);
         setAuthRestoring(false);
         console.log('AUTH RESTORE END');
-        if (!accessMode && location.pathname !== '/admin/login') navigate('/admin/login', { replace: true });
+        navigate('/admin/login', { replace: true });
         return;
       }
 
@@ -142,7 +149,6 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       setToken(session.access_token);
       setAuthRestoring(false);
       console.log('AUTH RESTORE END');
-      if (location.pathname === '/admin/login') navigate('/admin', { replace: true });
       void load(session.access_token);
     }
 
@@ -157,46 +163,61 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       setMessage(message);
       setAuthRestoring(false);
       console.log('AUTH RESTORE END');
-      if (!accessMode && location.pathname !== '/admin/login') navigate('/admin/login', { replace: true });
+      navigate('/admin/login', { replace: true });
     });
 
     return () => {
       active = false;
     };
-  }, [accessMode, location.pathname, navigate]);
+  }, [isLoginRoute, navigate]);
 
-  async function login() {
-    setLoading(true);
+  async function handleLogin() {
+    setLoginLoading(true);
     setMessage('');
-    const result = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (result.error) return setMessage(result.error.message);
-    const accessToken = result.data.session?.access_token || '';
-    const refreshToken = result.data.session?.refresh_token || '';
-    if (accessToken && refreshToken) {
+    try {
+      const result = await supabase.auth.signInWithPassword({ email, password });
+      if (result.error) {
+        setMessage(result.error.message);
+        return;
+      }
+
+      const accessToken = result.data.session?.access_token || '';
+      const refreshToken = result.data.session?.refresh_token || '';
+      if (!result.data.session || !accessToken || !refreshToken) {
+        setMessage('Nie udało się odczytać sesji administratora. Spróbuj ponownie.');
+        return;
+      }
+
       await supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken
       });
+
+      const adminCheck = await api.adminMe(accessToken).catch((adminError) => {
+        setMessage(adminError instanceof Error ? adminError.message : 'Brak dostepu administratora');
+        return undefined;
+      });
+      if (!adminCheck?.admin) {
+        setAdmin(null);
+        setMessage('Brak dostepu administratora');
+        return;
+      }
+
+      setAdmin(adminCheck.admin);
+      setUser(result.data.user ? {
+        id: result.data.user.id,
+        email: result.data.user.email,
+        app_metadata: result.data.user.app_metadata
+      } : null);
+      setMessage('');
+      setToken(accessToken);
+      navigate('/admin', { replace: true });
+      void load(accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Nie udało się zalogować do panelu administratora.');
+    } finally {
+      setLoginLoading(false);
     }
-    setUser(result.data.user ? {
-      id: result.data.user.id,
-      email: result.data.user.email,
-      app_metadata: result.data.user.app_metadata
-    } : null);
-    const adminCheck = await api.adminMe(accessToken).catch((adminError) => {
-      setMessage(adminError instanceof Error ? adminError.message : 'Brak dostepu administratora');
-      return undefined;
-    });
-    if (!adminCheck?.admin) {
-      setAdmin(null);
-      return setMessage('Brak dostepu administratora');
-    }
-    setAdmin(adminCheck.admin);
-    setMessage('');
-    setToken(accessToken);
-    navigate('/admin', { replace: true });
-    void load(accessToken);
   }
 
   async function resetAdminSession() {
@@ -308,7 +329,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     );
   }
 
-  if ((accessMode || location.pathname === '/admin/login') && !token) {
+  if (isLoginRoute) {
     return (
       <div className="admin-login-page">
         <div className="admin-login-card">
@@ -318,7 +339,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
           <p>Tylko dla administratorow i moderatorow.</p>
           <input type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
           <input type="password" placeholder="Haslo" value={password} onChange={(event) => setPassword(event.target.value)} />
-          <button className="button primary full" disabled={loading} onClick={login}>{loading ? t('states.loading') : 'Login'}</button>
+          <button className="button primary full" disabled={loginLoading} onClick={handleLogin}>{loginLoading ? t('states.loading') : 'Login'}</button>
           {message && <p className="error-text">{message}</p>}
         </div>
       </div>
