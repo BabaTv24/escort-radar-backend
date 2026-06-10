@@ -86,6 +86,7 @@ export type Profile = {
   subscription_expires_at?: string | null;
   max_photos?: number;
   trial_ends_at?: string | null;
+  created_at?: string;
   profile_images?: ProfileImage[];
   images?: ProfileImage[];
   visibility_reason?: 'visible' | 'missing_payment' | 'pending_verification' | 'suspended' | 'blocked' | 'missing_required_fields' | 'no_images';
@@ -212,6 +213,7 @@ export type ClientActivation = {
   referral_code?: string | null;
   referral_link?: string | null;
   qr_image_url?: string | null;
+  activated_at?: string | null;
   clicks: number;
   registrations: number;
   activations: number;

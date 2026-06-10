@@ -105,6 +105,7 @@ export function DashboardPage() {
   const [coinTransactions, setCoinTransactions] = useState<CoinTransaction[]>([]);
   const [giftsSent, setGiftsSent] = useState<GiftRow[]>([]);
   const [giftsReceived, setGiftsReceived] = useState<GiftRow[]>([]);
+  const [marketProfiles, setMarketProfiles] = useState<Profile[]>([]);
   const [activationBusy, setActivationBusy] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -184,6 +185,7 @@ export function DashboardPage() {
     setDashboardStatus('loading');
     try {
       await api.myWallet(accessToken).then((data) => setWallet(data.wallet)).catch(() => setWallet(null));
+      await api.profiles('?city=berlin').then((data) => setMarketProfiles(data.profiles)).catch(() => setMarketProfiles([]));
       const clientData = await api.clientActivationMe(accessToken);
       setClientActivation(clientData.activation);
       setCoinWallet(clientData.wallet);
@@ -462,6 +464,7 @@ export function DashboardPage() {
         onActivate={startClientActivation}
         onAvatarUpload={uploadClientAvatar}
         onLogout={logout}
+        marketProfiles={marketProfiles}
       />
     );
   }
@@ -794,7 +797,7 @@ function getPublicReferralLink(activation: ClientActivation | null) {
   return `${origin}/r/${encodeURIComponent(activation.referral_code)}`;
 }
 
-function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, giftsSent, giftsReceived, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout }: {
+function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, giftsSent, giftsReceived, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles }: {
   userEmail: string;
   wallet: Wallet | null;
   coinWallet: CoinWallet | null;
@@ -809,6 +812,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   onActivate: () => void;
   onAvatarUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onLogout: () => void;
+  marketProfiles: Profile[];
 }) {
   const { t } = useI18n();
   const activated = activation?.state === 'client_activated';
@@ -816,6 +820,11 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   const referralQrImageUrl = referralLink ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(referralLink)}` : '';
   const displayName = clientProfile?.display_name || userEmail.split('@')[0] || 'Client';
   const city = clientProfile?.city || 'Berlin';
+  const statusLabel = activated ? 'Konto aktywne' : 'Konto darmowe';
+  const availableProfiles = marketProfiles.filter((profile) => profile.available_now).length || Math.min(marketProfiles.length, 3);
+  const newToday = marketProfiles.filter((profile) => profile.created_at && new Date(profile.created_at).toDateString() === new Date().toDateString()).length;
+  const recentlyActive = marketProfiles.filter((profile) => profile.availability_status === 'available' || profile.available_now).length || availableProfiles;
+  const referralProgress = Math.min(100, Math.round(((activation?.activations || 0) / 3) * 100));
   const featureCards = [
     ['Radar', 'Zobacz profile w pobliżu Berlina.', RadioTower, '/city/berlin', true],
     ['Favorite profiles', 'Zapisuj ulubione profile i wracaj do nich szybciej.', Heart, '', activated],
@@ -825,20 +834,51 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     ['Bookings', 'Śledź zapytania i historię kontaktów.', CalendarDays, '', activated],
     ['Private gallery access', 'Uzyskaj dostęp do pełnych galerii VIP.', ImagePlus, '', activated]
   ] as const;
+  const premiumFeatureCards = [
+    ['Otworz radar', 'Zobacz profile w poblizu Berlina.', RadioTower, '/city/berlin', true],
+    ['Zobacz profile w poblizu', 'Przejdz do aktualnych profili w miescie.', Sparkles, '/city/berlin', true],
+    ['Ulubione', 'Zapisuj wybrane profile i wracaj szybciej.', Heart, '', activated],
+    ['Coin Wallet', 'Sprawdz saldo i historie Coins.', Gem, '/coins', activated],
+    ['Wyslij prezent', 'Prezenty Coins sa aktywne po odblokowaniu.', Gift, '', activated],
+    ['Historia aktywnosci', 'Kontrola odblokowan, prezentow i bonusow.', Clock, '', activated]
+  ] as const;
+  const unlockChecklist = [
+    'Telefon odblokowany',
+    'WhatsApp odblokowany',
+    'Telegram odblokowany',
+    'Pelne galerie odblokowane',
+    'Prezenty Coins aktywne',
+    'Referral link aktywny',
+    '100 Coins dodane'
+  ];
+  void featureCards;
 
   return (
     <div className="page dashboard-page">
       <section className="dashboard-hero">
         <p className="eyebrow">Escort Radar Client</p>
+        <h1>{activated ? 'Konto Premium aktywne' : 'Aktywuj konto za 0,99€'}</h1>
+        <p>{activated ? 'Pelne profile, kontakty, galerie VIP, Coins i referral program sa gotowe.' : 'Odblokuj pelne profile, kontakt, prywatne galerie, prezenty Coins i radar VIP.'}</p>
+        {!activated && (
+          <>
+            <div className="onboarding-points">
+              {['Telefon / WhatsApp / Telegram', 'Wszystkie zdjecia', 'Prywatne galerie', 'Prezenty Coins', 'Referral link + QR', '100 Coins bonus'].map((item) => <span key={item}>{item}</span>)}
+            </div>
+            <button className="button primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : 'Aktywuj teraz za 0,99€'}</button>
+          </>
+        )}
+        {activated && <div className="onboarding-points">{unlockChecklist.map((item) => <span key={item}>{item}</span>)}</div>}
+        <div hidden>
         <h1>{activated ? 'Konto aktywne' : 'Aktywuj konto za 0,99€'}</h1>
         {activated && <p>Twoje konto jest aktywne - pelne profile i kontakty sa odblokowane.</p>}
         <p>{activated ? 'Pełne profile, kontakty, galerie VIP, Coins i referral program są gotowe.' : 'Zobacz pełne profile, numery telefonu, prywatne galerie i wysyłaj prezenty Coins.'}</p>
+        </div>
       </section>
 
       <section className="creator-command-bar">
         <div>
           <strong>{displayName}</strong>
-          <span className={activated ? 'success' : 'subscription-notice'}>{message || (activated ? 'client_activated' : 'client_free')}</span>
+          <span className={activated ? 'success' : 'subscription-notice'}>{message || statusLabel}</span>
         </div>
         <div className="creator-command-actions">
           <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> Otwórz radar</Link>
@@ -856,7 +896,8 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
               <h2>{displayName}</h2>
               <p>{userEmail}</p>
               <p>{city}</p>
-              <span className={`admin-status ${activated ? 'active' : 'pending'}`}>{activated ? 'client_activated' : 'client_free'}</span>
+              <span className={`admin-status ${activated ? 'active' : 'pending'}`}>{statusLabel}</span>
+              {activation?.activated_at && <p>Aktywacja: {new Date(activation.activated_at).toLocaleDateString()}</p>}
             </div>
           </div>
           <label className="button full">
@@ -865,8 +906,8 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
           </label>
           <div className="metrics-grid">
             <Metric label="Coins" value={Math.round(Number(coinWallet?.balance || 0))} />
-            <Metric label="Gifts sent" value={giftsSent.length} />
-            <Metric label="Transactions" value={transactions.length} />
+            <Metric label="Prezenty wyslane" value={giftsSent.length} />
+            <Metric label="Prezenty otrzymane" value={giftsReceived.length} />
           </div>
         </section>
 
@@ -901,9 +942,20 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <Metric label="Activations" value={activation?.activations || 0} />
             <Metric label="Earned rewards" value={`${activation?.earned_rewards || 0} Coins`} />
           </div>
+          <div className="progress-track"><span style={{ width: `${referralProgress}%` }} /></div>
+          <p className="muted">Nastepny bonus: {Math.max(3 - (activation?.activations || 0), 0)} aktywacje z polecenia.</p>
         </section>
 
         <section className="creator-panel">
+          <p className="eyebrow">Market pulse</p>
+          <h2>Berlin jest aktywny teraz</h2>
+          <div className="metrics-grid">
+            <Metric label="Profiles near Berlin" value={marketProfiles.length || 'Dane wkrotce'} />
+            <Metric label="Available now" value={availableProfiles || 'Sprawdz radar'} />
+            <Metric label="New profiles today" value={newToday || 'Brak nowych dzisiaj'} />
+            <Metric label="Recently active" value={recentlyActive || 'Dane wkrotce'} />
+          </div>
+          <div hidden>
           <p className="eyebrow">Radar Berlin</p>
           <h2>1 profile near Berlin available now</h2>
           <p>Otwórz radar albo zobacz profile w pobliżu.</p>
@@ -911,12 +963,17 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <Link className="button primary" to="/city/berlin">Otwórz radar</Link>
             <Link className="button" to="/city/berlin">Zobacz profile w pobliżu</Link>
           </div>
+          </div>
+          <div className="creator-share-row">
+            <Link className="button primary" to="/city/berlin">Otworz radar</Link>
+            <Link className="button" to="/city/berlin">Zobacz profile w poblizu</Link>
+          </div>
         </section>
 
         <section className="creator-panel">
           <p className="eyebrow">Client tools</p>
           <div className="creator-dashboard-grid">
-            {featureCards.map(([title, copy, Icon, href, enabled]) => {
+            {premiumFeatureCards.map(([title, copy, Icon, href, enabled]) => {
               const content = <><Icon size={16} /> <strong>{title}</strong><span>{enabled ? copy : 'Aktywuj za 0,99€'}</span></>;
               if (href && enabled) return <Link className="admin-action-btn" to={href} key={title}>{content}</Link>;
               return <button className="admin-action-btn" type="button" key={title} onClick={enabled ? undefined : onActivate}>{content}</button>;

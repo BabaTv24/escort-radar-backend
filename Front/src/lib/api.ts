@@ -81,7 +81,14 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body)
   }),
-  adminStats: (token: string) => request<{ stats: Record<string, number>; latest_activity: AdminActivity[] }>('/api/admin/stats', { token }),
+  adminStats: (token: string) => request<{
+    stats: Record<string, number>;
+    latest_activity: AdminActivity[];
+    revenue_events?: Record<string, unknown>[];
+    top_cities?: Record<string, unknown>[];
+    top_categories?: Record<string, unknown>[];
+    top_profiles?: Record<string, unknown>[];
+  }>('/api/admin/stats', { token }),
   adminMe: (token: string) => request<{ admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/me', { token }),
   adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number> }>(`/api/admin/profiles${params}`, { token }),
   adminUsers: (token: string) => request<{ users: Record<string, unknown>[] }>('/api/admin/users', { token }),

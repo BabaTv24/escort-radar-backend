@@ -6,6 +6,7 @@ export type ClientActivationSummary = {
   referral_code: string | null;
   referral_link: string | null;
   qr_image_url: string | null;
+  activated_at: string | null;
   clicks: number;
   registrations: number;
   activations: number;
@@ -23,6 +24,7 @@ export async function getClientActivationSummary(userId: string): Promise<Client
     referral_code: referral?.referral_code || null,
     referral_link: referral?.referral_link || null,
     qr_image_url: await getQrImageUrl(userId, referral?.referral_code || null),
+    activated_at: activation?.activated_at || null,
     clicks: Number(referral?.click_count || 0),
     registrations: Number(referral?.registration_count || 0),
     activations: Number(referral?.activation_count || 0),

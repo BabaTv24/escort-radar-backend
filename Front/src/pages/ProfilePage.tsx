@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertTriangle, BadgeCheck, CalendarDays, ChevronLeft, ChevronRight, Flag, Languages, LockKeyhole, MapPin, MessageCircle, ShieldCheck, Star, Tags, Video, X } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, CalendarDays, ChevronLeft, ChevronRight, Flag, Gift, Languages, LockKeyhole, MapPin, MessageCircle, Phone, ShieldCheck, Star, Tags, Video, X } from 'lucide-react';
 import { api } from '../lib/api';
-import type { Profile } from '../types';
+import { supabase } from '../lib/supabase';
+import type { Profile, ProfileAccess } from '../types';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { getDemoProfile } from '../data/demoProfiles';
 import { useI18n } from '../i18n';
@@ -16,11 +17,23 @@ export function ProfilePage() {
   const [bookingMessage, setBookingMessage] = useState('');
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [profileAccess, setProfileAccess] = useState<ProfileAccess | null>(null);
+  const [accessMessage, setAccessMessage] = useState('');
+  const [activationBusy, setActivationBusy] = useState(false);
   const { t, option } = useI18n();
 
   useEffect(() => {
     api.profile(id)
-      .then((data) => setProfile(data.profile))
+      .then(async (data) => {
+        setProfile(data.profile);
+        const session = await supabase.auth.getSession();
+        const token = session.data.session?.access_token;
+        if (token) {
+          api.profileAccess(token, id)
+            .then((accessData) => setProfileAccess(accessData.access))
+            .catch(() => setProfileAccess(null));
+        }
+      })
       .catch((err) => {
         const demo = getDemoProfile(id);
         if (demo) setProfile(demo);
@@ -30,7 +43,10 @@ export function ProfilePage() {
 
   if (error) return <div className="page narrow"><ErrorState message={error} /></div>;
   if (!profile) return <div className="page narrow"><LoadingState /></div>;
-  const galleryImages = profile.profile_images || [];
+  const galleryImages = profileAccess?.full_gallery?.length ? profileAccess.full_gallery : profile.profile_images || [];
+  const activated = profileAccess?.client_state === 'client_activated';
+  const priceFrom = getPriceFrom(profile);
+  const contactFallback = 'Kontakt nie zostal jeszcze dodany';
 
   async function submitReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -88,6 +104,32 @@ export function ProfilePage() {
             {profile.private_studio && <span>{t('badges.private')}</span>}
             <span><Star size={14} /> {t('profile.popularTonight')}</span>
           </div>
+          <div className="premium-contact-card">
+            <div>
+              <p className="eyebrow">Premium contact</p>
+              <h2>{profile.display_name}</h2>
+              <p>{profile.age ? `${profile.age} lat` : 'Wiek potwierdzany'} · {profile.city}{profile.area ? `, ${profile.area}` : ''}</p>
+              <p>{profile.availability_status === 'available' ? 'Dostepna teraz' : 'Status: ' + (profile.availability_status || 'unavailable')}</p>
+              <p>Cena od: {priceFrom}</p>
+              <p>{profile.verified ? 'Profil zweryfikowany' : 'Weryfikacja w toku'} · {profile.distance_km ? `${profile.distance_km} km` : 'Radar Berlin'}</p>
+            </div>
+            {!activated && <p className="subscription-notice">Aktywuj za 0,99€ aby zobaczyc kontakt</p>}
+            {activated && (
+              <div className="contact-unlocked-list">
+                <p><Phone size={15} /> Telefon: {profileAccess?.phone_number || contactFallback}</p>
+                <p><MessageCircle size={15} /> WhatsApp: {profileAccess?.whatsapp || contactFallback}</p>
+                <p><MessageCircle size={15} /> Telegram: {profileAccess?.telegram || contactFallback}</p>
+              </div>
+            )}
+            <div className="profile-cta-grid">
+              <button className="button primary" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={16} /> Telefon</button>
+              <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={16} /> WhatsApp</button>
+              <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.telegram || contactFallback) : startClientActivation()}><MessageCircle size={16} /> Telegram</button>
+              <a href="#booking" className="button"><CalendarDays size={16} /> Rezerwuj</a>
+              <button className="button" type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={16} /> Wyslij prezent</button>
+              <button className="button" type="button" onClick={() => setAccessMessage(activated ? 'Live Cam jest aktywny dla kont Premium.' : 'Aktywuj za 0,99€ aby odblokowac Live Cam.')}><Video size={16} /> Live Cam</button>
+            </div>
+          </div>
           <p>{profile.description || t('profile.fallbackDescription')}</p>
           <div className="conversion-row">
             <span>{t('profile.currentlyOnline')}</span>
@@ -99,9 +141,10 @@ export function ProfilePage() {
           <p className="safety-line">{t('radar.privacy')}</p>
           <div className="profile-cta-grid">
             <a href="#booking" className="button primary"><CalendarDays size={16} /> {t('profile.bookNow')}</a>
-            <button className="button" type="button"><MessageCircle size={16} /> {t('creator.privateChatCta')}</button>
-            <button className="button" type="button"><Video size={16} /> {t('creator.liveCamCta')}</button>
+            <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><MessageCircle size={16} /> {activated ? 'Kontakt' : 'Aktywuj kontakt'}</button>
+            <button className="button" type="button" onClick={() => setAccessMessage(activated ? 'Live Cam jest aktywny dla kont Premium.' : 'Aktywuj za 0,99€ aby odblokowac Live Cam.')}><Video size={16} /> {t('creator.liveCamCta')}</button>
           </div>
+          {accessMessage && <p className={activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
         </div>
       </section>
 
@@ -120,6 +163,22 @@ export function ProfilePage() {
         </InfoPanel>
         <InfoPanel title={t('profile.pricing')} icon={<LockKeyhole size={18} />}>
           <PriceList profile={profile} />
+        </InfoPanel>
+        <InfoPanel title="Client access" icon={<LockKeyhole size={18} />}>
+          {activated ? (
+            <>
+              <p>Telefon: {profileAccess?.phone_number || contactFallback}</p>
+              <p>WhatsApp: {profileAccess?.whatsapp || contactFallback}</p>
+              <p>Telegram: {profileAccess?.telegram || contactFallback}</p>
+              <button className="button" type="button" onClick={sendGift}>Wyslij prezent - 10 Coins</button>
+              <button className="button" type="button" onClick={unlockVipGallery}>Odblokuj galerie VIP - 25 Coins</button>
+            </>
+          ) : (
+            <>
+              <p>Telefon, WhatsApp, Telegram, pelna galeria, galeria VIP, prezenty i Live Cam wymagaja aktywacji klienta.</p>
+              <button className="button primary" type="button" disabled={activationBusy} onClick={startClientActivation}>{activationBusy ? 'Ladowanie...' : 'Aktywuj za 0,99€'}</button>
+            </>
+          )}
         </InfoPanel>
         <InfoPanel title={t('profile.availability')} icon={<CalendarDays size={18} />}>
           <p>{t(`status.${profile.availability_status || 'unavailable'}`)}</p>
@@ -164,9 +223,29 @@ export function ProfilePage() {
             </select>
           </div>
           <textarea name="message" placeholder={t('form.message')} />
-          <button className="button primary" type="submit">{t('buttons.sendBooking')}</button>
+          <button className="button primary" type="submit">Wyslij request rezerwacji</button>
           {bookingMessage && <p className="success">{bookingMessage}</p>}
         </form>
+      </section>
+
+      <section className="form-panel private-gallery-panel">
+        <h2><LockKeyhole size={18} /> Prywatna galeria</h2>
+        {activated && profileAccess?.vip_gallery_unlocked ? (
+          <div className="profile-media-slider">
+            {(profileAccess.full_gallery || []).slice(0, 4).map((image, index) => (
+              <button key={image.id} className={index === 0 ? 'profile-media-main' : 'profile-media-thumb'} type="button" onClick={() => setGalleryIndex(index)}>
+                {image.public_url ? <img src={image.public_url} alt="" loading="lazy" /> : <div className="image-placeholder large">{t('profile.noImage')}</div>}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="premium-contact-card">
+            <p className="eyebrow">VIP access</p>
+            <h2>Prywatna galeria</h2>
+            <p>Odblokuj Coins, aby zobaczyc prywatne zdjecia po aktywacji konta.</p>
+            <button className="button primary" type="button" onClick={activated ? unlockVipGallery : startClientActivation}>{activated ? 'Odblokuj Coins' : 'Aktywuj za 0,99€'}</button>
+          </div>
+        )}
       </section>
 
       <section className="profile-info-grid">
@@ -205,13 +284,58 @@ export function ProfilePage() {
         />
       )}
       <nav className="profile-floating-cta">
-        <button type="button"><MessageCircle size={17} /> {t('creator.privateChatCta')}</button>
-        <button type="button"><Video size={17} /> {t('creator.liveCamCta')}</button>
-        <a href="#booking"><CalendarDays size={17} /> {t('profile.bookNow')}</a>
-        <button type="button"><LockKeyhole size={17} /> {t('creator.unlockWithTokens')}</button>
+        <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><MessageCircle size={17} /> Kontakt</button>
+        <a href="#booking"><CalendarDays size={17} /> Rezerwuj</a>
+        <button type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={17} /> Coins</button>
+        <a href="/city/berlin"><MapPin size={17} /> Radar</a>
       </nav>
     </div>
   );
+
+  async function startClientActivation() {
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+    if (!token) {
+      setAccessMessage('Zaloguj sie, aby aktywowac konto za 0,99€.');
+      return;
+    }
+
+    setActivationBusy(true);
+    try {
+      const checkout = await api.clientActivationCheckout(token);
+      window.location.href = checkout.checkout_url;
+    } catch (err) {
+      setAccessMessage(err instanceof Error ? err.message : 'Nie udalo sie uruchomic platnosci.');
+    } finally {
+      setActivationBusy(false);
+    }
+  }
+
+  async function sendGift() {
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+    if (!token) return setAccessMessage('Login required.');
+    await api.sendGift(token, { profile_id: profile!.id, gift_type: 'rose', coin_cost: 10 });
+    setAccessMessage('Gift sent.');
+  }
+
+  async function unlockVipGallery() {
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+    if (!token) return setAccessMessage('Login required.');
+    await api.unlockVipGallery(token, profile!.id, 25);
+    const access = await api.profileAccess(token, profile!.id);
+    setProfileAccess(access.access);
+    setAccessMessage('VIP gallery unlocked.');
+  }
+}
+
+function getPriceFrom(profile: Profile) {
+  const values = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_night]
+    .map((value) => Number(value || 0))
+    .filter((value) => value > 0);
+  if (!values.length) return 'Cena na zapytanie';
+  return `${Math.min(...values)} ${profile.currency || 'EUR'}`;
 }
 
 function InfoPanel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {

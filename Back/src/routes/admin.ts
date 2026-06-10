@@ -66,9 +66,9 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   const monthStart = new Date(dayStart.getFullYear(), dayStart.getMonth(), 1);
 
   const [profiles, reports, bookings, activity, activationPayments, activations] = await Promise.all([
-    supabaseAdmin.from('profiles').select('id, status, verification_status, moderation_status, is_test_account, created_at').limit(1000),
+    supabaseAdmin.from('profiles').select('id, display_name, city, category, status, verification_status, moderation_status, is_test_account, available_now, created_at').limit(1000),
     supabaseAdmin.from('reports').select('id, admin_status, status').limit(1000),
-    supabaseAdmin.from('booking_requests').select('id, status').limit(1000),
+    supabaseAdmin.from('booking_requests').select('id, status, created_at').limit(1000),
     supabaseAdmin.from('admin_activity_logs').select('*').order('created_at', { ascending: false }).limit(12),
     supabaseAdmin.from('client_activation_payments').select('*').eq('status', 'paid').order('created_at', { ascending: false }).limit(1000),
     supabaseAdmin.from('client_activations').select('id, state').limit(5000)
@@ -86,6 +86,8 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   const activationRows = activations.data || [];
   const dailyClientActivationRevenue = sumPaymentCents(activationPaymentRows.filter((row) => new Date(row.created_at) >= dayStart));
   const monthlyClientActivationRevenue = sumPaymentCents(activationPaymentRows.filter((row) => new Date(row.created_at) >= monthStart));
+  const activatedClientCount = activationRows.filter((activation) => activation.state === 'client_activated').length;
+  const registeredClientCount = activationRows.length;
   const latestActivationPayments = activationPaymentRows.slice(0, 12).map((payment) => ({
     id: payment.id,
     admin_email: payment.email,
@@ -105,17 +107,44 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
       total_profiles: profileRows.length,
       pending_verification: profileRows.filter((profile) => profile.verification_status === 'pending').length,
       active_profiles: profileRows.filter((profile) => profile.status === 'active').length,
+      available_profiles: profileRows.filter((profile) => profile.available_now).length,
       suspended_profiles: profileRows.filter((profile) => profile.status === 'suspended' || profile.moderation_status === 'suspended').length,
       booking_requests: bookingRows.length,
+      bookings_today: bookingRows.filter((booking) => new Date(booking.created_at) >= dayStart).length,
       reports: reportRows.length,
       test_accounts: profileRows.filter((profile) => profile.is_test_account).length,
       daily_revenue_eur: dailyClientActivationRevenue,
       monthly_revenue_eur: monthlyClientActivationRevenue,
       client_activation_revenue_eur: sumPaymentCents(activationPaymentRows),
       client_activation_transactions: activationPaymentRows.length,
-      activated_clients: activationRows.filter((activation) => activation.state === 'client_activated').length,
-      free_clients: activationRows.filter((activation) => activation.state !== 'client_activated').length
+      registered_clients: registeredClientCount,
+      activated_clients: activatedClientCount,
+      free_clients: Math.max(registeredClientCount - activatedClientCount, 0),
+      activation_conversion_rate: registeredClientCount ? Math.round((activatedClientCount / registeredClientCount) * 100) : 0
     },
+    revenue_events: latestActivationPayments.map((payment) => ({
+      date: payment.created_at,
+      email: payment.admin_email,
+      type: 'client_activation',
+      amount: Number(payment.details.amount_cents || 0) / 100,
+      currency: payment.details.currency || 'eur',
+      status: payment.details.status || 'paid',
+      provider: 'stripe',
+      stripe_session_id: payment.target_id
+    })),
+    top_cities: topCounts(profileRows, 'city'),
+    top_categories: topCounts(profileRows, 'category'),
+    top_profiles: profileRows
+      .filter((profile) => profile.status === 'active')
+      .slice(0, 8)
+      .map((profile) => ({
+        id: profile.id,
+        display_name: profile.display_name,
+        city: profile.city,
+        category: profile.category,
+        available_now: profile.available_now,
+        created_at: profile.created_at
+      })),
     latest_activity: [...latestActivationPayments, ...(activity.data || [])]
       .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
       .slice(0, 12)
@@ -998,4 +1027,18 @@ function normalizeSettings(rows: Array<{ key: string; value: unknown }>) {
 function sumPaymentCents(rows: Array<{ amount_cents?: number | null }>) {
   const cents = rows.reduce((sum, row) => sum + Number(row.amount_cents || 0), 0);
   return Number((cents / 100).toFixed(2));
+}
+
+function topCounts<T extends Record<string, unknown>>(rows: T[], key: keyof T) {
+  const counts = rows.reduce<Record<string, number>>((acc, row) => {
+    const value = String(row[key] || '').trim();
+    if (!value) return acc;
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+
+  return Object.entries(counts)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 8)
+    .map(([label, count]) => ({ label, count }));
 }

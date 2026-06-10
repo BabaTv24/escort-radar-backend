@@ -84,6 +84,10 @@ export function AdminPage() {
   const [photos, setPhotos] = useState<Record<string, any>[]>([]);
   const [clientReferrals, setClientReferrals] = useState<Record<string, any>[]>([]);
   const [activity, setActivity] = useState<AdminActivity[]>([]);
+  const [revenueEvents, setRevenueEvents] = useState<Record<string, any>[]>([]);
+  const [topCities, setTopCities] = useState<Record<string, any>[]>([]);
+  const [topCategories, setTopCategories] = useState<Record<string, any>[]>([]);
+  const [topProfiles, setTopProfiles] = useState<Record<string, any>[]>([]);
   const [query, setQuery] = useState('');
   const [modal, setModal] = useState<{ title: string; body: string } | null>(null);
   const [newTag, setNewTag] = useState({ label: '', group_key: 'premium' });
@@ -285,7 +289,7 @@ export function AdminPage() {
         adminLoadRequest('adminClientReferrals', api.adminClientReferrals(accessToken))
       ]);
 
-      const statsData = settledValue(statsResult, { stats: {}, latest_activity: [] }, 'adminStats');
+      const statsData = settledValue(statsResult, { stats: {}, latest_activity: [], revenue_events: [], top_cities: [], top_categories: [], top_profiles: [] }, 'adminStats');
       const tokenData = settledValue(tokenResult, { stats: {} }, 'adminTokenStats');
       const usersData = settledValue(usersResult, { users: [] }, 'adminUsers');
       const profileData = settledValue(profileResult, { stats: {}, profiles: [] }, 'adminProfiles');
@@ -317,6 +321,10 @@ export function AdminPage() {
       setPhotos(photoData.photos as Record<string, any>[]);
       setClientReferrals(clientReferralData.referrals);
       setActivity(statsData.latest_activity);
+      setRevenueEvents((statsData.revenue_events || []) as Record<string, any>[]);
+      setTopCities((statsData.top_cities || []) as Record<string, any>[]);
+      setTopCategories((statsData.top_categories || []) as Record<string, any>[]);
+      setTopProfiles((statsData.top_profiles || []) as Record<string, any>[]);
     } finally {
       setLoading(false);
     }
@@ -424,30 +432,53 @@ export function AdminPage() {
 
   function renderView() {
     if (view === 'dashboard') {
+      const registeredClients = stats.registered_clients || users.filter((user) => user.account_type === 'client').length;
+      const activatedClients = stats.activated_clients || 0;
       const cards = [
-        ['Dzienny przychod', stats.daily_revenue_eur || tokenStats.approved_purchase_value || 0],
-        ['Miesieczny przychod', stats.monthly_revenue_eur || tokenStats.revenue_estimate_eur || tokenStats.approved_purchase_value || 0],
-        ['Transakcje', (stats.client_activation_transactions || clientActivationPayments.length) + transactions.length],
-        ['Client activations revenue', stats.client_activation_revenue_eur || 0],
-        ['Activated clients', stats.activated_clients || 0],
+        ['Revenue today', revenueLabel(stats.daily_revenue_eur, 'No payments recorded today')],
+        ['Revenue this month', revenueLabel(stats.monthly_revenue_eur, 'No payments this month')],
+        ['Client activation revenue', revenueLabel(stats.client_activation_revenue_eur, 'No activation revenue yet')],
+        ['Client activations', stats.client_activation_transactions || clientActivationPayments.length],
+        ['Activated clients', activatedClients],
         ['Free clients', stats.free_clients || 0],
-        ['Konwersja', `${users.length ? Math.round((purchases.length / users.length) * 100) : 0}%`],
-        ['Aktywni uzytkownicy', users.filter((user) => user.status === 'active').length],
-        ['Profile lacznie', stats.total_profiles || profiles.length],
+        ['Active profiles', stats.active_profiles || 0],
+        ['Available profiles', stats.available_profiles || profiles.filter((profile) => profile.available_now).length],
+        ['Bookings today', stats.bookings_today || 0],
+        ['Coins in circulation', tokenStats.token_circulation || 0],
+        ['Token sales', tokenStats.approved_purchase_value || 0],
+        ['Transakcje', (stats.client_activation_transactions || clientActivationPayments.length) + transactions.length],
         ['Do weryfikacji', stats.pending_verification || 0],
-        ['Aktywne profile', stats.active_profiles || 0],
-        ['Zawieszone', stats.suspended_profiles || 0],
-        ['Konta testowe', stats.test_accounts || users.filter((user) => user.is_test_account).length],
-        ['Tokeny w obiegu', tokenStats.token_circulation || 0],
-        ['Rezerwa TATACoin', tokenStats.master_reserve_tatacoin || 500000],
-        ['Requesty rezerwacji', bookings.length],
         ['Zgloszenia naduzyc', reports.length]
       ];
       return (
         <>
           <section className="admin-metric-grid">{cards.map(([label, value]) => <AdminStatCard key={label} label={String(label)} value={value} />)}</section>
           <section className="admin-chart-grid">
-            {['Przychody 7 dni', 'Wzrost liczby uzytkownikow', 'Ruch na stronie', 'Top kategorie', 'Top tagi', 'Top miasta'].map((title) => <ChartPlaceholder key={title} title={title} />)}
+            <article className="admin-card">
+              <h2>Recent Revenue Events</h2>
+              {revenueEvents.length ? <AdminTable rows={revenueEvents} columns={['date', 'email', 'type', 'amount', 'currency', 'status', 'provider']} /> : <EmptyAdminState text="No payments recorded today" />}
+            </article>
+            <article className="admin-card">
+              <h2>Client Activation Funnel</h2>
+              <div className="metrics-grid">
+                <MetricBlock label="Registered clients" value={registeredClients} />
+                <MetricBlock label="Activated clients" value={activatedClients} />
+                <MetricBlock label="Conversion" value={`${stats.activation_conversion_rate || 0}%`} />
+                <MetricBlock label="Revenue" value={revenueLabel(stats.client_activation_revenue_eur, '0 EUR')} />
+              </div>
+            </article>
+            <article className="admin-card">
+              <h2>Top Cities</h2>
+              {topCities.length ? <AdminTable rows={topCities} columns={['label', 'count']} /> : <EmptyAdminState text="No city data yet" />}
+            </article>
+            <article className="admin-card">
+              <h2>Top Categories</h2>
+              {topCategories.length ? <AdminTable rows={topCategories} columns={['label', 'count']} /> : <EmptyAdminState text="No category data yet" />}
+            </article>
+            <article className="admin-card">
+              <h2>Top Profiles</h2>
+              {topProfiles.length ? <AdminTable rows={topProfiles} columns={['display_name', 'city', 'category', 'available_now', 'created_at']} /> : <EmptyAdminState text="No active profiles yet" />}
+            </article>
           </section>
         </>
       );
@@ -650,6 +681,19 @@ function adminLabel(key: string) {
 
 function AdminStatCard({ label, value }: { label: string; value: unknown }) {
   return <article className="admin-card stat"><span>{label}</span><strong>{String(value ?? 0)}</strong></article>;
+}
+
+function MetricBlock({ label, value }: { label: string; value: unknown }) {
+  return <div className="metric"><span>{label}</span><strong>{String(value ?? 0)}</strong></div>;
+}
+
+function EmptyAdminState({ text }: { text: string }) {
+  return <p className="muted">{text}</p>;
+}
+
+function revenueLabel(value: unknown, emptyText: string) {
+  const numeric = Number(value || 0);
+  return numeric > 0 ? `${numeric.toFixed(2)} EUR` : emptyText;
 }
 
 function ChartPlaceholder({ title }: { title: string }) {
