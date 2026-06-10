@@ -63,6 +63,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const [user, setUser] = useState<Record<string, unknown> | null>(null);
   const [admin, setAdmin] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState('');
+  const [authRestoring, setAuthRestoring] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
   const { t, option } = useI18n();
@@ -100,8 +101,13 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   }, [loading, user, admin, error]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      const session = data.session;
+    let active = true;
+
+    async function handleSession(session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) {
+      console.log('SUPABASE SESSION', session);
+      console.log('LOCAL STORAGE KEYS', Object.keys(localStorage));
+
+      if (!active) return;
       setUser(session?.user ? {
         id: session.user.id,
         email: session.user.email,
@@ -109,26 +115,51 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       } : null);
 
       if (!session?.access_token) {
+        setToken('');
+        setAdmin(null);
         setError('No active admin session');
-        if (!accessMode) navigate('/admin/login', { replace: true });
+        setAuthRestoring(false);
+        if (!accessMode && location.pathname !== '/admin/login') navigate('/admin/login', { replace: true });
         return;
       }
+
       const adminCheck = await api.adminMe(session.access_token).catch((adminError) => {
         setError(adminError instanceof Error ? adminError.message : 'Admin check failed');
         return null;
       });
+      if (!active) return;
+
       if (!adminCheck?.admin) {
+        setToken('');
         setAdmin(null);
         setError('Admin check failed or user is not admin');
         setMessage('Brak dostepu administratora');
+        setAuthRestoring(false);
         return;
       }
+
       setAdmin(adminCheck.admin);
       setError('');
       setToken(session.access_token);
+      setAuthRestoring(false);
       load(session.access_token);
+    }
+
+    async function restoreSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      await handleSession(session);
+    }
+
+    restoreSession();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      handleSession(session);
     });
-  }, []);
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [accessMode, location.pathname, navigate]);
 
   async function login() {
     setLoading(true);
@@ -238,6 +269,16 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
           <button className="button primary full" disabled={loading} onClick={login}>{loading ? t('states.loading') : 'Login'}</button>
           {message && <p className="error-text">{message}</p>}
         </div>
+      </div>
+    );
+  }
+
+  if (authRestoring) {
+    return (
+      <div style={{ padding: 20, color: 'white', background: '#050505', minHeight: '100vh' }}>
+        <h1>Admin Debug</h1>
+        <p>Restoring Supabase session...</p>
+        <pre>{JSON.stringify({ loading, user, admin, error, message, path: location.pathname }, null, 2)}</pre>
       </div>
     );
   }
