@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../supabase.js';
 import { allowedCities, asyncHandler, parseBoolean, slugify, validateProfileInput } from '../validation.js';
-import { requireAdvertiserAccess, verifyUser } from '../middleware/auth.js';
+import { requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
 import { generatePublicUserId, generateReferralCode, normalizePhone } from '../utils/identity.js';
 import { getClientActivationSummary } from '../services/clientActivation.js';
 
@@ -128,7 +128,7 @@ profilesRouter.get('/:id', asyncHandler(async (req, res) => {
   res.json({ profile: sanitizePublicProfile(withImageUrls(data)) });
 }));
 
-profilesRouter.post('/', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
+profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHandler(async (req, res) => {
   logProfileDebug('POST /api/profiles start', req, {
     status: 'start',
     display_name: safeText(req.body.display_name),
@@ -160,7 +160,7 @@ profilesRouter.post('/', verifyUser, requireAdvertiserAccess, asyncHandler(async
     verified: isTestAccount,
     verification_status: isTestAccount ? 'verified' : 'pending',
     moderation_status: 'clean',
-    subscription_status: 'active',
+    subscription_status: req.advertiserAccess!.onboarding ? 'trial' : 'active',
     plan: req.advertiserAccess!.plan,
     listing_plan: req.advertiserAccess!.plan,
     is_test_account: isTestAccount,
@@ -186,7 +186,7 @@ profilesRouter.post('/', verifyUser, requireAdvertiserAccess, asyncHandler(async
   res.status(201).json({ profile: withImageUrls(hydrated || data, wallet), wallet });
 }));
 
-profilesRouter.put('/:id', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
+profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncHandler(async (req, res) => {
   logProfileDebug('PUT /api/profiles/:id start', req, {
     status: 'start',
     profile_id: req.params.id,
@@ -222,7 +222,7 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserAccess, asyncHandler(asy
     ...phoneValidation.data,
     public_user_id: existing.public_user_id || await generateUniqueValue('public_user_id', generatePublicUserId),
     referral_code: existing.referral_code || await generateUniqueValue('referral_code', generateReferralCode),
-    subscription_status: 'active',
+    subscription_status: req.advertiserAccess!.onboarding ? 'trial' : 'active',
     plan: req.advertiserAccess!.plan,
     listing_plan: req.advertiserAccess!.plan,
     ...(existing.is_test_account ? {
@@ -259,7 +259,7 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserAccess, asyncHandler(asy
   res.json({ profile: withImageUrls(hydrated || data, wallet), wallet });
 }));
 
-profilesRouter.delete('/:id', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
+profilesRouter.delete('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncHandler(async (req, res) => {
   const { data: existing } = await supabaseAdmin.from('profiles').select('user_id').eq('id', req.params.id).single();
   if (!existing) return res.status(404).json({ error: 'Profile not found' });
   if (existing.user_id !== req.user!.id) return res.status(403).json({ error: 'Not your profile' });

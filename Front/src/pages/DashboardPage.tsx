@@ -338,7 +338,10 @@ export function DashboardPage() {
     } catch (error) {
       setDashboardStatus('error');
       setUploadStatus('error');
-      const nextError = error instanceof Error ? error.message : t('photos.uploadFailed');
+      const rawError = error instanceof Error ? error.message : t('photos.uploadFailed');
+      const nextError = rawError.toLowerCase().includes('subscription') || rawError.toLowerCase().includes('advertiser')
+        ? 'Upload blocked by subscription rule. Trial upload should be allowed. Contact admin.'
+        : rawError;
       setMessage(nextError);
       setLastApiError(nextError);
     }

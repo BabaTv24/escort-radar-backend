@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
-import { requireAdvertiserAccess, verifyUser } from '../middleware/auth.js';
+import { getAdvertiserOnboardingAccess, requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { config } from '../config.js';
 import { asyncHandler } from '../validation.js';
@@ -48,18 +48,31 @@ uploadsRouter.post('/client-avatar', verifyUser, upload.single('image'), asyncHa
   res.status(201).json({ client_profile: data, avatar_url: publicUrl.publicUrl });
 }));
 
-uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload.single('image'), asyncHandler(async (req, res) => {
+uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHandler(async (req, res) => {
   const profileId = String(req.body.profile_id || '');
+  const advertiserAccess = getAdvertiserOnboardingAccess(req.user);
   logUploadDebug('POST /api/uploads/profile-image start', req, {
     status: 'start',
     profile_id: profileId || null,
+    allowed: Boolean(advertiserAccess),
+    reason: advertiserAccess ? (advertiserAccess.onboarding ? 'advertiser_onboarding' : 'active_advertiser') : 'not_advertiser',
     storage_bucket: config.storageBucket,
     file_received: Boolean(req.file),
     file_mime: req.file?.mimetype || null,
     file_size: req.file?.size || null
   });
+  if (!advertiserAccess) {
+    logUploadDebug('POST /api/uploads/profile-image forbidden_account_type', req, {
+      status: 'error',
+      allowed: false,
+      reason: 'client_cannot_upload_advertiser_images',
+      profile_id: profileId || null,
+      storage_bucket: config.storageBucket
+    });
+    return res.status(403).json({ error: 'Escort or business account required for profile photo upload.' });
+  }
   if (!profileId) {
-    logUploadDebug('POST /api/uploads/profile-image missing_profile_id', req, { status: 'error', storage_bucket: config.storageBucket });
+    logUploadDebug('POST /api/uploads/profile-image missing_profile_id', req, { status: 'error', allowed: true, reason: 'missing_profile_id', storage_bucket: config.storageBucket });
     return res.status(400).json({ error: 'profile_id is required' });
   }
   if (!req.file) {
@@ -87,7 +100,8 @@ uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload
     return res.status(403).json({ error: 'Not your profile' });
   }
 
-  const maxPhotos = Number(profile.max_photos || 6);
+  const profileMaxPhotos = Number(profile.max_photos || 6);
+  const maxPhotos = advertiserAccess.onboarding ? Math.min(profileMaxPhotos, advertiserAccess.maxOnboardingPhotos) : profileMaxPhotos;
   const { data: existingImages, count, error: countError } = await supabaseAdmin
     .from('profile_images')
     .select('id', { count: 'exact' })
@@ -98,8 +112,16 @@ uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload
     return res.status(400).json({ error: countError.message });
   }
   if ((count || 0) >= maxPhotos) {
-    logUploadDebug('POST /api/uploads/profile-image limit_reached', req, { status: 'error', profile_id: profileId, count, max_photos: maxPhotos, storage_bucket: config.storageBucket });
-    return res.status(400).json({ error: `Photo limit reached. Premium listings include up to ${maxPhotos} photos.` });
+    logUploadDebug('POST /api/uploads/profile-image limit_reached', req, {
+      status: 'error',
+      allowed: false,
+      reason: advertiserAccess.onboarding ? 'onboarding_photo_limit_reached' : 'photo_limit_reached',
+      profile_id: profileId,
+      count,
+      max_photos: maxPhotos,
+      storage_bucket: config.storageBucket
+    });
+    return res.status(400).json({ error: advertiserAccess.onboarding ? 'Onboarding upload limit reached. Trial setup allows up to 3 photos.' : `Photo limit reached. Premium listings include up to ${maxPhotos} photos.` });
   }
 
   const processed = await sharp(req.file.buffer)
@@ -148,6 +170,8 @@ uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload
   const { data: publicUrl } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(storagePath);
   logUploadDebug('POST /api/uploads/profile-image success', req, {
     status: 'success',
+    allowed: true,
+    reason: advertiserAccess.onboarding ? 'advertiser_onboarding' : 'active_advertiser',
     profile_id: profileId,
     image_id: data.id,
     storage_bucket: config.storageBucket,
@@ -167,7 +191,7 @@ uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload
   });
 }));
 
-uploadsRouter.patch('/profile-image/:id/cover', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
+uploadsRouter.patch('/profile-image/:id/cover', verifyUser, requireAdvertiserOnboardingAccess, asyncHandler(async (req, res) => {
   const imageId = String(req.params.id || '');
   const { data: image, error: imageError } = await supabaseAdmin
     .from('profile_images')
@@ -191,7 +215,7 @@ uploadsRouter.patch('/profile-image/:id/cover', verifyUser, requireAdvertiserAcc
   res.json({ image: { ...data, public_url: publicUrl.publicUrl, is_cover: true } });
 }));
 
-uploadsRouter.delete('/profile-image/:id', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
+uploadsRouter.delete('/profile-image/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncHandler(async (req, res) => {
   const imageId = String(req.params.id || '');
   const { data: image, error: imageError } = await supabaseAdmin
     .from('profile_images')

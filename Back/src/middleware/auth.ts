@@ -13,7 +13,9 @@ export type AuthAccountType = 'client' | 'escort' | 'business';
 export type AdvertiserAccess = {
   accountType: Exclude<AuthAccountType, 'client'>;
   plan: 'escort_monthly' | 'business_monthly';
-  subscriptionStatus: 'active';
+  subscriptionStatus: string;
+  onboarding: boolean;
+  maxOnboardingPhotos: number;
 };
 
 declare global {
@@ -86,7 +88,27 @@ export function getAdvertiserAccess(user?: AuthUser): AdvertiserAccess | null {
   return {
     accountType,
     plan: requiredPlan,
-    subscriptionStatus: 'active'
+    subscriptionStatus: 'active',
+    onboarding: false,
+    maxOnboardingPhotos: 6
+  };
+}
+
+export function getAdvertiserOnboardingAccess(user?: AuthUser): AdvertiserAccess | null {
+  const accountType = getAuthAccountType(user);
+  if (accountType === 'client') return null;
+
+  const subscriptionStatus = String(readAppMetadata(user, 'subscription_status') || 'trial');
+  const metadataPlan = String(readAppMetadata(user, 'plan') || '');
+  const requiredPlan = accountType === 'escort' ? 'escort_monthly' : 'business_monthly';
+  const active = subscriptionStatus === 'active' && (!metadataPlan || metadataPlan === requiredPlan);
+
+  return {
+    accountType,
+    plan: requiredPlan,
+    subscriptionStatus: active ? 'active' : subscriptionStatus,
+    onboarding: !active,
+    maxOnboardingPhotos: active ? 6 : 3
   };
 }
 
@@ -111,6 +133,16 @@ export function requireAdvertiserAccess(req: Request, res: Response, next: NextF
         business: { auth_account_type: 'business', plan: 'business_monthly', subscription_status: 'active' }
       }
     });
+  }
+
+  req.advertiserAccess = access;
+  next();
+}
+
+export function requireAdvertiserOnboardingAccess(req: Request, res: Response, next: NextFunction) {
+  const access = getAdvertiserOnboardingAccess(req.user);
+  if (!access) {
+    return res.status(403).json({ error: 'Escort or business account required' });
   }
 
   req.advertiserAccess = access;
