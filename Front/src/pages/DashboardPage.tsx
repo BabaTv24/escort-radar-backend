@@ -338,10 +338,7 @@ export function DashboardPage() {
     } catch (error) {
       setDashboardStatus('error');
       setUploadStatus('error');
-      const rawError = error instanceof Error ? error.message : t('photos.uploadFailed');
-      const nextError = rawError.toLowerCase().includes('subscription') || rawError.toLowerCase().includes('advertiser')
-        ? 'Upload blocked by subscription rule. Trial upload should be allowed. Contact admin.'
-        : rawError;
+      const nextError = error instanceof Error ? error.message : t('photos.uploadFailed');
       setMessage(nextError);
       setLastApiError(nextError);
     }
@@ -528,12 +525,15 @@ export function DashboardPage() {
         uploadStatus={uploadStatus}
         onProfileChange={setProfile}
         onUploadImage={uploadImage}
+        onDeleteImage={deleteImage}
         onSave={saveProfile}
         onLogout={logout}
       />
     );
   }
 
+  return <UnknownAccountDashboard email={userEmail} authAccountType={authAccountType} message={message || 'Nie rozpoznano typu konta. Skontaktuj sie z administracja.'} onLogout={logout} />;
+  /*
   return (
     <div className="page dashboard-page">
       <section className="dashboard-hero">
@@ -603,14 +603,14 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <nav className="creator-studio-tabs">
+      <nav className="legacy-disabled-tabs">
         {['listing', 'media', 'services', 'pricing', 'live', 'referral', 'privacy', 'visibility'].map((tab) => (
           <button key={tab} type="button" className={creatorTab === tab ? 'active' : ''} onClick={() => setCreatorTab(tab)}>
             {t(`creator.dashboardTabs.${tab}`)}
           </button>
         ))}
       </nav>
-      <div className="creator-onboarding-progress">
+      <div className="legacy-disabled-progress">
         {['account', 'profileType', 'photos', 'location', 'pricing', 'services', 'live', 'visibility', 'publish'].map((step, index) => (
           <button key={step} type="button" className={getWizardStepClass(index, creatorTab)} onClick={() => setCreatorTab(mapWizardStepToTab(step))}>
             <span>{index + 1}</span>{t(`creator.wizard.${step}`)}
@@ -868,6 +868,7 @@ export function DashboardPage() {
       />
     </div>
   );
+*/
 }
 
 function resolveAuthAccountType(metadata?: Record<string, unknown> | null): DashboardAccountType {
@@ -1433,7 +1434,7 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
   );
 }
 
-function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onSave, onLogout }: {
+function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onDeleteImage, onSave, onLogout }: {
   profile: Partial<Profile>;
   savedProfile: Profile | null;
   userEmail: string;
@@ -1442,6 +1443,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
   uploadStatus: string;
   onProfileChange: (profile: Partial<Profile>) => void;
   onUploadImage: (event: ChangeEvent<HTMLInputElement>) => void;
+  onDeleteImage: (imageId: string) => void;
   onSave: (event: FormEvent) => void;
   onLogout: () => void;
 }) {
@@ -1552,7 +1554,10 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
             </label>
             <div className="one-hand-photo-strip">
               {(savedProfile?.profile_images || []).slice(0, 6).map((image) => (
-                <img key={image.id} src={image.public_url} alt="" />
+                <div className="one-hand-photo-item" key={image.id}>
+                  <img src={image.public_url} alt="" />
+                  <button type="button" onClick={() => onDeleteImage(image.id)}>Delete</button>
+                </div>
               ))}
               {!imageCount && <p>No photos yet. Add your first profile photo.</p>}
             </div>

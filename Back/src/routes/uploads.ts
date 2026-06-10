@@ -57,6 +57,7 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
     allowed: Boolean(advertiserAccess),
     reason: advertiserAccess ? (advertiserAccess.onboarding ? 'advertiser_onboarding' : 'active_advertiser') : 'not_advertiser',
     storage_bucket: config.storageBucket,
+    received_fields: Object.keys(req.body || {}),
     file_received: Boolean(req.file),
     file_mime: req.file?.mimetype || null,
     file_size: req.file?.size || null
@@ -73,11 +74,11 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
   }
   if (!profileId) {
     logUploadDebug('POST /api/uploads/profile-image missing_profile_id', req, { status: 'error', allowed: true, reason: 'missing_profile_id', storage_bucket: config.storageBucket });
-    return res.status(400).json({ error: 'profile_id is required' });
+    return res.status(400).json({ error: 'profile_id is required', reason: 'missing_profile_id', details: 'Frontend must send profile_id in multipart FormData.' });
   }
   if (!req.file) {
     logUploadDebug('POST /api/uploads/profile-image missing_file', req, { status: 'error', profile_id: profileId, storage_bucket: config.storageBucket });
-    return res.status(400).json({ error: 'image file is required' });
+    return res.status(400).json({ error: 'image file is required', reason: 'missing_file', details: 'Frontend must send the file under FormData field name "image".' });
   }
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(req.file.mimetype)) {
     logUploadDebug('POST /api/uploads/profile-image unsupported_format', req, {
@@ -87,17 +88,17 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
       file_size: req.file.size,
       storage_bucket: config.storageBucket
     });
-    return res.status(415).json({ error: 'Unsupported image format. Use JPG, PNG, or WEBP.' });
+    return res.status(415).json({ error: 'Unsupported image format. Use JPG, PNG, or WEBP.', reason: 'unsupported_mime_type', details: req.file.mimetype });
   }
 
   const { data: profile } = await supabaseAdmin.from('profiles').select('user_id, max_photos').eq('id', profileId).single();
   if (!profile) {
     logUploadDebug('POST /api/uploads/profile-image profile_not_found', req, { status: 'error', profile_id: profileId, storage_bucket: config.storageBucket });
-    return res.status(404).json({ error: 'Profile not found' });
+    return res.status(404).json({ error: 'Profile not found', reason: 'profile_not_found', details: profileId });
   }
   if (profile.user_id !== req.user!.id) {
     logUploadDebug('POST /api/uploads/profile-image forbidden', req, { status: 'error', profile_id: profileId, owner_id: profile.user_id, storage_bucket: config.storageBucket });
-    return res.status(403).json({ error: 'Not your profile' });
+    return res.status(403).json({ error: 'Not your profile', reason: 'profile_owner_mismatch', details: 'The profile_id belongs to another user.' });
   }
 
   const profileMaxPhotos = Number(profile.max_photos || 6);
@@ -109,7 +110,7 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
 
   if (countError) {
     logUploadDebug('POST /api/uploads/profile-image count_error', req, { status: 'error', profile_id: profileId, supabase_error: countError.message, storage_bucket: config.storageBucket });
-    return res.status(400).json({ error: countError.message });
+    return res.status(400).json({ error: countError.message, reason: 'photo_count_query_failed', details: countError.message });
   }
   if ((count || 0) >= maxPhotos) {
     logUploadDebug('POST /api/uploads/profile-image limit_reached', req, {
@@ -121,7 +122,11 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
       max_photos: maxPhotos,
       storage_bucket: config.storageBucket
     });
-    return res.status(400).json({ error: advertiserAccess.onboarding ? 'Onboarding upload limit reached. Trial setup allows up to 3 photos.' : `Photo limit reached. Premium listings include up to ${maxPhotos} photos.` });
+    return res.status(400).json({
+      error: `Photo limit reached. Upload limit is ${maxPhotos} photos.`,
+      reason: advertiserAccess.onboarding ? 'onboarding_photo_limit_reached' : 'photo_limit_reached',
+      details: { count, limit: maxPhotos }
+    });
   }
 
   const processed = await sharp(req.file.buffer)
@@ -146,7 +151,7 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
       storage_path: storagePath,
       supabase_error: uploadResult.error.message
     });
-    return res.status(400).json({ error: message });
+    return res.status(400).json({ error: message, reason: 'storage_upload_failed', details: uploadResult.error.message });
   }
 
   const isCover = (existingImages?.length || 0) === 0;
@@ -164,7 +169,7 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
       storage_path: storagePath,
       supabase_error: error.message
     });
-    return res.status(400).json({ error: error.message });
+    return res.status(400).json({ error: error.message, reason: 'profile_image_insert_failed', details: error.message });
   }
 
   const { data: publicUrl } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(storagePath);

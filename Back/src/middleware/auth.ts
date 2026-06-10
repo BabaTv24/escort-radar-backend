@@ -108,7 +108,7 @@ export function getAdvertiserOnboardingAccess(user?: AuthUser): AdvertiserAccess
     plan: requiredPlan,
     subscriptionStatus: active ? 'active' : subscriptionStatus,
     onboarding: !active,
-    maxOnboardingPhotos: active ? 6 : 3
+    maxOnboardingPhotos: 6
   };
 }
 

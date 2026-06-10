@@ -12,7 +12,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(payload.error || 'Request failed');
+    const reason = payload.reason ? ` (${payload.reason})` : '';
+    const details = payload.details ? `: ${typeof payload.details === 'string' ? payload.details : JSON.stringify(payload.details)}` : '';
+    throw new Error(`${payload.error || 'Request failed'}${reason}${details}`);
   }
 
   if (response.status === 204) return undefined as T;
