@@ -101,6 +101,12 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   }, [loading, user, admin, error]);
 
   useEffect(() => {
+    if (token && location.pathname === '/admin/login') {
+      navigate('/admin', { replace: true });
+    }
+  }, [token, location.pathname, navigate]);
+
+  useEffect(() => {
     let active = true;
     const sessionTimeout = window.setTimeout(() => {
       console.log('SESSION TIMEOUT');
@@ -269,7 +275,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     }
   }
 
-  if (accessMode || location.pathname === '/admin/login') {
+  if ((accessMode || location.pathname === '/admin/login') && !token) {
     return (
       <div className="admin-login-page">
         <div className="admin-login-card">
