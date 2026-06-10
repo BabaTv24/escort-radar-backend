@@ -89,6 +89,7 @@ export type Profile = {
   profile_images?: ProfileImage[];
   images?: ProfileImage[];
   visibility_reason?: 'visible' | 'missing_payment' | 'pending_verification' | 'suspended' | 'blocked' | 'missing_required_fields' | 'no_images';
+  locked_features?: string[];
   wallet_summary?: {
     escort_token_balance: number;
     referral_balance: number;
@@ -204,4 +205,70 @@ export type TokenPackage = {
   bonus_tokens: number;
   featured: boolean;
   active?: boolean;
+};
+
+export type ClientActivation = {
+  state: 'client_free' | 'client_activated';
+  referral_code?: string | null;
+  referral_link?: string | null;
+  qr_image_url?: string | null;
+  clicks: number;
+  registrations: number;
+  activations: number;
+  earned_rewards: number;
+};
+
+export type ClientProfile = {
+  id: string;
+  user_id: string;
+  display_name?: string | null;
+  city?: string | null;
+  avatar_url?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CoinWallet = {
+  id: string;
+  user_id: string;
+  balance: number;
+  lifetime_earned: number;
+  lifetime_spent: number;
+  frozen?: boolean;
+  created_at: string;
+};
+
+export type CoinTransaction = {
+  id: string;
+  wallet_id: string;
+  user_id: string;
+  amount: number;
+  direction: 'credit' | 'debit';
+  transaction_type: string;
+  status: string;
+  created_at: string;
+};
+
+export type Gift = {
+  id: string;
+  sender_user_id: string;
+  receiver_profile_id?: string | null;
+  receiver_user_id?: string | null;
+  gift_type: string;
+  coin_cost: number;
+  message?: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type ProfileAccess = {
+  client_state: 'client_activated';
+  phone_number?: string | null;
+  additional_phones: string[];
+  whatsapp?: string | null;
+  telegram?: string | null;
+  full_gallery: ProfileImage[];
+  vip_gallery_unlocked: boolean;
+  gifts_enabled: boolean;
+  live_cam_enabled: boolean;
 };

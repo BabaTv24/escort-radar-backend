@@ -446,7 +446,7 @@ export function AdminPage() {
     }
 
     if (view === 'users') {
-      return <AdminTable rows={filteredUsers} columns={['email', 'role', 'account_type', 'public_user_id', 'referral_code', 'token_balance', 'profile_count', 'created_at', 'status']} actions={(user) => (
+      return <AdminTable rows={filteredUsers} columns={['email', 'role', 'account_type', 'client_state', 'client_activated_at', 'avatar_url', 'public_user_id', 'referral_code', 'token_balance', 'profile_count', 'created_at', 'status']} actions={(user) => (
         <>
           <Action onClick={() => setModal({ title: String(user.email), body: JSON.stringify(user, null, 2) })}>View</Action>
           <Action onClick={() => setModal({ title: 'Edit user', body: JSON.stringify(user, null, 2) })}>Edit</Action>

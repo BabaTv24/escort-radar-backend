@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
-import { verifyUser } from '../middleware/auth.js';
+import { requireAdvertiserAccess, verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { config } from '../config.js';
 import { asyncHandler } from '../validation.js';
@@ -14,7 +14,41 @@ const upload = multer({
 
 export const uploadsRouter = Router();
 
-uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHandler(async (req, res) => {
+uploadsRouter.post('/client-avatar', verifyUser, upload.single('image'), asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'image file is required' });
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(req.file.mimetype)) {
+    return res.status(415).json({ error: 'Unsupported image format. Use JPG, PNG, or WEBP.' });
+  }
+
+  const processed = await sharp(req.file.buffer)
+    .rotate()
+    .resize({ width: 512, height: 512, fit: 'cover' })
+    .jpeg({ quality: 86, mozjpeg: true })
+    .toBuffer();
+
+  const storagePath = `client-avatars/${req.user!.id}/${crypto.randomUUID()}.jpg`;
+  const uploadResult = await supabaseAdmin.storage
+    .from(config.storageBucket)
+    .upload(storagePath, processed, { contentType: 'image/jpeg', upsert: true });
+
+  if (uploadResult.error) return res.status(400).json({ error: uploadResult.error.message });
+
+  const { data: publicUrl } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(storagePath);
+  const { data, error } = await supabaseAdmin
+    .from('client_profiles')
+    .upsert({
+      user_id: req.user!.id,
+      avatar_url: publicUrl.publicUrl,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' })
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  res.status(201).json({ client_profile: data, avatar_url: publicUrl.publicUrl });
+}));
+
+uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload.single('image'), asyncHandler(async (req, res) => {
   const profileId = String(req.body.profile_id || '');
   if (!profileId) return res.status(400).json({ error: 'profile_id is required' });
   if (!req.file) return res.status(400).json({ error: 'image file is required' });
@@ -76,7 +110,7 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
   });
 }));
 
-uploadsRouter.patch('/profile-image/:id/cover', verifyUser, asyncHandler(async (req, res) => {
+uploadsRouter.patch('/profile-image/:id/cover', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
   const imageId = String(req.params.id || '');
   const { data: image, error: imageError } = await supabaseAdmin
     .from('profile_images')
@@ -100,7 +134,7 @@ uploadsRouter.patch('/profile-image/:id/cover', verifyUser, asyncHandler(async (
   res.json({ image: { ...data, public_url: publicUrl.publicUrl, is_cover: true } });
 }));
 
-uploadsRouter.delete('/profile-image/:id', verifyUser, asyncHandler(async (req, res) => {
+uploadsRouter.delete('/profile-image/:id', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
   const imageId = String(req.params.id || '');
   const { data: image, error: imageError } = await supabaseAdmin
     .from('profile_images')

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CalendarDays, Clock, Copy, CreditCard, Flame, Gem, ImagePlus, Lock, LogOut, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
+import { CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, Heart, ImagePlus, Lock, LogOut, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import type { BookingRequest, ClientActivation, CoinWallet, Profile, ProfileImage, Tag } from '../types';
+import type { BookingRequest, ClientActivation, ClientProfile, CoinTransaction, CoinWallet, Gift as GiftRow, Profile, ProfileImage, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
@@ -100,8 +100,13 @@ export function DashboardPage() {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [lastApiError, setLastApiError] = useState('');
   const [clientActivation, setClientActivation] = useState<ClientActivation | null>(null);
+  const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
   const [coinWallet, setCoinWallet] = useState<CoinWallet | null>(null);
+  const [coinTransactions, setCoinTransactions] = useState<CoinTransaction[]>([]);
+  const [giftsSent, setGiftsSent] = useState<GiftRow[]>([]);
+  const [giftsReceived, setGiftsReceived] = useState<GiftRow[]>([]);
   const [activationBusy, setActivationBusy] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { t, option } = useI18n();
 
@@ -167,8 +172,10 @@ export function DashboardPage() {
   async function resolveBackendAuthAccountType(accessToken: string): Promise<AuthAccountType> {
     try {
       const data = await api.authMe(accessToken);
+      setClientProfile(data.client_profile);
       return resolveAuthAccountType(data.user.app_metadata || { auth_account_type: data.user.auth_account_type });
     } catch {
+      setClientProfile(null);
       return 'client';
     }
   }
@@ -180,12 +187,18 @@ export function DashboardPage() {
       const clientData = await api.clientActivationMe(accessToken);
       setClientActivation(clientData.activation);
       setCoinWallet(clientData.wallet);
+      setCoinTransactions(clientData.transactions);
+      setGiftsSent(clientData.gifts_sent);
+      setGiftsReceived(clientData.gifts_received);
       const checkoutSessionId = searchParams.get('activation_session_id');
       if (checkoutSessionId && clientData.activation.state !== 'client_activated') {
         const confirmed = await api.confirmClientActivation(accessToken, checkoutSessionId);
         setClientActivation(confirmed.activation);
         const refreshed = await api.clientActivationMe(accessToken);
         setCoinWallet(refreshed.wallet);
+        setCoinTransactions(refreshed.transactions);
+        setGiftsSent(refreshed.gifts_sent);
+        setGiftsReceived(refreshed.gifts_received);
         setSearchParams({});
       }
       setSavedProfile(null);
@@ -368,6 +381,10 @@ export function DashboardPage() {
     setWallet(null);
     setCoinWallet(null);
     setClientActivation(null);
+    setClientProfile(null);
+    setCoinTransactions([]);
+    setGiftsSent([]);
+    setGiftsReceived([]);
   }
 
   async function startClientActivation() {
@@ -382,6 +399,25 @@ export function DashboardPage() {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     } finally {
       setActivationBusy(false);
+    }
+  }
+
+  async function uploadClientAvatar(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !token) return;
+    setAvatarUploading(true);
+    setMessage('');
+    const form = new FormData();
+    form.set('image', file);
+    try {
+      const result = await api.uploadClientAvatar(token, form);
+      setClientProfile(result.client_profile);
+      setMessage('Avatar zapisany.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setAvatarUploading(false);
+      event.target.value = '';
     }
   }
 
@@ -415,10 +451,16 @@ export function DashboardPage() {
         userEmail={userEmail}
         wallet={wallet}
         coinWallet={coinWallet}
+        clientProfile={clientProfile}
         activation={clientActivation}
+        transactions={coinTransactions}
+        giftsSent={giftsSent}
+        giftsReceived={giftsReceived}
         message={message}
         activationBusy={activationBusy}
+        avatarUploading={avatarUploading}
         onActivate={startClientActivation}
+        onAvatarUpload={uploadClientAvatar}
         onLogout={logout}
       />
     );
@@ -746,34 +788,51 @@ function isAdvertiserAccount(accountType: AuthAccountType) {
   return accountType === 'escort' || accountType === 'business';
 }
 
-function ClientDashboard({ userEmail, wallet, coinWallet, activation, message, activationBusy, onActivate, onLogout }: {
+function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, giftsSent, giftsReceived, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout }: {
   userEmail: string;
   wallet: Wallet | null;
   coinWallet: CoinWallet | null;
+  clientProfile: ClientProfile | null;
   activation: ClientActivation | null;
+  transactions: CoinTransaction[];
+  giftsSent: GiftRow[];
+  giftsReceived: GiftRow[];
   message: string;
   activationBusy: boolean;
+  avatarUploading: boolean;
   onActivate: () => void;
+  onAvatarUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onLogout: () => void;
 }) {
   const { t } = useI18n();
   const activated = activation?.state === 'client_activated';
+  const displayName = clientProfile?.display_name || userEmail.split('@')[0] || 'Client';
+  const city = clientProfile?.city || 'Berlin';
+  const featureCards = [
+    ['Radar', 'Zobacz profile w pobliżu Berlina.', RadioTower, '/city/berlin', true],
+    ['Favorite profiles', 'Zapisuj ulubione profile i wracaj do nich szybciej.', Heart, '', activated],
+    ['Profile unlocks', 'Odblokuj numery telefonu, WhatsApp, Telegram i galerie.', Lock, '', activated],
+    ['Gifts / Coins', 'Wysyłaj prezenty Coins i odblokowuj prywatne galerie.', Gift, '/coins', activated],
+    ['Referrals', 'Udostępnij link i QR po aktywacji konta.', QrCode, '', activated],
+    ['Bookings', 'Śledź zapytania i historię kontaktów.', CalendarDays, '', activated],
+    ['Private gallery access', 'Uzyskaj dostęp do pełnych galerii VIP.', ImagePlus, '', activated]
+  ] as const;
 
   return (
     <div className="page dashboard-page">
       <section className="dashboard-hero">
-        <p className="eyebrow">{t('dashboard.client.eyebrow')}</p>
-        <h1>{t('dashboard.client.title')}</h1>
-        <p>{t('dashboard.client.subtitle')}</p>
+        <p className="eyebrow">Escort Radar Client</p>
+        <h1>{activated ? 'Konto aktywne' : 'Aktywuj konto za 0,99€'}</h1>
+        <p>{activated ? 'Pełne profile, kontakty, galerie VIP, Coins i referral program są gotowe.' : 'Zobacz pełne profile, numery telefonu, prywatne galerie i wysyłaj prezenty Coins.'}</p>
       </section>
 
       <section className="creator-command-bar">
         <div>
-          <strong>{t('auth.signedInAs', { email: userEmail })}</strong>
-          <span className="success">{message || t('dashboard.client.ready')}</span>
+          <strong>{displayName}</strong>
+          <span className={activated ? 'success' : 'subscription-notice'}>{message || (activated ? 'client_activated' : 'client_free')}</span>
         </div>
         <div className="creator-command-actions">
-          <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> {t('nav.radar')}</Link>
+          <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> Otwórz radar</Link>
           <Link className="button" to="/coins"><Gem size={16} /> Coin Wallet</Link>
           <button className="button danger" type="button" onClick={onLogout}>{t('buttons.logout')}</button>
         </div>
@@ -781,27 +840,44 @@ function ClientDashboard({ userEmail, wallet, coinWallet, activation, message, a
 
       <div className="dashboard-grid">
         <section className="creator-panel">
-          <p className="eyebrow">{t('dashboard.client.statusEyebrow')}</p>
-          <h2>{activated ? 'client_activated' : 'client_free'}</h2>
-          <div className="metrics-grid">
-            <Metric label={t('tokens.balance')} value={`${Math.round(Number(wallet?.escort_token_balance || 0))} ER`} />
-            <Metric label="Coins" value={Math.round(Number(coinWallet?.balance || 0))} />
-            <Metric label="Activation" value={activated ? 'Unlocked' : '0.99 EUR'} />
+          <div className="profile-summary">
+            {clientProfile?.avatar_url ? <img className="client-qr-image" src={clientProfile.avatar_url} alt="" /> : <div className="qr-visual"><UserRound size={54} /></div>}
+            <div>
+              <p className="eyebrow">Client profile</p>
+              <h2>{displayName}</h2>
+              <p>{userEmail}</p>
+              <p>{city}</p>
+              <span className={`admin-status ${activated ? 'active' : 'pending'}`}>{activated ? 'client_activated' : 'client_free'}</span>
+            </div>
           </div>
-          {!activated && <button className="button primary full" type="button" disabled={activationBusy} onClick={onActivate}>
-            {activationBusy ? t('states.loading') : 'Activate for 0.99 EUR'}
-          </button>}
+          <label className="button full">
+            {avatarUploading ? t('states.loading') : 'Avatar hochladen'}
+            <input hidden type="file" accept="image/*" onChange={onAvatarUpload} />
+          </label>
+          <div className="metrics-grid">
+            <Metric label="Coins" value={Math.round(Number(coinWallet?.balance || 0))} />
+            <Metric label="Gifts sent" value={giftsSent.length} />
+            <Metric label="Transactions" value={transactions.length} />
+          </div>
         </section>
 
-        <section className="creator-panel">
-          <p className="eyebrow">{t('dashboard.client.toolsEyebrow')}</p>
-          <div className="creator-dashboard-grid">
-            <Link className="admin-action-btn" to="/city/berlin"><RadioTower size={16} /> {t('dashboard.client.openRadar')}</Link>
-            <Link className="admin-action-btn" to="/coins"><Gem size={16} /> Coin Wallet</Link>
-            <button className="admin-action-btn" type="button"><UserRound size={16} /> {t('dashboard.client.favorites')}</button>
-            <button className="admin-action-btn" type="button"><Clock size={16} /> {t('dashboard.client.activity')}</button>
+        {!activated && <section className="creator-panel elevated">
+          <p className="eyebrow">Full Escort Radar Experience</p>
+          <h2>Aktywuj konto za 0,99€</h2>
+          <p>Zobacz pełne profile, numery telefonu, prywatne galerie i wysyłaj prezenty Coins.</p>
+          <div className="onboarding-points">
+            <span>unlock phone / WhatsApp / Telegram</span>
+            <span>see all photos</span>
+            <span>send gifts / coins</span>
+            <span>access private gallery</span>
+            <span>save favorites</span>
+            <span>get referral link and QR</span>
+            <span>receive welcome coins</span>
           </div>
-        </section>
+          <button className="button primary full" type="button" disabled={activationBusy} onClick={onActivate}>
+            {activationBusy ? t('states.loading') : 'Aktywuj teraz za 0,99€'}
+          </button>
+        </section>}
 
         <section className="creator-panel referral-studio">
           <div>
@@ -815,6 +891,40 @@ function ClientDashboard({ userEmail, wallet, coinWallet, activation, message, a
             <Metric label="Registrations" value={activation?.registrations || 0} />
             <Metric label="Activations" value={activation?.activations || 0} />
             <Metric label="Earned rewards" value={`${activation?.earned_rewards || 0} Coins`} />
+          </div>
+        </section>
+
+        <section className="creator-panel">
+          <p className="eyebrow">Radar Berlin</p>
+          <h2>1 profile near Berlin available now</h2>
+          <p>Otwórz radar albo zobacz profile w pobliżu.</p>
+          <div className="creator-share-row">
+            <Link className="button primary" to="/city/berlin">Otwórz radar</Link>
+            <Link className="button" to="/city/berlin">Zobacz profile w pobliżu</Link>
+          </div>
+        </section>
+
+        <section className="creator-panel">
+          <p className="eyebrow">Client tools</p>
+          <div className="creator-dashboard-grid">
+            {featureCards.map(([title, copy, Icon, href, enabled]) => {
+              const content = <><Icon size={16} /> <strong>{title}</strong><span>{enabled ? copy : 'Aktywuj za 0,99€'}</span></>;
+              if (href && enabled) return <Link className="admin-action-btn" to={href} key={title}>{content}</Link>;
+              return <button className="admin-action-btn" type="button" key={title} onClick={enabled ? undefined : onActivate}>{content}</button>;
+            })}
+          </div>
+        </section>
+
+        <section className="creator-panel">
+          <p className="eyebrow">Aktywitätsverlauf</p>
+          <div className="booking-list">
+            {transactions.slice(0, 5).map((transaction) => (
+              <div className="booking-row" key={transaction.id}>
+                <div><strong>{transaction.transaction_type}</strong><p>{new Date(transaction.created_at).toLocaleString()}</p></div>
+                <span>{transaction.direction === 'credit' ? '+' : '-'}{transaction.amount} Coins</span>
+              </div>
+            ))}
+            {!transactions.length && <p className="muted">No activity yet. Unlock profiles, send gifts, and collect referral rewards.</p>}
           </div>
         </section>
       </div>

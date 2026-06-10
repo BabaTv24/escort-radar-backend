@@ -143,19 +143,25 @@ adminRouter.get('/business-profiles', asyncHandler(async (_req, res) => {
 }));
 
 adminRouter.get('/users', asyncHandler(async (_req, res) => {
-  const [{ data: authUsers, error: authError }, { data: profiles }, { data: wallets }] = await Promise.all([
+  const [{ data: authUsers, error: authError }, { data: profiles }, { data: wallets }, { data: activations }, { data: clientProfiles }] = await Promise.all([
     supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     supabaseAdmin.from('profiles').select('id, user_id, account_type, public_user_id, referral_code, is_test_account, status, created_at').limit(2000),
-    supabaseAdmin.from('wallets').select('*').limit(2000)
+    supabaseAdmin.from('wallets').select('*').limit(2000),
+    supabaseAdmin.from('client_activations').select('user_id, state, activated_at').limit(2000),
+    supabaseAdmin.from('client_profiles').select('user_id, avatar_url').limit(2000)
   ]);
 
   if (authError) return res.status(500).json({ error: authError.message });
 
   const profileRows = profiles || [];
   const walletRows = wallets || [];
+  const activationRows = activations || [];
+  const clientProfileRows = clientProfiles || [];
   const users = (authUsers.users || []).map((user) => {
     const userProfiles = profileRows.filter((profile) => profile.user_id === user.id);
     const wallet = walletRows.find((row) => row.user_id === user.id);
+    const activation = activationRows.find((row) => row.user_id === user.id);
+    const clientProfile = clientProfileRows.find((row) => row.user_id === user.id);
     const primaryProfile = userProfiles[0];
     return {
       id: user.id,
@@ -167,6 +173,9 @@ adminRouter.get('/users', asyncHandler(async (_req, res) => {
       token_balance: Number(wallet?.escort_token_balance || 0),
       wallet_id: wallet?.id || null,
       wallet_frozen: Boolean(wallet?.frozen),
+      client_state: activation?.state || user.app_metadata?.client_state || user.app_metadata?.client_activation_state || 'client_free',
+      client_activated_at: activation?.activated_at || null,
+      avatar_url: clientProfile?.avatar_url || null,
       profile_count: userProfiles.length,
       is_test_account: userProfiles.some((profile) => profile.is_test_account) || String(user.email || '').includes('+test'),
       created_at: user.created_at,

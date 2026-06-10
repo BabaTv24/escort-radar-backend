@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, ClientProfile, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -21,7 +21,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
 export const api = {
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
-  authMe: (token: string) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business'; role?: string; app_metadata?: Record<string, unknown> } }>('/api/auth/me', { token }),
+  authMe: (token: string) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business'; role?: string; app_metadata?: Record<string, unknown> }; client_profile: ClientProfile | null }>('/api/auth/me', { token }),
+  updateClientProfile: (token: string, body: Partial<ClientProfile>) => request<{ client_profile: ClientProfile }>('/api/auth/client-profile', {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
   register: (body: { email: string; password: string; username?: string; auth_account_type: 'client' | 'escort' | 'business'; identity?: string; referred_by_code?: string }) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business' } }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(body)
@@ -41,6 +46,11 @@ export const api = {
     body: JSON.stringify(body)
   }),
   uploadImage: (token: string, form: FormData) => request<{ image: unknown }>('/api/uploads/profile-image', {
+    method: 'POST',
+    token,
+    body: form
+  }),
+  uploadClientAvatar: (token: string, form: FormData) => request<{ client_profile: ClientProfile; avatar_url: string }>('/api/uploads/client-avatar', {
     method: 'POST',
     token,
     body: form

@@ -13,6 +13,11 @@ authRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
   const appMetadata = req.user?.app_metadata || {};
   const accountType = normalizeAuthAccountType(appMetadata.auth_account_type);
   const role = appMetadata.role === 'admin' ? 'admin' : accountType;
+  const { data: clientProfile } = await supabaseAdmin
+    .from('client_profiles')
+    .select('*')
+    .eq('user_id', req.user!.id)
+    .maybeSingle();
 
   res.json({
     user: {
@@ -28,8 +33,28 @@ authRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
         subscription_status: appMetadata.subscription_status,
         client_state: appMetadata.client_state || appMetadata.client_activation_state
       }
-    }
+    },
+    client_profile: clientProfile || null
   });
+}));
+
+authRouter.patch('/client-profile', verifyUser, asyncHandler(async (req, res) => {
+  const displayName = optionalString(req.body.display_name || req.body.nickname, 80);
+  const city = optionalString(req.body.city, 80) || 'berlin';
+
+  const { data, error } = await supabaseAdmin
+    .from('client_profiles')
+    .upsert({
+      user_id: req.user!.id,
+      display_name: displayName,
+      city,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' })
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ client_profile: data });
 }));
 
 authRouter.post('/register', asyncHandler(async (req, res) => {
