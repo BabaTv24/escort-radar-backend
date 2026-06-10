@@ -94,8 +94,14 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     let active = true;
 
     async function restoreAdminSession() {
+      console.log('AUTH RESTORE START');
       setAuthRestoring(true);
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await withTimeout(
+        supabase.auth.getSession(),
+        5000,
+        'Supabase getSession'
+      );
+      console.log('SESSION FOUND', !!session);
 
       if (!active) return;
       if (!session?.access_token) {
@@ -103,10 +109,12 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
         setUser(null);
         setAdmin(null);
         setAuthRestoring(false);
+        console.log('AUTH RESTORE END');
         if (!accessMode && location.pathname !== '/admin/login') navigate('/admin/login', { replace: true });
         return;
       }
 
+      console.log('ADMIN CHECK START');
       const adminCheck = await api.adminMe(session.access_token).catch((adminError) => {
         setMessage(adminError instanceof Error ? adminError.message : 'Brak dostepu administratora');
         return undefined;
@@ -119,9 +127,11 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
         setAdmin(null);
         setMessage('Brak dostepu administratora');
         setAuthRestoring(false);
+        console.log('AUTH RESTORE END');
         return;
       }
 
+      console.log('ADMIN CHECK SUCCESS');
       setAdmin(adminCheck.admin);
       setUser({
         id: session.user.id,
@@ -131,6 +141,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       setMessage('');
       setToken(session.access_token);
       setAuthRestoring(false);
+      console.log('AUTH RESTORE END');
       if (location.pathname === '/admin/login') navigate('/admin', { replace: true });
       void load(session.access_token);
     }
@@ -140,8 +151,13 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       setToken('');
       setUser(null);
       setAdmin(null);
-      setMessage(sessionError instanceof Error ? sessionError.message : 'Brak dostepu administratora');
+      const message = sessionError instanceof Error && sessionError.message.includes('Supabase getSession timeout')
+        ? 'Sesja wygasła albo nie została odczytana. Zaloguj się ponownie.'
+        : sessionError instanceof Error ? sessionError.message : 'Brak dostepu administratora';
+      setMessage(message);
       setAuthRestoring(false);
+      console.log('AUTH RESTORE END');
+      if (!accessMode && location.pathname !== '/admin/login') navigate('/admin/login', { replace: true });
     });
 
     return () => {
@@ -156,6 +172,13 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     setLoading(false);
     if (result.error) return setMessage(result.error.message);
     const accessToken = result.data.session?.access_token || '';
+    const refreshToken = result.data.session?.refresh_token || '';
+    if (accessToken && refreshToken) {
+      await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken
+      });
+    }
     setUser(result.data.user ? {
       id: result.data.user.id,
       email: result.data.user.email,
@@ -172,8 +195,20 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     setAdmin(adminCheck.admin);
     setMessage('');
     setToken(accessToken);
-    await load(accessToken);
     navigate('/admin', { replace: true });
+    void load(accessToken);
+  }
+
+  async function resetAdminSession() {
+    await supabase.auth.signOut();
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith('sb-'))
+      .forEach((key) => localStorage.removeItem(key));
+    setToken('');
+    setUser(null);
+    setAdmin(null);
+    setMessage('');
+    navigate('/admin/login', { replace: true });
   }
 
   async function logout() {
@@ -298,6 +333,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
           <h1>Brak dostepu administratora</h1>
           <p>{message || 'Zaloguj sie kontem administratora.'}</p>
           <Link className="button primary full" to="/admin/login">Przejdz do logowania</Link>
+          <button className="button full" onClick={resetAdminSession}>Resetuj sesje administratora</button>
         </div>
       </div>
     );
@@ -515,6 +551,15 @@ function settledValue<T>(result: PromiseSettledResult<T>, fallback: T, label: st
   if (result.status === 'fulfilled') return result.value;
   console.error(`Admin load failed: ${label}`, result.reason);
   return fallback;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms);
+    })
+  ]);
 }
 
 function adminLoadRequest<T>(label: string, request: Promise<T>, timeoutMs = 10000): Promise<T> {
