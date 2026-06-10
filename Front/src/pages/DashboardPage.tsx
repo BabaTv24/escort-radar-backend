@@ -1442,13 +1442,17 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
   onSave: (event: FormEvent) => void;
   onLogout: () => void;
 }) {
-  const [panel, setPanel] = useState<'photos' | 'location' | 'prices' | 'text'>('photos');
+  const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'prices' | 'text'>(savedProfile ? 'photos' : 'setup');
   const primaryImage = savedProfile?.profile_images?.[0]?.public_url;
   const currentStatus = profile.availability_status || savedProfile?.availability_status || 'unavailable';
   const city = profile.city || savedProfile?.city || 'Berlin';
   const area = profile.area || savedProfile?.area || '';
   const displayName = profile.display_name || savedProfile?.display_name || 'Your profile';
   const imageCount = savedProfile?.profile_images?.length || 0;
+
+  useEffect(() => {
+    if (savedProfile && panel === 'setup') setPanel('photos');
+  }, [savedProfile, panel]);
 
   function setStatus(status: Profile['availability_status']) {
     onProfileChange({
@@ -1494,6 +1498,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
       </section>
 
       <section className="one-hand-actions" aria-label="Primary actions">
+        {!savedProfile && <ActionButton active={panel === 'setup'} icon={<UserRound size={22} />} label="Quick Setup" onClick={() => setPanel('setup')} />}
         <ActionButton active={panel === 'photos'} icon={<ImagePlus size={22} />} label="Add Photos" onClick={() => setPanel('photos')} />
         <ActionButton active={panel === 'location'} icon={<MapPin size={22} />} label="Location" onClick={() => setPanel('location')} />
         <ActionButton active={panel === 'prices'} icon={<Gem size={22} />} label="Prices" onClick={() => setPanel('prices')} />
@@ -1501,6 +1506,32 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
       </section>
 
       <form className="one-hand-panel" onSubmit={onSave}>
+        {panel === 'setup' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">Complete your profile in 3 minutes</p>
+                <h2>Quick Setup</h2>
+              </div>
+            </div>
+            <div className="one-hand-inline-fields">
+              <input placeholder="Profile name" value={profile.display_name || ''} onChange={(event) => onProfileChange({ ...profile, display_name: event.target.value })} required />
+              <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value })}>
+                {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <input placeholder="District" value={profile.area || ''} onChange={(event) => onProfileChange({ ...profile, area: event.target.value })} />
+              <input inputMode="numeric" type="number" placeholder="1 hour price" value={profile.price_1h || ''} onChange={(event) => onProfileChange({ ...profile, price_1h: event.target.value ? Number(event.target.value) : null })} />
+            </div>
+            <textarea
+              rows={4}
+              placeholder="Short public profile text"
+              value={profile.description || ''}
+              onChange={(event) => onProfileChange({ ...profile, description: event.target.value })}
+            />
+            <p className="muted">Save once to create the profile. Photo upload unlocks immediately after the profile exists.</p>
+          </section>
+        )}
+
         {panel === 'photos' && (
           <section className="one-hand-card photo-manager">
             <div className="one-hand-section-head">
@@ -1513,8 +1544,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
             <label className="one-hand-upload">
               <input type="file" accept="image/*" onChange={onUploadImage} disabled={!savedProfile} />
               <UploadCloud size={24} />
-              <strong>{savedProfile ? 'Camera or gallery' : 'Save profile first'}</strong>
-              <span>{uploadStatus === 'uploading' ? 'Uploading...' : 'Tap once, choose photo, done.'}</span>
+              <strong>{savedProfile ? 'Camera or gallery' : 'Create profile first'}</strong>
+              <span>{savedProfile ? (uploadStatus === 'uploading' ? 'Uploading...' : 'Tap once, choose photo, done.') : 'Go to Quick Setup, fill name/city/price, then Save changes.'}</span>
             </label>
             <div className="one-hand-photo-strip">
               {(savedProfile?.profile_images || []).slice(0, 6).map((image) => (
@@ -1591,10 +1622,11 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
       </form>
 
       <nav className="one-hand-bottom-nav">
+        {!savedProfile && <button type="button" className={panel === 'setup' ? 'active' : ''} onClick={() => setPanel('setup')}><UserRound size={18} />Setup</button>}
         <button type="button" className={panel === 'photos' ? 'active' : ''} onClick={() => setPanel('photos')}><ImagePlus size={18} />Photos</button>
         <button type="button" className={panel === 'location' ? 'active' : ''} onClick={() => setPanel('location')}><MapPin size={18} />Location</button>
         <button type="button" className={panel === 'prices' ? 'active' : ''} onClick={() => setPanel('prices')}><Gem size={18} />Prices</button>
-        <button type="button" className={panel === 'text' ? 'active' : ''} onClick={() => setPanel('text')}><UserRound size={18} />Text</button>
+        {savedProfile && <button type="button" className={panel === 'text' ? 'active' : ''} onClick={() => setPanel('text')}><UserRound size={18} />Text</button>}
       </nav>
       <p className="one-hand-email">{userEmail}</p>
     </div>

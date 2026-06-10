@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../supabase.js';
 import { allowedCities, asyncHandler, parseBoolean, slugify, validateProfileInput } from '../validation.js';
-import { verifyUser } from '../middleware/auth.js';
+import { requireAdvertiserAccess, verifyUser } from '../middleware/auth.js';
 import { generatePublicUserId, generateReferralCode, normalizePhone } from '../utils/identity.js';
+import { getClientActivationSummary } from '../services/clientActivation.js';
 
 export const profilesRouter = Router();
 
@@ -47,6 +48,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
 }));
 
 profilesRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
+  logProfileDebug('GET /api/profiles/me start', req, { status: 'start' });
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
@@ -55,9 +57,60 @@ profilesRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
     .limit(1)
     .maybeSingle();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logProfileDebug('GET /api/profiles/me error', req, { status: 'error', supabase_error: error.message });
+    return res.status(500).json({ error: error.message });
+  }
   const wallet = await getOrCreateWallet(req.user!.id);
+  logProfileDebug('GET /api/profiles/me success', req, {
+    status: 'success',
+    profile_id: data?.id || null,
+    images: data?.profile_images?.length || 0
+  });
   res.json({ profile: data ? withImageUrls(data, wallet) : null, wallet });
+}));
+
+profilesRouter.get('/:id/access', verifyUser, asyncHandler(async (req, res) => {
+  const activation = await getClientActivationSummary(req.user!.id);
+  if (activation.state !== 'client_activated') {
+    return res.status(403).json({
+      error: 'Client activation required',
+      locked_features: ['phone_number', 'whatsapp', 'telegram', 'full_gallery', 'vip_gallery', 'gifts', 'live_cam']
+    });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, primary_phone, additional_phones, whatsapp, telegram, profile_images(*)')
+    .eq('id', req.params.id)
+    .single();
+  if (error || !data) return res.status(404).json({ error: 'Profile not found' });
+
+  const images = (data.profile_images || []).map((image: any) => {
+    const { data: publicUrl } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
+    return { ...image, public_url: publicUrl.publicUrl, is_cover: Boolean(image.is_primary) };
+  });
+
+  const { data: vipUnlock } = await supabaseAdmin
+    .from('vip_gallery_unlocks')
+    .select('id, expires_at')
+    .eq('user_id', req.user!.id)
+    .eq('profile_id', req.params.id)
+    .maybeSingle();
+
+  res.json({
+    access: {
+      client_state: activation.state,
+      phone_number: data.primary_phone,
+      additional_phones: data.additional_phones || [],
+      whatsapp: data.whatsapp,
+      telegram: data.telegram,
+      full_gallery: images,
+      vip_gallery_unlocked: Boolean(vipUnlock),
+      gifts_enabled: true,
+      live_cam_enabled: true
+    }
+  });
 }));
 
 profilesRouter.get('/:id', asyncHandler(async (req, res) => {
@@ -72,14 +125,26 @@ profilesRouter.get('/:id', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Profile not found' });
   }
 
-  res.json({ profile: withImageUrls(data) });
+  res.json({ profile: sanitizePublicProfile(withImageUrls(data)) });
 }));
 
-profilesRouter.post('/', verifyUser, asyncHandler(async (req, res) => {
+profilesRouter.post('/', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
+  logProfileDebug('POST /api/profiles start', req, {
+    status: 'start',
+    display_name: safeText(req.body.display_name),
+    city: safeText(req.body.city),
+    availability_status: safeText(req.body.availability_status)
+  });
   const result = validateProfileInput(req.body);
-  if ('error' in result) return res.status(400).json({ error: result.error });
+  if ('error' in result) {
+    logProfileDebug('POST /api/profiles validation_error', req, { status: 'error', error: result.error });
+    return res.status(400).json({ error: result.error });
+  }
   const phoneValidation = await validatePhoneRules(result.data, null);
-  if ('error' in phoneValidation) return res.status(400).json({ error: phoneValidation.error });
+  if ('error' in phoneValidation) {
+    logProfileDebug('POST /api/profiles phone_error', req, { status: 'error', error: phoneValidation.error });
+    return res.status(400).json({ error: phoneValidation.error });
+  }
   const { tag_ids, profileData } = splitProfileTags(result.data);
 
   const baseSlug = slugify(result.data.display_name);
@@ -95,37 +160,71 @@ profilesRouter.post('/', verifyUser, asyncHandler(async (req, res) => {
     verified: isTestAccount,
     verification_status: isTestAccount ? 'verified' : 'pending',
     moderation_status: 'clean',
-    subscription_status: isTestAccount ? 'active' : 'trial',
+    subscription_status: 'active',
+    plan: req.advertiserAccess!.plan,
+    listing_plan: req.advertiserAccess!.plan,
     is_test_account: isTestAccount,
     verified_at: isTestAccount ? new Date().toISOString() : null,
     trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
   };
 
   const { data, error } = await supabaseAdmin.from('profiles').insert(payload).select('*, profile_images(*), profile_tags(tag_id, tags(*))').single();
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    logProfileDebug('POST /api/profiles supabase_error', req, { status: 'error', supabase_error: error.message });
+    return res.status(400).json({ error: error.message });
+  }
   await syncProfileTags(data.id, tag_ids);
   const hydrated = await fetchProfile(data.id);
 
   const wallet = await getOrCreateWallet(req.user!.id);
+  logProfileDebug('POST /api/profiles success', req, {
+    status: 'success',
+    profile_id: data.id,
+    availability_status: data.availability_status,
+    available_now: data.available_now
+  });
   res.status(201).json({ profile: withImageUrls(hydrated || data, wallet), wallet });
 }));
 
-profilesRouter.put('/:id', verifyUser, asyncHandler(async (req, res) => {
+profilesRouter.put('/:id', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
+  logProfileDebug('PUT /api/profiles/:id start', req, {
+    status: 'start',
+    profile_id: req.params.id,
+    city: safeText(req.body.city),
+    area: safeText(req.body.area),
+    availability_status: safeText(req.body.availability_status),
+    available_now: Boolean(req.body.available_now)
+  });
   const result = validateProfileInput(req.body);
-  if ('error' in result) return res.status(400).json({ error: result.error });
+  if ('error' in result) {
+    logProfileDebug('PUT /api/profiles/:id validation_error', req, { status: 'error', profile_id: req.params.id, error: result.error });
+    return res.status(400).json({ error: result.error });
+  }
   const phoneValidation = await validatePhoneRules(result.data, req.params.id);
-  if ('error' in phoneValidation) return res.status(400).json({ error: phoneValidation.error });
+  if ('error' in phoneValidation) {
+    logProfileDebug('PUT /api/profiles/:id phone_error', req, { status: 'error', profile_id: req.params.id, error: phoneValidation.error });
+    return res.status(400).json({ error: phoneValidation.error });
+  }
   const { tag_ids, profileData } = splitProfileTags(result.data);
 
   const { data: existing } = await supabaseAdmin.from('profiles').select('user_id, is_test_account, public_user_id, referral_code').eq('id', req.params.id).single();
-  if (!existing) return res.status(404).json({ error: 'Profile not found' });
-  if (existing.user_id !== req.user!.id) return res.status(403).json({ error: 'Not your profile' });
+  if (!existing) {
+    logProfileDebug('PUT /api/profiles/:id not_found', req, { status: 'error', profile_id: req.params.id });
+    return res.status(404).json({ error: 'Profile not found' });
+  }
+  if (existing.user_id !== req.user!.id) {
+    logProfileDebug('PUT /api/profiles/:id forbidden', req, { status: 'error', profile_id: req.params.id, owner_id: existing.user_id });
+    return res.status(403).json({ error: 'Not your profile' });
+  }
 
   const updatePayload = {
     ...profileData,
     ...phoneValidation.data,
     public_user_id: existing.public_user_id || await generateUniqueValue('public_user_id', generatePublicUserId),
     referral_code: existing.referral_code || await generateUniqueValue('referral_code', generateReferralCode),
+    subscription_status: 'active',
+    plan: req.advertiserAccess!.plan,
+    listing_plan: req.advertiserAccess!.plan,
     ...(existing.is_test_account ? {
       status: 'active',
       verified: true,
@@ -142,14 +241,25 @@ profilesRouter.put('/:id', verifyUser, asyncHandler(async (req, res) => {
     .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
     .single();
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    logProfileDebug('PUT /api/profiles/:id supabase_error', req, { status: 'error', profile_id: req.params.id, supabase_error: error.message });
+    return res.status(400).json({ error: error.message });
+  }
   await syncProfileTags(data.id, tag_ids);
   const hydrated = await fetchProfile(data.id);
   const wallet = await getOrCreateWallet(req.user!.id);
+  logProfileDebug('PUT /api/profiles/:id success', req, {
+    status: 'success',
+    profile_id: data.id,
+    city: data.city,
+    area: data.area,
+    availability_status: data.availability_status,
+    available_now: data.available_now
+  });
   res.json({ profile: withImageUrls(hydrated || data, wallet), wallet });
 }));
 
-profilesRouter.delete('/:id', verifyUser, asyncHandler(async (req, res) => {
+profilesRouter.delete('/:id', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
   const { data: existing } = await supabaseAdmin.from('profiles').select('user_id').eq('id', req.params.id).single();
   if (!existing) return res.status(404).json({ error: 'Profile not found' });
   if (existing.user_id !== req.user!.id) return res.status(403).json({ error: 'Not your profile' });
@@ -179,6 +289,17 @@ function withImageUrls(profile: any, wallet?: any) {
       public_wallet_id: wallet.public_wallet_id
     } : undefined,
     visibility_reason: getVisibilityReason({ ...profile, profile_images: images })
+  };
+}
+
+function sanitizePublicProfile(profile: any) {
+  const { primary_phone, additional_phones, whatsapp, telegram, ...publicProfile } = profile;
+  const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
+  return {
+    ...publicProfile,
+    profile_images: visibleImages,
+    images: visibleImages,
+    locked_features: ['phone_number', 'whatsapp', 'telegram', 'full_gallery', 'vip_gallery', 'gifts', 'live_cam']
   };
 }
 
@@ -220,6 +341,22 @@ async function fetchProfile(id: string) {
 function isSafeTestEmail(email: string | undefined) {
   const normalized = email?.toLowerCase() || '';
   return normalized.includes('+test') && !['mtvx007@gmail.com', 'babatv24@proton.me'].includes(normalized);
+}
+
+function logProfileDebug(message: string, req: any, extra: Record<string, unknown> = {}) {
+  console.info('[profiles]', {
+    message,
+    user_id: req.user?.id || null,
+    auth_account_type: req.user?.app_metadata?.auth_account_type || null,
+    plan: req.user?.app_metadata?.plan || null,
+    subscription_status: req.user?.app_metadata?.subscription_status || null,
+    ...extra
+  });
+}
+
+function safeText(value: unknown) {
+  const text = String(value || '').trim();
+  return text ? text.slice(0, 120) : null;
 }
 
 async function validatePhoneRules(data: Record<string, any>, profileId: string | null) {

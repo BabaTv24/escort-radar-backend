@@ -50,15 +50,42 @@ uploadsRouter.post('/client-avatar', verifyUser, upload.single('image'), asyncHa
 
 uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload.single('image'), asyncHandler(async (req, res) => {
   const profileId = String(req.body.profile_id || '');
-  if (!profileId) return res.status(400).json({ error: 'profile_id is required' });
-  if (!req.file) return res.status(400).json({ error: 'image file is required' });
+  logUploadDebug('POST /api/uploads/profile-image start', req, {
+    status: 'start',
+    profile_id: profileId || null,
+    storage_bucket: config.storageBucket,
+    file_received: Boolean(req.file),
+    file_mime: req.file?.mimetype || null,
+    file_size: req.file?.size || null
+  });
+  if (!profileId) {
+    logUploadDebug('POST /api/uploads/profile-image missing_profile_id', req, { status: 'error', storage_bucket: config.storageBucket });
+    return res.status(400).json({ error: 'profile_id is required' });
+  }
+  if (!req.file) {
+    logUploadDebug('POST /api/uploads/profile-image missing_file', req, { status: 'error', profile_id: profileId, storage_bucket: config.storageBucket });
+    return res.status(400).json({ error: 'image file is required' });
+  }
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(req.file.mimetype)) {
+    logUploadDebug('POST /api/uploads/profile-image unsupported_format', req, {
+      status: 'error',
+      profile_id: profileId,
+      file_mime: req.file.mimetype,
+      file_size: req.file.size,
+      storage_bucket: config.storageBucket
+    });
     return res.status(415).json({ error: 'Unsupported image format. Use JPG, PNG, or WEBP.' });
   }
 
   const { data: profile } = await supabaseAdmin.from('profiles').select('user_id, max_photos').eq('id', profileId).single();
-  if (!profile) return res.status(404).json({ error: 'Profile not found' });
-  if (profile.user_id !== req.user!.id) return res.status(403).json({ error: 'Not your profile' });
+  if (!profile) {
+    logUploadDebug('POST /api/uploads/profile-image profile_not_found', req, { status: 'error', profile_id: profileId, storage_bucket: config.storageBucket });
+    return res.status(404).json({ error: 'Profile not found' });
+  }
+  if (profile.user_id !== req.user!.id) {
+    logUploadDebug('POST /api/uploads/profile-image forbidden', req, { status: 'error', profile_id: profileId, owner_id: profile.user_id, storage_bucket: config.storageBucket });
+    return res.status(403).json({ error: 'Not your profile' });
+  }
 
   const maxPhotos = Number(profile.max_photos || 6);
   const { data: existingImages, count, error: countError } = await supabaseAdmin
@@ -66,8 +93,12 @@ uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload
     .select('id', { count: 'exact' })
     .eq('profile_id', profileId);
 
-  if (countError) return res.status(400).json({ error: countError.message });
+  if (countError) {
+    logUploadDebug('POST /api/uploads/profile-image count_error', req, { status: 'error', profile_id: profileId, supabase_error: countError.message, storage_bucket: config.storageBucket });
+    return res.status(400).json({ error: countError.message });
+  }
   if ((count || 0) >= maxPhotos) {
+    logUploadDebug('POST /api/uploads/profile-image limit_reached', req, { status: 'error', profile_id: profileId, count, max_photos: maxPhotos, storage_bucket: config.storageBucket });
     return res.status(400).json({ error: `Photo limit reached. Premium listings include up to ${maxPhotos} photos.` });
   }
 
@@ -86,6 +117,13 @@ uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload
     const message = uploadResult.error.message.toLowerCase().includes('bucket')
       ? `Storage bucket "${config.storageBucket}" is missing or not accessible.`
       : uploadResult.error.message;
+    logUploadDebug('POST /api/uploads/profile-image storage_error', req, {
+      status: 'error',
+      profile_id: profileId,
+      storage_bucket: config.storageBucket,
+      storage_path: storagePath,
+      supabase_error: uploadResult.error.message
+    });
     return res.status(400).json({ error: message });
   }
 
@@ -96,9 +134,28 @@ uploadsRouter.post('/profile-image', verifyUser, requireAdvertiserAccess, upload
     .select()
     .single();
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    logUploadDebug('POST /api/uploads/profile-image insert_error', req, {
+      status: 'error',
+      profile_id: profileId,
+      storage_bucket: config.storageBucket,
+      storage_path: storagePath,
+      supabase_error: error.message
+    });
+    return res.status(400).json({ error: error.message });
+  }
 
   const { data: publicUrl } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(storagePath);
+  logUploadDebug('POST /api/uploads/profile-image success', req, {
+    status: 'success',
+    profile_id: profileId,
+    image_id: data.id,
+    storage_bucket: config.storageBucket,
+    storage_path: storagePath,
+    public_url: publicUrl.publicUrl,
+    file_mime: req.file.mimetype,
+    file_size: req.file.size
+  });
   res.status(201).json({
     image: {
       ...data,
@@ -170,3 +227,14 @@ uploadsRouter.use((error: unknown, _req: Request, res: Response, next: NextFunct
 
   next(error);
 });
+
+function logUploadDebug(message: string, req: Request, extra: Record<string, unknown> = {}) {
+  console.info('[uploads]', {
+    message,
+    user_id: req.user?.id || null,
+    auth_account_type: req.user?.app_metadata?.auth_account_type || null,
+    plan: req.user?.app_metadata?.plan || null,
+    subscription_status: req.user?.app_metadata?.subscription_status || null,
+    ...extra
+  });
+}
