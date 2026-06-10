@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, Heart, ImagePlus, Lock, LogOut, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
+import { BarChart3, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, Heart, ImagePlus, Lock, LogOut, MapPin, MessageCircle, MoreHorizontal, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
@@ -514,6 +514,24 @@ export function DashboardPage() {
     );
   }
 
+  if (authAccountType === 'escort') {
+    return (
+      <AdvertiserOneHandDashboard
+        profile={profile}
+        savedProfile={savedProfile}
+        userEmail={userEmail}
+        dashboardStatus={dashboardStatus}
+        message={message}
+        bookingRequests={bookingRequests}
+        uploadStatus={uploadStatus}
+        onProfileChange={setProfile}
+        onUploadImage={uploadImage}
+        onSave={saveProfile}
+        onLogout={logout}
+      />
+    );
+  }
+
   return (
     <div className="page dashboard-page">
       <section className="dashboard-hero">
@@ -544,6 +562,15 @@ export function DashboardPage() {
       />
 
       <section className="advertiser-mobile-command">
+        <div className="todays-activity-card">
+          <p className="eyebrow">Today's Activity</p>
+          <div className="todays-activity-grid">
+            <Metric label="Views Today" value={savedProfile ? 128 : 0} />
+            <Metric label="Messages" value={bookingRequests.length} />
+            <Metric label="Favorites" value={savedProfile?.referral_count || 0} />
+            <Metric label="Bookings" value={bookingRequests.length} />
+          </div>
+        </div>
         <div className="advertiser-status-card">
           <span className={`creator-live-dot ${savedProfile?.availability_status || profile.availability_status || 'unavailable'}`} />
           <div>
@@ -1401,6 +1428,260 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
       {savedProfile ? <Link to={`/profile/${savedProfile.id}`}>{t('nav.profile')}</Link> : <button type="button">{t('nav.profile')}</button>}
       <button type="button" onClick={onLogout}><LogOut size={17} />{t('buttons.logout')}</button>
     </nav>
+  );
+}
+
+function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboardStatus, message, bookingRequests, uploadStatus, onProfileChange, onUploadImage, onSave, onLogout }: {
+  profile: Partial<Profile>;
+  savedProfile: Profile | null;
+  userEmail: string;
+  dashboardStatus: string;
+  message: string;
+  bookingRequests: BookingRequest[];
+  uploadStatus: string;
+  onProfileChange: (profile: Partial<Profile>) => void;
+  onUploadImage: (event: ChangeEvent<HTMLInputElement>) => void;
+  onSave: (event: FormEvent) => void;
+  onLogout: () => void;
+}) {
+  const [panel, setPanel] = useState<'photos' | 'messages' | 'location' | 'prices' | 'bookings' | 'stats' | 'more'>('photos');
+  const primaryImage = savedProfile?.profile_images?.[0]?.public_url;
+  const currentStatus = profile.availability_status || savedProfile?.availability_status || 'unavailable';
+  const city = profile.city || savedProfile?.city || 'Berlin';
+  const area = profile.area || savedProfile?.area || '';
+  const displayName = profile.display_name || savedProfile?.display_name || 'Your profile';
+  const imageCount = savedProfile?.profile_images?.length || 0;
+  const unreadMessages = bookingRequests.filter((booking) => booking.status === 'pending').length;
+
+  function setStatus(status: Profile['availability_status']) {
+    onProfileChange({
+      ...profile,
+      availability_status: status,
+      available_now: status === 'available'
+    });
+  }
+
+  function updatePrice(key: keyof Pick<Profile, 'price_30min' | 'price_1h' | 'price_2h' | 'price_night'>, value: string) {
+    onProfileChange({ ...profile, [key]: value ? Number(value) : null });
+  }
+
+  return (
+    <div className="page dashboard-page one-hand-dashboard">
+      <section className="one-hand-status">
+        <div className="one-hand-photo">
+          {primaryImage ? <img src={primaryImage} alt="" /> : <UserRound size={34} />}
+        </div>
+        <div className="one-hand-identity">
+          <span className="eyebrow">Today</span>
+          <h1>{displayName}</h1>
+          <p><MapPin size={14} /> {city}{area ? `, ${area}` : ''}</p>
+        </div>
+        <button className="one-hand-logout" type="button" onClick={onLogout}><LogOut size={18} /></button>
+      </section>
+
+      <section className="one-hand-status-toggle" aria-label="Availability status">
+        {[
+          ['available', 'ONLINE'],
+          ['busy', 'BUSY'],
+          ['unavailable', 'OFFLINE']
+        ].map(([status, label]) => (
+          <button
+            key={status}
+            className={currentStatus === status ? `active ${status}` : ''}
+            type="button"
+            onClick={() => setStatus(status as Profile['availability_status'])}
+          >
+            {label}
+          </button>
+        ))}
+      </section>
+
+      <section className="one-hand-actions" aria-label="Primary actions">
+        <ActionButton active={panel === 'photos'} icon={<ImagePlus size={22} />} label="Add Photos" onClick={() => setPanel('photos')} />
+        <ActionButton active={panel === 'messages'} icon={<MessageCircle size={22} />} label="Messages" badge={unreadMessages} onClick={() => setPanel('messages')} />
+        <ActionButton active={panel === 'location'} icon={<MapPin size={22} />} label="Location" onClick={() => setPanel('location')} />
+        <ActionButton active={panel === 'prices'} icon={<Gem size={22} />} label="Prices" onClick={() => setPanel('prices')} />
+        <ActionButton active={panel === 'bookings'} icon={<CalendarDays size={22} />} label="Bookings" badge={bookingRequests.length} onClick={() => setPanel('bookings')} />
+        <ActionButton active={panel === 'stats'} icon={<BarChart3 size={22} />} label="Statistics" onClick={() => setPanel('stats')} />
+      </section>
+
+      <form className="one-hand-panel" onSubmit={onSave}>
+        {panel === 'photos' && (
+          <section className="one-hand-card photo-manager">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">Photo management</p>
+                <h2>Add photo</h2>
+              </div>
+              <span>{imageCount}/{savedProfile?.max_photos || 6}</span>
+            </div>
+            <label className="one-hand-upload">
+              <input type="file" accept="image/*" onChange={onUploadImage} disabled={!savedProfile} />
+              <UploadCloud size={24} />
+              <strong>{savedProfile ? 'Camera or gallery' : 'Save profile first'}</strong>
+              <span>{uploadStatus === 'uploading' ? 'Uploading...' : 'Tap once, choose photo, done.'}</span>
+            </label>
+            <div className="one-hand-photo-strip">
+              {(savedProfile?.profile_images || []).slice(0, 6).map((image) => (
+                <img key={image.id} src={image.public_url} alt="" />
+              ))}
+              {!imageCount && <p>No photos yet. Add your first profile photo.</p>}
+            </div>
+          </section>
+        )}
+
+        {panel === 'messages' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">Messages</p>
+                <h2>Recent conversations</h2>
+              </div>
+              <span>{unreadMessages} unread</span>
+            </div>
+            <div className="one-hand-list">
+              {(bookingRequests.length ? bookingRequests : demoBookingRequests).slice(0, 3).map((booking) => (
+                <article key={booking.id}>
+                  <strong>{booking.requester_email}</strong>
+                  <p>{booking.message || `${booking.duration_minutes} min request`}</p>
+                  <span>{booking.status}</span>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {panel === 'location' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">Location</p>
+                <h2>Update location</h2>
+              </div>
+            </div>
+            <button className="button primary" type="button" onClick={() => onProfileChange({ ...profile, city: 'berlin', area: profile.area || 'Mitte', approximate_location_area: profile.approximate_location_area || 'Berlin Mitte' })}>
+              <RadioTower size={16} /> Use Berlin radar
+            </button>
+            <div className="one-hand-inline-fields">
+              <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value })}>
+                {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <input placeholder="District" value={profile.area || ''} onChange={(event) => onProfileChange({ ...profile, area: event.target.value })} />
+            </div>
+          </section>
+        )}
+
+        {panel === 'prices' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">Prices</p>
+                <h2>Inline edit</h2>
+              </div>
+              <span>{profile.currency || 'EUR'}</span>
+            </div>
+            <div className="one-hand-price-grid">
+              <PriceEditor label="30 min" value={profile.price_30min} onChange={(value) => updatePrice('price_30min', value)} />
+              <PriceEditor label="1 hour" value={profile.price_1h} onChange={(value) => updatePrice('price_1h', value)} />
+              <PriceEditor label="2 hours" value={profile.price_2h} onChange={(value) => updatePrice('price_2h', value)} />
+              <PriceEditor label="Night" value={profile.price_night} onChange={(value) => updatePrice('price_night', value)} />
+            </div>
+          </section>
+        )}
+
+        {panel === 'bookings' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">Bookings</p>
+                <h2>Requests</h2>
+              </div>
+              <span>{bookingRequests.length}</span>
+            </div>
+            <div className="one-hand-list">
+              {(bookingRequests.length ? bookingRequests : demoBookingRequests).slice(0, 4).map((booking) => (
+                <article key={booking.id}>
+                  <strong>{booking.requested_date} / {booking.requested_time}</strong>
+                  <p>{booking.requester_email} - {booking.duration_minutes} min</p>
+                  <span>{booking.status}</span>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {panel === 'stats' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">Statistics</p>
+                <h2>Today</h2>
+              </div>
+            </div>
+            <div className="one-hand-stat-grid">
+              <Metric label="Views" value={savedProfile ? 128 : 0} />
+              <Metric label="Messages" value={unreadMessages} />
+              <Metric label="Favorites" value={savedProfile?.referral_count || 0} />
+              <Metric label="Bookings" value={bookingRequests.length} />
+            </div>
+          </section>
+        )}
+
+        {panel === 'more' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">More</p>
+                <h2>Secondary tools</h2>
+              </div>
+            </div>
+            <div className="one-hand-more-grid">
+              {savedProfile && <Link to={`/profile/${savedProfile.id}`}>Public profile</Link>}
+              <Link to="/tokens">Wallet</Link>
+              <button type="button">Profile details</button>
+              <button type="button">Referral</button>
+              <button type="button">Verification</button>
+              <button type="button">Settings</button>
+            </div>
+          </section>
+        )}
+
+        <div className="one-hand-save">
+          <button className="button primary" type="submit" disabled={dashboardStatus === 'saving'}>
+            {dashboardStatus === 'saving' ? 'Saving...' : 'Save changes'}
+          </button>
+          <button className="button" type="button" onClick={() => setPanel('more')}><MoreHorizontal size={16} /> More</button>
+        </div>
+        {message && <p className={dashboardStatus === 'error' ? 'error-text' : 'success'}>{message}</p>}
+      </form>
+
+      <nav className="one-hand-bottom-nav">
+        <button type="button" className={panel === 'photos' ? 'active' : ''} onClick={() => setPanel('photos')}><ImagePlus size={18} />Photos</button>
+        <button type="button" className={panel === 'messages' ? 'active' : ''} onClick={() => setPanel('messages')}><MessageCircle size={18} />Messages</button>
+        <button type="button" className={panel === 'bookings' ? 'active' : ''} onClick={() => setPanel('bookings')}><CalendarDays size={18} />Bookings</button>
+        <button type="button" className={panel === 'more' ? 'active' : ''} onClick={() => setPanel('more')}><MoreHorizontal size={18} />More</button>
+      </nav>
+      <p className="one-hand-email">{userEmail}</p>
+    </div>
+  );
+}
+
+function ActionButton({ icon, label, badge, active, onClick }: { icon: ReactNode; label: string; badge?: number; active?: boolean; onClick: () => void }) {
+  return (
+    <button className={active ? 'active' : ''} type="button" onClick={onClick}>
+      {badge ? <span className="one-hand-badge">{badge}</span> : null}
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function PriceEditor({ label, value, onChange }: { label: string; value?: number | null; onChange: (value: string) => void }) {
+  return (
+    <label>
+      <span>{label}</span>
+      <input inputMode="numeric" type="number" value={value || ''} onChange={(event) => onChange(event.target.value)} />
+    </label>
   );
 }
 
