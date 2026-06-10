@@ -45,13 +45,41 @@ export function HomePage() {
         <div className="hero-content">
           <img className="hero-brand-mark" src="/Logo_Escort_3.png" alt="" />
           <p className="eyebrow">{t('home.heroEyebrow')}</p>
-          <h1>Escort Radar</h1>
-          <p className="tagline">{t('home.tagline')}</p>
+          <h1>Profiles near you</h1>
+          <p className="tagline">Live availability, verified profiles and fast contact in one premium radar feed.</p>
           <div className="hero-actions">
             <Link to="/city/berlin" className="button primary"><RadioTower size={18} /> {t('home.openRadar')}</Link>
             <Link to="/dashboard" className="button"><PlusCircle size={18} /> {t('home.create')}</Link>
           </div>
           <p className="demo-note">{t('home.demo')}</p>
+        </div>
+      </section>
+
+      <section className="home-marketplace-showcase">
+        <div className="section-head compact">
+          <div>
+            <p className="eyebrow">Escort Radar Marketplace</p>
+            <h2>Top Escorts in deiner Nähe</h2>
+          </div>
+          <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> Radar öffnen</Link>
+        </div>
+        <div className="avatar-carousel">
+          {featured.slice(0, 10).map((profile) => {
+            const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
+            return (
+              <Link to={`/profile/${profile.id}`} className="top-avatar" key={profile.id}>
+                {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{profile.display_name.slice(0, 1)}</span>}
+                <strong>{profile.display_name}</strong>
+                <small>{profile.available_now ? 'Available now' : profile.city}</small>
+              </Link>
+            );
+          })}
+        </div>
+        <div className="sort-tabs static-tabs" aria-label="Marketplace sorting preview">
+          {['Bestplatzierte', 'Neu', 'In der Nähe', 'Online'].map((item, index) => <span className={index === 0 ? 'selected' : ''} key={item}>{item}</span>)}
+        </div>
+        <div className="cards-grid marketplace-grid premium-profile-grid">
+          {featured.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
         </div>
       </section>
 

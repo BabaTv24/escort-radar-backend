@@ -543,6 +543,25 @@ export function DashboardPage() {
         onLogout={logout}
       />
 
+      <section className="advertiser-mobile-command">
+        <div className="advertiser-status-card">
+          <span className={`creator-live-dot ${savedProfile?.availability_status || profile.availability_status || 'unavailable'}`} />
+          <div>
+            <p className="eyebrow">Status</p>
+            <h2>{savedProfile?.availability_status === 'available' || profile.availability_status === 'available' ? 'Available Now' : 'Set availability'}</h2>
+            <p>{savedProfile?.city || profile.city || 'Berlin'} · {profileStatusLabel(savedProfile)} · {advertiserPlanLabel(savedProfile)}</p>
+          </div>
+          <button className="button primary" type="button" onClick={() => setProfile({ ...profile, availability_status: profile.availability_status === 'available' ? 'busy' : 'available', available_now: profile.availability_status !== 'available' })}>Toggle</button>
+        </div>
+        <div className="advertiser-quick-actions">
+          <button type="button" onClick={() => setCreatorTab('media')}><UploadCloud size={18} /><span>Add Photo</span></button>
+          <button type="button" onClick={() => setCreatorTab('visibility')}><RadioTower size={18} /><span>Location</span></button>
+          <button type="button" onClick={() => setCreatorTab('pricing')}><Gem size={18} /><span>Prices</span></button>
+          <button type="button" onClick={() => setCreatorTab('live')}><MessageCircle size={18} /><span>Messages</span></button>
+          <button type="button" onClick={() => setCreatorTab('referral')}><CalendarDays size={18} /><span>Bookings</span></button>
+        </div>
+      </section>
+
       <section className="creator-command-bar">
         <div>
           <strong>{t('auth.signedInAs', { email: userEmail })}</strong>
