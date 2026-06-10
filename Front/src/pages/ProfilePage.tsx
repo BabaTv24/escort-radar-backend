@@ -1,13 +1,34 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertTriangle, BadgeCheck, CalendarDays, ChevronLeft, ChevronRight, Flag, Gift, Languages, LockKeyhole, MapPin, MessageCircle, Phone, ShieldCheck, Star, Tags, Video, X } from 'lucide-react';
+import {
+  BadgeCheck,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Flag,
+  Gift,
+  Heart,
+  Languages,
+  LockKeyhole,
+  MapPin,
+  MessageCircle,
+  Phone,
+  ShieldCheck,
+  Star,
+  Tags,
+  Video,
+  X
+} from 'lucide-react';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import type { Profile, ProfileAccess } from '../types';
 import { ErrorState, LoadingState } from '../components/LoadingState';
-import { getDemoProfile } from '../data/demoProfiles';
+import { getDemoProfile, getDemoProfiles } from '../data/demoProfiles';
 import { useI18n } from '../i18n';
+
+type ProfileTab = 'overview' | 'services' | 'prices' | 'reviews';
 
 export function ProfilePage() {
   const { id = '' } = useParams();
@@ -20,6 +41,7 @@ export function ProfilePage() {
   const [profileAccess, setProfileAccess] = useState<ProfileAccess | null>(null);
   const [accessMessage, setAccessMessage] = useState('');
   const [activationBusy, setActivationBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -43,10 +65,17 @@ export function ProfilePage() {
 
   if (error) return <div className="page narrow"><ErrorState message={error} /></div>;
   if (!profile) return <div className="page narrow"><LoadingState /></div>;
+
   const galleryImages = profileAccess?.full_gallery?.length ? profileAccess.full_gallery : profile.profile_images || [];
   const activated = profileAccess?.client_state === 'client_activated';
   const priceFrom = getPriceFrom(profile);
   const contactFallback = 'Kontakt nie zostal jeszcze dodany';
+  const locationLabel = `${profile.city}${profile.area ? `, ${profile.area}` : ''}`;
+  const statusLabel = profile.availability_status === 'available' ? 'Online now' : profile.availability_status === 'busy' ? 'Busy' : 'Offline';
+  const languages = profile.languages?.length ? profile.languages : ['DE', 'EN'];
+  const visitTypes = profile.visit_types?.length ? profile.visit_types : ['incall', 'hotel'];
+  const serviceTags = profile.service_tags?.length ? profile.service_tags : ['dinner-date', 'hotel', 'discreet'];
+  const similarProfiles = getDemoProfiles(profile.city).filter((item) => item.id !== profile.id).slice(0, 6);
 
   async function submitReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -78,200 +107,215 @@ export function ProfilePage() {
 
   return (
     <div className="page premium-profile-page">
-      <section className="premium-profile-hero">
-        <div className="profile-media-slider">
-          {galleryImages.length ? galleryImages.slice(0, 4).map((image, index) => (
-            <button key={image.id} className={index === 0 ? 'profile-media-main' : 'profile-media-thumb'} type="button" onClick={() => setGalleryIndex(index)}>
-              {image.public_url ? <img src={image.public_url} alt="" loading={index === 0 ? 'eager' : 'lazy'} /> : <div className="image-placeholder large">{t('profile.noImage')}</div>}
-              {index === 0 && <span className="media-counter">{index + 1}/{galleryImages.length}</span>}
-              {index === 3 && galleryImages.length > 4 && <span className="premium-unlock-overlay">+{galleryImages.length - 4}</span>}
-            </button>
-          )) : <div className="image-placeholder large">{t('profile.noImage')}</div>}
-          <div className="locked-media-teaser">
-            <LockKeyhole size={18} />
-            <strong>{t('profile.lockedMediaTeaser')}</strong>
-            <button className="button primary" type="button">{t('creator.unlockWithTokens')}</button>
-          </div>
-        </div>
-        <div className="profile-summary">
-          <span className={`status ${profile.availability_status || 'unavailable'}`}>{profile.availability_status === 'available' ? t('profile.liveNow') : t(`status.${profile.availability_status || 'unavailable'}`)}</span>
-          <h1>{profile.display_name}{profile.age ? <span>{profile.age}</span> : null}</h1>
-          <p><MapPin size={16} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}</p>
-          <p>{profile.category ? option(profile.category) : option('other')} · {profile.approximate_location_area || profile.area}</p>
-          <div className="badges">
-            {profile.verified && <span><BadgeCheck size={14} /> {t('badges.verified')}</span>}
-            {profile.mobile_service && <span>{t('badges.mobile')}</span>}
-            {profile.private_studio && <span>{t('badges.private')}</span>}
-            <span><Star size={14} /> {t('profile.popularTonight')}</span>
-          </div>
-          <div className="premium-contact-card">
-            <div>
-              <p className="eyebrow">Premium contact</p>
-              <h2>{profile.display_name}</h2>
-              <p>{profile.age ? `${profile.age} lat` : 'Wiek potwierdzany'} · {profile.city}{profile.area ? `, ${profile.area}` : ''}</p>
-              <p>{profile.availability_status === 'available' ? 'Dostepna teraz' : 'Status: ' + (profile.availability_status || 'unavailable')}</p>
-              <p>Cena od: {priceFrom}</p>
-              <p>{profile.verified ? 'Profil zweryfikowany' : 'Weryfikacja w toku'} · {profile.distance_km ? `${profile.distance_km} km` : 'Radar Berlin'}</p>
-            </div>
-            {!activated && <p className="subscription-notice">Aktywuj za 0,99€ aby zobaczyc kontakt</p>}
-            {activated && (
-              <div className="contact-unlocked-list">
-                <p><Phone size={15} /> Telefon: {profileAccess?.phone_number || contactFallback}</p>
-                <p><MessageCircle size={15} /> WhatsApp: {profileAccess?.whatsapp || contactFallback}</p>
-                <p><MessageCircle size={15} /> Telegram: {profileAccess?.telegram || contactFallback}</p>
+      <section className="market-profile-shell">
+        <main className="market-profile-main">
+          <section className="market-gallery-card">
+            <div className="market-gallery-main">
+              {galleryImages[0]?.public_url ? (
+                <button type="button" onClick={() => setGalleryIndex(0)} aria-label="Open gallery">
+                  <img src={galleryImages[0].public_url} alt="" loading="eager" />
+                </button>
+              ) : (
+                <div className="image-placeholder large">{t('profile.noImage')}</div>
+              )}
+              <div className="market-gallery-overlay">
+                <div className="market-badge-row">
+                  {profile.verified && <span><BadgeCheck size={14} /> Verified</span>}
+                  <span>Premium</span>
+                  <span><Video size={14} /> Live Cam</span>
+                </div>
+                <span className={`status ${profile.availability_status || 'unavailable'}`}>{statusLabel}</span>
+                <h1>{profile.display_name}</h1>
+                <p><MapPin size={15} /> {locationLabel}{profile.distance_km ? ` - ${profile.distance_km} km` : ''}</p>
+                <div className="market-hero-facts">
+                  <span><Star size={14} /> 4.9 rating</span>
+                  <span>{priceFrom}</span>
+                  <span>{profile.age ? `${profile.age} years` : 'Age verified'}</span>
+                </div>
               </div>
-            )}
-            <div className="profile-cta-grid">
-              <button className="button primary" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={16} /> Telefon</button>
-              <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={16} /> WhatsApp</button>
-              <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.telegram || contactFallback) : startClientActivation()}><MessageCircle size={16} /> Telegram</button>
-              <a href="#booking" className="button"><CalendarDays size={16} /> Rezerwuj</a>
-              <button className="button" type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={16} /> Wyslij prezent</button>
-              <button className="button" type="button" onClick={() => setAccessMessage(activated ? 'Live Cam jest aktywny dla kont Premium.' : 'Aktywuj za 0,99€ aby odblokowac Live Cam.')}><Video size={16} /> Live Cam</button>
+              <span className="media-counter">1/{Math.max(galleryImages.length, 1)}</span>
             </div>
-          </div>
-          <p>{profile.description || t('profile.fallbackDescription')}</p>
-          <div className="conversion-row">
-            <span>{t('profile.currentlyOnline')}</span>
-            <span>{t('profile.lastBooking')}</span>
-            <span>{t('profile.limitedAvailability')}</span>
-          </div>
-          {profile.subscription_status === 'demo' && <p className="demo-note">{t('home.demo')}</p>}
-          <p className="safety-line">{t('profile.availableWithin', { radius: profile.service_radius_km || 25 })}</p>
-          <p className="safety-line">{t('radar.privacy')}</p>
-          <div className="profile-cta-grid">
-            <a href="#booking" className="button primary"><CalendarDays size={16} /> {t('profile.bookNow')}</a>
-            <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><MessageCircle size={16} /> {activated ? 'Kontakt' : 'Aktywuj kontakt'}</button>
-            <button className="button" type="button" onClick={() => setAccessMessage(activated ? 'Live Cam jest aktywny dla kont Premium.' : 'Aktywuj za 0,99€ aby odblokowac Live Cam.')}><Video size={16} /> {t('creator.liveCamCta')}</button>
-          </div>
-          {accessMessage && <p className={activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
-        </div>
-      </section>
 
-      <section className="notice safety"><AlertTriangle size={18} /> {t('city.safety')}</section>
+            <div className="market-gallery-thumbs">
+              {galleryImages.slice(1, 6).map((image, index) => (
+                <button key={image.id} type="button" onClick={() => setGalleryIndex(index + 1)}>
+                  {image.public_url ? <img src={image.public_url} alt="" loading="lazy" /> : <div className="image-placeholder large">{t('profile.noImage')}</div>}
+                </button>
+              ))}
+              {!galleryImages.slice(1, 6).length && <span className="market-empty-inline">More verified photos coming soon.</span>}
+            </div>
+          </section>
 
-      <section className="profile-info-grid">
-        <InfoPanel title={t('profile.about')} icon={<ShieldCheck size={18} />}>
-          <p>{profile.age ? t('profile.ageYears', { age: profile.age }) : t('profile.ageVerified')}{profile.height ? ` / ${profile.height} cm` : ''}</p>
-          <p>{profile.body_type ? t('profile.bodyType', { value: option(profile.body_type) }) : t('profile.bodyPending')}</p>
-          <p>{profile.hair_color ? t('profile.hair', { value: option(profile.hair_color) }) : t('profile.hairPending')}</p>
-          <p>{profile.origin ? t('profile.origin', { value: option(profile.origin) }) : t('profile.originPending')}</p>
-          <p>{profile.experience_type ? t('profile.experience', { value: option(profile.experience_type) }) : t('profile.experiencePending')}</p>
-          <TagList values={profile.body_features || []} raw />
-          <p>{profile.orientation ? option(profile.orientation) : t('profile.orientationPending')}</p>
-          <p>{profile.audience?.length ? t('profile.audience', { value: profile.audience.map(option).join(', ') }) : t('profile.audiencePending')}</p>
-        </InfoPanel>
-        <InfoPanel title={t('profile.pricing')} icon={<LockKeyhole size={18} />}>
-          <PriceList profile={profile} />
-        </InfoPanel>
-        <InfoPanel title="Client access" icon={<LockKeyhole size={18} />}>
-          {activated ? (
-            <>
-              <p>Telefon: {profileAccess?.phone_number || contactFallback}</p>
-              <p>WhatsApp: {profileAccess?.whatsapp || contactFallback}</p>
-              <p>Telegram: {profileAccess?.telegram || contactFallback}</p>
-              <button className="button" type="button" onClick={sendGift}>Wyslij prezent - 10 Coins</button>
-              <button className="button" type="button" onClick={unlockVipGallery}>Odblokuj galerie VIP - 25 Coins</button>
-            </>
-          ) : (
-            <>
-              <p>Telefon, WhatsApp, Telegram, pelna galeria, galeria VIP, prezenty i Live Cam wymagaja aktywacji klienta.</p>
-              <button className="button primary" type="button" disabled={activationBusy} onClick={startClientActivation}>{activationBusy ? 'Ladowanie...' : 'Aktywuj za 0,99€'}</button>
-            </>
-          )}
-        </InfoPanel>
-        <InfoPanel title={t('profile.availability')} icon={<CalendarDays size={18} />}>
-          <p>{t(`status.${profile.availability_status || 'unavailable'}`)}</p>
-          <p>{profile.availability_note || t('profile.detailsPending')}</p>
-        </InfoPanel>
-        <InfoPanel title={t('profile.servicesTags')} icon={<Tags size={18} />}>
-          <TagList values={profile.service_tags || []} />
-          {profile.tags?.length ? <div className="tag-list premium-tags">{profile.tags.map((tag) => <span key={tag.id}>{tag.label}</span>)}</div> : null}
-        </InfoPanel>
-        <InfoPanel title={t('profile.languages')} icon={<Languages size={18} />}>
-          <TagList values={profile.languages || []} raw />
-        </InfoPanel>
-        <InfoPanel title={t('profile.visitOptions')} icon={<MapPin size={18} />}>
-          <TagList values={profile.visit_types || []} />
-          <TagList values={profile.payment_methods || []} />
-        </InfoPanel>
-        <InfoPanel title={t('profile.safety')} icon={<AlertTriangle size={18} />}>
-          <p>{t('city.safety')}</p>
-        </InfoPanel>
-      </section>
-
-      <section className="form-panel service-menu-panel">
-        <h2><Tags size={18} /> {t('profile.serviceMenu')}</h2>
-        <div className="service-menu-columns">
-          <ServiceMenuList title={t('profile.included')} services={(profile.service_menu || []).filter((service) => service.enabled && service.included)} currency={profile.currency || 'EUR'} />
-          <ServiceMenuList title={t('profile.extra')} services={(profile.service_menu || []).filter((service) => service.enabled && !service.included)} currency={profile.currency || 'EUR'} />
-        </div>
-      </section>
-
-      <section className="form-panel booking-panel" id="booking">
-        <h2><CalendarDays size={18} /> {t('profile.booking')}</h2>
-        <p className="safety-line">{t('city.safety')}</p>
-        <form onSubmit={submitBooking} className="stack">
-          <div className="form-grid">
-            <input name="email" type="email" placeholder={t('form.email')} required />
-            <input name="date" type="date" aria-label={t('form.date')} required />
-            <input name="time" type="time" aria-label={t('form.time')} required />
-            <select name="duration" defaultValue="60">
-              <option value="60">60 min</option>
-              <option value="120">120 min</option>
-              <option value="240">240 min</option>
-            </select>
-          </div>
-          <textarea name="message" placeholder={t('form.message')} />
-          <button className="button primary" type="submit">Wyslij request rezerwacji</button>
-          {bookingMessage && <p className="success">{bookingMessage}</p>}
-        </form>
-      </section>
-
-      <section className="form-panel private-gallery-panel">
-        <h2><LockKeyhole size={18} /> Prywatna galeria</h2>
-        {activated && profileAccess?.vip_gallery_unlocked ? (
-          <div className="profile-media-slider">
-            {(profileAccess.full_gallery || []).slice(0, 4).map((image, index) => (
-              <button key={image.id} className={index === 0 ? 'profile-media-main' : 'profile-media-thumb'} type="button" onClick={() => setGalleryIndex(index)}>
-                {image.public_url ? <img src={image.public_url} alt="" loading="lazy" /> : <div className="image-placeholder large">{t('profile.noImage')}</div>}
+          <nav className="market-profile-tabs" aria-label="Profile sections">
+            {(['overview', 'services', 'prices', 'reviews'] as const).map((tab) => (
+              <button key={tab} className={activeTab === tab ? 'active' : ''} type="button" onClick={() => setActiveTab(tab)}>
+                {tab[0].toUpperCase() + tab.slice(1)}
               </button>
             ))}
+          </nav>
+
+          <MarketSection tab="overview" activeTab={activeTab} eyebrow="Overview" title="Private introduction">
+            <p>{profile.description || t('profile.fallbackDescription')}</p>
+            <div className="market-detail-grid">
+              <MarketFact icon={<ShieldCheck size={17} />} label="Verification" value={profile.verified ? 'Verified profile' : 'Verification pending'} />
+              <MarketFact icon={<Languages size={17} />} label="Languages" value={languages.join(', ')} />
+              <MarketFact icon={<MapPin size={17} />} label="Visit type" value={visitTypes.map(option).join(', ')} />
+              <MarketFact icon={<Clock size={17} />} label="Last active" value={profile.availability_status === 'available' ? 'Available now' : 'Recently active'} />
+            </div>
+          </MarketSection>
+
+          <MarketSection tab="overview" activeTab={activeTab} eyebrow="Availability" title="Schedule and radar status">
+            <div className="market-schedule-grid">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
+                <div key={day}>
+                  <span>{day}</span>
+                  <strong>{index < 5 ? '18:00 - 02:00' : 'On request'}</strong>
+                </div>
+              ))}
+            </div>
+            <p className="muted-copy">{profile.availability_note || 'Schedule is confirmed directly before booking. Radar status updates with live availability.'}</p>
+          </MarketSection>
+
+          <MarketSection tab="services" activeTab={activeTab} eyebrow="Services" title="Selected experiences">
+            <TagList values={serviceTags} />
+            {profile.tags?.length ? <div className="tag-list premium-tags">{profile.tags.map((tag) => <span key={tag.id}>{tag.label}</span>)}</div> : null}
+            <div className="service-menu-columns">
+              <ServiceMenuList title={t('profile.included')} services={(profile.service_menu || []).filter((service) => service.enabled && service.included)} currency={profile.currency || 'EUR'} />
+              <ServiceMenuList title={t('profile.extra')} services={(profile.service_menu || []).filter((service) => service.enabled && !service.included)} currency={profile.currency || 'EUR'} />
+            </div>
+          </MarketSection>
+
+          <MarketSection tab="prices" activeTab={activeTab} eyebrow="Prices" title="Transparent rates">
+            <PriceList profile={profile} />
+          </MarketSection>
+
+          <MarketSection tab="reviews" activeTab={activeTab} eyebrow="Reviews" title="Verified guest feedback">
+            <div className="market-review-summary">
+              <strong><Star size={18} /> 4.9</strong>
+              <span>Verified reviews are shown after moderation.</span>
+            </div>
+            <div className="market-empty-state">
+              <BadgeCheck size={18} />
+              <p>No public reviews yet. First verified reviews will appear here after moderation.</p>
+            </div>
+          </MarketSection>
+
+          <section className="market-section private-gallery-panel">
+            <div className="market-section-heading">
+              <p className="eyebrow">VIP gallery</p>
+              <h2>Private gallery</h2>
+            </div>
+            {activated && profileAccess?.vip_gallery_unlocked ? (
+              <div className="market-gallery-thumbs vip">
+                {(profileAccess.full_gallery || []).slice(0, 6).map((image, index) => (
+                  <button key={image.id} type="button" onClick={() => setGalleryIndex(index)}>
+                    {image.public_url ? <img src={image.public_url} alt="" loading="lazy" /> : <div className="image-placeholder large">{t('profile.noImage')}</div>}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="market-lock-card">
+                <LockKeyhole size={18} />
+                <div>
+                  <strong>Private gallery</strong>
+                  <p>Unlock with Coins after client activation.</p>
+                </div>
+                <button className="button primary" type="button" onClick={activated ? unlockVipGallery : startClientActivation}>{activated ? 'Unlock with Coins' : 'Activate 0.99 EUR'}</button>
+              </div>
+            )}
+          </section>
+
+          <section className="market-section" id="booking">
+            <div className="market-section-heading">
+              <p className="eyebrow">Booking</p>
+              <h2>Send a booking request</h2>
+            </div>
+            <form onSubmit={submitBooking} className="market-booking-form">
+              <input name="email" type="email" placeholder={t('form.email')} required />
+              <input name="date" type="date" aria-label={t('form.date')} required />
+              <input name="time" type="time" aria-label={t('form.time')} required />
+              <select name="duration" defaultValue="60">
+                <option value="60">60 min</option>
+                <option value="120">120 min</option>
+                <option value="240">240 min</option>
+              </select>
+              <textarea name="message" placeholder={t('form.message')} />
+              <button className="button primary" type="submit">Send booking request</button>
+              {bookingMessage && <p className="success">{bookingMessage}</p>}
+            </form>
+          </section>
+
+          <section className="market-section similar-profiles">
+            <div className="market-section-heading">
+              <p className="eyebrow">Nearby</p>
+              <h2>Similar profiles</h2>
+            </div>
+            <div className="similar-profile-grid">
+              {similarProfiles.length ? similarProfiles.map((item) => (
+                <a key={item.id} href={`/profile/${item.id}`}>
+                  {item.profile_images?.[0]?.public_url && <img src={item.profile_images[0].public_url} alt="" loading="lazy" />}
+                  <strong>{item.display_name}</strong>
+                  <span>{item.area || item.city} - {getPriceFrom(item)}</span>
+                </a>
+              )) : <div className="market-empty-state"><p>No similar profiles in this area yet.</p></div>}
+            </div>
+          </section>
+
+          <section className="market-section report-section">
+            <div className="market-section-heading">
+              <p className="eyebrow">Safety</p>
+              <h2>Report profile</h2>
+            </div>
+            <form onSubmit={submitReport} className="market-booking-form">
+              <input name="email" type="email" placeholder={t('form.emailOptional')} />
+              <select name="reason" required>
+                <option value="policy concern">{t('profile.reportReasonPolicy')}</option>
+                <option value="suspected illegal content">{t('profile.reportReasonIllegal')}</option>
+                <option value="non-consensual data">{t('profile.reportReasonData')}</option>
+                <option value="other">{t('profile.reportReasonOther')}</option>
+              </select>
+              <textarea name="message" placeholder={t('profile.reportDetails')} />
+              <button className="button" type="submit"><Flag size={16} /> {t('buttons.submitReport')}</button>
+              {reportMessage && <p className="success">{reportMessage}</p>}
+            </form>
+          </section>
+        </main>
+
+        <aside className="market-contact-panel">
+          <span className={`status ${profile.availability_status || 'unavailable'}`}>{statusLabel}</span>
+          <h2>{profile.display_name}</h2>
+          <p><MapPin size={15} /> {locationLabel}</p>
+          <div className="market-contact-price">
+            <span>From</span>
+            <strong>{priceFrom}</strong>
           </div>
-        ) : (
-          <div className="premium-contact-card">
-            <p className="eyebrow">VIP access</p>
-            <h2>Prywatna galeria</h2>
-            <p>Odblokuj Coins, aby zobaczyc prywatne zdjecia po aktywacji konta.</p>
-            <button className="button primary" type="button" onClick={activated ? unlockVipGallery : startClientActivation}>{activated ? 'Odblokuj Coins' : 'Aktywuj za 0,99€'}</button>
+          <div className="market-rating-line"><Star size={16} /> 4.9 <span>verified rating</span></div>
+          {!activated && <p className="subscription-notice">Activate for 0.99 EUR to reveal direct contact.</p>}
+          {activated && (
+            <div className="contact-unlocked-list">
+              <p><Phone size={15} /> Phone: {profileAccess?.phone_number || contactFallback}</p>
+              <p><MessageCircle size={15} /> WhatsApp: {profileAccess?.whatsapp || contactFallback}</p>
+              <p><MessageCircle size={15} /> Telegram: {profileAccess?.telegram || contactFallback}</p>
+            </div>
+          )}
+          <div className="market-contact-actions">
+            <button className="button primary" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={16} /> Message</button>
+            <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={16} /> Call</button>
+            <a href="#booking" className="button"><CalendarDays size={16} /> Book</a>
+            <button className="button" type="button"><Heart size={16} /> Favorite</button>
+            <button className="button" type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={16} /> Gift</button>
+            <button className="button" type="button" onClick={() => setAccessMessage(activated ? 'Live Cam is available for Premium clients.' : 'Activate for 0.99 EUR to unlock Live Cam.')}><Video size={16} /> Live</button>
           </div>
-        )}
+          {accessMessage && <p className={activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
+          <div className="market-contact-facts">
+            <MarketFact icon={<BadgeCheck size={16} />} label="Verified" value={profile.verified ? 'Yes' : 'Pending'} />
+            <MarketFact icon={<Languages size={16} />} label="Languages" value={languages.join(', ')} />
+            <MarketFact icon={<MapPin size={16} />} label="Visits" value={visitTypes.map(option).join(', ')} />
+            <MarketFact icon={<Clock size={16} />} label="Last active" value={profile.availability_status === 'available' ? 'Now' : 'Recently'} />
+          </div>
+        </aside>
       </section>
 
-      <section className="profile-info-grid">
-        <InfoPanel title={t('profile.reviews')} icon={<Star size={18} />}>
-          <p>{t('profile.reviewsPlaceholder')}</p>
-        </InfoPanel>
-        <InfoPanel title={t('profile.similarCreators')} icon={<Tags size={18} />}>
-          <p>{t('profile.similarPlaceholder')}</p>
-        </InfoPanel>
-      </section>
-
-      <section className="form-panel">
-        <h2><Flag size={18} /> {t('profile.reportTitle')}</h2>
-        <form onSubmit={submitReport} className="stack">
-          <input name="email" type="email" placeholder={t('form.emailOptional')} />
-          <select name="reason" required>
-            <option value="policy concern">{t('profile.reportReasonPolicy')}</option>
-            <option value="suspected illegal content">{t('profile.reportReasonIllegal')}</option>
-            <option value="non-consensual data">{t('profile.reportReasonData')}</option>
-            <option value="other">{t('profile.reportReasonOther')}</option>
-          </select>
-          <textarea name="message" placeholder={t('profile.reportDetails')} />
-          <button className="button primary" type="submit">{t('buttons.submitReport')}</button>
-          {reportMessage && <p className="success">{reportMessage}</p>}
-        </form>
-      </section>
       {galleryIndex !== null && galleryImages.length > 0 && (
         <FullscreenGallery
           images={galleryImages}
@@ -283,11 +327,11 @@ export function ProfilePage() {
           setTouchStart={setTouchStart}
         />
       )}
+
       <nav className="profile-floating-cta">
-        <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><MessageCircle size={17} /> Kontakt</button>
-        <a href="#booking"><CalendarDays size={17} /> Rezerwuj</a>
-        <button type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={17} /> Coins</button>
-        <a href="/city/berlin"><MapPin size={17} /> Radar</a>
+        <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={17} /> Message</button>
+        <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={17} /> Call</button>
+        <a href="#booking"><CalendarDays size={17} /> Book</a>
       </nav>
     </div>
   );
@@ -296,7 +340,7 @@ export function ProfilePage() {
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token;
     if (!token) {
-      setAccessMessage('Zaloguj sie, aby aktywowac konto za 0,99€.');
+      setAccessMessage('Zaloguj sie, aby aktywowac konto za 0,99 EUR.');
       return;
     }
 
@@ -330,21 +374,40 @@ export function ProfilePage() {
   }
 }
 
+function MarketSection({ tab, activeTab, eyebrow, title, children }: {
+  tab: ProfileTab;
+  activeTab: ProfileTab;
+  eyebrow: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="market-section" data-tab-visible={activeTab === tab}>
+      <div className="market-section-heading">
+        <p className="eyebrow">{eyebrow}</p>
+        <h2>{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function MarketFact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="market-fact">
+      {icon}
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function getPriceFrom(profile: Profile) {
   const values = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_night]
     .map((value) => Number(value || 0))
     .filter((value) => value > 0);
   if (!values.length) return 'Cena na zapytanie';
   return `${Math.min(...values)} ${profile.currency || 'EUR'}`;
-}
-
-function InfoPanel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
-  return (
-    <article className="info-panel">
-      <h2>{icon} {title}</h2>
-      {children}
-    </article>
-  );
 }
 
 function FullscreenGallery({ images, index, profile, onIndex, onClose, touchStart, setTouchStart }: {
@@ -405,7 +468,6 @@ function FullscreenGallery({ images, index, profile, onIndex, onClose, touchStar
       <div className="gallery-creator-overlay">
         <strong>{profile.display_name}</strong>
         <span>{t(`status.${profile.availability_status || 'unavailable'}`)}</span>
-        <button className="button primary" type="button">{t('creator.unlockWithTokens')}</button>
       </div>
     </div>
   );
@@ -420,17 +482,17 @@ function TagList({ values, raw = false }: { values: string[]; raw?: boolean }) {
 function PriceList({ profile }: { profile: Profile }) {
   const currency = profile.currency || 'EUR';
   const rows = [
-    ['form.price30', profile.price_30min],
-    ['form.price1h', profile.price_1h],
-    ['form.price2h', profile.price_2h],
-    ['form.priceNight', profile.price_night],
-    ['form.outcallFee', profile.outcall_fee]
+    ['30 min', profile.price_30min],
+    ['1h', profile.price_1h],
+    ['2h', profile.price_2h],
+    ['Overnight', profile.price_night],
+    ['Outcall fee', profile.outcall_fee]
   ];
-  const { t } = useI18n();
 
   return (
-    <div className="price-list">
-      {rows.map(([label, value]) => value ? <div key={label}><span>{t(String(label))}</span><strong>{value} {currency}</strong></div> : null)}
+    <div className="price-list market-price-list">
+      {rows.map(([label, value]) => value ? <div key={label}><span>{label}</span><strong>{value} {currency}</strong></div> : null)}
+      {!rows.some(([, value]) => value) && <p>Rates are available on request.</p>}
     </div>
   );
 }
