@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -23,6 +23,7 @@ export const api = {
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
   tags: () => request<{ tags: Tag[] }>('/api/tags'),
   profile: (id: string) => request<{ profile: Profile }>(`/api/profiles/${id}`),
+  profileAccess: (token: string, id: string) => request<{ access: ProfileAccess }>(`/api/profiles/${id}/access`, { token }),
   myProfile: (token: string) => request<{ profile: Profile | null }>('/api/profiles/me', { token }),
   createProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile }>('/api/profiles', {
     method: 'POST',
@@ -61,7 +62,12 @@ export const api = {
     token,
     body: JSON.stringify({ status })
   }),
+  adminLogin: (body: { email: string; password: string; two_factor_code?: string }) => request<{ token: string; admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/login', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }),
   adminStats: (token: string) => request<{ stats: Record<string, number>; latest_activity: AdminActivity[] }>('/api/admin/stats', { token }),
+  adminMe: (token: string) => request<{ admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/me', { token }),
   adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number> }>(`/api/admin/profiles${params}`, { token }),
   adminUsers: (token: string) => request<{ users: Record<string, unknown>[] }>('/api/admin/users', { token }),
   adminSubscriptions: (token: string) => request<{ subscriptions: Record<string, unknown>[] }>('/api/admin/subscriptions', { token }),
@@ -159,5 +165,47 @@ export const api = {
     method: 'POST',
     token,
     body: JSON.stringify({ simulation })
+  }),
+  clientActivationMe: (token: string) => request<{
+    activation: ClientActivation;
+    wallet: CoinWallet;
+    transactions: CoinTransaction[];
+    gifts_sent: Gift[];
+    gifts_received: Gift[];
+  }>('/api/client-activation/me', { token }),
+  clientActivationCheckout: (token: string, referred_by_code?: string | null) => request<{ checkout_session_id: string; checkout_url: string }>('/api/client-activation/checkout', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ referred_by_code })
+  }),
+  confirmClientActivation: (token: string, checkout_session_id: string) => request<{ activation: ClientActivation }>('/api/client-activation/confirm', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ checkout_session_id })
+  }),
+  trackReferralClick: (referral_code: string, landing_path = window.location.pathname) => request<{ ok: boolean }>('/api/client-activation/referral-click', {
+    method: 'POST',
+    body: JSON.stringify({ referral_code, landing_path })
+  }),
+  sendGift: (token: string, body: { profile_id: string; gift_type: string; coin_cost: number; message?: string }) => request<{ gift: Gift }>('/api/client-activation/gifts', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
+  unlockVipGallery: (token: string, profile_id: string, coin_cost = 25) => request('/api/client-activation/vip-gallery-unlocks', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ profile_id, coin_cost })
+  }),
+  adminClientReferrals: (token: string) => request<{ referrals: Record<string, unknown>[] }>('/api/client-activation/admin/referral-stats', { token }),
+  adminSetClientActivation: (token: string, userId: string, state: 'client_free' | 'client_activated') => request(`/api/client-activation/admin/users/${userId}/activation`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ state })
+  }),
+  adminAdjustCoins: (token: string, userId: string, amount: number, note = '') => request<{ wallet: CoinWallet }>(`/api/client-activation/admin/users/${userId}/coins`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ amount, note })
   })
 };

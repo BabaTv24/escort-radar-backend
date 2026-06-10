@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Camera, Coins, FlaskConical, LogOut, MessageSquare, Settings, Shield, Tags, Users, WalletCards } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
 
 type AdminUser = Record<string, any>;
 type SubscriptionRow = Record<string, any>;
+const adminTokenStorageKey = 'escort-radar-admin-token';
 
 const sections = [
   {
@@ -103,15 +103,11 @@ export function AdminPage() {
     async function restoreAdminSession() {
       console.log('AUTH RESTORE START');
       setAuthRestoring(true);
-      const { data: { session } } = await withTimeout(
-        supabase.auth.getSession(),
-        5000,
-        'Supabase getSession'
-      );
-      console.log('SESSION FOUND', !!session);
+      const storedToken = localStorage.getItem(adminTokenStorageKey) || '';
+      console.log('SESSION FOUND', Boolean(storedToken));
 
       if (!active) return;
-      if (!session?.access_token) {
+      if (!storedToken) {
         setToken('');
         setUser(null);
         setAdmin(null);
@@ -122,7 +118,7 @@ export function AdminPage() {
       }
 
       console.log('ADMIN CHECK START');
-      const adminCheck = await api.adminMe(session.access_token).catch((adminError) => {
+      const adminCheck = await withTimeout(api.adminMe(storedToken), 5000, 'Admin me').catch((adminError) => {
         setMessage(adminError instanceof Error ? adminError.message : 'Brak dostepu administratora');
         return undefined;
       });
@@ -141,15 +137,18 @@ export function AdminPage() {
       console.log('ADMIN CHECK SUCCESS');
       setAdmin(adminCheck.admin);
       setUser({
-        id: session.user.id,
-        email: session.user.email,
-        app_metadata: session.user.app_metadata
+        id: adminCheck.admin.id,
+        email: adminCheck.admin.email,
+        app_metadata: {
+          role: adminCheck.admin.role,
+          admin: adminCheck.admin.admin
+        }
       });
       setMessage('');
-      setToken(session.access_token);
+      setToken(storedToken);
       setAuthRestoring(false);
       console.log('AUTH RESTORE END');
-      void load(session.access_token);
+      void load(storedToken);
     }
 
     restoreAdminSession().catch((sessionError) => {
@@ -157,9 +156,7 @@ export function AdminPage() {
       setToken('');
       setUser(null);
       setAdmin(null);
-      const message = sessionError instanceof Error && sessionError.message.includes('Supabase getSession timeout')
-        ? 'Sesja wygasła albo nie została odczytana. Zaloguj się ponownie.'
-        : sessionError instanceof Error ? sessionError.message : 'Brak dostepu administratora';
+      const message = sessionError instanceof Error ? sessionError.message : 'Brak dostepu administratora';
       setMessage(message);
       setAuthRestoring(false);
       console.log('AUTH RESTORE END');
@@ -178,23 +175,18 @@ export function AdminPage() {
     try {
       console.log('SUPABASE LOGIN START');
       const result = await withTimeout(
-        supabase.auth.signInWithPassword({ email, password }),
+        api.adminLogin({ email, password }),
         10000,
-        'Supabase login'
+        'Admin login'
       );
       console.log('SUPABASE LOGIN RESULT', result);
-      if (result.error) {
-        setMessage(result.error.message);
+      const accessToken = result.token || '';
+      if (!accessToken) {
+        setMessage('Nie udało się odczytać tokenu administratora. Spróbuj ponownie.');
         return;
       }
 
-      const accessToken = result.data.session?.access_token || '';
-      if (!result.data.session || !accessToken) {
-        setMessage('Nie udało się odczytać sesji administratora. Spróbuj ponownie.');
-        return;
-      }
-
-      console.log('LOGIN SUCCESS SESSION', result.data.session);
+      console.log('LOGIN SUCCESS SESSION', result);
 
       console.log('ADMIN CHECK START');
       const adminCheck = await withTimeout(api.adminMe(accessToken), 10000, 'Admin me');
@@ -206,13 +198,17 @@ export function AdminPage() {
       }
 
       setAdmin(adminCheck.admin);
-      setUser(result.data.user ? {
-        id: result.data.user.id,
-        email: result.data.user.email,
-        app_metadata: result.data.user.app_metadata
-      } : null);
+      setUser({
+        id: adminCheck.admin.id,
+        email: adminCheck.admin.email,
+        app_metadata: {
+          role: adminCheck.admin.role,
+          admin: adminCheck.admin.admin
+        }
+      });
       setMessage('');
       setToken(accessToken);
+      localStorage.setItem(adminTokenStorageKey, accessToken);
       console.log('ADMIN CHECK SUCCESS');
       console.log('ADMIN LOGIN SUCCESS');
       navigate('/admin', { replace: true });
@@ -220,6 +216,10 @@ export function AdminPage() {
     } catch (error) {
       if (error instanceof Error && error.message.includes('Supabase login timeout')) {
         setMessage('Logowanie Supabase przekroczyło czas. Odśwież stronę albo spróbuj w innej przeglądarce.');
+        return;
+      }
+      if (error instanceof Error && error.message.includes('Admin login timeout')) {
+        setMessage('Backend admina nie odpowiada. Sprawdź Render.');
         return;
       }
       if (error instanceof Error && error.message.includes('Admin me timeout')) {
@@ -233,10 +233,7 @@ export function AdminPage() {
   }
 
   async function resetAdminSession() {
-    await supabase.auth.signOut();
-    Object.keys(localStorage)
-      .filter((key) => key.startsWith('sb-'))
-      .forEach((key) => localStorage.removeItem(key));
+    localStorage.removeItem(adminTokenStorageKey);
     setToken('');
     setUser(null);
     setAdmin(null);
@@ -245,7 +242,7 @@ export function AdminPage() {
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    localStorage.removeItem(adminTokenStorageKey);
     setToken('');
     navigate('/admin/login', { replace: true });
   }

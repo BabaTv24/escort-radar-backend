@@ -17,7 +17,13 @@ type Config = {
   supabaseAnonKey: string;
   frontendUrl: string;
   nodeEnv: string;
+  adminEmail: string;
+  adminPassword: string;
+  admin2faSecret: string;
+  adminHardDeletePin: string;
   adminEmails: string[];
+  jwtSecret: string;
+  sessionSecret: string;
   storageBucket: string;
   stripeSecretKey: string;
   appUrl: string;
@@ -38,7 +44,13 @@ export const config: Config = {
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY!,
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
   nodeEnv: process.env.NODE_ENV || 'development',
+  adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
+  adminPassword: process.env.ADMIN_PASSWORD || '',
+  admin2faSecret: process.env.ADMIN_2FA_SECRET || '',
+  adminHardDeletePin: process.env.ADMIN_HARD_DELETE_PIN || '',
   adminEmails: (process.env.ADMIN_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean),
+  jwtSecret: process.env.JWT_SECRET || '',
+  sessionSecret: process.env.SESSION_SECRET || '',
   storageBucket: process.env.SUPABASE_STORAGE_BUCKET || 'profile-images',
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
   appUrl: process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173',

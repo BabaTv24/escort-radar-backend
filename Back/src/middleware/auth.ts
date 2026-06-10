@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { supabaseAnon } from '../supabase.js';
+import { verifyAdminToken } from '../utils/adminJwt.js';
 
 export type AuthUser = {
   id: string;
@@ -31,6 +32,12 @@ export async function verifyUser(req: Request, res: Response, next: NextFunction
     return res.status(401).json({ error: 'Missing bearer token' });
   }
 
+  const adminUser = tryReadAdminToken(token);
+  if (adminUser) {
+    req.user = adminUser;
+    return next();
+  }
+
   const { data, error } = await supabaseAnon.auth.getUser(token);
   if (error || !data.user) {
     return res.status(401).json({ error: 'Invalid or expired token' });
@@ -42,6 +49,22 @@ export async function verifyUser(req: Request, res: Response, next: NextFunction
     app_metadata: data.user.app_metadata
   };
 
+  next();
+}
+
+export function verifyAdminJwt(req: Request, res: Response, next: NextFunction) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  if (!token) {
+    return res.status(401).json({ error: 'Missing bearer token' });
+  }
+
+  const adminUser = tryReadAdminToken(token);
+  if (!adminUser) {
+    return res.status(401).json({ error: 'Invalid or expired admin token' });
+  }
+
+  req.user = adminUser;
   next();
 }
 
@@ -118,4 +141,20 @@ export function requireAdminOrModerator(req: Request, res: Response, next: NextF
 
 function readAppMetadata(user: AuthUser | undefined, key: string) {
   return user?.app_metadata?.[key];
+}
+
+function tryReadAdminToken(token: string): AuthUser | null {
+  try {
+    const payload = verifyAdminToken(token);
+    return {
+      id: payload.sub,
+      email: payload.email,
+      app_metadata: {
+        role: 'admin',
+        admin: true
+      }
+    };
+  } catch {
+    return null;
+  }
 }

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAdmin, verifyUser } from '../middleware/auth.js';
+import { requireAdmin, verifyAdminJwt } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import {
   allowedAdminReportStatuses,
@@ -12,10 +12,42 @@ import {
 import { normalizePhone } from '../utils/identity.js';
 import { writeAdminAuditLog } from '../services/adminAudit.js';
 import { config } from '../config.js';
+import { signAdminToken } from '../utils/adminJwt.js';
 
 export const adminRouter = Router();
 
-adminRouter.use(verifyUser, requireAdmin);
+adminRouter.post('/login', asyncHandler(async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+  const twoFactorCode = String(req.body.two_factor_code || req.body.twoFactorCode || '');
+  const allowedEmails = new Set([config.adminEmail, ...config.adminEmails].filter(Boolean));
+
+  if (!config.adminPassword || !config.jwtSecret) {
+    console.error('Admin login is not configured: ADMIN_PASSWORD and JWT_SECRET are required');
+    return res.status(500).json({ error: 'Admin login is not configured' });
+  }
+
+  if (!allowedEmails.has(email) || password !== config.adminPassword) {
+    return res.status(401).json({ error: 'Invalid admin credentials' });
+  }
+
+  if (config.admin2faSecret && twoFactorCode !== config.admin2faSecret) {
+    return res.status(401).json({ error: 'Invalid admin 2FA code' });
+  }
+
+  const token = signAdminToken(email);
+  res.json({
+    token,
+    admin: {
+      id: email,
+      email,
+      role: 'admin',
+      admin: true
+    }
+  });
+}));
+
+adminRouter.use(verifyAdminJwt, requireAdmin);
 
 adminRouter.get('/me', asyncHandler(async (req, res) => {
   res.json({
