@@ -172,10 +172,17 @@ export function AdminPage() {
   }, [isLoginRoute, navigate]);
 
   async function handleLogin() {
+    console.log('ADMIN LOGIN START');
     setLoginLoading(true);
     setMessage('');
     try {
-      const result = await supabase.auth.signInWithPassword({ email, password });
+      console.log('SUPABASE LOGIN START');
+      const result = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        10000,
+        'Supabase login'
+      );
+      console.log('SUPABASE LOGIN RESULT', result);
       if (result.error) {
         setMessage(result.error.message);
         return;
@@ -188,15 +195,19 @@ export function AdminPage() {
         return;
       }
 
-      await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      });
+      console.log('SET SESSION START');
+      await withTimeout(
+        supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        }),
+        5000,
+        'Supabase setSession'
+      );
 
-      const adminCheck = await api.adminMe(accessToken).catch((adminError) => {
-        setMessage(adminError instanceof Error ? adminError.message : 'Brak dostepu administratora');
-        return undefined;
-      });
+      console.log('ADMIN ME START');
+      const adminCheck = await withTimeout(api.adminMe(accessToken), 10000, 'Admin me');
+      console.log('ADMIN ME RESULT', adminCheck);
       if (!adminCheck?.admin) {
         setAdmin(null);
         setMessage('Brak dostepu administratora');
@@ -211,9 +222,18 @@ export function AdminPage() {
       } : null);
       setMessage('');
       setToken(accessToken);
+      console.log('ADMIN LOGIN SUCCESS');
       navigate('/admin', { replace: true });
       void load(accessToken);
     } catch (error) {
+      if (error instanceof Error && error.message.includes('Supabase login timeout')) {
+        setMessage('Logowanie Supabase przekroczyło czas. Odśwież stronę albo spróbuj w innej przeglądarce.');
+        return;
+      }
+      if (error instanceof Error && error.message.includes('Admin me timeout')) {
+        setMessage('Backend admina nie odpowiada. Sprawdź Render.');
+        return;
+      }
       setMessage(error instanceof Error ? error.message : 'Nie udało się zalogować do panelu administratora.');
     } finally {
       setLoginLoading(false);
