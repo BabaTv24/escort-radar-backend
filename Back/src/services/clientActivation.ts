@@ -74,7 +74,7 @@ export async function activateClientAccount(userId: string, payment: {
   referred_by_code?: string | null;
 } = {}) {
   const referralCode = await getOrCreateReferralCode(userId);
-  const referralLink = `${config.appUrl.replace(/\/$/, '')}/r/${encodeURIComponent(referralCode)}`;
+  const referralLink = `${getPublicFrontendUrl()}/r/${encodeURIComponent(referralCode)}`;
   const qrImageUrl = getQrServiceUrl(referralLink);
   const referredByCode = payment.referred_by_code || await getStoredReferredByCode(userId);
 
@@ -260,11 +260,17 @@ async function getOrCreateReferralCode(userId: string) {
 async function getQrImageUrl(userId: string, referralCode: string | null) {
   if (!referralCode) return null;
   const { data } = await supabaseAdmin.from('qr_codes').select('qr_image_url').eq('user_id', userId).eq('referral_code', referralCode).maybeSingle();
-  return data?.qr_image_url || getQrServiceUrl(`${config.appUrl.replace(/\/$/, '')}/r/${encodeURIComponent(referralCode)}`);
+  return data?.qr_image_url || getQrServiceUrl(`${getPublicFrontendUrl()}/r/${encodeURIComponent(referralCode)}`);
 }
 
 function getQrServiceUrl(value: string) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(value)}`;
+}
+
+function getPublicFrontendUrl() {
+  const configuredUrl = config.frontendUrl || config.appUrl || 'https://escort-radar.fun';
+  if (configuredUrl.includes('localhost') || configuredUrl.includes('onrender')) return 'https://escort-radar.fun';
+  return configuredUrl.replace(/\/$/, '');
 }
 
 async function syncClientAppMetadata(userId: string, state: 'client_free' | 'client_activated', referralCode?: string) {

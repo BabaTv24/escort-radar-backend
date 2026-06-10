@@ -61,20 +61,44 @@ adminRouter.get('/me', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.get('/stats', asyncHandler(async (_req, res) => {
-  const [profiles, reports, bookings, activity] = await Promise.all([
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const monthStart = new Date(dayStart.getFullYear(), dayStart.getMonth(), 1);
+
+  const [profiles, reports, bookings, activity, activationPayments, activations] = await Promise.all([
     supabaseAdmin.from('profiles').select('id, status, verification_status, moderation_status, is_test_account, created_at').limit(1000),
     supabaseAdmin.from('reports').select('id, admin_status, status').limit(1000),
     supabaseAdmin.from('booking_requests').select('id, status').limit(1000),
-    supabaseAdmin.from('admin_activity_logs').select('*').order('created_at', { ascending: false }).limit(12)
+    supabaseAdmin.from('admin_activity_logs').select('*').order('created_at', { ascending: false }).limit(12),
+    supabaseAdmin.from('client_activation_payments').select('*').eq('status', 'paid').order('created_at', { ascending: false }).limit(1000),
+    supabaseAdmin.from('client_activations').select('id, state').limit(5000)
   ]);
 
   if (profiles.error) return res.status(500).json({ error: profiles.error.message });
   if (reports.error) return res.status(500).json({ error: reports.error.message });
   if (bookings.error) return res.status(500).json({ error: bookings.error.message });
+  if (activationPayments.error) return res.status(500).json({ error: activationPayments.error.message });
 
   const profileRows = profiles.data || [];
   const reportRows = reports.data || [];
   const bookingRows = bookings.data || [];
+  const activationPaymentRows = activationPayments.data || [];
+  const activationRows = activations.data || [];
+  const dailyClientActivationRevenue = sumPaymentCents(activationPaymentRows.filter((row) => new Date(row.created_at) >= dayStart));
+  const monthlyClientActivationRevenue = sumPaymentCents(activationPaymentRows.filter((row) => new Date(row.created_at) >= monthStart));
+  const latestActivationPayments = activationPaymentRows.slice(0, 12).map((payment) => ({
+    id: payment.id,
+    admin_email: payment.email,
+    action: 'client_activation_payment',
+    target_type: 'client_activation_payment',
+    target_id: payment.stripe_session_id,
+    details: {
+      amount_cents: payment.amount_cents,
+      currency: payment.currency,
+      status: payment.status
+    },
+    created_at: payment.created_at
+  }));
 
   res.json({
     stats: {
@@ -84,10 +108,29 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
       suspended_profiles: profileRows.filter((profile) => profile.status === 'suspended' || profile.moderation_status === 'suspended').length,
       booking_requests: bookingRows.length,
       reports: reportRows.length,
-      test_accounts: profileRows.filter((profile) => profile.is_test_account).length
+      test_accounts: profileRows.filter((profile) => profile.is_test_account).length,
+      daily_revenue_eur: dailyClientActivationRevenue,
+      monthly_revenue_eur: monthlyClientActivationRevenue,
+      client_activation_revenue_eur: sumPaymentCents(activationPaymentRows),
+      client_activation_transactions: activationPaymentRows.length,
+      activated_clients: activationRows.filter((activation) => activation.state === 'client_activated').length,
+      free_clients: activationRows.filter((activation) => activation.state !== 'client_activated').length
     },
-    latest_activity: activity.data || []
+    latest_activity: [...latestActivationPayments, ...(activity.data || [])]
+      .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+      .slice(0, 12)
   });
+}));
+
+adminRouter.get('/client-activation-payments', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('client_activation_payments')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ client_activation_payments: data || [] });
 }));
 
 adminRouter.get('/audit-log', asyncHandler(async (_req, res) => {
@@ -950,4 +993,9 @@ function normalizeSettings(rows: Array<{ key: string; value: unknown }>) {
   });
 
   return defaults;
+}
+
+function sumPaymentCents(rows: Array<{ amount_cents?: number | null }>) {
+  const cents = rows.reduce((sum, row) => sum + Number(row.amount_cents || 0), 0);
+  return Number((cents / 100).toFixed(2));
 }

@@ -124,11 +124,34 @@ clientActivationRouter.post('/confirm', asyncHandler(async (req, res) => {
   }
   if (session.payment_status !== 'paid') return res.status(400).json({ error: 'Payment is not completed' });
 
+  const stripeSessionId = String(session.id || sessionId);
+  const { data: existingPayment } = await supabaseAdmin
+    .from('client_activation_payments')
+    .select('id')
+    .eq('stripe_session_id', stripeSessionId)
+    .maybeSingle();
+
+  if (existingPayment) {
+    return res.json({ activation: await getClientActivationSummary(req.user!.id) });
+  }
+
   await activateClientAccount(req.user!.id, {
-    stripe_checkout_session_id: String(session.id || sessionId),
+    stripe_checkout_session_id: stripeSessionId,
     stripe_payment_intent_id: session.payment_intent ? String(session.payment_intent) : null,
     referred_by_code: optionalText(session.metadata?.referred_by_code, 80)
   });
+
+  const { error: paymentError } = await supabaseAdmin.from('client_activation_payments').insert({
+    user_id: req.user!.id,
+    email: req.user?.email || null,
+    amount_cents: Number(session.amount_total || config.clientActivationPriceCents),
+    currency: String(session.currency || 'eur').toLowerCase(),
+    status: 'paid',
+    provider: 'stripe',
+    stripe_session_id: stripeSessionId,
+    stripe_payment_intent_id: session.payment_intent ? String(session.payment_intent) : null
+  });
+  if (paymentError && paymentError.code !== '23505') return res.status(400).json({ error: paymentError.message });
 
   res.json({ activation: await getClientActivationSummary(req.user!.id) });
 }));

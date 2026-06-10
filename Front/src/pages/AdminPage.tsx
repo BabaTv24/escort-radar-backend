@@ -77,6 +77,7 @@ export function AdminPage() {
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
+  const [clientActivationPayments, setClientActivationPayments] = useState<Record<string, any>[]>([]);
   const [purchases, setPurchases] = useState<TokenPurchaseRequest[]>([]);
   const [masterWallets, setMasterWallets] = useState<MasterAdminWallet[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -260,6 +261,7 @@ export function AdminPage() {
         bookingResult,
         walletResult,
         transactionResult,
+        clientActivationPaymentResult,
         purchaseResult,
         masterResult,
         tagResult,
@@ -275,6 +277,7 @@ export function AdminPage() {
         adminLoadRequest('adminBookings', api.adminBookings(accessToken)),
         adminLoadRequest('adminWallets', api.adminWallets(accessToken)),
         adminLoadRequest('adminTokenTransactions', api.adminTokenTransactions(accessToken)),
+        adminLoadRequest('adminClientActivationPayments', api.adminClientActivationPayments(accessToken)),
         adminLoadRequest('adminPurchaseRequests', api.adminPurchaseRequests(accessToken)),
         adminLoadRequest('adminMasterWallets', api.adminMasterWallets(accessToken)),
         adminLoadRequest('adminTags', api.adminTags(accessToken)),
@@ -291,6 +294,7 @@ export function AdminPage() {
       const bookingData = settledValue(bookingResult, { booking_requests: [] }, 'adminBookings');
       const walletData = settledValue(walletResult, { wallets: [] }, 'adminWallets');
       const transactionData = settledValue(transactionResult, { transactions: [] }, 'adminTokenTransactions');
+      const clientActivationPaymentData = settledValue(clientActivationPaymentResult, { client_activation_payments: [] }, 'adminClientActivationPayments');
       const purchaseData = settledValue(purchaseResult, { purchase_requests: [] }, 'adminPurchaseRequests');
       const masterData = settledValue(masterResult, { master_wallets: [] }, 'adminMasterWallets');
       const tagData = settledValue(tagResult, { tags: [] }, 'adminTags');
@@ -306,6 +310,7 @@ export function AdminPage() {
       setBookings(bookingData.booking_requests);
       setWallets(walletData.wallets);
       setTransactions(transactionData.transactions);
+      setClientActivationPayments(clientActivationPaymentData.client_activation_payments as Record<string, any>[]);
       setPurchases(purchaseData.purchase_requests);
       setMasterWallets(masterData.master_wallets);
       setTags(tagData.tags);
@@ -420,9 +425,12 @@ export function AdminPage() {
   function renderView() {
     if (view === 'dashboard') {
       const cards = [
-        ['Dzienny przychod', tokenStats.approved_purchase_value || 0],
-        ['Miesieczny przychod', tokenStats.revenue_estimate_eur || tokenStats.approved_purchase_value || 0],
-        ['Transakcje', transactions.length],
+        ['Dzienny przychod', stats.daily_revenue_eur || tokenStats.approved_purchase_value || 0],
+        ['Miesieczny przychod', stats.monthly_revenue_eur || tokenStats.revenue_estimate_eur || tokenStats.approved_purchase_value || 0],
+        ['Transakcje', (stats.client_activation_transactions || clientActivationPayments.length) + transactions.length],
+        ['Client activations revenue', stats.client_activation_revenue_eur || 0],
+        ['Activated clients', stats.activated_clients || 0],
+        ['Free clients', stats.free_clients || 0],
         ['Konwersja', `${users.length ? Math.round((purchases.length / users.length) * 100) : 0}%`],
         ['Aktywni uzytkownicy', users.filter((user) => user.status === 'active').length],
         ['Profile lacznie', stats.total_profiles || profiles.length],
@@ -480,6 +488,11 @@ export function AdminPage() {
     if (view === 'token-transactions') {
       return (
         <>
+          <section className="admin-card">
+            <h2>Client activation payments</h2>
+            <p>Jednorazowe platnosci 0.99 EUR z aktywacji klienta.</p>
+          </section>
+          <AdminTable rows={clientActivationPayments} columns={['email', 'amount_cents', 'currency', 'status', 'provider', 'stripe_session_id', 'stripe_payment_intent_id', 'created_at']} />
           <AdminTable rows={purchases} columns={['id', 'user_id', 'token_amount', 'eur_price', 'bonus_tokens', 'status', 'created_at']} actions={(purchase) => (
             <>
               <Action onClick={() => action(() => api.setPurchaseRequestStatus(token, purchase.id, 'approved'))}>Approve</Action>

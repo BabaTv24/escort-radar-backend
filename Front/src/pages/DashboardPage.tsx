@@ -788,6 +788,12 @@ function isAdvertiserAccount(accountType: AuthAccountType) {
   return accountType === 'escort' || accountType === 'business';
 }
 
+function getPublicReferralLink(activation: ClientActivation | null) {
+  if (!activation?.referral_code) return '';
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://escort-radar.fun';
+  return `${origin}/r/${encodeURIComponent(activation.referral_code)}`;
+}
+
 function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, giftsSent, giftsReceived, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout }: {
   userEmail: string;
   wallet: Wallet | null;
@@ -806,6 +812,8 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
 }) {
   const { t } = useI18n();
   const activated = activation?.state === 'client_activated';
+  const referralLink = getPublicReferralLink(activation);
+  const referralQrImageUrl = referralLink ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(referralLink)}` : '';
   const displayName = clientProfile?.display_name || userEmail.split('@')[0] || 'Client';
   const city = clientProfile?.city || 'Berlin';
   const featureCards = [
@@ -823,6 +831,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
       <section className="dashboard-hero">
         <p className="eyebrow">Escort Radar Client</p>
         <h1>{activated ? 'Konto aktywne' : 'Aktywuj konto za 0,99€'}</h1>
+        {activated && <p>Twoje konto jest aktywne - pelne profile i kontakty sa odblokowane.</p>}
         <p>{activated ? 'Pełne profile, kontakty, galerie VIP, Coins i referral program są gotowe.' : 'Zobacz pełne profile, numery telefonu, prywatne galerie i wysyłaj prezenty Coins.'}</p>
       </section>
 
@@ -882,10 +891,10 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
         <section className="creator-panel referral-studio">
           <div>
             <p className="eyebrow">My Referral Program</p>
-            <h2>{activation?.referral_link || 'Activate to unlock referrals'}</h2>
-            {activation?.referral_link && <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(activation.referral_link || '')}><Copy size={14} /> {t('referral.copy')}</button>}
+            <h2>{referralLink || 'Activate to unlock referrals'}</h2>
+            {referralLink && <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(referralLink)}><Copy size={14} /> {t('referral.copy')}</button>}
           </div>
-          {activation?.qr_image_url ? <img className="client-qr-image" src={activation.qr_image_url} alt="Referral QR" /> : <QrVisual seed="CLIENT-FREE" />}
+          {referralQrImageUrl ? <img className="client-qr-image" src={referralQrImageUrl} alt="Referral QR" /> : <QrVisual seed="CLIENT-FREE" />}
           <div className="metrics-grid">
             <Metric label="Clicks" value={activation?.clicks || 0} />
             <Metric label="Registrations" value={activation?.registrations || 0} />

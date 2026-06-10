@@ -151,6 +151,7 @@ export const api = {
   }),
   adminWallets: (token: string) => request<{ wallets: Wallet[] }>('/api/admin/wallets', { token }),
   adminTokenTransactions: (token: string) => request<{ transactions: TokenTransaction[] }>('/api/admin/token-transactions', { token }),
+  adminClientActivationPayments: (token: string) => request<{ client_activation_payments: Record<string, unknown>[] }>('/api/admin/client-activation-payments', { token }),
   adminPurchaseRequests: (token: string) => request<{ purchase_requests: TokenPurchaseRequest[] }>('/api/admin/token-purchase-requests', { token }),
   setPurchaseRequestStatus: (token: string, id: string, status: string, admin_note = '') => request(`/api/admin/token-purchase-requests/${id}/status`, {
     method: 'PATCH',
