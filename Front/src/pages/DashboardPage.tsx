@@ -80,6 +80,7 @@ const authIntentStorageKey = 'escortRadar.authIntent';
 const allowedAuthAccountTypes = ['client', 'escort', 'business'] as const;
 const allowedIdentities = ['male', 'female', 'trans'];
 type AuthAccountType = typeof allowedAuthAccountTypes[number];
+type DashboardAccountType = AuthAccountType | 'unknown';
 
 export function DashboardPage() {
   const [token, setToken] = useState('');
@@ -93,7 +94,8 @@ export function DashboardPage() {
   const [profileMode, setProfileMode] = useState<'create' | 'edit'>('create');
   const [activeWizardStep, setActiveWizardStep] = useState(1);
   const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [authAccountType, setAuthAccountType] = useState<AuthAccountType>('client');
+  const [authAccountType, setAuthAccountType] = useState<DashboardAccountType>('unknown');
+  const [authResolved, setAuthResolved] = useState(false);
   const [platformTags, setPlatformTags] = useState<Tag[]>([]);
   const [contentTab, setContentTab] = useState('photos');
   const [creatorTab, setCreatorTab] = useState('listing');
@@ -129,15 +131,23 @@ export function DashboardPage() {
     setUserEmail(session?.user.email || '');
 
     if (!session?.access_token) {
-      setAuthAccountType('client');
+      setAuthAccountType('unknown');
+      setAuthResolved(true);
       return;
     }
 
     const role = await resolveBackendAuthAccountType(session.access_token);
     setAuthAccountType(role);
+    setAuthResolved(true);
 
     if (role === 'client') {
       await loadClientDashboard(session.access_token);
+      return;
+    }
+
+    if (role === 'unknown') {
+      setDashboardStatus('error');
+      setMessage('Nie rozpoznano typu konta. Skontaktuj sie z administracja.');
       return;
     }
 
@@ -170,14 +180,14 @@ export function DashboardPage() {
     }
   }
 
-  async function resolveBackendAuthAccountType(accessToken: string): Promise<AuthAccountType> {
+  async function resolveBackendAuthAccountType(accessToken: string): Promise<DashboardAccountType> {
     try {
       const data = await api.authMe(accessToken);
       setClientProfile(data.client_profile);
       return resolveAuthAccountType(data.user.app_metadata || { auth_account_type: data.user.auth_account_type });
     } catch {
       setClientProfile(null);
-      return 'client';
+      return 'unknown';
     }
   }
 
@@ -387,6 +397,8 @@ export function DashboardPage() {
     setCoinTransactions([]);
     setGiftsSent([]);
     setGiftsReceived([]);
+    setAuthAccountType('unknown');
+    setAuthResolved(false);
   }
 
   async function startClientActivation() {
@@ -447,6 +459,29 @@ export function DashboardPage() {
     );
   }
 
+  if (!authResolved) {
+    return (
+      <div className="page dashboard-page">
+        <section className="dashboard-hero">
+          <p className="eyebrow">Escort Radar</p>
+          <h1>Ladowanie dashboardu...</h1>
+          <p>Sprawdzamy bezpieczny typ konta z backendu.</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (authAccountType === 'unknown') {
+    return (
+      <UnknownAccountDashboard
+        email={userEmail}
+        authAccountType={authAccountType}
+        message={message}
+        onLogout={logout}
+      />
+    );
+  }
+
   if (authAccountType === 'client') {
     return (
       <ClientDashboard
@@ -483,8 +518,13 @@ export function DashboardPage() {
     <div className="page dashboard-page">
       <section className="dashboard-hero">
         <p className="eyebrow">{t('dashboard.creator.eyebrow')}</p>
-        <h1>{t('dashboard.creator.title')}</h1>
-        <p>{t('dashboard.creator.subtitle')}</p>
+        <h1>{savedProfile?.display_name || profile.display_name || 'Escort'} — Professional Profile</h1>
+        <p>Status profilu: {profileStatusLabel(savedProfile)} · Plan: {advertiserPlanLabel(savedProfile)} · Radar: {savedProfile?.availability_status || profile.availability_status || 'incomplete'}</p>
+        <div className="hero-actions">
+          {savedProfile && <Link className="button primary" to={`/profile/${savedProfile.id}`}>Zobacz publiczny profil</Link>}
+          <button className="button" type="button" onClick={() => setCreatorTab('media')}>Upload zdjec</button>
+          <button className="button" type="button" onClick={() => setCreatorTab('pricing')}>Cennik</button>
+        </div>
         <div className="wizard-progress">
           {Array.from({ length: 8 }, (_, index) => index + 1).map((step) => (
             <button key={step} className={activeWizardStep === step ? 'active' : activeWizardStep > step ? 'done' : ''} type="button" onClick={() => setActiveWizardStep(step)}>
@@ -782,13 +822,50 @@ export function DashboardPage() {
   );
 }
 
-function resolveAuthAccountType(metadata?: Record<string, unknown> | null): AuthAccountType {
+function resolveAuthAccountType(metadata?: Record<string, unknown> | null): DashboardAccountType {
   const value = String(metadata?.auth_account_type || '');
-  return allowedAuthAccountTypes.includes(value as AuthAccountType) ? value as AuthAccountType : 'client';
+  return allowedAuthAccountTypes.includes(value as AuthAccountType) ? value as AuthAccountType : 'unknown';
 }
 
-function isAdvertiserAccount(accountType: AuthAccountType) {
+function isAdvertiserAccount(accountType: DashboardAccountType) {
   return accountType === 'escort' || accountType === 'business';
+}
+
+function profileStatusLabel(profile: Profile | null) {
+  if (!profile) return 'incomplete';
+  if (profile.status === 'active') return 'active';
+  if (profile.status === 'pending' || profile.verification_status === 'pending') return 'pending';
+  return profile.status || 'incomplete';
+}
+
+function advertiserPlanLabel(profile: Profile | null) {
+  if (profile?.trial_ends_at && profile.subscription_status !== 'active') return 'trial';
+  if (profile?.listing_plan === 'business_monthly') return 'Premium Business 49,99€/month';
+  if (profile?.listing_plan === 'escort_monthly' || profile?.subscription_status === 'active') return 'Premium Listing 49,99€/month';
+  return 'trial';
+}
+
+function UnknownAccountDashboard({ email, authAccountType, message, onLogout }: {
+  email: string;
+  authAccountType: string;
+  message: string;
+  onLogout: () => void;
+}) {
+  return (
+    <div className="page dashboard-page">
+      <section className="dashboard-hero">
+        <p className="eyebrow">Escort Radar Account</p>
+        <h1>Nie rozpoznano typu konta.</h1>
+        <p>Skontaktuj sie z administracja.</p>
+        {message && <p className="error-text">{message}</p>}
+        <div className="creator-panel">
+          <p>Email: {email || '-'}</p>
+          <p>auth_account_type: {authAccountType || '-'}</p>
+        </div>
+        <button className="button danger" type="button" onClick={onLogout}>Wyloguj</button>
+      </section>
+    </div>
+  );
 }
 
 function getPublicReferralLink(activation: ClientActivation | null) {

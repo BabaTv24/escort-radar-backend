@@ -11,7 +11,7 @@ export const authRouter = Router();
 
 authRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
   const appMetadata = req.user?.app_metadata || {};
-  const accountType = normalizeAuthAccountType(appMetadata.auth_account_type);
+  const accountType = await resolveAuthAccountType(req.user!.id, appMetadata);
   const role = appMetadata.role === 'admin' ? 'admin' : accountType;
   const { data: clientProfile } = await supabaseAdmin
     .from('client_profiles')
@@ -61,7 +61,7 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   const username = optionalString(req.body.username, 80);
-  const authAccountType = normalizeAuthAccountType(req.body.auth_account_type);
+  const authAccountType = normalizeAuthAccountType(req.body.auth_account_type) || 'client';
   const identity = allowedIdentities.includes(String(req.body.identity) as typeof allowedIdentities[number])
     ? String(req.body.identity)
     : undefined;
@@ -97,11 +97,39 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
   });
 }));
 
-function normalizeAuthAccountType(value: unknown): 'client' | 'escort' | 'business' {
+async function resolveAuthAccountType(userId: string, appMetadata: Record<string, unknown>): Promise<'client' | 'escort' | 'business'> {
+  const metadataType = normalizeAuthAccountType(appMetadata.auth_account_type);
+  if (metadataType) return metadataType;
+
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('account_type')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!profile) return 'client';
+
+  const inferredType = ['agency', 'massage_salon', 'club_party', 'live_cam'].includes(String(profile.account_type || ''))
+    ? 'business'
+    : 'escort';
+
+  await supabaseAdmin.auth.admin.updateUserById(userId, {
+    app_metadata: {
+      ...appMetadata,
+      auth_account_type: inferredType
+    }
+  });
+
+  return inferredType;
+}
+
+function normalizeAuthAccountType(value: unknown): 'client' | 'escort' | 'business' | null {
   const nextValue = String(value || '');
   return allowedAuthAccountTypes.includes(nextValue as 'client' | 'escort' | 'business')
     ? nextValue as 'client' | 'escort' | 'business'
-    : 'client';
+    : null;
 }
 
 function optionalString(value: unknown, maxLength: number) {
