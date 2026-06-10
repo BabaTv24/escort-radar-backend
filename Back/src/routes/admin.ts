@@ -10,10 +10,23 @@ import {
   optionalText
 } from '../validation.js';
 import { normalizePhone } from '../utils/identity.js';
+import { writeAdminAuditLog } from '../services/adminAudit.js';
+import { config } from '../config.js';
 
 export const adminRouter = Router();
 
 adminRouter.use(verifyUser, requireAdmin);
+
+adminRouter.get('/me', asyncHandler(async (req, res) => {
+  res.json({
+    admin: {
+      id: req.user?.id,
+      email: req.user?.email,
+      role: req.user?.app_metadata?.role || 'admin',
+      admin: req.user?.app_metadata?.admin === true
+    }
+  });
+}));
 
 adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   const [profiles, reports, bookings, activity] = await Promise.all([
@@ -45,6 +58,17 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   });
 }));
 
+adminRouter.get('/audit-log', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('admin_audit_log')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ audit_log: data || [] });
+}));
+
 adminRouter.get('/profiles', asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.query.phone);
   let query = supabaseAdmin
@@ -74,6 +98,18 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
   });
 }));
 
+adminRouter.get('/business-profiles', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('*, profile_images(*)')
+    .in('account_type', ['agency', 'massage_salon', 'club_party', 'live_cam'])
+    .order('created_at', { ascending: false })
+    .limit(300);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ business_profiles: data || [] });
+}));
+
 adminRouter.get('/users', asyncHandler(async (_req, res) => {
   const [{ data: authUsers, error: authError }, { data: profiles }, { data: wallets }] = await Promise.all([
     supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
@@ -93,7 +129,7 @@ adminRouter.get('/users', asyncHandler(async (_req, res) => {
       id: user.id,
       email: user.email,
       role: user.app_metadata?.role || 'user',
-      account_type: primaryProfile?.account_type || user.user_metadata?.account_type || 'private',
+      account_type: primaryProfile?.account_type || user.app_metadata?.auth_account_type || 'private',
       public_user_id: primaryProfile?.public_user_id || null,
       referral_code: primaryProfile?.referral_code || null,
       token_balance: Number(wallet?.escort_token_balance || 0),
@@ -109,6 +145,85 @@ adminRouter.get('/users', asyncHandler(async (_req, res) => {
   res.json({ users });
 }));
 
+adminRouter.get('/users/:id', asyncHandler(async (req, res) => {
+  const [{ data: authUser, error: authError }, { data: profiles }, { data: wallet }] = await Promise.all([
+    supabaseAdmin.auth.admin.getUserById(req.params.id),
+    supabaseAdmin.from('profiles').select('*, profile_images(*)').eq('user_id', req.params.id).limit(20),
+    supabaseAdmin.from('wallets').select('*').eq('user_id', req.params.id).maybeSingle()
+  ]);
+
+  if (authError || !authUser.user) return res.status(404).json({ error: authError?.message || 'User not found' });
+
+  res.json({
+    user: {
+      id: authUser.user.id,
+      email: authUser.user.email,
+      app_metadata: authUser.user.app_metadata,
+      created_at: authUser.user.created_at,
+      banned_until: authUser.user.banned_until,
+      status: authUser.user.banned_until ? 'suspended' : 'active'
+    },
+    profiles: profiles || [],
+    wallet: wallet || null
+  });
+}));
+
+adminRouter.patch('/users/:id', asyncHandler(async (req, res) => {
+  const patch: Record<string, unknown> = {};
+  const email = optionalText(req.body.email, 320);
+  const password = optionalText(req.body.password, 200);
+  const phone = optionalText(req.body.phone, 80);
+
+  if (email) patch.email = email;
+  if (password) patch.password = password;
+  if (phone) patch.phone = phone;
+  if (!Object.keys(patch).length) return res.status(400).json({ error: 'No valid user fields provided' });
+
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, patch);
+  if (error) return res.status(400).json({ error: error.message });
+
+  await logAdminAction(req.user?.email, 'user_updated', 'auth_user', req.params.id, patch);
+  res.json({ user: data.user });
+}));
+
+adminRouter.patch('/users/:id/role', asyncHandler(async (req, res) => {
+  const role = String(req.body.role || '').trim();
+  if (!['client', 'escort', 'business', 'moderator', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+
+  const { data: existing, error: fetchError } = await supabaseAdmin.auth.admin.getUserById(req.params.id);
+  if (fetchError || !existing.user) return res.status(404).json({ error: fetchError?.message || 'User not found' });
+
+  const appMetadata: Record<string, unknown> = {
+    ...existing.user.app_metadata,
+    role,
+    admin: role === 'admin'
+  };
+
+  if (['client', 'escort', 'business'].includes(role)) {
+    appMetadata.auth_account_type = role;
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, { app_metadata: appMetadata });
+  if (error) return res.status(400).json({ error: error.message });
+
+  await logAdminAction(req.user?.email, 'user_role_updated', 'auth_user', req.params.id, { role });
+  res.json({ user: data.user });
+}));
+
+adminRouter.patch('/users/:id/suspend', asyncHandler(async (req, res) => {
+  const suspended = req.body.suspended !== false;
+  const banDuration = suspended ? optionalText(req.body.ban_duration, 40) || '876000h' : 'none';
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, { ban_duration: banDuration });
+  if (error) return res.status(400).json({ error: error.message });
+
+  await logAdminAction(req.user?.email, suspended ? 'user_suspended' : 'user_unsuspended', 'auth_user', req.params.id, {
+    suspended,
+    ban_duration: banDuration,
+    reason: optionalText(req.body.reason, 1000)
+  });
+  res.json({ user: data.user });
+}));
+
 adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
   const { data, error } = await supabaseAdmin
     .from('profiles')
@@ -118,6 +233,31 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ subscriptions: data || [] });
+}));
+
+adminRouter.patch('/subscriptions/:id', asyncHandler(async (req, res) => {
+  const status = String(req.body.subscription_status || req.body.status || '');
+  if (!['free', 'active', 'past_due', 'cancelled', 'expired', 'test'].includes(status)) return res.status(400).json({ error: 'Invalid subscription status' });
+
+  const patch = {
+    subscription_status: status,
+    listing_plan: optionalText(req.body.listing_plan || req.body.plan, 80),
+    plan: optionalText(req.body.plan || req.body.listing_plan, 80),
+    subscription_started_at: optionalText(req.body.subscription_started_at, 80),
+    subscription_expires_at: optionalText(req.body.subscription_expires_at, 80),
+    admin_note: optionalText(req.body.admin_note, 4000)
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'subscription_updated', 'profile_subscription', req.params.id, patch);
+  res.json({ subscription: data });
 }));
 
 adminRouter.get('/tags', asyncHandler(async (_req, res) => {
@@ -267,6 +407,50 @@ adminRouter.patch('/profiles/:id/verification', asyncHandler(async (req, res) =>
   res.json({ profile: data });
 }));
 
+adminRouter.patch('/profiles/:id/verify', asyncHandler(async (req, res) => {
+  const verificationStatus = String(req.body.verification_status || req.body.status || 'verified');
+  const moderationStatus = String(req.body.moderation_status || '');
+  if (!allowedVerificationStatuses.includes(verificationStatus)) return res.status(400).json({ error: 'Invalid verification status' });
+  if (moderationStatus && !allowedModerationStatuses.includes(moderationStatus)) return res.status(400).json({ error: 'Invalid moderation status' });
+
+  const patch: Record<string, unknown> = {
+    verification_status: verificationStatus,
+    verified: verificationStatus === 'verified'
+  };
+  if (verificationStatus === 'verified') patch.verified_at = new Date().toISOString();
+  if (moderationStatus) patch.moderation_status = moderationStatus;
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'profile_verification_updated', 'profile', req.params.id, patch);
+  res.json({ profile: data });
+}));
+
+adminRouter.delete('/profiles/:id', asyncHandler(async (req, res) => {
+  const { data: images } = await supabaseAdmin
+    .from('profile_images')
+    .select('storage_path')
+    .eq('profile_id', req.params.id);
+
+  const storagePaths = (images || []).map((image) => image.storage_path).filter(Boolean);
+  if (storagePaths.length) await supabaseAdmin.storage.from(config.storageBucket).remove(storagePaths);
+
+  const { error } = await supabaseAdmin.from('profiles').delete().eq('id', req.params.id);
+  if (error) return res.status(400).json({ error: error.message });
+
+  await logAdminAction(req.user?.email, 'profile_deleted', 'profile', req.params.id, {
+    hard_delete: true,
+    reason: optionalText(req.body.reason, 1000)
+  });
+  res.status(204).send();
+}));
+
 adminRouter.patch('/profiles/:id/test-account', asyncHandler(async (req, res) => {
   const isTestAccount = Boolean(req.body.is_test_account);
   const fakeStatus = String(req.body.availability_status || '');
@@ -369,6 +553,30 @@ adminRouter.patch('/bookings/:id/status', asyncHandler(async (req, res) => {
   res.json({ booking_request: data });
 }));
 
+adminRouter.patch('/bookings/:id', asyncHandler(async (req, res) => {
+  const status = String(req.body.status || '');
+  if (!['pending', 'accepted', 'rejected', 'cancelled'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid booking status' });
+  }
+
+  const patch = {
+    status,
+    message: optionalText(req.body.message, 2000),
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('booking_requests')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'booking_updated', 'booking_request', req.params.id, patch);
+  res.json({ booking_request: data });
+}));
+
 adminRouter.get('/settings', asyncHandler(async (_req, res) => {
   const { data, error } = await supabaseAdmin
     .from('app_settings')
@@ -427,6 +635,42 @@ adminRouter.get('/wallets', asyncHandler(async (_req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ wallets: data || [] });
+}));
+
+adminRouter.patch('/wallets/:userId', asyncHandler(async (req, res) => {
+  const balance = Number(req.body.escort_token_balance ?? req.body.token_balance);
+  const frozen = req.body.frozen === undefined ? undefined : Boolean(req.body.frozen);
+  if (!Number.isFinite(balance) || balance < 0) return res.status(400).json({ error: 'Invalid token balance' });
+
+  const { data: existing } = await supabaseAdmin
+    .from('wallets')
+    .select('*')
+    .eq('user_id', req.params.userId)
+    .maybeSingle();
+
+  const patch = {
+    escort_token_balance: balance,
+    ...(frozen === undefined ? {} : { frozen })
+  };
+
+  const { data, error } = existing
+    ? await supabaseAdmin.from('wallets').update(patch).eq('id', existing.id).select().single()
+    : await supabaseAdmin
+      .from('wallets')
+      .insert({
+        user_id: req.params.userId,
+        public_wallet_id: `ERW-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        ...patch
+      })
+      .select()
+      .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'wallet_adjusted', 'wallet', data.id, {
+    user_id: req.params.userId,
+    ...patch
+  });
+  res.json({ wallet: data });
 }));
 
 adminRouter.get('/token-transactions', asyncHandler(async (_req, res) => {
@@ -538,6 +782,17 @@ adminRouter.get('/photos', asyncHandler(async (_req, res) => {
   res.json({ photos: data || [] });
 }));
 
+adminRouter.get('/uploads', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('profile_images')
+    .select('*, profiles(display_name, city, user_id)')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ uploads: data || [] });
+}));
+
 adminRouter.patch('/photos/:id/status', asyncHandler(async (req, res) => {
   const status = String(req.body.moderation_status || req.body.status || '');
   if (!['pending', 'approved', 'rejected', 'blocked'].includes(status)) return res.status(400).json({ error: 'Invalid photo status' });
@@ -550,6 +805,27 @@ adminRouter.patch('/photos/:id/status', asyncHandler(async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
   await logAdminAction(req.user?.email, 'photo_moderation_updated', 'profile_image', req.params.id, { moderation_status: status });
   res.json({ photo: data });
+}));
+
+adminRouter.delete('/uploads/:id', asyncHandler(async (req, res) => {
+  const { data: image, error: fetchError } = await supabaseAdmin
+    .from('profile_images')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
+
+  if (fetchError || !image) return res.status(404).json({ error: fetchError?.message || 'Upload not found' });
+
+  if (image.storage_path) await supabaseAdmin.storage.from(config.storageBucket).remove([image.storage_path]);
+  const { error } = await supabaseAdmin.from('profile_images').delete().eq('id', req.params.id);
+  if (error) return res.status(400).json({ error: error.message });
+
+  await logAdminAction(req.user?.email, 'upload_deleted', 'profile_image', req.params.id, {
+    profile_id: image.profile_id,
+    storage_path: image.storage_path,
+    reason: optionalText(req.body.reason, 1000)
+  });
+  res.status(204).send();
 }));
 
 adminRouter.get('/live-sessions', asyncHandler(async (_req, res) => {
@@ -614,13 +890,7 @@ adminRouter.patch('/settings', asyncHandler(async (req, res) => {
 }));
 
 async function logAdminAction(adminEmail: string | undefined, action: string, targetType: string, targetId: string | null, details: Record<string, unknown>) {
-  await supabaseAdmin.from('admin_activity_logs').insert({
-    admin_email: adminEmail || null,
-    action,
-    target_type: targetType,
-    target_id: targetId,
-    details
-  });
+  await writeAdminAuditLog(adminEmail, action, targetType, targetId, details);
 }
 
 function normalizeSettings(rows: Array<{ key: string; value: unknown }>) {
