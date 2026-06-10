@@ -189,23 +189,14 @@ export function AdminPage() {
       }
 
       const accessToken = result.data.session?.access_token || '';
-      const refreshToken = result.data.session?.refresh_token || '';
-      if (!result.data.session || !accessToken || !refreshToken) {
+      if (!result.data.session || !accessToken) {
         setMessage('Nie udało się odczytać sesji administratora. Spróbuj ponownie.');
         return;
       }
 
-      console.log('SET SESSION START');
-      await withTimeout(
-        supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken
-        }),
-        5000,
-        'Supabase setSession'
-      );
+      console.log('LOGIN SUCCESS SESSION', result.data.session);
 
-      console.log('ADMIN ME START');
+      console.log('ADMIN CHECK START');
       const adminCheck = await withTimeout(api.adminMe(accessToken), 10000, 'Admin me');
       console.log('ADMIN ME RESULT', adminCheck);
       if (!adminCheck?.admin) {
@@ -222,6 +213,7 @@ export function AdminPage() {
       } : null);
       setMessage('');
       setToken(accessToken);
+      console.log('ADMIN CHECK SUCCESS');
       console.log('ADMIN LOGIN SUCCESS');
       navigate('/admin', { replace: true });
       void load(accessToken);
