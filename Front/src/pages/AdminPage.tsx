@@ -132,7 +132,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       setToken(session.access_token);
       setAuthRestoring(false);
       if (location.pathname === '/admin/login') navigate('/admin', { replace: true });
-      load(session.access_token);
+      void load(session.access_token);
     }
 
     restoreAdminSession().catch((sessionError) => {
@@ -184,54 +184,72 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
 
   async function load(accessToken = token) {
     setLoading(true);
-    const [
-      statsData,
-      tokenData,
-      usersData,
-      profileData,
-      subscriptionData,
-      reportData,
-      bookingData,
-      walletData,
-      transactionData,
-      purchaseData,
-      masterData,
-      tagData,
-      photoData,
-      clientReferralData
-    ] = await Promise.all([
-      api.adminStats(accessToken),
-      api.adminTokenStats(accessToken),
-      api.adminUsers(accessToken),
-      api.adminProfiles(accessToken),
-      api.adminSubscriptions(accessToken),
-      api.adminReports(accessToken),
-      api.adminBookings(accessToken),
-      api.adminWallets(accessToken),
-      api.adminTokenTransactions(accessToken),
-      api.adminPurchaseRequests(accessToken),
-      api.adminMasterWallets(accessToken),
-      api.adminTags(accessToken),
-      api.adminPhotos(accessToken),
-      api.adminClientReferrals(accessToken)
-    ]);
+    try {
+      const [
+        statsResult,
+        tokenResult,
+        usersResult,
+        profileResult,
+        subscriptionResult,
+        reportResult,
+        bookingResult,
+        walletResult,
+        transactionResult,
+        purchaseResult,
+        masterResult,
+        tagResult,
+        photoResult,
+        clientReferralResult
+      ] = await Promise.allSettled([
+        adminLoadRequest('adminStats', api.adminStats(accessToken)),
+        adminLoadRequest('adminTokenStats', api.adminTokenStats(accessToken)),
+        adminLoadRequest('adminUsers', api.adminUsers(accessToken)),
+        adminLoadRequest('adminProfiles', api.adminProfiles(accessToken)),
+        adminLoadRequest('adminSubscriptions', api.adminSubscriptions(accessToken)),
+        adminLoadRequest('adminReports', api.adminReports(accessToken)),
+        adminLoadRequest('adminBookings', api.adminBookings(accessToken)),
+        adminLoadRequest('adminWallets', api.adminWallets(accessToken)),
+        adminLoadRequest('adminTokenTransactions', api.adminTokenTransactions(accessToken)),
+        adminLoadRequest('adminPurchaseRequests', api.adminPurchaseRequests(accessToken)),
+        adminLoadRequest('adminMasterWallets', api.adminMasterWallets(accessToken)),
+        adminLoadRequest('adminTags', api.adminTags(accessToken)),
+        adminLoadRequest('adminPhotos', api.adminPhotos(accessToken)),
+        adminLoadRequest('adminClientReferrals', api.adminClientReferrals(accessToken))
+      ]);
 
-    setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
-    setTokenStats(tokenData.stats);
-    setUsers(usersData.users);
-    setProfiles(profileData.profiles);
-    setSubscriptions(subscriptionData.subscriptions);
-    setReports(reportData.reports);
-    setBookings(bookingData.booking_requests);
-    setWallets(walletData.wallets);
-    setTransactions(transactionData.transactions);
-    setPurchases(purchaseData.purchase_requests);
-    setMasterWallets(masterData.master_wallets);
-    setTags(tagData.tags);
-    setPhotos(photoData.photos as Record<string, any>[]);
-    setClientReferrals(clientReferralData.referrals);
-    setActivity(statsData.latest_activity);
-    setLoading(false);
+      const statsData = settledValue(statsResult, { stats: {}, latest_activity: [] }, 'adminStats');
+      const tokenData = settledValue(tokenResult, { stats: {} }, 'adminTokenStats');
+      const usersData = settledValue(usersResult, { users: [] }, 'adminUsers');
+      const profileData = settledValue(profileResult, { stats: {}, profiles: [] }, 'adminProfiles');
+      const subscriptionData = settledValue(subscriptionResult, { subscriptions: [] }, 'adminSubscriptions');
+      const reportData = settledValue(reportResult, { reports: [], reports_count: 0 }, 'adminReports');
+      const bookingData = settledValue(bookingResult, { booking_requests: [] }, 'adminBookings');
+      const walletData = settledValue(walletResult, { wallets: [] }, 'adminWallets');
+      const transactionData = settledValue(transactionResult, { transactions: [] }, 'adminTokenTransactions');
+      const purchaseData = settledValue(purchaseResult, { purchase_requests: [] }, 'adminPurchaseRequests');
+      const masterData = settledValue(masterResult, { master_wallets: [] }, 'adminMasterWallets');
+      const tagData = settledValue(tagResult, { tags: [] }, 'adminTags');
+      const photoData = settledValue(photoResult, { photos: [] }, 'adminPhotos');
+      const clientReferralData = settledValue(clientReferralResult, { referrals: [] }, 'adminClientReferrals');
+
+      setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
+      setTokenStats(tokenData.stats);
+      setUsers(usersData.users);
+      setProfiles(profileData.profiles);
+      setSubscriptions(subscriptionData.subscriptions);
+      setReports(reportData.reports);
+      setBookings(bookingData.booking_requests);
+      setWallets(walletData.wallets);
+      setTransactions(transactionData.transactions);
+      setPurchases(purchaseData.purchase_requests);
+      setMasterWallets(masterData.master_wallets);
+      setTags(tagData.tags);
+      setPhotos(photoData.photos as Record<string, any>[]);
+      setClientReferrals(clientReferralData.referrals);
+      setActivity(statsData.latest_activity);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function action(fn: () => Promise<unknown>) {
@@ -240,6 +258,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      setLoading(false);
     }
   }
 
@@ -490,6 +509,23 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
 
     return <section className="admin-card"><h2>{adminLabel(view)}</h2><p>Modul przygotowany jako placeholder control center.</p></section>;
   }
+}
+
+function settledValue<T>(result: PromiseSettledResult<T>, fallback: T, label: string): T {
+  if (result.status === 'fulfilled') return result.value;
+  console.error(`Admin load failed: ${label}`, result.reason);
+  return fallback;
+}
+
+function adminLoadRequest<T>(label: string, request: Promise<T>, timeoutMs = 10000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Admin load timeout: ${label}`)), timeoutMs);
+  });
+
+  return Promise.race([request, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
 }
 
 function getAdminView(pathname: string) {
