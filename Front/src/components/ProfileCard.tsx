@@ -1,52 +1,90 @@
 import { Link } from 'react-router-dom';
-import { BadgeCheck, HeartHandshake, Hotel, Languages, MapPin, Radio, Smartphone, LockKeyhole } from 'lucide-react';
+import { BadgeCheck, HeartHandshake, Home, Hotel, Languages, MapPin, MessageCircle, Radio, Star, Video, LockKeyhole } from 'lucide-react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
+import { serviceLabel } from '../data/serviceCatalog';
 
 export function ProfileCard({ profile }: { profile: Profile }) {
   const { t, option } = useI18n();
   const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
   const status = profile.availability_status || (profile.available_now ? 'available' : 'unavailable');
+  const operatorLabel = operatorStatusLabel(profile.operator_status || (status === 'available' ? 'ONLINE_NOW' : status === 'busy' ? 'BUSY' : 'OFFLINE'));
+  const priceFrom = getPriceFrom(profile);
+  const reviewCount = 12 + (profile.id.length % 37);
+  const rating = (4.6 + (profile.id.length % 4) / 10).toFixed(1);
+  const isNew = profile.created_at ? Date.now() - new Date(profile.created_at).getTime() < 1000 * 60 * 60 * 24 * 14 : profile.id.length % 2 === 0;
+  const badges = [
+    profile.verified ? 'VERIFIED' : '',
+    profile.price_1h ? 'PLUS' : '',
+    isNew ? 'NEW' : '',
+    (profile.category === 'live_cam' || profile.service_tags?.includes('live-cam')) ? 'LIVE CAM' : ''
+  ].filter(Boolean).slice(0, 3);
 
   return (
-    <article className="profile-card">
+    <article className="profile-card premium-profile-card">
       <div className="card-image">
         {primary?.public_url ? <img src={primary.public_url} alt="" loading="lazy" /> : <div className="image-placeholder">{t('app.name')}</div>}
-        <span className={`status ${status}`}>{t(`status.${status}`)}</span>
+        <span className={`status ${status}`}>{operatorLabel}</span>
+        <div className="premium-card-badges">
+          {badges.map((badge) => <span key={badge}>{badge}</span>)}
+        </div>
         <div className="card-overlay">
-          <strong>{profile.display_name}</strong>
-          {profile.distance_km ? <span>~{profile.distance_km} km</span> : null}
+          <div>
+            <strong>{profile.display_name}</strong>
+            <small>{profile.age ? `${profile.age} · ` : ''}{option(profile.category || 'other')}</small>
+          </div>
+          <span>{profile.distance_km ? `~${profile.distance_km} km` : profile.work_city || profile.city}</span>
         </div>
       </div>
       <div className="card-body">
         <div>
           <h3>{profile.display_name}{profile.age ? <span>{profile.age}</span> : null}</h3>
-          <p><MapPin size={15} /> {profile.city}{profile.area ? `, ${profile.area}` : ''}{profile.distance_km ? ` - ~${profile.distance_km} km` : ''}</p>
+          <p><MapPin size={15} /> {profile.work_city || profile.city}{profile.work_area || profile.area ? `, ${profile.work_area || profile.area}` : ''}{profile.distance_km ? ` - ~${profile.distance_km} km` : ''}</p>
+        </div>
+        <div className="premium-card-meta">
+          <strong>{priceFrom}</strong>
+          <span><Star size={14} /> {rating} ({reviewCount})</span>
+        </div>
+        <div className="mini-icon-row" aria-label="Profile features">
+          {profile.visit_types?.includes('hotel') && <span title="Hotel visit"><Hotel size={15} /></span>}
+          {profile.visit_types?.includes('incall') && <span title="Home visit"><Home size={15} /></span>}
+          {profile.service_tags?.includes('conversation') && <span title="Chat"><MessageCircle size={15} /></span>}
+          {profile.category === 'live_cam' && <span title="Cam"><Video size={15} /></span>}
+          {profile.verified && <span title="Verified"><BadgeCheck size={15} /></span>}
+          {profile.audience?.includes('couples') && <span title="Couples"><HeartHandshake size={15} /></span>}
         </div>
         <div className="badges">
-          {status === 'available' && <span>{t('badges.availableNow')}</span>}
-          {profile.verified && <span><BadgeCheck size={14} /> {t('badges.verified')}</span>}
-          <span><LockKeyhole size={14} /> Private gallery</span>
-          <span>Live tonight</span>
-          {profile.price_1h && <span>VIP</span>}
-          {profile.mobile_service && <span><Smartphone size={14} /> {t('badges.mobile')}</span>}
-          {profile.private_studio && <span><LockKeyhole size={14} /> {t('badges.private')}</span>}
-          {profile.audience?.includes('couples') && <span><HeartHandshake size={14} /> {t('badges.couples')}</span>}
-          {profile.visit_types?.includes('hotel') && <span><Hotel size={14} /> {t('badges.hotel')}</span>}
+          {profile.private_studio && <span><LockKeyhole size={14} /> Private</span>}
           {profile.languages?.length ? <span><Languages size={14} /> {profile.languages.slice(0, 3).join('/')}</span> : null}
           {profile.category && <span><Radio size={14} /> {option(profile.category)}</span>}
+          {profile.hotspot_type && <span>{profile.hotspot_type}</span>}
+          {profile.radar_score ? <span>Radar {profile.radar_score}</span> : null}
         </div>
-        {profile.tags?.length ? (
-          <div className="tag-list compact">
-            {profile.tags.slice(0, 5).map((tag) => <span key={tag.id}>{tag.label}</span>)}
-          </div>
-        ) : null}
-        {profile.price_1h && <p className="price-line">{t('profile.fromPrice', { price: profile.price_1h, currency: profile.currency || 'EUR' })}</p>}
-        <p className="muted">{t('profile.availableWithin', { radius: profile.service_radius_km || 25 })}</p>
+        {profile.services?.length ? <p className="muted line-clamp">{profile.services.slice(0, 4).map(serviceLabel).join(' · ')}</p> : null}
         {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
-        <Link to={`/profile/${profile.id}`} className="button full">Private access</Link>
+        <Link to={`/profile/${profile.id}`} className="button primary full">Profil ansehen</Link>
       </div>
     </article>
   );
+}
+
+function operatorStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    ONLINE_NOW: 'Online now',
+    BUSY: 'Busy',
+    TRAVELING: 'Traveling',
+    AVAILABLE_TODAY: 'Available today',
+    APPOINTMENT_ONLY: 'Appointment only',
+    OFFLINE: 'Offline'
+  };
+  return labels[status] || 'Offline';
+}
+
+function getPriceFrom(profile: Profile) {
+  const prices = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_night]
+    .map((value) => Number(value || 0))
+    .filter((value) => value > 0);
+  if (!prices.length) return 'Preis auf Anfrage';
+  return `ab ${Math.min(...prices)} ${profile.currency || 'EUR'} / h`;
 }

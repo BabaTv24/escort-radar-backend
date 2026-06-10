@@ -18,10 +18,15 @@ type RadarPanelProps = {
   compact?: boolean;
 };
 
-const positions = [
-  [52, 22], [68, 35], [38, 42], [58, 58], [30, 62], [76, 70],
-  [45, 75], [25, 32], [62, 82], [82, 48], [48, 34], [36, 78]
-];
+const fallbackAngles = [286, 34, 214, 118, 326, 174, 64, 252, 18, 148, 304, 96];
+const statusClassByOperator: Record<string, string> = {
+  ONLINE_NOW: 'online-now',
+  AVAILABLE_TODAY: 'available-today',
+  BUSY: 'busy',
+  APPOINTMENT_ONLY: 'appointment-only',
+  TRAVELING: 'traveling',
+  OFFLINE: 'offline'
+};
 
 export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, fallbackNotice = false, compact = false }: RadarPanelProps) {
   const { t } = useI18n();
@@ -60,9 +65,10 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         {onUseLocation && <button className="button" type="button" onClick={onUseLocation}>{t('radar.useLocation')}</button>}
         <p className="safety-line">{t('radar.inRange', { count: visibleProfiles.length })}</p>
         <div className="radar-legend">
-          <span><i className="dot available" /> {t('status.available')}</span>
+          <span><i className="dot online-now" /> Online now</span>
+          <span><i className="dot available-today" /> Available today</span>
           <span><i className="dot busy" /> {t('status.busy')}</span>
-          <span><i className="dot unavailable" /> {t('status.unavailable')}</span>
+          <span><i className="dot offline" /> Offline</span>
         </div>
         {compact && <Link to={`/city/${city}`} className="button primary">{t('radar.cta')}</Link>}
       </div>
@@ -70,18 +76,62 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         <div className="radar-sweep" />
         <div className="radar-core" />
         {visibleProfiles.slice(0, 12).map(({ profile, radar }, index) => {
-          const [left, top] = positions[index % positions.length];
+          const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
+          const point = getRadarPoint(profile, index, radius, radar.distance_km);
+          const operatorStatus = profile.operator_status || (profile.available_now ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE');
+          const statusClass = statusClassByOperator[operatorStatus] || 'offline';
+          const price = getPrice(profile);
+
           return (
             <Link
               key={profile.id}
               to={`/profile/${profile.id}`}
-              className={`radar-point ${profile.availability_status || 'unavailable'}`}
-              style={{ left: `${left}%`, top: `${top}%` }}
-              title={`${profile.display_name} · ~${radar.distance_km} km`}
-            />
+              className={`radar-point radar-avatar-point ${statusClass}`}
+              style={{ left: `${point.left}%`, top: `${point.top}%` }}
+              title={`${profile.display_name} - ~${radar.distance_km} km - ${operatorStatus.replaceAll('_', ' ')} - ${price}`}
+            >
+              {primary?.public_url ? <img src={primary.public_url} alt="" loading="lazy" /> : <span>{getInitials(profile.display_name)}</span>}
+              <span className="radar-tooltip">
+                <strong>{profile.display_name}</strong>
+                <small>~{radar.distance_km} km</small>
+                <small>{operatorStatus.replaceAll('_', ' ')}</small>
+                <small>{price}</small>
+              </span>
+            </Link>
           );
         })}
       </div>
     </section>
   );
+}
+
+function getRadarPoint(profile: Profile, index: number, radius: number, distanceKm?: number | null) {
+  const hasCoordinates = typeof profile.latitude === 'number' && typeof profile.longitude === 'number';
+  const seed = hashString(profile.id);
+  const angle = (hasCoordinates ? seed % 360 : fallbackAngles[index % fallbackAngles.length]) * (Math.PI / 180);
+  const distanceRatio = Math.min(Math.max(Number(distanceKm || 0) / Math.max(radius, 1), 0.2), 0.92);
+  const fallbackRatio = 0.34 + ((seed % 54) / 100);
+  const visualRadius = hasCoordinates ? distanceRatio : fallbackRatio;
+
+  return {
+    left: 50 + Math.cos(angle) * visualRadius * 42,
+    top: 50 + Math.sin(angle) * visualRadius * 42
+  };
+}
+
+function hashString(value: string) {
+  return value.split('').reduce((total, char) => total + char.charCodeAt(0), 0);
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return `${parts[0]?.[0] || 'P'}${parts[1]?.[0] || ''}`;
+}
+
+function getPrice(profile: Profile) {
+  const prices = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_night]
+    .map((value) => Number(value || 0))
+    .filter((value) => value > 0);
+  if (!prices.length) return 'Price on request';
+  return `from ${Math.min(...prices)} ${profile.currency || 'EUR'}`;
 }
