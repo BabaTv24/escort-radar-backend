@@ -10,6 +10,7 @@ import { paymentsRouter } from './routes/payments.js';
 import { bookingRequestsRouter } from './routes/bookingRequests.js';
 import { tokensRouter } from './routes/tokens.js';
 import { tagsRouter } from './routes/tags.js';
+import { clientActivationRouter } from './routes/clientActivation.js';
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use('/api/payments', paymentsRouter);
 app.use('/api/booking-requests', bookingRequestsRouter);
 app.use('/api/tokens', tokensRouter);
 app.use('/api/tags', tagsRouter);
+app.use('/api/client-activation', clientActivationRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
