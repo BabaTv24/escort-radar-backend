@@ -11,6 +11,7 @@ import { bookingRequestsRouter } from './routes/bookingRequests.js';
 import { tokensRouter } from './routes/tokens.js';
 import { tagsRouter } from './routes/tags.js';
 import { clientActivationRouter } from './routes/clientActivation.js';
+import { authRouter } from './routes/auth.js';
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'escort-radar-api', environment: config.nodeEnv });
 });
 
+app.use('/api/auth', authRouter);
 app.use('/api/profiles', profilesRouter);
 app.use('/api/uploads', uploadsRouter);
 app.use('/api/reports', reportsRouter);

@@ -21,6 +21,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
 export const api = {
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
+  authMe: (token: string) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business'; role?: string; app_metadata?: Record<string, unknown> } }>('/api/auth/me', { token }),
+  register: (body: { email: string; password: string; username?: string; auth_account_type: 'client' | 'escort' | 'business'; identity?: string; referred_by_code?: string }) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business' } }>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }),
   tags: () => request<{ tags: Tag[] }>('/api/tags'),
   profile: (id: string) => request<{ profile: Profile }>(`/api/profiles/${id}`),
   profileAccess: (token: string, id: string) => request<{ access: ProfileAccess }>(`/api/profiles/${id}/access`, { token }),

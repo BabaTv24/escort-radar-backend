@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarDays, Clock, Copy, CreditCard, Flame, Gem, ImagePlus, Lock, LogOut, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import type { BookingRequest, Profile, ProfileImage, Tag } from '../types';
+import type { BookingRequest, ClientActivation, CoinWallet, Profile, ProfileImage, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
@@ -76,8 +77,9 @@ const emptyProfile: Partial<Profile> = {
 };
 
 const authIntentStorageKey = 'escortRadar.authIntent';
-const allowedAuthAccountTypes = ['client', 'escort', 'business'];
+const allowedAuthAccountTypes = ['client', 'escort', 'business'] as const;
 const allowedIdentities = ['male', 'female', 'trans'];
+type AuthAccountType = typeof allowedAuthAccountTypes[number];
 
 export function DashboardPage() {
   const [token, setToken] = useState('');
@@ -91,56 +93,109 @@ export function DashboardPage() {
   const [profileMode, setProfileMode] = useState<'create' | 'edit'>('create');
   const [activeWizardStep, setActiveWizardStep] = useState(1);
   const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [authAccountType, setAuthAccountType] = useState<AuthAccountType>('client');
   const [platformTags, setPlatformTags] = useState<Tag[]>([]);
   const [contentTab, setContentTab] = useState('photos');
   const [creatorTab, setCreatorTab] = useState('listing');
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [lastApiError, setLastApiError] = useState('');
+  const [clientActivation, setClientActivation] = useState<ClientActivation | null>(null);
+  const [coinWallet, setCoinWallet] = useState<CoinWallet | null>(null);
+  const [activationBusy, setActivationBusy] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t, option } = useI18n();
 
   useEffect(() => {
     api.tags().then((data) => setPlatformTags(data.tags)).catch(() => setPlatformTags([]));
     supabase.auth.getSession().then(async ({ data }) => {
-      const session = data.session;
-      setToken(session?.access_token || '');
-      setUserEmail(session?.user.email || '');
-      if (session?.access_token) {
-        await syncStoredAuthIntent();
-        loadDashboard(session.access_token);
-      }
+      await activateSession(data.session);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setToken(session?.access_token || '');
-      setUserEmail(session?.user.email || '');
-      if (session?.access_token) {
-        await syncStoredAuthIntent();
-        loadDashboard(session.access_token);
-      }
+      await activateSession(session);
     });
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  async function syncStoredAuthIntent() {
+  async function activateSession(session: Session | null) {
+    setToken(session?.access_token || '');
+    setUserEmail(session?.user.email || '');
+
+    if (!session?.access_token) {
+      setAuthAccountType('client');
+      return;
+    }
+
+    const role = await resolveBackendAuthAccountType(session.access_token);
+    setAuthAccountType(role);
+
+    if (role === 'client') {
+      await loadClientDashboard(session.access_token);
+      return;
+    }
+
+    await loadDashboard(session.access_token);
+  }
+
+  async function syncStoredAuthIntent(): Promise<Record<string, string> | null> {
     const stored = localStorage.getItem(authIntentStorageKey);
-    if (!stored) return;
+    if (!stored) return null;
 
     try {
       const parsed = JSON.parse(stored) as Record<string, unknown>;
       const metadata: Record<string, string> = {};
-      if (allowedAuthAccountTypes.includes(String(parsed.auth_account_type))) {
+      if (allowedAuthAccountTypes.includes(String(parsed.auth_account_type) as AuthAccountType)) {
         metadata.auth_account_type = String(parsed.auth_account_type);
       }
       if (allowedIdentities.includes(String(parsed.identity))) {
         metadata.identity = String(parsed.identity);
       }
-      if (!Object.keys(metadata).length) return;
+      if (parsed.referred_by_code) {
+        metadata.referred_by_code = String(parsed.referred_by_code);
+      }
+      if (!Object.keys(metadata).length) return null;
 
       const { error } = await supabase.auth.updateUser({ data: metadata });
       if (!error) localStorage.removeItem(authIntentStorageKey);
+      return error ? null : metadata;
     } catch {
-      return;
+      return null;
+    }
+  }
+
+  async function resolveBackendAuthAccountType(accessToken: string): Promise<AuthAccountType> {
+    try {
+      const data = await api.authMe(accessToken);
+      return resolveAuthAccountType(data.user.app_metadata || { auth_account_type: data.user.auth_account_type });
+    } catch {
+      return 'client';
+    }
+  }
+
+  async function loadClientDashboard(accessToken: string) {
+    setDashboardStatus('loading');
+    try {
+      await api.myWallet(accessToken).then((data) => setWallet(data.wallet)).catch(() => setWallet(null));
+      const clientData = await api.clientActivationMe(accessToken);
+      setClientActivation(clientData.activation);
+      setCoinWallet(clientData.wallet);
+      const checkoutSessionId = searchParams.get('activation_session_id');
+      if (checkoutSessionId && clientData.activation.state !== 'client_activated') {
+        const confirmed = await api.confirmClientActivation(accessToken, checkoutSessionId);
+        setClientActivation(confirmed.activation);
+        const refreshed = await api.clientActivationMe(accessToken);
+        setCoinWallet(refreshed.wallet);
+        setSearchParams({});
+      }
+      setSavedProfile(null);
+      setProfile({ ...emptyProfile });
+      setProfileMode('create');
+      setMessage(t('dashboard.client.ready'));
+      setDashboardStatus('success');
+    } catch {
+      setDashboardStatus('error');
+      setMessage(t('states.requestFailed'));
     }
   }
 
@@ -186,6 +241,10 @@ export function DashboardPage() {
     setDashboardStatus('saving');
     setMessage(t('dashboard.saving'));
     if (!token) return setMessage(t('dashboard.signInFirst'));
+    if (!isAdvertiserAccount(authAccountType)) {
+      setDashboardStatus('error');
+      return setMessage('To jest funkcja dla ogłoszeniodawców. Utwórz konto Escort lub Business.');
+    }
 
     try {
       const body = prepareProfilePayload(profile, savedProfile);
@@ -211,6 +270,11 @@ export function DashboardPage() {
   async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !token || !savedProfile) return;
+    if (!isAdvertiserAccount(authAccountType)) {
+      setDashboardStatus('error');
+      setUploadStatus('error');
+      return setMessage('To jest funkcja dla ogłoszeniodawców. Utwórz konto Escort lub Business.');
+    }
     setAuthStatus('idle');
     setDashboardStatus('saving');
     setUploadStatus('uploading');
@@ -302,6 +366,23 @@ export function DashboardPage() {
     setSavedProfile(null);
     setProfile({ ...emptyProfile });
     setWallet(null);
+    setCoinWallet(null);
+    setClientActivation(null);
+  }
+
+  async function startClientActivation() {
+    if (!token) return;
+    setActivationBusy(true);
+    setMessage('');
+    try {
+      const referredByCode = localStorage.getItem('escortRadar.referralCode');
+      const checkout = await api.clientActivationCheckout(token, referredByCode);
+      window.location.href = checkout.checkout_url;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setActivationBusy(false);
+    }
   }
 
   if (!token) {
@@ -319,8 +400,8 @@ export function DashboardPage() {
               <span>{t('baba.manualModeration')}</span>
             </div>
             <div className="hero-actions">
-              <Link to="/register" className="button primary">{t('dashboard.createAccountFirst')}</Link>
-              <Link to="/login" className="button">{t('dashboard.haveAccountLogin')}</Link>
+              <Link to="/register?type=client" className="button primary">{t('dashboard.client.createFree')}</Link>
+              <Link to="/register?type=escort" className="button">{t('dashboard.creator.createPremium')}</Link>
             </div>
           </div>
         </section>
@@ -328,12 +409,37 @@ export function DashboardPage() {
     );
   }
 
+  if (authAccountType === 'client') {
+    return (
+      <ClientDashboard
+        userEmail={userEmail}
+        wallet={wallet}
+        coinWallet={coinWallet}
+        activation={clientActivation}
+        message={message}
+        activationBusy={activationBusy}
+        onActivate={startClientActivation}
+        onLogout={logout}
+      />
+    );
+  }
+
+  if (authAccountType === 'business') {
+    return (
+      <BusinessDashboard
+        userEmail={userEmail}
+        message={message}
+        onLogout={logout}
+      />
+    );
+  }
+
   return (
     <div className="page dashboard-page">
       <section className="dashboard-hero">
-        <p className="eyebrow">{t('onboarding.step2')}</p>
-        <h1>{t('dashboard.title')}</h1>
-        <p>{t('dashboard.subtitle')}</p>
+        <p className="eyebrow">{t('dashboard.creator.eyebrow')}</p>
+        <h1>{t('dashboard.creator.title')}</h1>
+        <p>{t('dashboard.creator.subtitle')}</p>
         <div className="wizard-progress">
           {Array.from({ length: 8 }, (_, index) => index + 1).map((step) => (
             <button key={step} className={activeWizardStep === step ? 'active' : activeWizardStep > step ? 'done' : ''} type="button" onClick={() => setActiveWizardStep(step)}>
@@ -627,6 +733,133 @@ export function DashboardPage() {
         onUpload={() => document.getElementById('creator-media-upload')?.click()}
         onLogout={logout}
       />
+    </div>
+  );
+}
+
+function resolveAuthAccountType(metadata?: Record<string, unknown> | null): AuthAccountType {
+  const value = String(metadata?.auth_account_type || '');
+  return allowedAuthAccountTypes.includes(value as AuthAccountType) ? value as AuthAccountType : 'client';
+}
+
+function isAdvertiserAccount(accountType: AuthAccountType) {
+  return accountType === 'escort' || accountType === 'business';
+}
+
+function ClientDashboard({ userEmail, wallet, coinWallet, activation, message, activationBusy, onActivate, onLogout }: {
+  userEmail: string;
+  wallet: Wallet | null;
+  coinWallet: CoinWallet | null;
+  activation: ClientActivation | null;
+  message: string;
+  activationBusy: boolean;
+  onActivate: () => void;
+  onLogout: () => void;
+}) {
+  const { t } = useI18n();
+  const activated = activation?.state === 'client_activated';
+
+  return (
+    <div className="page dashboard-page">
+      <section className="dashboard-hero">
+        <p className="eyebrow">{t('dashboard.client.eyebrow')}</p>
+        <h1>{t('dashboard.client.title')}</h1>
+        <p>{t('dashboard.client.subtitle')}</p>
+      </section>
+
+      <section className="creator-command-bar">
+        <div>
+          <strong>{t('auth.signedInAs', { email: userEmail })}</strong>
+          <span className="success">{message || t('dashboard.client.ready')}</span>
+        </div>
+        <div className="creator-command-actions">
+          <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> {t('nav.radar')}</Link>
+          <Link className="button" to="/coins"><Gem size={16} /> Coin Wallet</Link>
+          <button className="button danger" type="button" onClick={onLogout}>{t('buttons.logout')}</button>
+        </div>
+      </section>
+
+      <div className="dashboard-grid">
+        <section className="creator-panel">
+          <p className="eyebrow">{t('dashboard.client.statusEyebrow')}</p>
+          <h2>{activated ? 'client_activated' : 'client_free'}</h2>
+          <div className="metrics-grid">
+            <Metric label={t('tokens.balance')} value={`${Math.round(Number(wallet?.escort_token_balance || 0))} ER`} />
+            <Metric label="Coins" value={Math.round(Number(coinWallet?.balance || 0))} />
+            <Metric label="Activation" value={activated ? 'Unlocked' : '0.99 EUR'} />
+          </div>
+          {!activated && <button className="button primary full" type="button" disabled={activationBusy} onClick={onActivate}>
+            {activationBusy ? t('states.loading') : 'Activate for 0.99 EUR'}
+          </button>}
+        </section>
+
+        <section className="creator-panel">
+          <p className="eyebrow">{t('dashboard.client.toolsEyebrow')}</p>
+          <div className="creator-dashboard-grid">
+            <Link className="admin-action-btn" to="/city/berlin"><RadioTower size={16} /> {t('dashboard.client.openRadar')}</Link>
+            <Link className="admin-action-btn" to="/coins"><Gem size={16} /> Coin Wallet</Link>
+            <button className="admin-action-btn" type="button"><UserRound size={16} /> {t('dashboard.client.favorites')}</button>
+            <button className="admin-action-btn" type="button"><Clock size={16} /> {t('dashboard.client.activity')}</button>
+          </div>
+        </section>
+
+        <section className="creator-panel referral-studio">
+          <div>
+            <p className="eyebrow">My Referral Program</p>
+            <h2>{activation?.referral_link || 'Activate to unlock referrals'}</h2>
+            {activation?.referral_link && <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(activation.referral_link || '')}><Copy size={14} /> {t('referral.copy')}</button>}
+          </div>
+          {activation?.qr_image_url ? <img className="client-qr-image" src={activation.qr_image_url} alt="Referral QR" /> : <QrVisual seed="CLIENT-FREE" />}
+          <div className="metrics-grid">
+            <Metric label="Clicks" value={activation?.clicks || 0} />
+            <Metric label="Registrations" value={activation?.registrations || 0} />
+            <Metric label="Activations" value={activation?.activations || 0} />
+            <Metric label="Earned rewards" value={`${activation?.earned_rewards || 0} Coins`} />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function BusinessDashboard({ userEmail, message, onLogout }: {
+  userEmail: string;
+  message: string;
+  onLogout: () => void;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <div className="page dashboard-page">
+      <section className="dashboard-hero">
+        <p className="eyebrow">{t('dashboard.business.eyebrow')}</p>
+        <h1>{t('dashboard.business.title')}</h1>
+        <p>{t('dashboard.business.subtitle')}</p>
+      </section>
+
+      <section className="creator-command-bar">
+        <div>
+          <strong>{t('auth.signedInAs', { email: userEmail })}</strong>
+          <span className="success">{message || t('dashboard.business.ready')}</span>
+        </div>
+        <div className="creator-command-actions">
+          <Link className="button primary" to="/tokens"><Gem size={16} /> {t('dashboard.business.premiumCta')}</Link>
+          <button className="button danger" type="button" onClick={onLogout}>{t('buttons.logout')}</button>
+        </div>
+      </section>
+
+      <div className="dashboard-grid">
+        <section className="creator-panel">
+          <p className="eyebrow">{t('dashboard.business.verificationEyebrow')}</p>
+          <h2>{t('dashboard.business.verificationTitle')}</h2>
+          <p>{t('dashboard.business.verificationCopy')}</p>
+        </section>
+        <section className="creator-panel">
+          <p className="eyebrow">{t('dashboard.business.multiProfileEyebrow')}</p>
+          <h2>{t('dashboard.business.multiProfileTitle')}</h2>
+          <p>{t('dashboard.business.multiProfileCopy')}</p>
+        </section>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Radar, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useI18n } from '../i18n';
 
 const authAccountTypeOptions = ['client', 'escort', 'business'] as const;
@@ -9,11 +10,12 @@ const identityOptions = ['male', 'female', 'trans'] as const;
 const authIntentStorageKey = 'escortRadar.authIntent';
 
 export function RegisterPage() {
+  const [searchParams] = useSearchParams();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
-  const [authAccountType, setAuthAccountType] = useState<typeof authAccountTypeOptions[number]>('escort');
+  const [authAccountType, setAuthAccountType] = useState<typeof authAccountTypeOptions[number]>('client');
   const [identity, setIdentity] = useState<typeof identityOptions[number]>('female');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [confirmedAdult, setConfirmedAdult] = useState(false);
@@ -23,26 +25,44 @@ export function RegisterPage() {
   const { t } = useI18n();
   const requiresVerification = authAccountType === 'escort' || authAccountType === 'business';
 
+  useEffect(() => {
+    const requestedType = searchParams.get('type');
+    if (authAccountTypeOptions.includes(requestedType as typeof authAccountTypeOptions[number])) {
+      setAuthAccountType(requestedType as typeof authAccountTypeOptions[number]);
+    }
+  }, [searchParams]);
+
   async function register() {
     setMessage('');
     if (password !== repeatPassword) return setMessage(t('onboarding.passwordMismatch'));
     if (!acceptedTerms || !confirmedAdult) return setMessage(t('onboarding.acceptRequired'));
 
     setLoading(true);
-    const result = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: { data: { username, auth_account_type: authAccountType, identity } }
-    });
-    setLoading(false);
-
-    if (result.error) return setMessage(result.error.message);
-    navigate('/dashboard');
+    const referredByCode = searchParams.get('ref') || localStorage.getItem('escortRadar.referralCode') || '';
+    try {
+      await api.register({
+        email: email.trim(),
+        password,
+        username,
+        auth_account_type: authAccountType,
+        identity,
+        referred_by_code: referredByCode
+      });
+      const result = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (result.error) return setMessage(result.error.message);
+      if (referredByCode) localStorage.setItem('escortRadar.referralCode', referredByCode);
+      navigate('/dashboard');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function signInWithGoogle() {
     setMessage('');
-    localStorage.setItem(authIntentStorageKey, JSON.stringify({ auth_account_type: authAccountType, identity }));
+    const referredByCode = searchParams.get('ref') || localStorage.getItem('escortRadar.referralCode') || '';
+    localStorage.setItem(authIntentStorageKey, JSON.stringify({ auth_account_type: authAccountType, identity, referred_by_code: referredByCode }));
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/dashboard` }
@@ -62,17 +82,23 @@ export function RegisterPage() {
           <h1><Radar size={44} /> {t('onboarding.headline')}</h1>
           <p>{t('onboarding.subtitle')}</p>
           <div className="onboarding-points">
-            <span>{t('subscription.price')}</span>
-            <span>{t('register.benefitPhotos')}</span>
-            <span>{t('register.benefitRadar')}</span>
-            <span>{t('register.benefitVip')}</span>
-            <span>{t('tokens.title')}</span>
-            <span>{t('baba.manualModeration')}</span>
+            {authAccountType === 'client' ? <>
+              <span>{t('auth.clientBenefitFree')}</span>
+              <span>{t('auth.clientBenefitRadar')}</span>
+              <span>{t('auth.clientBenefitTokens')}</span>
+            </> : <>
+              <span>{t('subscription.price')}</span>
+              <span>{t('register.benefitPhotos')}</span>
+              <span>{t('register.benefitRadar')}</span>
+              <span>{t('register.benefitVip')}</span>
+              <span>{t('tokens.title')}</span>
+              <span>{t('baba.manualModeration')}</span>
+            </>}
           </div>
         </div>
         <div className="onboarding-card">
           <p className="eyebrow">{t('onboarding.registerCard')}</p>
-          <h2>{t('onboarding.createAccess')}</h2>
+          <h2>{requiresVerification ? t('onboarding.createAccess') : t('auth.createFreeAccess')}</h2>
           <div className="account-type-grid">
             {authAccountTypeOptions.map((item) => (
               <button key={item} type="button" className={authAccountType === item ? 'account-type-card selected' : 'account-type-card'} onClick={() => setAuthAccountType(item)}>
@@ -84,14 +110,19 @@ export function RegisterPage() {
           <select value={identity} onChange={(event) => setIdentity(event.target.value as typeof identityOptions[number])}>
             {identityOptions.map((item) => <option key={item} value={item}>{t(`identity.${item}`)}</option>)}
           </select>
-          {requiresVerification && <p className="subscription-notice"><ShieldCheck size={16} /> Profile publication requires verification.</p>}
+          <p className="subscription-notice">
+            <ShieldCheck size={16} />
+            {requiresVerification ? t('auth.registrationPremiumNotice') : t('auth.registrationClientNotice')}
+          </p>
           <input placeholder={t('form.username')} value={username} onChange={(event) => setUsername(event.target.value)} />
           <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
           <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
           <input type="password" placeholder={t('form.repeatPassword')} value={repeatPassword} onChange={(event) => setRepeatPassword(event.target.value)} />
           <label className="premium-check"><input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} /> {t('onboarding.acceptTerms')}</label>
           <label className="premium-check"><input type="checkbox" checked={confirmedAdult} onChange={(event) => setConfirmedAdult(event.target.checked)} /> {t('onboarding.confirm18')}</label>
-          <button className="button primary full" disabled={loading} onClick={register}>{loading ? t('states.loading') : t('onboarding.createPremiumAccount')}</button>
+          <button className="button primary full" disabled={loading} onClick={register}>
+            {loading ? t('states.loading') : requiresVerification ? t('onboarding.createPremiumAccount') : t('auth.createFreeClientAccount')}
+          </button>
           <button className="button full" type="button" disabled={loading} onClick={signInWithGoogle}>{t('auth.continueWithGoogle')}</button>
           <Link className="text-link" to="/login">{t('auth.alreadyHaveAccount')}</Link>
           {message && <p className="error-text">{message}</p>}
