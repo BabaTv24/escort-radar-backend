@@ -10,8 +10,6 @@ import { useI18n } from '../i18n';
 type AdminUser = Record<string, any>;
 type SubscriptionRow = Record<string, any>;
 
-const adminEmails = ['mtvx007@gmail.com', 'babatv24@proton.me'];
-
 const sections = [
   {
     title: 'PRZEGLAD',
@@ -62,6 +60,9 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const [token, setToken] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<Record<string, unknown> | null>(null);
+  const [admin, setAdmin] = useState<Record<string, unknown> | null>(null);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const { t, option } = useI18n();
@@ -79,6 +80,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const [masterWallets, setMasterWallets] = useState<MasterAdminWallet[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [photos, setPhotos] = useState<Record<string, any>[]>([]);
+  const [clientReferrals, setClientReferrals] = useState<Record<string, any>[]>([]);
   const [activity, setActivity] = useState<AdminActivity[]>([]);
   const [query, setQuery] = useState('');
   const [modal, setModal] = useState<{ title: string; body: string } | null>(null);
@@ -89,17 +91,40 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
   const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    console.log('ADMIN PAGE', {
+      loading,
+      user,
+      admin,
+      error
+    });
+  }, [loading, user, admin, error]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data }) => {
       const session = data.session;
-      const signedEmail = session?.user.email?.toLowerCase() || '';
+      setUser(session?.user ? {
+        id: session.user.id,
+        email: session.user.email,
+        app_metadata: session.user.app_metadata
+      } : null);
+
       if (!session?.access_token) {
+        setError('No active admin session');
         if (!accessMode) navigate('/admin/login', { replace: true });
         return;
       }
-      if (!adminEmails.includes(signedEmail)) {
+      const adminCheck = await api.adminMe(session.access_token).catch((adminError) => {
+        setError(adminError instanceof Error ? adminError.message : 'Admin check failed');
+        return null;
+      });
+      if (!adminCheck?.admin) {
+        setAdmin(null);
+        setError('Admin check failed or user is not admin');
         setMessage('Brak dostepu administratora');
         return;
       }
+      setAdmin(adminCheck.admin);
+      setError('');
       setToken(session.access_token);
       load(session.access_token);
     });
@@ -111,9 +136,23 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     const result = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (result.error) return setMessage(result.error.message);
-    const signedEmail = result.data.user?.email?.toLowerCase() || '';
-    if (!adminEmails.includes(signedEmail)) return setMessage('Brak dostepu administratora');
     const accessToken = result.data.session?.access_token || '';
+    setUser(result.data.user ? {
+      id: result.data.user.id,
+      email: result.data.user.email,
+      app_metadata: result.data.user.app_metadata
+    } : null);
+    const adminCheck = await api.adminMe(accessToken).catch((adminError) => {
+      setError(adminError instanceof Error ? adminError.message : 'Admin check failed');
+      return null;
+    });
+    if (!adminCheck?.admin) {
+      setAdmin(null);
+      setError('Admin check failed or user is not admin');
+      return setMessage('Brak dostepu administratora');
+    }
+    setAdmin(adminCheck.admin);
+    setError('');
     setToken(accessToken);
     await load(accessToken);
     navigate('/admin', { replace: true });
@@ -140,7 +179,8 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       purchaseData,
       masterData,
       tagData,
-      photoData
+      photoData,
+      clientReferralData
     ] = await Promise.all([
       api.adminStats(accessToken),
       api.adminTokenStats(accessToken),
@@ -154,7 +194,8 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       api.adminPurchaseRequests(accessToken),
       api.adminMasterWallets(accessToken),
       api.adminTags(accessToken),
-      api.adminPhotos(accessToken)
+      api.adminPhotos(accessToken),
+      api.adminClientReferrals(accessToken)
     ]);
 
     setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
@@ -170,6 +211,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     setMasterWallets(masterData.master_wallets);
     setTags(tagData.tags);
     setPhotos(photoData.photos as Record<string, any>[]);
+    setClientReferrals(clientReferralData.referrals);
     setActivity(statsData.latest_activity);
     setLoading(false);
   }
@@ -200,7 +242,14 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
     );
   }
 
-  if (!token) return null;
+  if (!token) {
+    return (
+      <div style={{ padding: 20, color: 'white', background: '#050505', minHeight: '100vh' }}>
+        <h1>Admin Debug</h1>
+        <pre>{JSON.stringify({ loading, user, admin, error, message, path: location.pathname }, null, 2)}</pre>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-shell">
@@ -283,7 +332,10 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
         <>
           <Action onClick={() => setModal({ title: String(user.email), body: JSON.stringify(user, null, 2) })}>View</Action>
           <Action onClick={() => setModal({ title: 'Edit user', body: JSON.stringify(user, null, 2) })}>Edit</Action>
-          <Action onClick={() => setModal({ title: 'Token balance editor', body: `${user.email}: ${user.token_balance}` })}>Add tokens</Action>
+          <Action onClick={() => action(() => api.adminAdjustCoins(token, String(user.id), 100, 'Manual admin credit'))}>+100 Coins</Action>
+          <Action danger onClick={() => action(() => api.adminAdjustCoins(token, String(user.id), -25, 'Manual admin debit'))}>-25 Coins</Action>
+          <Action onClick={() => action(() => api.adminSetClientActivation(token, String(user.id), 'client_activated'))}>Activate client</Action>
+          <Action danger onClick={() => action(() => api.adminSetClientActivation(token, String(user.id), 'client_free'))}>Deactivate client</Action>
           <Action danger onClick={() => setModal({ title: 'Suspend placeholder', body: String(user.email) })}>Suspend</Action>
         </>
       )} />;
@@ -340,6 +392,12 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
       );
     }
 
+    if (view === 'referrals') {
+      return <AdminTable rows={clientReferrals} columns={['referral_code', 'user_id', 'referred_by_code', 'click_count', 'registration_count', 'activation_count', 'earned_coins', 'created_at']} actions={(row) => (
+        <Action onClick={() => setModal({ title: String(row.referral_code), body: JSON.stringify(row, null, 2) })}>View</Action>
+      )} />;
+    }
+
     if (view === 'tags') {
       return (
         <>
@@ -385,7 +443,7 @@ export function AdminPage({ accessMode = false }: { accessMode?: boolean }) {
         <AdminStatCard label="Bookings" value="enabled" />
         <AdminStatCard label="Live cam placeholder" value="enabled" />
         <AdminStatCard label="Token shop" value="enabled" />
-        <AdminStatCard label="Admin emails" value={adminEmails.join(', ')} />
+        <AdminStatCard label="Admin access" value="app_metadata.role/admin" />
       </section>;
     }
 
