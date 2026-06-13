@@ -14,6 +14,7 @@ import { clientActivationRouter } from './routes/clientActivation.js';
 import { authRouter } from './routes/auth.js';
 import { clientIntentRouter } from './routes/clientIntent.js';
 
+const serverBuildTime = new Date().toISOString();
 const app = express();
 
 app.use(helmet());
@@ -22,6 +23,19 @@ app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'escort-radar-api', environment: config.nodeEnv });
+});
+
+app.get('/api/version', (_req, res) => {
+  res.json({
+    app: 'escort-radar-backend',
+    commit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || 'local',
+    buildTime: serverBuildTime,
+    routes: {
+      clientIntent: true,
+      adminProfiles: true,
+      adminSubscriptions: true,
+    },
+  });
 });
 
 app.use('/api/auth', authRouter);
