@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, Heart, ImagePlus, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import type { BookingRequest, ClientActivation, ClientProfile, CoinTransaction, CoinWallet, Gift as GiftRow, Profile, ProfileImage, Tag } from '../types';
+import type { BookingRequest, ClientActivation, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Gift as GiftRow, Profile, ProfileImage, RadarNotification, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
@@ -26,6 +26,7 @@ import {
   toggleArrayValue,
   visitTypeOptions
 } from '../data/filterOptions';
+import { serviceLabel, serviceOptions } from '../data/serviceCatalog';
 
 const emptyProfile: Partial<Profile> = {
   display_name: '',
@@ -36,6 +37,10 @@ const emptyProfile: Partial<Profile> = {
   phone_rule_confirmed: false,
   city: 'berlin',
   area: '',
+  work_country: 'Germany',
+  work_city: 'Berlin',
+  work_area: '',
+  work_place_label: '',
   category: 'ladies',
   description: '',
   age: 25,
@@ -50,14 +55,28 @@ const emptyProfile: Partial<Profile> = {
   audience: [],
   visit_types: [],
   service_tags: [],
+  services: [],
   tag_ids: [],
   payment_methods: [],
   availability_note: '',
   availability_status: 'unavailable',
+  operator_status: 'OFFLINE',
+  working_today_start: '08:00',
+  working_today_end: '22:00',
+  working_tomorrow_start: '10:00',
+  working_tomorrow_end: '20:00',
+  working_24_7: false,
+  travel_city: '',
+  travel_arrival_date: '',
+  travel_departure_date: '',
+  hotspot_type: null,
   service_radius_km: 25,
   approximate_location_area: '',
+  location_mode: 'city_only',
   latitude: null,
   longitude: null,
+  auto_location_on_login: false,
+  auto_location_while_online: false,
   price_30min: 120,
   price_1h: 200,
   price_2h: 360,
@@ -108,6 +127,11 @@ export function DashboardPage() {
   const [giftsSent, setGiftsSent] = useState<GiftRow[]>([]);
   const [giftsReceived, setGiftsReceived] = useState<GiftRow[]>([]);
   const [marketProfiles, setMarketProfiles] = useState<Profile[]>([]);
+  const [clientIntent, setClientIntent] = useState<ClientIntent | null>(null);
+  const [clientMatches, setClientMatches] = useState<Profile[]>([]);
+  const [clientNotifications, setClientNotifications] = useState<RadarNotification[]>([]);
+  const [nearbyClients, setNearbyClients] = useState<ClientIntent[]>([]);
+  const [advertiserNotifications, setAdvertiserNotifications] = useState<RadarNotification[]>([]);
   const [activationBusy, setActivationBusy] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -197,6 +221,15 @@ export function DashboardPage() {
       await api.myWallet(accessToken).then((data) => setWallet(data.wallet)).catch(() => setWallet(null));
       await api.profiles('?city=berlin').then((data) => setMarketProfiles(data.profiles)).catch(() => setMarketProfiles([]));
       const clientData = await api.clientActivationMe(accessToken);
+      await api.clientIntentMe(accessToken).then((data) => {
+        setClientIntent(data.intent);
+        setClientMatches(data.nearby_advertisers);
+        setClientNotifications(data.notifications);
+      }).catch(() => {
+        setClientIntent(null);
+        setClientMatches([]);
+        setClientNotifications([]);
+      });
       setClientActivation(clientData.activation);
       setCoinWallet(clientData.wallet);
       setCoinTransactions(clientData.transactions);
@@ -253,6 +286,13 @@ export function DashboardPage() {
         setProfileMode('create');
         setMessage(t('dashboard.noProfileYet'));
       }
+      await api.advertiserNearbyClients(accessToken).then((data) => {
+        setNearbyClients(data.clients);
+        setAdvertiserNotifications(data.notifications);
+      }).catch(() => {
+        setNearbyClients([]);
+        setAdvertiserNotifications([]);
+      });
       setDashboardStatus('success');
     } catch (error) {
       setDashboardStatus('error');
@@ -260,8 +300,7 @@ export function DashboardPage() {
     }
   }
 
-  async function saveProfile(event: FormEvent) {
-    event.preventDefault();
+  async function persistProfile(draftProfile: Partial<Profile> = profile, successMessage?: string) {
     setAuthStatus('idle');
     setDashboardStatus('saving');
     setMessage(t('dashboard.saving'));
@@ -272,7 +311,7 @@ export function DashboardPage() {
     }
 
     try {
-      const body = prepareProfilePayload(profile, savedProfile);
+      const body = prepareProfilePayload(draftProfile, savedProfile);
       const result = savedProfile
         ? await api.updateProfile(token, savedProfile.id, body)
         : await api.createProfile(token, body);
@@ -282,7 +321,7 @@ export function DashboardPage() {
       await loadDashboard(token);
       setProfileMode('edit');
       setDashboardStatus('success');
-      setMessage(t('dashboard.saved'));
+      setMessage(successMessage || t('dashboard.saved'));
       setLastApiError('');
     } catch (error) {
       setDashboardStatus('error');
@@ -342,6 +381,11 @@ export function DashboardPage() {
       setMessage(nextError);
       setLastApiError(nextError);
     }
+  }
+
+  async function saveProfile(event: FormEvent) {
+    event.preventDefault();
+    await persistProfile(profile);
   }
 
   async function setCoverImage(imageId: string) {
@@ -459,6 +503,23 @@ export function DashboardPage() {
     );
   }
 
+  async function createClientIntent(body: Partial<ClientIntent>) {
+    if (!token) return;
+    setDashboardStatus('saving');
+    try {
+      const data = await api.createClientIntent(token, body);
+      setClientIntent(data.intent);
+      setClientMatches(data.nearby_advertisers);
+      const refreshed = await api.clientIntentMe(token);
+      setClientNotifications(refreshed.notifications);
+      setDashboardStatus('success');
+      setMessage('Client request is live for 2 hours.');
+    } catch (error) {
+      setDashboardStatus('error');
+      setMessage(error instanceof Error ? error.message : 'Could not create request.');
+    }
+  }
+
   if (!authResolved) {
     return (
       <div className="page dashboard-page">
@@ -500,6 +561,10 @@ export function DashboardPage() {
         onAvatarUpload={uploadClientAvatar}
         onLogout={logout}
         marketProfiles={marketProfiles}
+        intent={clientIntent}
+        matches={clientMatches}
+        notifications={clientNotifications}
+        onCreateIntent={(body) => createClientIntent(body)}
       />
     );
   }
@@ -520,13 +585,16 @@ export function DashboardPage() {
         profile={profile}
         savedProfile={savedProfile}
         userEmail={userEmail}
+        bookingCount={bookingRequests.length}
+        nearbyClients={nearbyClients}
+        notifications={advertiserNotifications}
         dashboardStatus={dashboardStatus}
         message={message}
         uploadStatus={uploadStatus}
         onProfileChange={setProfile}
         onUploadImage={uploadImage}
         onDeleteImage={deleteImage}
-        onSave={saveProfile}
+        onSaveDraft={persistProfile}
         onLogout={logout}
       />
     );
@@ -923,7 +991,7 @@ function getPublicReferralLink(activation: ClientActivation | null) {
   return `${origin}/r/${encodeURIComponent(activation.referral_code)}`;
 }
 
-function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, giftsSent, giftsReceived, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles }: {
+function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, giftsSent, giftsReceived, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent }: {
   userEmail: string;
   wallet: Wallet | null;
   coinWallet: CoinWallet | null;
@@ -939,6 +1007,10 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   onAvatarUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onLogout: () => void;
   marketProfiles: Profile[];
+  intent: ClientIntent | null;
+  matches: Profile[];
+  notifications: RadarNotification[];
+  onCreateIntent: (body: Partial<ClientIntent>) => void;
 }) {
   const { t } = useI18n();
   const activated = activation?.state === 'client_activated';
@@ -951,6 +1023,16 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   const newToday = marketProfiles.filter((profile) => profile.created_at && new Date(profile.created_at).toDateString() === new Date().toDateString()).length;
   const recentlyActive = marketProfiles.filter((profile) => profile.availability_status === 'available' || profile.available_now).length || availableProfiles;
   const referralProgress = Math.min(100, Math.round(((activation?.activations || 0) / 3) * 100));
+  const [intentDraft, setIntentDraft] = useState<Partial<ClientIntent>>({
+    status: intent?.status || 'LOOKING_NOW',
+    city: intent?.city || 'berlin',
+    area: intent?.area || '',
+    radius_km: intent?.radius_km || 25,
+    category: intent?.category || 'ladies',
+    budget_min: intent?.budget_min || 100,
+    budget_max: intent?.budget_max || 300,
+    time_window: intent?.time_window || 'Tonight'
+  });
   const featureCards = [
     ['Radar', 'Zobacz profile w pobliżu Berlina.', RadioTower, '/city/berlin', true],
     ['Favorite profiles', 'Zapisuj ulubione profile i wracaj do nich szybciej.', Heart, '', activated],
@@ -1070,6 +1152,47 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
           </div>
           <div className="progress-track"><span style={{ width: `${referralProgress}%` }} /></div>
           <p className="muted">Nastepny bonus: {Math.max(3 - (activation?.activations || 0), 0)} aktywacje z polecenia.</p>
+        </section>
+
+        <section className="creator-panel">
+          <p className="eyebrow">Client intent</p>
+          <h2>{intent ? `${intent.status.replace(/_/g, ' ')} in ${intent.city}` : 'Create a live request'}</h2>
+          <div className="one-hand-status-toggle">
+            {(['LOOKING_NOW', 'LOOKING_TODAY', 'TRAVELING', 'BROWSING', 'OFFLINE'] as const).map((status) => (
+              <button key={status} type="button" className={intentDraft.status === status ? 'active available' : ''} onClick={() => setIntentDraft({ ...intentDraft, status })}>{status.replace(/_/g, ' ')}</button>
+            ))}
+          </div>
+          <div className="one-hand-inline-fields">
+            <select value={intentDraft.city || 'berlin'} onChange={(event) => setIntentDraft({ ...intentDraft, city: event.target.value })}>
+              {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <input placeholder="Area" value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
+            <select value={intentDraft.category || 'ladies'} onChange={(event) => setIntentDraft({ ...intentDraft, category: event.target.value })}>
+              {['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'].map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
+              {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}
+            </select>
+            <input type="number" placeholder="Budget min" value={intentDraft.budget_min || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_min: Number(event.target.value) })} />
+            <input type="number" placeholder="Budget max" value={intentDraft.budget_max || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_max: Number(event.target.value) })} />
+            <input placeholder="Time window" value={intentDraft.time_window || ''} onChange={(event) => setIntentDraft({ ...intentDraft, time_window: event.target.value })} />
+          </div>
+          <button className="button primary full" type="button" onClick={() => onCreateIntent(intentDraft)}>Create live request</button>
+          <p className="muted">Max 1 active request. Cooldown 5 minutes. Exact location is never shown.</p>
+          <div className="metrics-grid">
+            <Metric label="Nearby active advertisers" value={matches.length} />
+            <Metric label="Notifications" value={notifications.length} />
+            <Metric label="Expires" value={intent?.expires_at ? new Date(intent.expires_at).toLocaleTimeString() : '-'} />
+          </div>
+          <div className="booking-list">
+            {matches.slice(0, 4).map((match) => (
+              <div className="booking-row" key={match.id}>
+                <div><strong>{match.display_name}</strong><p>{match.work_city || match.city} · {match.operator_status || match.availability_status}</p></div>
+                <span>{match.match_score ?? match.radar_score ?? 0}</span>
+              </div>
+            ))}
+            {!matches.length && <p className="muted">No live matches yet.</p>}
+          </div>
         </section>
 
         <section className="creator-panel">
@@ -1434,24 +1557,35 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
   );
 }
 
-function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onDeleteImage, onSave, onLogout }: {
+function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onDeleteImage, onSaveDraft, onLogout }: {
   profile: Partial<Profile>;
   savedProfile: Profile | null;
   userEmail: string;
+  bookingCount: number;
+  nearbyClients: ClientIntent[];
+  notifications: RadarNotification[];
   dashboardStatus: string;
   message: string;
   uploadStatus: string;
   onProfileChange: (profile: Partial<Profile>) => void;
   onUploadImage: (event: ChangeEvent<HTMLInputElement>) => void;
   onDeleteImage: (imageId: string) => void;
-  onSave: (event: FormEvent) => void;
+  onSaveDraft: (profile: Partial<Profile>, successMessage?: string) => Promise<void>;
   onLogout: () => void;
 }) {
-  const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'prices' | 'text'>(savedProfile ? 'photos' : 'setup');
+  const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text'>(savedProfile ? 'operator' : 'setup');
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [geoMessage, setGeoMessage] = useState('');
+  const [placeQuery, setPlaceQuery] = useState('');
+  const [placeSuggestions, setPlaceSuggestions] = useState<any[]>([]);
+  const [placeLoading, setPlaceLoading] = useState(false);
+  const autoLocationRan = useRef(false);
+  const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const primaryImage = savedProfile?.profile_images?.[0]?.public_url;
-  const currentStatus = profile.availability_status || savedProfile?.availability_status || 'unavailable';
-  const city = profile.city || savedProfile?.city || 'Berlin';
-  const area = profile.area || savedProfile?.area || '';
+  const currentOperatorStatus = profile.operator_status || savedProfile?.operator_status || 'OFFLINE';
+  const city = profile.work_city || savedProfile?.work_city || profile.city || savedProfile?.city || 'Berlin';
+  const area = profile.work_area || savedProfile?.work_area || profile.area || savedProfile?.area || '';
+  const workLocationLabel = profile.work_place_label || savedProfile?.work_place_label || `${city}${area ? `, ${area}` : ''}`;
   const displayName = profile.display_name || savedProfile?.display_name || 'Your profile';
   const imageCount = savedProfile?.profile_images?.length || 0;
 
@@ -1459,17 +1593,161 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
     if (savedProfile && panel === 'setup') setPanel('photos');
   }, [savedProfile, panel]);
 
-  function setStatus(status: Profile['availability_status']) {
+  function setOperatorStatus(status: NonNullable<Profile['operator_status']>) {
+    const availability = operatorToAvailability(status);
     onProfileChange({
       ...profile,
-      availability_status: status,
-      available_now: status === 'available'
+      operator_status: status,
+      availability_status: availability,
+      available_now: status === 'ONLINE_NOW'
     });
   }
 
   function updatePrice(key: keyof Pick<Profile, 'price_30min' | 'price_1h' | 'price_2h' | 'price_night'>, value: string) {
     onProfileChange({ ...profile, [key]: value ? Number(value) : null });
   }
+
+  function toggleService(key: string) {
+    const current = profile.services || [];
+    const next = current.includes(key)
+      ? current.filter((item) => item !== key)
+      : current.length >= 100 ? current : [...current, key];
+    onProfileChange({ ...profile, services: next });
+  }
+
+  async function useCurrentGps() {
+    setGeoMessage('');
+    if (!navigator.geolocation) {
+      setGeoMessage('GPS is not available in this browser. You can set city manually.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const nextProfile = {
+          ...profile,
+          work_city: profile.work_city || normalizeCityName(profile.city || 'berlin'),
+          work_area: profile.work_area || profile.area || '',
+          work_country: profile.work_country || 'Germany',
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6)),
+          location_mode: 'approximate' as const
+        };
+        onProfileChange(nextProfile);
+        setGeoMessage('GPS detected. Saving location...');
+        await onSaveDraft(nextProfile);
+        setGeoMessage('Location saved. Exact GPS is hidden from public profile.');
+      },
+      () => setGeoMessage('GPS permission denied. You can set city manually.'),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+    );
+  }
+
+  async function clearGps() {
+    const nextProfile = { ...profile, latitude: null, longitude: null, location_mode: 'city_only' as const };
+    onProfileChange(nextProfile);
+    setGeoMessage('GPS cleared. Saving city-only location...');
+    await onSaveDraft(nextProfile);
+    setGeoMessage('GPS cleared. Public profile uses city/area only.');
+  }
+
+  async function searchPlace() {
+    setGeoMessage('');
+    if (!googleMapsKey) {
+      setGeoMessage('Google Maps key is not configured. Use manual city and area fields.');
+      setPlaceSuggestions([]);
+      return;
+    }
+    if (!placeQuery.trim()) {
+      setGeoMessage('Type a place, hotel, club, street, or city first.');
+      return;
+    }
+    setPlaceLoading(true);
+    try {
+      const google = await loadGooglePlaces(googleMapsKey);
+      const service = new google.maps.places.AutocompleteService();
+      service.getPlacePredictions(
+        { input: placeQuery, types: ['geocode', 'establishment'] },
+        (predictions: any[] | null, status: string) => {
+          setPlaceLoading(false);
+          if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions?.length) {
+            setGeoMessage('No place found. Use manual city and area fields.');
+            setPlaceSuggestions([]);
+            return;
+          }
+          setPlaceSuggestions(predictions.slice(0, 5));
+        }
+      );
+    } catch {
+      setPlaceLoading(false);
+      setGeoMessage('Google Maps could not load. Use manual city and area fields.');
+    }
+  }
+
+  async function selectPlace(placeId: string) {
+    if (!googleMapsKey) return;
+    setPlaceLoading(true);
+    try {
+      const google = await loadGooglePlaces(googleMapsKey);
+      const node = document.createElement('div');
+      const service = new google.maps.places.PlacesService(node);
+      service.getDetails(
+        { placeId, fields: ['name', 'formatted_address', 'geometry', 'address_components'] },
+        async (place: any, status: string) => {
+          setPlaceLoading(false);
+          if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
+            setGeoMessage('Place details could not be loaded. Use manual city and area fields.');
+            return;
+          }
+          const parsed = parseGooglePlace(place);
+          const nextProfile = {
+            ...profile,
+            work_country: parsed.country || profile.work_country || 'Germany',
+            work_city: parsed.city || profile.work_city || normalizeCityName(profile.city || 'berlin'),
+            work_area: parsed.area || profile.work_area || '',
+            work_place_label: parsed.label || place.formatted_address || place.name || '',
+            city: parsed.legacyCity || profile.city || 'berlin',
+            area: parsed.area || profile.area || '',
+            latitude: parsed.latitude,
+            longitude: parsed.longitude,
+            location_mode: 'approximate' as const
+          };
+          onProfileChange(nextProfile);
+          setPlaceQuery(parsed.label || place.formatted_address || '');
+          setPlaceSuggestions([]);
+          setGeoMessage('Place selected. Save work location to persist it.');
+        }
+      );
+    } catch {
+      setPlaceLoading(false);
+      setGeoMessage('Google Maps could not load. Use manual city and area fields.');
+    }
+  }
+
+  useEffect(() => {
+    if (!savedProfile || autoLocationRan.current || !profile.auto_location_on_login) return;
+    autoLocationRan.current = true;
+    void useCurrentGps();
+  }, [savedProfile?.id, profile.auto_location_on_login]);
+
+  useEffect(() => {
+    if (!savedProfile || !profile.auto_location_while_online || currentOperatorStatus !== 'ONLINE_NOW') return;
+    const timer = window.setInterval(() => {
+      void useCurrentGps();
+    }, 15 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [savedProfile?.id, profile.auto_location_while_online, currentOperatorStatus, profile]);
+
+  const selectedServices = profile.services || [];
+  const filteredServices = serviceOptions.filter((service) => {
+    const query = serviceSearch.trim().toLowerCase();
+    if (!query) return true;
+    return service.label.toLowerCase().includes(query) || service.category.toLowerCase().includes(query);
+  });
+  const groupedServices = filteredServices.reduce<Record<string, typeof serviceOptions>>((groups, service) => {
+    groups[service.category] = groups[service.category] || [];
+    groups[service.category].push(service);
+    return groups;
+  }, {});
 
   return (
     <div className="page dashboard-page one-hand-dashboard">
@@ -1480,22 +1758,25 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
         <div className="one-hand-identity">
           <span className="eyebrow">Today</span>
           <h1>{displayName}</h1>
-          <p><MapPin size={14} /> {city}{area ? `, ${area}` : ''}</p>
+          <p><MapPin size={14} /> {workLocationLabel}</p>
         </div>
         <button className="one-hand-logout" type="button" onClick={onLogout}><LogOut size={18} /></button>
       </section>
 
       <section className="one-hand-status-toggle" aria-label="Availability status">
         {[
-          ['available', 'ONLINE'],
-          ['busy', 'BUSY'],
-          ['unavailable', 'OFFLINE']
+          ['ONLINE_NOW', 'ONLINE NOW'],
+          ['AVAILABLE_TODAY', 'TODAY'],
+          ['TRAVELING', 'TRAVEL'],
+          ['APPOINTMENT_ONLY', 'APPOINTMENT'],
+          ['BUSY', 'BUSY'],
+          ['OFFLINE', 'OFFLINE']
         ].map(([status, label]) => (
           <button
             key={status}
-            className={currentStatus === status ? `active ${status}` : ''}
+            className={currentOperatorStatus === status ? `active ${operatorToAvailability(status as NonNullable<Profile['operator_status']>)}` : ''}
             type="button"
-            onClick={() => setStatus(status as Profile['availability_status'])}
+            onClick={() => setOperatorStatus(status as NonNullable<Profile['operator_status']>)}
           >
             {label}
           </button>
@@ -1506,11 +1787,19 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
         {!savedProfile && <ActionButton active={panel === 'setup'} icon={<UserRound size={22} />} label="Quick Setup" onClick={() => setPanel('setup')} />}
         <ActionButton active={panel === 'photos'} icon={<ImagePlus size={22} />} label="Add Photos" onClick={() => setPanel('photos')} />
         <ActionButton active={panel === 'location'} icon={<MapPin size={22} />} label="Location" onClick={() => setPanel('location')} />
+        <ActionButton active={panel === 'operator'} icon={<RadioTower size={22} />} label="Operator" onClick={() => setPanel('operator')} />
         <ActionButton active={panel === 'prices'} icon={<Gem size={22} />} label="Prices" onClick={() => setPanel('prices')} />
+        <ActionButton active={panel === 'services'} icon={<Sparkles size={22} />} label="Services" onClick={() => setPanel('services')} />
         <ActionButton active={panel === 'text'} icon={<UserRound size={22} />} label="Profile Text" onClick={() => setPanel('text')} />
       </section>
 
-      <form className="one-hand-panel" onSubmit={onSave}>
+      <form
+        className="one-hand-panel"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSaveDraft(profile, panel === 'services' ? 'Services saved' : undefined);
+        }}
+      >
         {panel === 'setup' && (
           <section className="one-hand-card">
             <div className="one-hand-section-head">
@@ -1564,24 +1853,148 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
           </section>
         )}
 
+        {panel === 'operator' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">Radar operator mode</p>
+                <h2>{operatorStatusLabel(currentOperatorStatus)}</h2>
+              </div>
+              <span>Score {savedProfile?.radar_score || profile.radar_score || 0}</span>
+            </div>
+            <div className="one-hand-inline-fields">
+              <input type="time" value={profile.working_today_start || ''} onChange={(event) => onProfileChange({ ...profile, working_today_start: event.target.value })} />
+              <input type="time" value={profile.working_today_end || ''} onChange={(event) => onProfileChange({ ...profile, working_today_end: event.target.value })} />
+              <input type="time" value={profile.working_tomorrow_start || ''} onChange={(event) => onProfileChange({ ...profile, working_tomorrow_start: event.target.value })} />
+              <input type="time" value={profile.working_tomorrow_end || ''} onChange={(event) => onProfileChange({ ...profile, working_tomorrow_end: event.target.value })} />
+            </div>
+            <div className="toggle-grid">
+              <label><input type="checkbox" checked={Boolean(profile.working_24_7)} onChange={(event) => onProfileChange({ ...profile, working_24_7: event.target.checked })} /> 24/7 today</label>
+              <button className="button" type="button" onClick={() => onProfileChange({ ...profile, working_tomorrow_start: profile.working_today_start, working_tomorrow_end: profile.working_today_end })}>Copy today to tomorrow</button>
+            </div>
+            <div className="one-hand-inline-fields">
+              <input placeholder="Next city" value={profile.travel_city || ''} onChange={(event) => onProfileChange({ ...profile, travel_city: event.target.value })} />
+              <input type="date" value={profile.travel_arrival_date || ''} onChange={(event) => onProfileChange({ ...profile, travel_arrival_date: event.target.value })} />
+              <input type="date" value={profile.travel_departure_date || ''} onChange={(event) => onProfileChange({ ...profile, travel_departure_date: event.target.value })} />
+              <select value={profile.hotspot_type || ''} onChange={(event) => onProfileChange({ ...profile, hotspot_type: event.target.value as Profile['hotspot_type'] || null })}>
+                <option value="">Hotspot type</option>
+                {['hotel', 'apartment', 'club', 'private', 'mobile', 'vacation'].map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </div>
+            <div className="operator-analytics-grid">
+              <div><span>Profile ranking</span><strong>{savedProfile?.radar_score || profile.radar_score || 0}</strong></div>
+              <div><span>Bookings</span><strong>{bookingCount}</strong></div>
+              <div><span>Nearby active clients</span><strong>{nearbyClients.length}</strong></div>
+              <div><span>Notifications</span><strong>{notifications.length}</strong></div>
+              <div><span>Views</span><strong>Not tracked</strong></div>
+              <div><span>Favorites</span><strong>Not tracked</strong></div>
+              <div><span>Messages</span><strong>Not tracked</strong></div>
+              <div><span>Last GPS update</span><strong>{savedProfile?.location_updated_at ? new Date(savedProfile.location_updated_at).toLocaleString() : 'Not set'}</strong></div>
+            </div>
+            <div className="booking-list">
+              {nearbyClients.slice(0, 5).map((client) => (
+                <div className="booking-row" key={client.id}>
+                  <div><strong>{client.status.replace(/_/g, ' ')}</strong><p>{client.city}{client.area ? `, ${client.area}` : ''} · {client.category || 'any'} · {client.time_window || 'open'}</p></div>
+                  <span>{client.budget_min || 0}-{client.budget_max || 'open'}</span>
+                </div>
+              ))}
+              {!nearbyClients.length && <p className="muted">No nearby active client requests yet.</p>}
+            </div>
+            <button className="button primary" type="submit">Save operator mode</button>
+          </section>
+        )}
+
         {panel === 'location' && (
           <section className="one-hand-card">
             <div className="one-hand-section-head">
               <div>
-                <p className="eyebrow">Location</p>
-                <h2>Update location</h2>
+                <p className="eyebrow">Current work location</p>
+                <h2>{workLocationLabel}</h2>
               </div>
             </div>
             <div className="one-hand-inline-fields">
-              <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value })}>
+              <input placeholder="Country" value={profile.work_country || ''} onChange={(event) => onProfileChange({ ...profile, work_country: event.target.value })} />
+              <input placeholder="City" value={profile.work_city || ''} onChange={(event) => onProfileChange({ ...profile, work_city: event.target.value, city: normalizeLegacyCity(event.target.value) || profile.city || 'berlin' })} />
+              <input placeholder="District / area" value={profile.work_area || ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })} />
+              <input placeholder="Place label (hotel, apartment, club)" value={profile.work_place_label || ''} onChange={(event) => onProfileChange({ ...profile, work_place_label: event.target.value })} />
+              <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value, work_city: profile.work_city || normalizeCityName(event.target.value) })}>
                 {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
-              <input placeholder="District" value={profile.area || ''} onChange={(event) => onProfileChange({ ...profile, area: event.target.value })} />
-              <input placeholder="Approximate area" value={profile.approximate_location_area || ''} onChange={(event) => onProfileChange({ ...profile, approximate_location_area: event.target.value })} />
+              <input placeholder="Approximate public area" value={profile.approximate_location_area || ''} onChange={(event) => onProfileChange({ ...profile, approximate_location_area: event.target.value })} />
               <select value={profile.service_radius_km || 25} onChange={(event) => onProfileChange({ ...profile, service_radius_km: Number(event.target.value) })}>
-                {[5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}
+                {[1, 5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}
               </select>
+              <select value={profile.location_mode || 'city_only'} onChange={(event) => onProfileChange({ ...profile, location_mode: event.target.value as Profile['location_mode'] })}>
+                <option value="city_only">City only</option>
+                <option value="approximate">Approximate area</option>
+                <option value="exact_hidden">Exact GPS hidden</option>
+              </select>
+              <input placeholder="Latitude" value={profile.latitude ?? ''} onChange={(event) => onProfileChange({ ...profile, latitude: event.target.value ? Number(event.target.value) : null })} />
+              <input placeholder="Longitude" value={profile.longitude ?? ''} onChange={(event) => onProfileChange({ ...profile, longitude: event.target.value ? Number(event.target.value) : null })} />
             </div>
+            <div className="place-search-panel">
+              <input placeholder={googleMapsKey ? 'Search place or address...' : 'Manual location mode - Google key missing'} value={placeQuery} onChange={(event) => setPlaceQuery(event.target.value)} />
+              <button className="button" type="button" onClick={searchPlace} disabled={placeLoading}>{placeLoading ? 'Searching...' : 'Search place'}</button>
+              {placeSuggestions.length ? (
+                <div className="place-suggestions">
+                  {placeSuggestions.map((suggestion) => (
+                    <button key={suggestion.place_id} type="button" onClick={() => selectPlace(suggestion.place_id)}>
+                      {suggestion.description}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="toggle-grid">
+              <label><input type="checkbox" checked={Boolean(profile.auto_location_on_login)} onChange={(event) => onProfileChange({ ...profile, auto_location_on_login: event.target.checked })} /> Auto update GPS on login</label>
+              <label><input type="checkbox" checked={Boolean(profile.auto_location_while_online)} onChange={(event) => onProfileChange({ ...profile, auto_location_while_online: event.target.checked })} /> Auto update every 15 minutes while ONLINE</label>
+            </div>
+            <div className="one-hand-location-actions">
+              <button className="button" type="button" onClick={useCurrentGps}>Use current GPS</button>
+              <button className="button" type="button" onClick={clearGps}>Clear GPS</button>
+              <button className="button primary" type="submit">Save work location</button>
+            </div>
+            <p className="muted">Public profile shows city/area only. Exact GPS is stored for owner/admin tooling and approximate radar logic.</p>
+            {geoMessage && <p className={geoMessage.includes('denied') || geoMessage.includes('not available') ? 'error-text' : 'success'}>{geoMessage}</p>}
+          </section>
+        )}
+
+        {panel === 'services' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">Services</p>
+                <h2>Choose offered services</h2>
+              </div>
+              <span>{selectedServices.length}/100</span>
+            </div>
+            <input placeholder="Search services..." value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} />
+            <div className="selected-service-strip">
+              {selectedServices.length ? selectedServices.map((key) => (
+                <button key={key} type="button" onClick={() => toggleService(key)}>{serviceLabel(key)}</button>
+              )) : <p>No services selected yet.</p>}
+            </div>
+            <div className="service-checklist">
+              {Object.entries(groupedServices).map(([category, services]) => (
+                <div key={category} className="service-checklist-group">
+                  <strong>{category.replace(/_/g, ' ')}</strong>
+                  <div>
+                    {services.map((service) => (
+                      <button
+                        key={service.key}
+                        type="button"
+                        className={selectedServices.includes(service.key) ? 'selected' : ''}
+                        onClick={() => toggleService(service.key)}
+                      >
+                        {service.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="muted">18+ only. All services must be consensual and compliant with local law. Admin can moderate or hide options later.</p>
+            <button className="button primary" type="submit">Save services</button>
           </section>
         )}
 
@@ -1633,7 +2046,9 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, dashboar
         {!savedProfile && <button type="button" className={panel === 'setup' ? 'active' : ''} onClick={() => setPanel('setup')}><UserRound size={18} />Setup</button>}
         <button type="button" className={panel === 'photos' ? 'active' : ''} onClick={() => setPanel('photos')}><ImagePlus size={18} />Photos</button>
         <button type="button" className={panel === 'location' ? 'active' : ''} onClick={() => setPanel('location')}><MapPin size={18} />Location</button>
+        <button type="button" className={panel === 'operator' ? 'active' : ''} onClick={() => setPanel('operator')}><RadioTower size={18} />Operator</button>
         <button type="button" className={panel === 'prices' ? 'active' : ''} onClick={() => setPanel('prices')}><Gem size={18} />Prices</button>
+        <button type="button" className={panel === 'services' ? 'active' : ''} onClick={() => setPanel('services')}><Sparkles size={18} />Services</button>
         {savedProfile && <button type="button" className={panel === 'text' ? 'active' : ''} onClick={() => setPanel('text')}><UserRound size={18} />Text</button>}
       </nav>
       <p className="one-hand-email">{userEmail}</p>
@@ -1733,6 +2148,10 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     slug: 'preview',
     city: profile.city || 'berlin',
     area: profile.area || 'Central',
+    work_country: profile.work_country || 'Germany',
+    work_city: profile.work_city || normalizeCityName(profile.city || 'berlin'),
+    work_area: profile.work_area || profile.area || 'Central',
+    work_place_label: profile.work_place_label || '',
     category: profile.category || 'ladies',
     description: profile.description || '',
     languages: Array.isArray(profile.languages) ? profile.languages : ['EN'],
@@ -1740,15 +2159,30 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     audience: profile.audience || [],
     visit_types: profile.visit_types || [],
     service_tags: profile.service_tags || [],
+    services: profile.services || [],
     tag_ids: profile.tag_ids || [],
     tags: profile.tags || [],
     payment_methods: profile.payment_methods || [],
     availability_note: profile.availability_note,
     availability_status: profile.availability_status || 'unavailable',
+    operator_status: profile.operator_status || 'OFFLINE',
+    working_today_start: profile.working_today_start || null,
+    working_today_end: profile.working_today_end || null,
+    working_tomorrow_start: profile.working_tomorrow_start || null,
+    working_tomorrow_end: profile.working_tomorrow_end || null,
+    working_24_7: Boolean(profile.working_24_7),
+    travel_city: profile.travel_city || null,
+    travel_arrival_date: profile.travel_arrival_date || null,
+    travel_departure_date: profile.travel_departure_date || null,
+    hotspot_type: profile.hotspot_type || null,
+    radar_score: savedProfile?.radar_score || profile.radar_score || 0,
     service_radius_km: profile.service_radius_km || 25,
     approximate_location_area: profile.approximate_location_area || profile.area || 'Central',
     latitude: profile.latitude ?? null,
     longitude: profile.longitude ?? null,
+    location_updated_at: savedProfile?.location_updated_at || null,
+    auto_location_on_login: Boolean(profile.auto_location_on_login),
+    auto_location_while_online: Boolean(profile.auto_location_while_online),
     distance_km: profile.distance_km ?? 8,
     price_30min: profile.price_30min,
     price_1h: profile.price_1h,
@@ -1786,9 +2220,17 @@ function profileToForm(profile: Profile): Partial<Profile> {
     audience: profile.audience || [],
     visit_types: profile.visit_types || [],
     service_tags: profile.service_tags || [],
+    services: profile.services || [],
     tag_ids: profile.tag_ids || [],
     tags: profile.tags || [],
     payment_methods: profile.payment_methods || [],
+    work_country: profile.work_country || null,
+    work_city: profile.work_city || null,
+    work_area: profile.work_area || null,
+    work_place_label: profile.work_place_label || null,
+    location_updated_at: profile.location_updated_at || null,
+    auto_location_on_login: Boolean(profile.auto_location_on_login),
+    auto_location_while_online: Boolean(profile.auto_location_while_online),
     service_menu: profile.service_menu?.length ? profile.service_menu : emptyProfile.service_menu,
     profile_images: profile.profile_images || []
   };
@@ -1805,10 +2247,108 @@ function prepareProfilePayload(profile: Partial<Profile>, savedProfile: Profile 
   };
 }
 
+function operatorToAvailability(status: NonNullable<Profile['operator_status']>): Profile['availability_status'] {
+  if (status === 'ONLINE_NOW' || status === 'AVAILABLE_TODAY' || status === 'APPOINTMENT_ONLY') return 'available';
+  if (status === 'BUSY' || status === 'TRAVELING') return 'busy';
+  return 'unavailable';
+}
+
+function operatorStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    ONLINE_NOW: 'Online now',
+    BUSY: 'Busy',
+    TRAVELING: 'Traveling',
+    AVAILABLE_TODAY: 'Available today',
+    APPOINTMENT_ONLY: 'Appointment only',
+    OFFLINE: 'Offline'
+  };
+  return labels[status] || 'Offline';
+}
+
+let googlePlacesPromise: Promise<any> | null = null;
+
+function loadGooglePlaces(apiKey: string): Promise<any> {
+  const existing = (window as any).google;
+  if (existing?.maps?.places) return Promise.resolve(existing);
+  if (googlePlacesPromise) return googlePlacesPromise;
+
+  googlePlacesPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      const google = (window as any).google;
+      google?.maps?.places ? resolve(google) : reject(new Error('Google Places unavailable'));
+    };
+    script.onerror = () => reject(new Error('Google Maps failed to load'));
+    document.head.appendChild(script);
+  });
+
+  return googlePlacesPromise;
+}
+
+function parseGooglePlace(place: any) {
+  const components = Array.isArray(place.address_components) ? place.address_components : [];
+  const byType = (type: string) => components.find((component: any) => component.types?.includes(type))?.long_name || '';
+  const city = byType('locality') || byType('postal_town') || byType('administrative_area_level_2');
+  const area = byType('sublocality') || byType('sublocality_level_1') || byType('neighborhood') || byType('administrative_area_level_3');
+  const country = byType('country');
+  const latitude = place.geometry?.location?.lat ? Number(place.geometry.location.lat().toFixed(6)) : null;
+  const longitude = place.geometry?.location?.lng ? Number(place.geometry.location.lng().toFixed(6)) : null;
+  return {
+    city,
+    area,
+    country,
+    latitude,
+    longitude,
+    label: place.name || place.formatted_address || '',
+    legacyCity: normalizeLegacyCity(city)
+  };
+}
+
+function normalizeLegacyCity(value: string) {
+  const normalized = value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ä/g, 'ae')
+    .replace(/[^a-z0-9]+/g, '');
+  const known: Record<string, string> = {
+    berlin: 'berlin',
+    hamburg: 'hamburg',
+    hannover: 'hannover',
+    koln: 'koeln',
+    koeln: 'koeln',
+    cologne: 'koeln',
+    munchen: 'muenchen',
+    muenchen: 'muenchen',
+    munich: 'muenchen',
+    warszawa: 'warszawa',
+    warsaw: 'warszawa'
+  };
+  return known[normalized] || '';
+}
+
+function normalizeCityName(value: string) {
+  const labels: Record<string, string> = {
+    berlin: 'Berlin',
+    hamburg: 'Hamburg',
+    hannover: 'Hannover',
+    koeln: 'Koeln',
+    muenchen: 'Muenchen',
+    warszawa: 'Warszawa'
+  };
+  return labels[value] || value;
+}
+
 function getVisibilityReason(profile: Profile | null, t: (key: string, vars?: Record<string, string | number>) => string) {
   if (!profile) return t('visibility.noProfile');
   if (profile.visibility_reason) return t(`visibility.${profile.visibility_reason}`);
-  if (profile.moderation_status === 'blocked' || profile.moderation_status === 'suspended' || profile.status === 'suspended') return t('visibility.suspended');
+  if (profile.moderation_status === 'rejected' || profile.moderation_status === 'suspended' || profile.status === 'suspended') return t('visibility.suspended');
+  if (profile.moderation_status && profile.moderation_status !== 'approved') return t('visibility.pending_verification');
   if (!profile.city || !profile.category) return t('visibility.missingCityCategory');
   if (!profile.is_test_account && profile.subscription_status !== 'active') return t('visibility.noPayment');
   if (!profile.verified && profile.verification_status !== 'verified') return t('visibility.notVerified');

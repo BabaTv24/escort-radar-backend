@@ -109,7 +109,7 @@ async function listAllUsers() {
 async function deactivateOldTestProfiles(testUserIds: string[]) {
   const inactivePatch = {
     status: 'suspended',
-    moderation_status: 'blocked',
+    moderation_status: 'rejected',
     availability_status: 'unavailable',
     is_test_account: true,
     admin_note: 'Old test profile deactivated before fresh live QA seed'
@@ -180,7 +180,7 @@ async function createProfileForUser(userId: string, email: string, index: number
     verified: true,
     status: 'active',
     verification_status: 'verified',
-    moderation_status: 'clean',
+    moderation_status: 'approved',
     subscription_status: 'active',
     listing_plan: 'premium_monthly',
     listing_price: 49.99,

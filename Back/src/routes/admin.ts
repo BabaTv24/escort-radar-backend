@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import multer from 'multer';
+import sharp from 'sharp';
 import { requireAdmin, verifyAdminJwt } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import {
@@ -7,14 +9,28 @@ import {
   allowedStatuses,
   allowedVerificationStatuses,
   asyncHandler,
-  optionalText
+  optionalText,
+  slugify
 } from '../validation.js';
 import { normalizePhone } from '../utils/identity.js';
 import { writeAdminAuditLog } from '../services/adminAudit.js';
 import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
+import { allowedServiceKeys } from '../serviceCatalog.js';
 
 export const adminRouter = Router();
+
+const adminUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 }
+});
+
+const premiumTiers = ['standard', 'gold', 'elite', 'diamond'];
+const operatorStatuses = ['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'];
+const berlinSeedAreas = ['Mitte', 'Charlottenburg', 'Prenzlauer Berg', 'Kreuzberg', 'Friedrichshain', 'Wilmersdorf', 'Schoneberg', 'Neukolln'];
+const berlinSeedNames = ['Mila', 'Nora', 'Elena', 'Sofia', 'Lina', 'Amara', 'Vera', 'Nika', 'Alina', 'Mara', 'Eva', 'Lea', 'Iris', 'Kira', 'Livia', 'Selin', 'Anya', 'Noemi', 'Lara', 'Mina', 'Rosa', 'Clara', 'Yara', 'Nina'];
+const berlinSeedCategories = ['ladies', 'massage', 'house_hotel', 'live_cam', 'couples', 'trans', 'gay'];
+const berlinSeedServices = ['towarzystwo', 'pocalunki', 'masaz', 'masaz_relaksacyjny', 'dyskrecja', 'wspolne_wyjscia', 'spotkanie_calonocne', 'prywatnie', 'namietne_pocalunki', 'spa'];
 
 adminRouter.post('/login', asyncHandler(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
@@ -178,6 +194,7 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
   let query = supabaseAdmin
     .from('profiles')
     .select('*, profile_images(*)')
+    .order('admin_priority', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(300);
 
@@ -189,7 +206,19 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const rows = data || [];
+  const ownerIds = [...new Set((data || []).map((profile) => profile.user_id).filter(Boolean))];
+  const ownerEmailById = new Map<string, string>();
+  if (ownerIds.length) {
+    const { data: users } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    (users.users || []).forEach((user) => {
+      if (ownerIds.includes(user.id)) ownerEmailById.set(user.id, user.email || '');
+    });
+  }
+
+  const rows = (data || []).map((profile) => withAdminImageUrls({
+    ...profile,
+    owner_email: profile.user_id ? ownerEmailById.get(profile.user_id) || null : null
+  }));
   res.json({
     profiles: rows,
     stats: {
@@ -200,6 +229,55 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
       test_accounts: rows.filter((profile) => profile.is_test_account).length
     }
   });
+}));
+
+adminRouter.post('/profiles', asyncHandler(async (req, res) => {
+  const profileData = normalizeAdminProfilePayload(req.body);
+  if ('error' in profileData) return res.status(400).json({ error: profileData.error });
+
+  const payload = {
+    ...profileData.data,
+    slug: `${slugify(String(profileData.data.display_name))}-${Date.now().toString(36)}`,
+    subscription_status: 'test',
+    verification_status: profileData.data.verified ? 'verified' : 'pending',
+    moderation_status: 'approved',
+    verified_at: profileData.data.verified ? new Date().toISOString() : null,
+    location_updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .insert(payload)
+    .select('*, profile_images(*)')
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'profile_studio_created', 'profile', data.id, payload);
+  res.status(201).json({ profile: withAdminImageUrls(data) });
+}));
+
+adminRouter.post('/profiles/seed/berlin', asyncHandler(async (req, res) => {
+  const { data: existingSeeds } = await supabaseAdmin
+    .from('profiles')
+    .select('id')
+    .eq('city', 'berlin')
+    .eq('is_seed_profile', true)
+    .limit(60);
+
+  if ((existingSeeds || []).length >= 24) {
+    const { data } = await supabaseAdmin
+      .from('profiles')
+      .select('*, profile_images(*)')
+      .eq('city', 'berlin')
+      .eq('is_seed_profile', true)
+      .order('admin_priority', { ascending: false })
+      .limit(60);
+    return res.json({ created: 0, profiles: (data || []).map(withAdminImageUrls) });
+  }
+
+  const profiles = await createBerlinSeedProfiles();
+  await logAdminAction(req.user?.email, 'berlin_seed_profiles_generated', 'profile_seed', null, { count: profiles.length });
+  res.status(201).json({ created: profiles.length, profiles });
 }));
 
 adminRouter.get('/business-profiles', asyncHandler(async (_req, res) => {
@@ -338,14 +416,89 @@ adminRouter.patch('/users/:id/suspend', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .select('id, user_id, display_name, listing_plan, listing_price, listing_currency, subscription_status, subscription_started_at, subscription_expires_at, is_test_account, admin_note, created_at')
-    .order('created_at', { ascending: false })
-    .limit(500);
+  const [profilesResult, activationPaymentsResult, usersResult] = await Promise.all([
+    supabaseAdmin
+      .from('profiles')
+      .select('id, user_id, display_name, city, account_type, listing_plan, listing_price, listing_currency, subscription_status, subscription_started_at, subscription_expires_at, subscription_plan, subscription_start, subscription_end, subscription_requested_at, subscription_managed_by, subscription_note, is_test_account, premium_tier, created_at')
+      .order('created_at', { ascending: false })
+      .limit(800),
+    supabaseAdmin
+      .from('client_activation_payments')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(800),
+    supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  ]);
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ subscriptions: data || [] });
+  if (profilesResult.error) return res.status(500).json({ error: profilesResult.error.message });
+  if (activationPaymentsResult.error) return res.status(500).json({ error: activationPaymentsResult.error.message });
+
+  const emailById = new Map<string, string>();
+  (usersResult.data?.users || []).forEach((user) => emailById.set(user.id, user.email || ''));
+  const now = Date.now();
+  const profileRows = (profilesResult.data || []).map((profile) => {
+    const start = profile.subscription_start || profile.subscription_started_at || null;
+    const end = profile.subscription_end || profile.subscription_expires_at || null;
+    const status = String(profile.subscription_status || 'free');
+    return {
+      id: profile.id,
+      type: 'profile_subscription',
+      email: profile.user_id ? emailById.get(profile.user_id) || null : null,
+      user_id: profile.user_id,
+      profile_id: profile.id,
+      profile: profile.display_name,
+      city: profile.city,
+      plan: profile.subscription_plan || profile.listing_plan || 'escort_monthly',
+      role: profile.account_type || 'escort',
+      status,
+      requested_at: profile.subscription_requested_at || profile.created_at,
+      start,
+      end,
+      progress: subscriptionProgress(start, end),
+      payment_provider: status === 'test' ? 'admin' : 'manual',
+      amount_eur: Number(profile.listing_price || 49.99),
+      currency: profile.listing_currency || 'EUR',
+      premium_tier: profile.premium_tier || 'standard',
+      note: profile.subscription_note || null
+    };
+  });
+
+  const clientActivationRows = (activationPaymentsResult.data || []).map((payment) => ({
+    id: payment.id,
+    type: 'client_activation',
+    email: payment.email,
+    user_id: payment.user_id,
+    profile_id: null,
+    profile: 'Client activation 0.99 EUR',
+    plan: 'client_activation_099',
+    role: 'client',
+    status: payment.status || 'paid',
+    requested_at: payment.created_at,
+    start: payment.paid_at || payment.created_at,
+    end: null,
+    progress: payment.status === 'paid' ? 100 : 0,
+    payment_provider: payment.provider || 'stripe',
+    amount_eur: Number(payment.amount_cents || 0) / 100,
+    currency: String(payment.currency || 'eur').toUpperCase(),
+    stripe_session_id: payment.stripe_session_id
+  }));
+
+  const subscriptions = [...profileRows, ...clientActivationRows].sort((left, right) => new Date(right.requested_at || 0).getTime() - new Date(left.requested_at || 0).getTime());
+  const profileSubscriptions = profileRows;
+
+  res.json({
+    subscriptions,
+    stats: {
+      requested: profileSubscriptions.filter((row) => ['free', 'trial', 'pending', 'requested'].includes(row.status)).length,
+      future: profileSubscriptions.filter((row) => row.start && new Date(row.start).getTime() > now).length,
+      active: profileSubscriptions.filter((row) => row.status === 'active' && (!row.end || new Date(row.end).getTime() > now)).length,
+      expired: profileSubscriptions.filter((row) => row.status === 'expired' || Boolean(row.end && new Date(row.end).getTime() <= now)).length,
+      incomplete: profileSubscriptions.filter((row) => ['past_due', 'incomplete', 'cancelled'].includes(row.status)).length,
+      monthly_revenue: profileSubscriptions.filter((row) => row.status === 'active').reduce((sum, row) => sum + Number(row.amount_eur || 0), 0),
+      client_activations_099: clientActivationRows.filter((row) => row.status === 'paid').length,
+      escort_subscriptions: profileSubscriptions.filter((row) => ['escort', 'private'].includes(String(row.role))).length
+    }
+  });
 }));
 
 adminRouter.patch('/subscriptions/:id', asyncHandler(async (req, res) => {
@@ -371,6 +524,71 @@ adminRouter.patch('/subscriptions/:id', asyncHandler(async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
   await logAdminAction(req.user?.email, 'subscription_updated', 'profile_subscription', req.params.id, patch);
   res.json({ subscription: data });
+}));
+
+adminRouter.post('/subscriptions/:id/activate', asyncHandler(async (req, res) => {
+  const days = Number(req.body.days || 30);
+  const start = parseAdminDate(req.body.start || req.body.subscription_start) || new Date();
+  const end = parseAdminDate(req.body.end || req.body.subscription_end) || new Date(start.getTime() + Math.max(1, Math.min(days, 365)) * 24 * 60 * 60 * 1000);
+  const plan = optionalText(req.body.plan || req.body.subscription_plan, 80) || 'escort_monthly';
+  const patch = subscriptionPatch({
+    status: 'active',
+    plan,
+    start,
+    end,
+    managedBy: req.user?.email || req.user?.id,
+    note: optionalText(req.body.note || req.body.subscription_note, 2000)
+  });
+  const profile = await updateProfileSubscription(req.params.id, patch);
+  await logAdminAction(req.user?.email, 'subscription_activated_manually', 'profile', req.params.id, patch);
+  res.json({ subscription: profile });
+}));
+
+adminRouter.post('/subscriptions/:id/extend', asyncHandler(async (req, res) => {
+  const days = Number(req.body.days || 30);
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from('profiles')
+    .select('subscription_expires_at, subscription_end')
+    .eq('id', req.params.id)
+    .single();
+  if (fetchError || !existing) return res.status(404).json({ error: fetchError?.message || 'Subscription not found' });
+
+  const base = new Date(existing.subscription_end || existing.subscription_expires_at || Date.now());
+  const startBase = base.getTime() > Date.now() ? base : new Date();
+  const end = new Date(startBase.getTime() + Math.max(1, Math.min(days, 365)) * 24 * 60 * 60 * 1000);
+  const patch = subscriptionPatch({
+    status: 'active',
+    end,
+    managedBy: req.user?.email || req.user?.id,
+    note: optionalText(req.body.note, 2000)
+  });
+  const profile = await updateProfileSubscription(req.params.id, patch);
+  await logAdminAction(req.user?.email, 'subscription_extended', 'profile', req.params.id, { days, ...patch });
+  res.json({ subscription: profile });
+}));
+
+adminRouter.post('/subscriptions/:id/expire', asyncHandler(async (req, res) => {
+  const patch = subscriptionPatch({
+    status: 'expired',
+    end: new Date(),
+    managedBy: req.user?.email || req.user?.id,
+    note: optionalText(req.body.note, 2000)
+  });
+  const profile = await updateProfileSubscription(req.params.id, patch);
+  await logAdminAction(req.user?.email, 'subscription_expired', 'profile', req.params.id, patch);
+  res.json({ subscription: profile });
+}));
+
+adminRouter.post('/subscriptions/:id/cancel', asyncHandler(async (req, res) => {
+  const patch = subscriptionPatch({
+    status: 'cancelled',
+    end: new Date(),
+    managedBy: req.user?.email || req.user?.id,
+    note: optionalText(req.body.note, 2000)
+  });
+  const profile = await updateProfileSubscription(req.params.id, patch);
+  await logAdminAction(req.user?.email, 'subscription_cancelled', 'profile', req.params.id, patch);
+  res.json({ subscription: profile });
 }));
 
 adminRouter.get('/tags', asyncHandler(async (_req, res) => {
@@ -461,6 +679,180 @@ adminRouter.patch('/profiles/:id/promotion', asyncHandler(async (req, res) => {
   res.json({ profile: data });
 }));
 
+adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
+  const profileData = normalizeAdminProfilePayload(req.body);
+  if ('error' in profileData) return res.status(400).json({ error: profileData.error });
+
+  const patch = {
+    ...profileData.data,
+    verification_status: profileData.data.verified ? 'verified' : 'pending',
+    verified_at: profileData.data.verified ? new Date().toISOString() : null,
+    location_updated_at: new Date().toISOString()
+  };
+  if (!Object.prototype.hasOwnProperty.call(req.body, 'services')) {
+    delete (patch as Record<string, unknown>).services;
+    delete (patch as Record<string, unknown>).service_menu;
+  }
+  if (!Object.prototype.hasOwnProperty.call(req.body, 'status')) delete (patch as Record<string, unknown>).status;
+  if (!Object.prototype.hasOwnProperty.call(req.body, 'moderation_status')) delete (patch as Record<string, unknown>).moderation_status;
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select('*, profile_images(*)')
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'profile_studio_updated', 'profile', req.params.id, patch);
+  res.json({ profile: withAdminImageUrls(data) });
+}));
+
+adminRouter.patch('/profiles/:id/publish', asyncHandler(async (req, res) => {
+  const isPublished = req.body.is_published !== false && req.body.published !== false;
+  const patch: Record<string, unknown> = {
+    is_published: isPublished,
+    status: isPublished ? 'active' : 'active'
+  };
+  if (isPublished) {
+    patch.moderation_status = 'approved';
+    patch.reviewed_by = req.user?.email || req.user?.id || null;
+    patch.reviewed_at = new Date().toISOString();
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select('*, profile_images(*)')
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, isPublished ? 'profile_published' : 'profile_unpublished', 'profile', req.params.id, patch);
+  res.json({ profile: withAdminImageUrls(data) });
+}));
+
+adminRouter.post('/profiles/:id/images', adminUpload.single('image'), asyncHandler(async (req, res) => {
+  logAdminProfileImageUpload('start', req, { profile_id: req.params.id, file_mime: req.file?.mimetype || null, file_size: req.file?.size || null });
+  if (!req.file) {
+    logAdminProfileImageUpload('error', req, { profile_id: req.params.id, reason: 'missing_file' });
+    return res.status(400).json({ error: 'image file is required' });
+  }
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(req.file.mimetype)) {
+    logAdminProfileImageUpload('error', req, { profile_id: req.params.id, reason: 'unsupported_mime_type', file_mime: req.file.mimetype, file_size: req.file.size });
+    return res.status(415).json({ error: 'Unsupported image format. Use JPG, PNG, or WEBP.' });
+  }
+
+  const { data: profile } = await supabaseAdmin.from('profiles').select('id').eq('id', req.params.id).single();
+  if (!profile) {
+    logAdminProfileImageUpload('error', req, { profile_id: req.params.id, reason: 'profile_not_found' });
+    return res.status(404).json({ error: 'Profile not found' });
+  }
+
+  const processed = await sharp(req.file.buffer)
+    .rotate()
+    .resize({ width: 1600, height: 2200, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 84, mozjpeg: true })
+    .toBuffer();
+
+  const storagePath = `admin-profiles/${req.params.id}/${crypto.randomUUID()}.jpg`;
+  const uploadResult = await supabaseAdmin.storage
+    .from(config.storageBucket)
+    .upload(storagePath, processed, { contentType: 'image/jpeg' });
+
+  if (uploadResult.error) {
+    logAdminProfileImageUpload('error', req, { profile_id: req.params.id, reason: uploadResult.error.message, file_mime: req.file.mimetype, file_size: req.file.size });
+    return res.status(400).json({ error: uploadResult.error.message });
+  }
+
+  const { count } = await supabaseAdmin
+    .from('profile_images')
+    .select('id', { count: 'exact' })
+    .eq('profile_id', req.params.id);
+
+  const { data, error } = await supabaseAdmin
+    .from('profile_images')
+    .insert({
+      profile_id: req.params.id,
+      storage_path: storagePath,
+      is_primary: (count || 0) === 0 || req.body.is_cover === 'true',
+      moderation_status: 'approved',
+      sort_order: count || 0
+    })
+    .select()
+    .single();
+
+  if (error) {
+    logAdminProfileImageUpload('error', req, { profile_id: req.params.id, reason: error.message, file_mime: req.file.mimetype, file_size: req.file.size });
+    return res.status(400).json({ error: error.message });
+  }
+  if (data.is_primary) await supabaseAdmin.from('profile_images').update({ is_primary: false }).eq('profile_id', req.params.id).neq('id', data.id);
+
+  const image = withPublicImageUrl(data);
+  logAdminProfileImageUpload('success', req, { profile_id: req.params.id, image_id: data.id, file_mime: req.file.mimetype, file_size: req.file.size });
+  await logAdminAction(req.user?.email, 'profile_image_uploaded_by_admin', 'profile_image', data.id, { profile_id: req.params.id });
+  res.status(201).json({ image });
+}));
+
+adminRouter.patch('/profiles/:profileId/images/reorder', asyncHandler(async (req, res) => {
+  const imageIds: string[] = Array.isArray(req.body.image_ids) ? req.body.image_ids.map((item: unknown) => String(item)).filter(Boolean) : [];
+  if (!imageIds.length) return res.status(400).json({ error: 'image_ids are required' });
+
+  await Promise.all(imageIds.map((id, index) => supabaseAdmin.from('profile_images').update({ sort_order: index }).eq('id', id).eq('profile_id', req.params.profileId)));
+  const { data, error } = await supabaseAdmin
+    .from('profile_images')
+    .select('*')
+    .eq('profile_id', req.params.profileId)
+    .order('sort_order', { ascending: true });
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'profile_images_reordered', 'profile', req.params.profileId, { image_ids: imageIds });
+  res.json({ images: (data || []).map(withPublicImageUrl) });
+}));
+
+adminRouter.patch('/profiles/:profileId/images/:imageId/cover', asyncHandler(async (req, res) => {
+  await supabaseAdmin.from('profile_images').update({ is_primary: false }).eq('profile_id', req.params.profileId);
+  const { data, error } = await supabaseAdmin
+    .from('profile_images')
+    .update({ is_primary: true })
+    .eq('id', req.params.imageId)
+    .eq('profile_id', req.params.profileId)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'profile_cover_set_by_admin', 'profile_image', req.params.imageId, { profile_id: req.params.profileId });
+  res.json({ image: withPublicImageUrl(data) });
+}));
+
+adminRouter.delete('/profiles/:profileId/images/:imageId', asyncHandler(async (req, res) => {
+  const { data: image, error: fetchError } = await supabaseAdmin
+    .from('profile_images')
+    .select('*')
+    .eq('id', req.params.imageId)
+    .eq('profile_id', req.params.profileId)
+    .single();
+
+  if (fetchError || !image) return res.status(404).json({ error: fetchError?.message || 'Image not found' });
+
+  if (image.storage_path) await supabaseAdmin.storage.from(config.storageBucket).remove([image.storage_path]);
+  const { error } = await supabaseAdmin.from('profile_images').delete().eq('id', req.params.imageId);
+  if (error) return res.status(400).json({ error: error.message });
+
+  const { data: remaining } = await supabaseAdmin
+    .from('profile_images')
+    .select('*')
+    .eq('profile_id', req.params.profileId)
+    .order('sort_order', { ascending: true })
+    .limit(1);
+  if (image.is_primary && remaining?.[0]) {
+    await supabaseAdmin.from('profile_images').update({ is_primary: true }).eq('id', remaining[0].id);
+  }
+
+  await logAdminAction(req.user?.email, 'profile_image_deleted_by_admin', 'profile_image', req.params.imageId, { profile_id: req.params.profileId });
+  res.status(204).send();
+}));
+
 adminRouter.get('/profiles/:id', asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('profiles')
@@ -469,7 +861,7 @@ adminRouter.get('/profiles/:id', asyncHandler(async (req, res) => {
     .single();
 
   if (error) return res.status(404).json({ error: error.message });
-  res.json({ profile: data });
+  res.json({ profile: withAdminImageUrls(data) });
 }));
 
 adminRouter.patch('/profiles/:id/status', asyncHandler(async (req, res) => {
@@ -477,7 +869,17 @@ adminRouter.patch('/profiles/:id/status', asyncHandler(async (req, res) => {
   if (!allowedStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
   const patch: Record<string, unknown> = { status };
-  if (status === 'suspended') patch.suspended_at = new Date().toISOString();
+  if (status === 'suspended') {
+    patch.moderation_status = 'suspended';
+    patch.suspended_at = new Date().toISOString();
+    patch.suspended_reason = optionalText(req.body.suspended_reason || req.body.reason, 1000);
+  }
+  if (status === 'active') {
+    patch.moderation_status = 'approved';
+    patch.is_published = true;
+    patch.reviewed_by = req.user?.email || req.user?.id || null;
+    patch.reviewed_at = new Date().toISOString();
+  }
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
@@ -504,8 +906,14 @@ adminRouter.patch('/profiles/:id/verification', asyncHandler(async (req, res) =>
   if (verificationStatus === 'verified') patch.verified_at = new Date().toISOString();
   if (moderationStatus) {
     patch.moderation_status = moderationStatus;
-    if (moderationStatus === 'suspended') patch.suspended_at = new Date().toISOString();
-    if (moderationStatus === 'blocked') patch.blocked_at = new Date().toISOString();
+    patch.moderation_note = optionalText(req.body.moderation_note || req.body.note, 2000);
+    patch.reviewed_by = req.user?.email || req.user?.id || null;
+    patch.reviewed_at = new Date().toISOString();
+    if (moderationStatus === 'suspended') {
+      patch.suspended_at = new Date().toISOString();
+      patch.suspended_reason = optionalText(req.body.suspended_reason || req.body.reason, 1000);
+    }
+    if (moderationStatus === 'rejected') patch.blocked_at = new Date().toISOString();
   }
 
   const { data, error } = await supabaseAdmin
@@ -520,6 +928,41 @@ adminRouter.patch('/profiles/:id/verification', asyncHandler(async (req, res) =>
   res.json({ profile: data });
 }));
 
+adminRouter.patch('/profiles/:id/moderation', asyncHandler(async (req, res) => {
+  const moderationStatus = String(req.body.moderation_status || req.body.status || '');
+  if (!allowedModerationStatuses.includes(moderationStatus)) return res.status(400).json({ error: 'Invalid moderation status' });
+  const patch: Record<string, unknown> = {
+    moderation_status: moderationStatus,
+    moderation_note: optionalText(req.body.moderation_note || req.body.note, 2000),
+    reviewed_by: req.user?.email || req.user?.id || null,
+    reviewed_at: new Date().toISOString()
+  };
+  if (moderationStatus === 'approved') {
+    patch.status = 'active';
+    patch.is_published = req.body.is_published === undefined ? true : req.body.is_published !== false;
+  }
+  if (moderationStatus === 'suspended') {
+    patch.status = 'suspended';
+    patch.suspended_at = new Date().toISOString();
+    patch.suspended_reason = optionalText(req.body.suspended_reason || req.body.reason, 1000);
+  }
+  if (moderationStatus === 'rejected') {
+    patch.status = 'rejected';
+    patch.is_published = false;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select('*, profile_images(*)')
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'profile_moderation_updated', 'profile', req.params.id, patch);
+  res.json({ profile: withAdminImageUrls(data) });
+}));
+
 adminRouter.patch('/profiles/:id/verify', asyncHandler(async (req, res) => {
   const verificationStatus = String(req.body.verification_status || req.body.status || 'verified');
   const moderationStatus = String(req.body.moderation_status || '');
@@ -531,7 +974,11 @@ adminRouter.patch('/profiles/:id/verify', asyncHandler(async (req, res) => {
     verified: verificationStatus === 'verified'
   };
   if (verificationStatus === 'verified') patch.verified_at = new Date().toISOString();
-  if (moderationStatus) patch.moderation_status = moderationStatus;
+  if (moderationStatus) {
+    patch.moderation_status = moderationStatus;
+    patch.reviewed_by = req.user?.email || req.user?.id || null;
+    patch.reviewed_at = new Date().toISOString();
+  }
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
@@ -1004,6 +1451,343 @@ adminRouter.patch('/settings', asyncHandler(async (req, res) => {
 
 async function logAdminAction(adminEmail: string | undefined, action: string, targetType: string, targetId: string | null, details: Record<string, unknown>) {
   await writeAdminAuditLog(adminEmail, action, targetType, targetId, details);
+}
+
+function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Record<string, unknown> } | { error: string } {
+  const displayName = optionalText(body.display_name, 80);
+  if (!displayName) return { error: 'display_name is required' };
+
+  const city = String(body.city || 'berlin').trim().toLowerCase();
+  if (!['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].includes(city)) return { error: 'Unsupported city' };
+
+  const operatorStatus = normalizeAdminOperatorStatus(body.operator_status);
+  const services = normalizeAdminServices(body.services);
+  if ('error' in services) return services;
+  const premiumTier = String(body.premium_tier || 'standard');
+  const isPublished = body.is_published !== false;
+  const age = optionalInteger(body.age, 18, 99);
+  const height = optionalInteger(body.height_cm ?? body.height, 120, 230);
+  const category = normalizeAdminCategory(body.category);
+
+  return {
+    data: {
+      display_name: displayName,
+      city,
+      area: optionalText(body.area, 80),
+      work_city: optionalText(body.work_city, 100) || adminCityLabel(city),
+      work_area: optionalText(body.work_area, 120) || optionalText(body.area, 80),
+      category,
+      description: optionalText(body.description, 2000) || 'Preview profile generated for marketplace layout and internal quality checks. Replace with verified advertiser content before real publication.',
+      languages: ['DE', 'EN'],
+      age,
+      height,
+      height_cm: height,
+      nationality: optionalText(body.nationality, 80),
+      price_30min: optionalMoney(body.price_30min),
+      price_1h: optionalMoney(body.price_1h) || 180,
+      price_2h: optionalMoney(body.price_2h),
+      price_night: optionalMoney(body.price_night),
+      currency: 'EUR',
+      services: services.data,
+      service_menu: services.data.map((service) => ({ name: service, enabled: true, included: true, extra_price: null, note: null })),
+      visit_types: Array.isArray(body.visit_types) ? body.visit_types.map((item) => String(item)).slice(0, 8) : ['incall', 'hotel'],
+      service_tags: Array.isArray(body.service_tags) ? body.service_tags.map((item) => String(item)).slice(0, 16) : ['discreet', 'private-meeting'],
+      verified: body.verified !== false,
+      is_seed_profile: Boolean(body.is_seed_profile),
+      is_test_account: Boolean(body.is_seed_profile) || Boolean(body.is_test_account),
+      is_published: isPublished,
+      premium_tier: premiumTiers.includes(premiumTier) ? premiumTier : 'standard',
+      admin_priority: optionalInteger(body.admin_priority, 0, 10000) || 0,
+      status: isPublished ? 'active' : 'active',
+      subscription_status: 'test',
+      listing_plan: 'admin_profile_studio',
+      listing_price: 0,
+      listing_currency: 'EUR',
+      max_photos: 6,
+      moderation_status: allowedModerationStatuses.includes(String(body.moderation_status || 'approved')) ? String(body.moderation_status || 'approved') : 'approved',
+      moderation_note: optionalText(body.moderation_note, 2000),
+      suspended_reason: optionalText(body.suspended_reason, 1000),
+      ...operatorStatusPatch(operatorStatus)
+    }
+  };
+}
+
+async function createBerlinSeedProfiles() {
+  const rows = Array.from({ length: 24 }, (_, index) => {
+    const operatorStatus = index < 8 ? 'ONLINE_NOW' : index < 16 ? 'AVAILABLE_TODAY' : index < 20 ? 'BUSY' : 'OFFLINE';
+    const area = berlinSeedAreas[index % berlinSeedAreas.length];
+    const premiumTier = ['diamond', 'elite', 'gold', 'standard'][index % 4];
+    const services = seedServices(index);
+    const category = berlinSeedCategories[index % berlinSeedCategories.length];
+    const displayName = `${berlinSeedNames[index % berlinSeedNames.length]} ${area}`;
+    const age = 22 + (index % 14);
+    const height = 160 + (index % 21);
+    const price = 140 + (index % 9) * 25 + (premiumTier === 'diamond' ? 80 : premiumTier === 'elite' ? 45 : 0);
+
+    return {
+      display_name: displayName,
+      slug: `berlin-preview-${slugify(displayName)}-${index + 1}`,
+      city: 'berlin',
+      area,
+      work_city: 'Berlin',
+      work_area: area,
+      category,
+      description: seedDescription(area, premiumTier),
+      languages: ['DE', 'EN', index % 3 === 0 ? 'PL' : ''],
+      age,
+      height,
+      height_cm: height,
+      nationality: ['German', 'European', 'Polish', 'Spanish', 'International'][index % 5],
+      price_1h: price,
+      currency: 'EUR',
+      services,
+      service_menu: services.map((service) => ({ name: service, enabled: true, included: true, extra_price: null, note: null })),
+      visit_types: index % 2 === 0 ? ['incall', 'hotel'] : ['outcall', 'private'],
+      service_tags: ['discreet', 'private-meeting', index % 2 === 0 ? 'wellness' : 'conversation'],
+      verified: true,
+      verification_status: 'verified',
+      verified_at: new Date().toISOString(),
+      moderation_status: 'approved',
+      is_seed_profile: true,
+      is_test_account: true,
+      is_published: true,
+      premium_tier: premiumTier,
+      admin_priority: 1000 - index,
+      status: 'active',
+      subscription_status: 'test',
+      listing_plan: 'admin_seed',
+      listing_price: 0,
+      listing_currency: 'EUR',
+      max_photos: 6,
+      location_mode: 'approximate',
+      latitude: 52.52 + ((index % 7) - 3) * 0.018,
+      longitude: 13.405 + ((index % 9) - 4) * 0.021,
+      service_radius_km: [10, 15, 20, 25, 50][index % 5],
+      approximate_location_area: area,
+      location_updated_at: new Date().toISOString(),
+      ...operatorStatusPatch(operatorStatus)
+    };
+  }).map((row) => ({ ...row, languages: row.languages.filter(Boolean) }));
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .insert(rows)
+    .select('*, profile_images(*)');
+
+  if (error) throw new Error(error.message);
+
+  const seededProfiles = [];
+  for (const [index, profile] of (data || []).entries()) {
+    const image = await createSeedImage(profile.id, profile.display_name, index, true);
+    seededProfiles.push(withAdminImageUrls({ ...profile, profile_images: image ? [image] : [] }));
+  }
+  return seededProfiles;
+}
+
+async function createSeedImage(profileId: string, displayName: string, index: number, isPrimary: boolean) {
+  const buffer = await renderSeedImage(displayName, index);
+  const storagePath = `seed-profiles/berlin/${profileId}/${index + 1}.jpg`;
+  const uploadResult = await supabaseAdmin.storage
+    .from(config.storageBucket)
+    .upload(storagePath, buffer, { contentType: 'image/jpeg', upsert: true });
+
+  if (uploadResult.error) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from('profile_images')
+    .insert({
+      profile_id: profileId,
+      storage_path: storagePath,
+      is_primary: isPrimary,
+      is_blurred: false,
+      moderation_status: 'approved',
+      sort_order: 0
+    })
+    .select()
+    .single();
+
+  if (error) return null;
+  return withPublicImageUrl(data);
+}
+
+async function renderSeedImage(displayName: string, index: number) {
+  const palettes = [
+    ['#080808', '#4A1023', '#E8D8B5'],
+    ['#111111', '#2F1723', '#D6B08C'],
+    ['#0B0B0B', '#1F2937', '#A78BFA'],
+    ['#101010', '#164E63', '#14B8A6']
+  ];
+  const [bg, accent, gold] = palettes[index % palettes.length];
+  const initials = displayName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1500" viewBox="0 0 1200 1500">
+      <defs>
+        <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0" stop-color="${accent}"/>
+          <stop offset=".48" stop-color="${bg}"/>
+          <stop offset="1" stop-color="#171717"/>
+        </linearGradient>
+        <radialGradient id="r" cx="50%" cy="24%" r="58%">
+          <stop offset="0" stop-color="${gold}" stop-opacity=".52"/>
+          <stop offset=".62" stop-color="${accent}" stop-opacity=".18"/>
+          <stop offset="1" stop-color="${bg}" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect width="1200" height="1500" fill="url(#g)"/>
+      <rect width="1200" height="1500" fill="url(#r)"/>
+      <circle cx="600" cy="430" r="170" fill="rgba(232,216,181,.14)" stroke="${gold}" stroke-width="10"/>
+      <path d="M265 1280c55-310 615-310 670 0" fill="rgba(232,216,181,.12)" stroke="${gold}" stroke-width="10"/>
+      <path d="M210 160h780M210 1340h780" stroke="${gold}" stroke-opacity=".28" stroke-width="3"/>
+      <text x="600" y="468" text-anchor="middle" fill="${gold}" font-family="Arial" font-size="118" font-weight="800">${initials}</text>
+      <text x="86" y="1400" fill="${gold}" font-family="Arial" font-size="48" font-weight="700">Preview profile</text>
+    </svg>`;
+
+  return sharp(Buffer.from(svg)).jpeg({ quality: 86, mozjpeg: true }).toBuffer();
+}
+
+function seedServices(index: number) {
+  const services = [
+    berlinSeedServices[index % berlinSeedServices.length],
+    berlinSeedServices[(index + 3) % berlinSeedServices.length],
+    berlinSeedServices[(index + 6) % berlinSeedServices.length]
+  ].filter((service) => allowedServiceKeys.has(service));
+  return services.length ? services : ['towarzystwo', 'dyskrecja'];
+}
+
+function seedDescription(area: string, premiumTier: string) {
+  return `Preview profile for Berlin ${area}. This demo listing uses generated assets and original placeholder copy for marketplace QA. Tier: ${premiumTier}. Replace with verified advertiser content before real onboarding.`;
+}
+
+function normalizeAdminOperatorStatus(value: unknown) {
+  const status = String(value || 'OFFLINE').toUpperCase();
+  return operatorStatuses.includes(status) ? status : 'OFFLINE';
+}
+
+function normalizeAdminCategory(value: unknown) {
+  const category = String(value || 'ladies');
+  return ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'].includes(category) ? category : 'ladies';
+}
+
+function adminCityLabel(slug: string) {
+  const labels: Record<string, string> = {
+    berlin: 'Berlin',
+    hamburg: 'Hamburg',
+    hannover: 'Hannover',
+    koeln: 'Koeln',
+    muenchen: 'Muenchen',
+    warszawa: 'Warszawa'
+  };
+  return labels[slug] || slug;
+}
+
+function normalizeAdminServices(value: unknown): { data: string[] } | { error: string } {
+  if (!Array.isArray(value)) return { data: [] };
+  const services = [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
+  const unknown = services.find((service) => !allowedServiceKeys.has(service));
+  if (unknown) return { error: `Unknown service key: ${unknown}` };
+  return { data: services.slice(0, 24) };
+}
+
+function optionalInteger(value: unknown, min: number, max: number) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.min(Math.max(Math.round(number), min), max);
+}
+
+function optionalMoney(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return null;
+  return Math.round(number * 100) / 100;
+}
+
+function operatorStatusPatch(status: string) {
+  if (status === 'ONLINE_NOW') return { operator_status: status, availability_status: 'available', available_now: true };
+  if (status === 'AVAILABLE_TODAY' || status === 'APPOINTMENT_ONLY') return { operator_status: status, availability_status: 'available', available_now: false };
+  if (status === 'BUSY' || status === 'TRAVELING') return { operator_status: status, availability_status: 'busy', available_now: false };
+  return { operator_status: 'OFFLINE', availability_status: 'unavailable', available_now: false };
+}
+
+function withAdminImageUrls(profile: any) {
+  const images = (profile.profile_images || [])
+    .map(withPublicImageUrl)
+    .sort((left: any, right: any) => Number(left.sort_order || 0) - Number(right.sort_order || 0));
+  return { ...profile, profile_images: images, images };
+}
+
+function withPublicImageUrl(image: any) {
+  const { data } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(image.storage_path);
+  return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
+}
+
+function logAdminProfileImageUpload(status: 'start' | 'success' | 'error', req: any, extra: Record<string, unknown> = {}) {
+  console.info('[admin profiles images]', {
+    status,
+    profile_id: extra.profile_id || req.params?.id || req.params?.profileId || null,
+    admin_id: req.user?.id || req.user?.email || null,
+    bucket: config.storageBucket,
+    file_mime: extra.file_mime || null,
+    file_size: extra.file_size || null,
+    reason: extra.reason || null,
+    image_id: extra.image_id || null
+  });
+}
+
+function subscriptionProgress(startValue: unknown, endValue: unknown) {
+  if (!startValue || !endValue) return 0;
+  const start = new Date(String(startValue)).getTime();
+  const end = new Date(String(endValue)).getTime();
+  const now = Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
+}
+
+function parseAdminDate(value: unknown) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const date = new Date(text);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function subscriptionPatch(input: { status: string; plan?: string; start?: Date; end?: Date; managedBy?: string | null; note?: string | null }) {
+  const patch: Record<string, unknown> = {
+    subscription_status: input.status,
+    subscription_managed_by: input.managedBy || null,
+    subscription_note: input.note || null
+  };
+  if (input.plan) {
+    patch.subscription_plan = input.plan;
+    patch.listing_plan = input.plan;
+    patch.plan = input.plan;
+  }
+  if (input.start) {
+    patch.subscription_start = input.start.toISOString();
+    patch.subscription_started_at = input.start.toISOString();
+  }
+  if (input.end) {
+    patch.subscription_end = input.end.toISOString();
+    patch.subscription_expires_at = input.end.toISOString();
+  }
+  if (input.status === 'active') {
+    patch.status = 'active';
+    patch.is_published = true;
+    patch.moderation_status = 'approved';
+  }
+  if (['expired', 'cancelled'].includes(input.status)) {
+    patch.is_published = false;
+  }
+  return patch;
+}
+
+async function updateProfileSubscription(profileId: string, patch: Record<string, unknown>) {
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update(patch)
+    .eq('id', profileId)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 function normalizeSettings(rows: Array<{ key: string; value: unknown }>) {

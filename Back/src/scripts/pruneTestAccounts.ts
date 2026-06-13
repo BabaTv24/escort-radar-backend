@@ -140,7 +140,7 @@ async function markProfilesInactive(profileIds: string[]) {
     .from('profiles')
     .update({
       status: 'suspended',
-      moderation_status: 'blocked',
+      moderation_status: 'rejected',
       availability_status: 'unavailable',
       is_test_account: true,
       admin_note: 'Pruned by test account cleanup script'

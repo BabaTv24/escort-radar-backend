@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { allowedServiceKeys } from './serviceCatalog.js';
 
 export const allowedCities = ['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'];
 export const allowedCategories = ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'];
@@ -6,7 +7,7 @@ export const allowedAccountTypes = ['private', 'agency', 'massage_salon', 'club_
 export const allowedStatuses = ['pending', 'active', 'rejected', 'suspended'];
 export const allowedReportStatuses = ['open', 'reviewing', 'resolved', 'dismissed'];
 export const allowedVerificationStatuses = ['pending', 'verified', 'rejected', 'changes_requested'];
-export const allowedModerationStatuses = ['clean', 'review', 'suspended', 'blocked'];
+export const allowedModerationStatuses = ['pending', 'approved', 'rejected', 'suspended'];
 export const allowedAdminReportStatuses = ['open', 'investigating', 'resolved', 'escalated'];
 
 export function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) {
@@ -44,6 +45,10 @@ export function validateProfileInput(body: Record<string, unknown>) {
     return { error: 'Unsupported city' };
   }
 
+  const servicesProvided = Object.prototype.hasOwnProperty.call(body, 'services');
+  const services = optionalServices(body.services);
+  if ('error' in services) return services;
+
   return {
     data: {
       display_name: displayName,
@@ -55,6 +60,10 @@ export function validateProfileInput(body: Record<string, unknown>) {
       referred_by_code: optionalText(body.referred_by_code, 40),
       city,
       area: optionalText(body.area, 80),
+      work_country: optionalText(body.work_country, 80),
+      work_city: optionalText(body.work_city, 100),
+      work_area: optionalText(body.work_area, 120),
+      work_place_label: optionalText(body.work_place_label, 180),
       category: normalizeCategory(body.category),
       description: optionalText(body.description, 2000),
       languages: Array.isArray(body.languages)
@@ -71,6 +80,7 @@ export function validateProfileInput(body: Record<string, unknown>) {
       audience: optionalArray(body.audience, 6),
       visit_types: optionalArray(body.visit_types, 8),
       service_tags: optionalArray(body.service_tags, 16),
+      ...(servicesProvided ? { services: services.data } : {}),
       tag_ids: optionalArray(body.tag_ids, 60),
       payment_methods: optionalArray(body.payment_methods, 8),
       availability_note: optionalText(body.availability_note, 500),
@@ -86,10 +96,23 @@ export function validateProfileInput(body: Record<string, unknown>) {
       listing_currency: optionalText(body.listing_currency, 8) || 'EUR',
       max_photos: optionalNumber(body.max_photos, 1, 6) || 6,
       availability_status: normalizeAvailabilityStatus(body.availability_status),
-      service_radius_km: optionalNumber(body.service_radius_km, 5, 100) || 25,
+      operator_status: normalizeOperatorStatus(body.operator_status),
+      working_today_start: optionalTime(body.working_today_start),
+      working_today_end: optionalTime(body.working_today_end),
+      working_tomorrow_start: optionalTime(body.working_tomorrow_start),
+      working_tomorrow_end: optionalTime(body.working_tomorrow_end),
+      working_24_7: Boolean(body.working_24_7),
+      travel_city: optionalText(body.travel_city, 100),
+      travel_arrival_date: optionalDate(body.travel_arrival_date),
+      travel_departure_date: optionalDate(body.travel_departure_date),
+      hotspot_type: normalizeHotspotType(body.hotspot_type),
+      service_radius_km: optionalNumber(body.service_radius_km, 1, 100) || 25,
       approximate_location_area: optionalText(body.approximate_location_area, 120),
+      location_mode: normalizeLocationMode(body.location_mode),
       latitude: optionalCoordinate(body.latitude, -90, 90),
       longitude: optionalCoordinate(body.longitude, -180, 180),
+      auto_location_on_login: Boolean(body.auto_location_on_login),
+      auto_location_while_online: Boolean(body.auto_location_while_online),
       distance_km: optionalMoney(body.distance_km),
       available_now: Boolean(body.available_now),
       mobile_service: Boolean(body.mobile_service),
@@ -135,9 +158,42 @@ function optionalServiceMenu(value: unknown) {
   }).filter((service) => service.name);
 }
 
+function optionalServices(value: unknown): { data: string[] } | { error: string } {
+  if (!Array.isArray(value)) return { data: [] };
+  const unique = [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
+  const unknown = unique.find((item) => !allowedServiceKeys.has(item));
+  if (unknown) return { error: `Unknown service key: ${unknown}` };
+  return { data: unique.slice(0, 100) };
+}
+
 function normalizeAvailabilityStatus(value: unknown) {
   const status = String(value || 'unavailable');
   return ['available', 'busy', 'unavailable'].includes(status) ? status : 'unavailable';
+}
+
+function normalizeOperatorStatus(value: unknown) {
+  const status = String(value || 'OFFLINE').toUpperCase();
+  return ['ONLINE_NOW', 'BUSY', 'TRAVELING', 'AVAILABLE_TODAY', 'APPOINTMENT_ONLY', 'OFFLINE'].includes(status) ? status : 'OFFLINE';
+}
+
+function normalizeHotspotType(value: unknown) {
+  const type = String(value || '');
+  return ['hotel', 'apartment', 'club', 'private', 'mobile', 'vacation'].includes(type) ? type : null;
+}
+
+function optionalTime(value: unknown) {
+  const text = String(value || '').trim();
+  return /^\d{2}:\d{2}$/.test(text) ? text : null;
+}
+
+function optionalDate(value: unknown) {
+  const text = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function normalizeLocationMode(value: unknown) {
+  const mode = String(value || 'city_only');
+  return ['exact_hidden', 'approximate', 'city_only'].includes(mode) ? mode : 'city_only';
 }
 
 function normalizeCategory(value: unknown) {

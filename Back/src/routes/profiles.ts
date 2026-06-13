@@ -4,6 +4,7 @@ import { allowedCities, asyncHandler, parseBoolean, slugify, validateProfileInpu
 import { requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
 import { generatePublicUserId, generateReferralCode, normalizePhone } from '../utils/identity.js';
 import { getClientActivationSummary } from '../services/clientActivation.js';
+import { notifyMatchingClientsForProfile } from './clientIntent.js';
 
 export const profilesRouter = Router();
 
@@ -12,12 +13,20 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .from('profiles')
     .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
     .eq('status', 'active')
+    .eq('is_published', true)
+    .eq('moderation_status', 'approved')
     .eq('shadowbanned', false)
+    .in('subscription_status', ['active', 'trial', 'test'])
+    .order('admin_priority', { ascending: false })
     .order('available_now', { ascending: false })
+    .order('location_updated_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
 
   const city = String(req.query.city || '').toLowerCase();
-  if (city && allowedCities.includes(city)) query = query.eq('city', city);
+  if (city && allowedCities.includes(city)) {
+    const label = cityLabel(city);
+    query = query.or(`city.eq.${city},work_city.ilike.*${label}*,travel_city.ilike.*${label}*`);
+  }
 
   for (const key of ['available_now', 'mobile_service', 'private_studio', 'verified']) {
     const parsed = parseBoolean(req.query[key]);
@@ -44,7 +53,11 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
   const { data, error } = await query.limit(60);
   if (error) return res.status(500).json({ error: error.message });
 
-  res.json({ profiles: data?.map(withImageUrls) || [] });
+  const profiles = (data || [])
+    .map((profile) => sanitizePublicProfile(withImageUrls(profile)))
+    .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
+
+  res.json({ profiles });
 }));
 
 profilesRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
@@ -121,7 +134,7 @@ profilesRouter.get('/:id', asyncHandler(async (req, res) => {
     .single();
 
   if (error || !data) return res.status(404).json({ error: 'Profile not found' });
-  if (data.status !== 'active' || data.shadowbanned || ['blocked', 'suspended'].includes(data.moderation_status)) {
+  if (data.status !== 'active' || data.is_published === false || data.shadowbanned || data.moderation_status !== 'approved' || !['active', 'trial', 'test'].includes(String(data.subscription_status || ''))) {
     return res.status(404).json({ error: 'Profile not found' });
   }
 
@@ -133,7 +146,8 @@ profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHan
     status: 'start',
     display_name: safeText(req.body.display_name),
     city: safeText(req.body.city),
-    availability_status: safeText(req.body.availability_status)
+    availability_status: safeText(req.body.availability_status),
+    operator_status: safeText(req.body.operator_status)
   });
   const result = validateProfileInput(req.body);
   if ('error' in result) {
@@ -152,6 +166,7 @@ profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHan
   const payload = {
     ...profileData,
     ...phoneValidation.data,
+    ...operatorStatusPatch(profileData.operator_status),
     user_id: req.user!.id,
     slug: `${baseSlug}-${Date.now().toString(36)}`,
     public_user_id: await generateUniqueValue('public_user_id', generatePublicUserId),
@@ -159,19 +174,25 @@ profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHan
     status: isTestAccount ? 'active' : 'pending',
     verified: isTestAccount,
     verification_status: isTestAccount ? 'verified' : 'pending',
-    moderation_status: 'clean',
+    moderation_status: isTestAccount ? 'approved' : 'pending',
     subscription_status: req.advertiserAccess!.onboarding ? 'trial' : 'active',
     plan: req.advertiserAccess!.plan,
     listing_plan: req.advertiserAccess!.plan,
     is_test_account: isTestAccount,
     verified_at: isTestAccount ? new Date().toISOString() : null,
-    trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+    trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    location_updated_at: hasLocationChange(req.body) ? new Date().toISOString() : null
   };
 
   const { data, error } = await supabaseAdmin.from('profiles').insert(payload).select('*, profile_images(*), profile_tags(tag_id, tags(*))').single();
   if (error) {
     logProfileDebug('POST /api/profiles supabase_error', req, { status: 'error', supabase_error: error.message });
     return res.status(400).json({ error: error.message });
+  }
+  if (data.operator_status === 'ONLINE_NOW') {
+    await notifyMatchingClientsForProfile(data).catch((notificationError) => {
+      console.warn('[profiles] client match notification failed', notificationError);
+    });
   }
   await syncProfileTags(data.id, tag_ids);
   const hydrated = await fetchProfile(data.id);
@@ -193,7 +214,9 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
     city: safeText(req.body.city),
     area: safeText(req.body.area),
     availability_status: safeText(req.body.availability_status),
-    available_now: Boolean(req.body.available_now)
+    available_now: Boolean(req.body.available_now),
+    services_count: Array.isArray(req.body.services) ? req.body.services.length : null,
+    services_keys: Array.isArray(req.body.services) ? req.body.services.map((item: unknown) => String(item)).slice(0, 20) : null
   });
   const result = validateProfileInput(req.body);
   if ('error' in result) {
@@ -206,6 +229,10 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
     return res.status(400).json({ error: phoneValidation.error });
   }
   const { tag_ids, profileData } = splitProfileTags(result.data);
+  if (Array.isArray(profileData.services)) {
+    console.log('[profiles] update services count=', profileData.services.length);
+    console.log('[profiles] update services keys=', profileData.services.slice(0, 30));
+  }
 
   const { data: existing } = await supabaseAdmin.from('profiles').select('user_id, is_test_account, public_user_id, referral_code').eq('id', req.params.id).single();
   if (!existing) {
@@ -220,16 +247,18 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
   const updatePayload = {
     ...profileData,
     ...phoneValidation.data,
+    ...operatorStatusPatch(profileData.operator_status),
     public_user_id: existing.public_user_id || await generateUniqueValue('public_user_id', generatePublicUserId),
     referral_code: existing.referral_code || await generateUniqueValue('referral_code', generateReferralCode),
     subscription_status: req.advertiserAccess!.onboarding ? 'trial' : 'active',
     plan: req.advertiserAccess!.plan,
     listing_plan: req.advertiserAccess!.plan,
+    ...(hasLocationChange(req.body) ? { location_updated_at: new Date().toISOString() } : {}),
     ...(existing.is_test_account ? {
       status: 'active',
       verified: true,
       verification_status: 'verified',
-      moderation_status: 'clean',
+      moderation_status: 'approved',
       subscription_status: 'active'
     } : {})
   };
@@ -245,6 +274,11 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
     logProfileDebug('PUT /api/profiles/:id supabase_error', req, { status: 'error', profile_id: req.params.id, supabase_error: error.message });
     return res.status(400).json({ error: error.message });
   }
+  if (data.operator_status === 'ONLINE_NOW') {
+    await notifyMatchingClientsForProfile(data).catch((notificationError) => {
+      console.warn('[profiles] client match notification failed', notificationError);
+    });
+  }
   await syncProfileTags(data.id, tag_ids);
   const hydrated = await fetchProfile(data.id);
   const wallet = await getOrCreateWallet(req.user!.id);
@@ -254,8 +288,12 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
     city: data.city,
     area: data.area,
     availability_status: data.availability_status,
-    available_now: data.available_now
+    available_now: data.available_now,
+    saved_services_count: Array.isArray(data.services) ? data.services.length : 0
   });
+  if (Array.isArray(data.services)) {
+    console.log('[profiles] saved services count=', data.services.length);
+  }
   res.json({ profile: withImageUrls(hydrated || data, wallet), wallet });
 }));
 
@@ -273,6 +311,9 @@ function withImageUrls(profile: any, wallet?: any) {
   const images = (profile.profile_images || []).map((image: any) => {
     const { data } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
     return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
+  }).sort((left: any, right: any) => {
+    if (Boolean(left.is_primary) !== Boolean(right.is_primary)) return left.is_primary ? -1 : 1;
+    return Number(left.sort_order || 0) - Number(right.sort_order || 0);
   });
 
   const tags = (profile.profile_tags || []).map((row: any) => row.tags).filter(Boolean);
@@ -288,24 +329,106 @@ function withImageUrls(profile: any, wallet?: any) {
       referral_balance: Number(wallet.referral_balance || 0),
       public_wallet_id: wallet.public_wallet_id
     } : undefined,
-    visibility_reason: getVisibilityReason({ ...profile, profile_images: images })
+    visibility_reason: getVisibilityReason({ ...profile, profile_images: images }),
+    radar_score: calculateRadarScore({ ...profile, profile_images: images })
   };
 }
 
 function sanitizePublicProfile(profile: any) {
-  const { primary_phone, additional_phones, whatsapp, telegram, ...publicProfile } = profile;
+  const { primary_phone, additional_phones, whatsapp, telegram, latitude, longitude, work_place_label, ...publicProfile } = profile;
   const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
+  const approximateCoords = publicProfile.location_mode !== 'city_only'
+    && typeof latitude === 'number'
+    && typeof longitude === 'number'
+    ? {
+        latitude: Math.round(latitude * 100) / 100,
+        longitude: Math.round(longitude * 100) / 100
+      }
+    : {};
   return {
     ...publicProfile,
+    ...approximateCoords,
     profile_images: visibleImages,
     images: visibleImages,
     locked_features: ['phone_number', 'whatsapp', 'telegram', 'full_gallery', 'vip_gallery', 'gifts', 'live_cam']
   };
 }
 
+function hasLocationChange(body: Record<string, unknown>) {
+  return [
+    'work_country',
+    'work_city',
+    'work_area',
+    'work_place_label',
+    'city',
+    'area',
+    'latitude',
+    'longitude',
+    'location_mode',
+    'service_radius_km',
+    'auto_location_on_login',
+    'auto_location_while_online'
+  ].some((key) => Object.prototype.hasOwnProperty.call(body, key));
+}
+
+function operatorStatusPatch(status: unknown) {
+  const operatorStatus = String(status || 'OFFLINE').toUpperCase();
+  if (operatorStatus === 'ONLINE_NOW') return { availability_status: 'available', available_now: true };
+  if (operatorStatus === 'AVAILABLE_TODAY' || operatorStatus === 'APPOINTMENT_ONLY') return { availability_status: 'available', available_now: false };
+  if (operatorStatus === 'BUSY' || operatorStatus === 'TRAVELING') return { availability_status: 'busy', available_now: false };
+  return { availability_status: 'unavailable', available_now: false };
+}
+
+function cityLabel(slug: string) {
+  const labels: Record<string, string> = {
+    berlin: 'Berlin',
+    hamburg: 'Hamburg',
+    hannover: 'Hannover',
+    koeln: 'Koeln',
+    muenchen: 'Muenchen',
+    warszawa: 'Warszawa'
+  };
+  return labels[slug] || slug;
+}
+
+function calculateRadarScore(profile: any) {
+  const statusScore: Record<string, number> = {
+    ONLINE_NOW: 100,
+    AVAILABLE_TODAY: 80,
+    TRAVELING: 60,
+    BUSY: 20,
+    APPOINTMENT_ONLY: 40,
+    OFFLINE: 0
+  };
+  let score = statusScore[String(profile.operator_status || 'OFFLINE')] || 0;
+  if (profile.location_updated_at) {
+    const ageMinutes = (Date.now() - new Date(profile.location_updated_at).getTime()) / 60000;
+    if (ageMinutes < 30) score += 50;
+    else if (ageMinutes < 120) score += 20;
+  }
+  if (profile.verified) score += 25;
+  if (profileCompleteness(profile) >= 100) score += 25;
+  return score;
+}
+
+function profileCompleteness(profile: any) {
+  const checks = [
+    Boolean(profile.display_name),
+    Boolean(profile.city || profile.work_city),
+    Boolean(profile.description),
+    Boolean(profile.price_1h),
+    Boolean(profile.profile_images?.length),
+    Boolean(profile.services?.length || profile.service_menu?.length),
+    Boolean(profile.operator_status && profile.operator_status !== 'OFFLINE'),
+    Boolean(profile.service_radius_km)
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
 function getVisibilityReason(profile: any) {
-  if (profile.moderation_status === 'blocked') return 'blocked';
+  if (profile.moderation_status === 'rejected') return 'blocked';
   if (profile.moderation_status === 'suspended' || profile.status === 'suspended') return 'suspended';
+  if (profile.moderation_status !== 'approved') return 'pending_verification';
   if (!profile.display_name || !profile.city || !profile.category) return 'missing_required_fields';
   if (!profile.profile_images?.length) return 'no_images';
   if (!profile.is_test_account && profile.subscription_status !== 'active') return 'missing_payment';

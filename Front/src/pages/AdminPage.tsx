@@ -1,34 +1,65 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Ban, BarChart3, Camera, Coins, FlaskConical, LogOut, MessageSquare, Settings, Shield, Tags, Users, WalletCards } from 'lucide-react';
+import { Ban, BarChart3, Camera, Coins, Crown, FlaskConical, LogOut, MessageSquare, Settings, Shield, Tags, Trash2, Upload, Users, WalletCards } from 'lucide-react';
 import { api } from '../lib/api';
 import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
+import { categoryOptions } from '../data/filterOptions';
+import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 
 type AdminUser = Record<string, any>;
 type SubscriptionRow = Record<string, any>;
 const adminTokenStorageKey = 'escort-radar-admin-token';
+const serviceCategories = ['all', ...Array.from(new Set(serviceOptions.map((service) => service.category)))];
+const emptyStudioForm = {
+  id: '',
+  display_name: '',
+  category: 'ladies',
+  city: 'berlin',
+  area: 'Mitte',
+  work_city: 'Berlin',
+  work_area: 'Mitte',
+  age: 26,
+  nationality: 'European',
+  height_cm: 170,
+  price_30min: 120,
+  price_1h: 180,
+  price_2h: 320,
+  price_night: 900,
+  operator_status: 'AVAILABLE_TODAY',
+  services: ['towarzystwo', 'dyskrecja'],
+  description: '',
+  verified: true,
+  premium_tier: 'gold',
+  is_seed_profile: true,
+  is_published: true,
+  admin_priority: 100,
+  moderation_status: 'approved',
+  moderation_note: '',
+  suspended_reason: ''
+};
 
 const sections = [
   {
-    title: 'PRZEGLAD',
+    title: 'CONTROL',
     items: [
       ['dashboard', '/admin', BarChart3],
-      ['users', '/admin/users', Users],
-      ['profiles', '/admin/profiles', Shield],
+      ['profiles', '/admin/profiles', Crown],
       ['subscriptions', '/admin/subscriptions', Coins],
-      ['token-transactions', '/admin/token-transactions', Coins],
-      ['wallets', '/admin/wallets', WalletCards],
-      ['referrals', '/admin/referrals', Users]
+      ['payments', '/admin/token-transactions', WalletCards],
+      ['users', '/admin/users', Users],
+      ['reports', '/admin/reports', Ban],
+      ['settings', '/admin/settings', Settings]
     ]
   },
   {
-    title: 'TRESCI',
+    title: 'OPERATIONS',
     items: [
+      ['wallets', '/admin/wallets', WalletCards],
+      ['referrals', '/admin/referrals', Users],
       ['photos', '/admin/photos', Camera],
       ['tags', '/admin/tags', Tags],
-      ['reports', '/admin/reports', Ban],
       ['reviews', '/admin/reviews', MessageSquare],
       ['live-cam', '/admin/live-cam', Camera],
       ['video-manager', '/admin/video-manager', Camera]
@@ -46,7 +77,6 @@ const sections = [
   {
     title: 'SYSTEM',
     items: [
-      ['settings', '/admin/settings', Settings],
       ['live-lab', '/admin/live-lab', FlaskConical],
       ['moderation', '/admin/moderation', Shield],
       ['activity-logs', '/admin/activity-logs', BarChart3]
@@ -70,6 +100,7 @@ export function AdminPage() {
 
   const [stats, setStats] = useState<Record<string, number>>({});
   const [tokenStats, setTokenStats] = useState<Record<string, number>>({});
+  const [subscriptionStats, setSubscriptionStats] = useState<Record<string, number>>({});
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
@@ -91,10 +122,25 @@ export function AdminPage() {
   const [query, setQuery] = useState('');
   const [modal, setModal] = useState<{ title: string; body: string } | null>(null);
   const [newTag, setNewTag] = useState({ label: '', group_key: 'premium' });
+  const [studioForm, setStudioForm] = useState({ ...emptyStudioForm });
+  const [studioFile, setStudioFile] = useState<File | null>(null);
+  const [studioSaving, setStudioSaving] = useState(false);
+  const [studioServiceSearch, setStudioServiceSearch] = useState('');
+  const [studioServiceCategory, setStudioServiceCategory] = useState('all');
+  const [studioFilters, setStudioFilters] = useState({
+    city: 'all',
+    type: 'all',
+    published: 'all',
+    suspended: 'all',
+    seed: 'all',
+    verified: 'all',
+    premium_tier: 'all',
+    owner_email: ''
+  });
 
   const view = getAdminView(location.pathname);
   const isLoginRoute = location.pathname === '/admin/login';
-  const filteredProfiles = profiles.filter((profile) => JSON.stringify(profile).toLowerCase().includes(query.toLowerCase()));
+  const filteredProfiles = profiles.filter((profile) => profileMatchesAdminFilters(profile, query, studioFilters));
   const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
@@ -307,6 +353,7 @@ export function AdminPage() {
 
       setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
       setTokenStats(tokenData.stats);
+      setSubscriptionStats((subscriptionData as any).stats || {});
       setUsers(usersData.users);
       setProfiles(profileData.profiles);
       setSubscriptions(subscriptionData.subscriptions);
@@ -337,6 +384,88 @@ export function AdminPage() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
       setLoading(false);
+    }
+  }
+
+  function editStudioProfile(profile: Profile) {
+    setStudioForm({
+      id: profile.id,
+      display_name: profile.display_name || '',
+      category: profile.category || 'ladies',
+      city: profile.city || 'berlin',
+      area: profile.area || profile.work_area || '',
+      work_city: profile.work_city || profile.city || '',
+      work_area: profile.work_area || profile.area || '',
+      age: profile.age || 26,
+      nationality: profile.nationality || 'European',
+      height_cm: profile.height_cm || profile.height || 170,
+      price_30min: Number(profile.price_30min || 0),
+      price_1h: Number(profile.price_1h || 180),
+      price_2h: Number(profile.price_2h || 0),
+      price_night: Number(profile.price_night || 0),
+      operator_status: profile.operator_status || 'AVAILABLE_TODAY',
+      services: profile.services?.length ? profile.services : ['towarzystwo', 'dyskrecja'],
+      description: profile.description || '',
+      verified: profile.verified !== false,
+      premium_tier: profile.premium_tier || 'gold',
+      is_seed_profile: Boolean(profile.is_seed_profile),
+      is_published: profile.is_published !== false,
+      admin_priority: Number(profile.admin_priority || 0),
+      moderation_status: profile.moderation_status || 'approved',
+      moderation_note: profile.moderation_note || '',
+      suspended_reason: profile.suspended_reason || ''
+    });
+  }
+
+  async function saveStudioProfile() {
+    setStudioSaving(true);
+    setMessage('');
+    try {
+      const body = {
+        ...studioForm,
+        height: studioForm.height_cm,
+        price_1h: Number(studioForm.price_1h || 0),
+        price_30min: Number(studioForm.price_30min || 0),
+        price_2h: Number(studioForm.price_2h || 0),
+        price_night: Number(studioForm.price_night || 0),
+        age: Number(studioForm.age || 0),
+        height_cm: Number(studioForm.height_cm || 0),
+        admin_priority: Number(studioForm.admin_priority || 0)
+      } as Partial<Profile>;
+      const result = studioForm.id
+        ? await api.updateAdminProfile(token, studioForm.id, body)
+        : await api.createAdminProfile(token, body);
+      if (studioFile) await uploadStudioPhoto(result.profile.id);
+      setStudioForm({ ...emptyStudioForm });
+      setStudioFile(null);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Nie udalo sie zapisac profilu.');
+    } finally {
+      setStudioSaving(false);
+    }
+  }
+
+  async function uploadStudioPhoto(profileId = studioForm.id) {
+    if (!profileId || !studioFile) return;
+    const form = new FormData();
+    form.append('image', studioFile);
+    await api.uploadAdminProfileImage(token, profileId, form);
+    setStudioFile(null);
+    await load();
+  }
+
+  async function seedBerlinStudioProfiles() {
+    setStudioSaving(true);
+    setMessage('');
+    try {
+      const result = await api.seedBerlinProfiles(token);
+      setMessage(result.created ? `Wygenerowano ${result.created} profili demo dla Berlina.` : 'Berlin seed set juz istnieje - nie zdublowalem profili.');
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Nie udalo sie wygenerowac profili Berlina.');
+    } finally {
+      setStudioSaving(false);
     }
   }
 
@@ -498,6 +627,212 @@ export function AdminPage() {
       )} />;
     }
 
+    if (view === 'profiles' || view === 'profile-studio') {
+      const selectedProfile = profiles.find((profile) => profile.id === studioForm.id);
+      const studioProfiles = filteredProfiles;
+      return (
+        <section className="profile-studio-grid">
+          <article className="admin-card profile-studio-list">
+            <div className="profile-studio-head">
+              <div>
+                <p className="eyebrow">Profile Control</p>
+                <h2>Wszystkie profile</h2>
+              </div>
+              <button className="button primary" disabled={studioSaving} onClick={seedBerlinStudioProfiles}>
+                <Crown size={16} /> Generate Berlin Demo Set
+              </button>
+            </div>
+            <div className="studio-filter-grid">
+              <select value={studioFilters.city} onChange={(event) => setStudioFilters({ ...studioFilters, city: event.target.value })}>
+                {['all', 'berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <select value={studioFilters.type} onChange={(event) => setStudioFilters({ ...studioFilters, type: event.target.value })}>
+                {['all', ...categoryOptions].map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <select value={studioFilters.published} onChange={(event) => setStudioFilters({ ...studioFilters, published: event.target.value })}>
+                <option value="all">published: all</option>
+                <option value="yes">published</option>
+                <option value="no">unpublished</option>
+              </select>
+              <select value={studioFilters.suspended} onChange={(event) => setStudioFilters({ ...studioFilters, suspended: event.target.value })}>
+                <option value="all">suspended: all</option>
+                <option value="yes">suspended</option>
+                <option value="no">not suspended</option>
+              </select>
+              <select value={studioFilters.seed} onChange={(event) => setStudioFilters({ ...studioFilters, seed: event.target.value })}>
+                <option value="all">seed: all</option>
+                <option value="yes">seed/demo</option>
+                <option value="no">real/non-seed</option>
+              </select>
+              <select value={studioFilters.verified} onChange={(event) => setStudioFilters({ ...studioFilters, verified: event.target.value })}>
+                <option value="all">verified: all</option>
+                <option value="yes">verified</option>
+                <option value="no">unverified</option>
+              </select>
+              <select value={studioFilters.premium_tier} onChange={(event) => setStudioFilters({ ...studioFilters, premium_tier: event.target.value })}>
+                {['all', 'standard', 'gold', 'elite', 'diamond'].map((item) => <option key={item} value={item}>tier: {item}</option>)}
+              </select>
+              <input placeholder="owner email" value={studioFilters.owner_email} onChange={(event) => setStudioFilters({ ...studioFilters, owner_email: event.target.value })} />
+            </div>
+            <div className="profile-studio-table">
+              {studioProfiles.map((profile) => {
+                const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
+                return (
+                  <div className="studio-profile-row" key={profile.id}>
+                    {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{profile.display_name.slice(0, 1)}</span>}
+                    <div>
+                      <strong>{profile.display_name}</strong>
+                      <small>ID: {profile.id.slice(0, 8)} / Owner: {profile.owner_email || profile.user_id || 'no user_id'}</small>
+                      <small>{profile.category || 'type?'} / {profile.city} / {profile.area || profile.work_area || '-'} / {profile.operator_status || profile.availability_status}</small>
+                      <div className="studio-badges">
+                        <i>{profile.status}</i>
+                        <i>{profile.moderation_status || 'pending'}</i>
+                        <i>{profile.premium_tier || 'standard'}</i>
+                        <i>{profile.subscription_status || 'free'}</i>
+                        <i>{profile.profile_images?.length || 0} photos</i>
+                        <i>{profile.services?.length || 0} services</i>
+                        {profile.is_published !== false ? <i>published</i> : <i>unpublished</i>}
+                        {profile.is_seed_profile && <i>seed/demo</i>}
+                        <i>{profile.created_at ? new Date(profile.created_at).toLocaleDateString() : '-'}</i>
+                      </div>
+                    </div>
+                    <div className="admin-actions-row">
+                      <Action onClick={() => editStudioProfile(profile)}>Edit</Action>
+                      <Action onClick={() => action(() => api.publishAdminProfile(token, profile.id, profile.is_published === false))}>
+                        {profile.is_published === false ? 'Publish' : 'Unpublish'}
+                      </Action>
+                      <Action onClick={() => action(() => api.setProfileStatus(token, profile.id, profile.status === 'suspended' || profile.moderation_status === 'suspended' ? 'active' : 'suspended'))}>
+                        {profile.status === 'suspended' || profile.moderation_status === 'suspended' ? 'Unsuspend' : 'Suspend'}
+                      </Action>
+                      <Action onClick={() => action(() => api.setProfileVerification(token, profile.id, profile.verified ? 'pending' : 'verified', profile.moderation_status || 'approved'))}>
+                        {profile.verified ? 'Unverify' : 'Verify'}
+                      </Action>
+                      <Action onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'approved', is_published: true }))}>Approve</Action>
+                      <Action danger onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'rejected' }))}>Reject</Action>
+                      <Link className="admin-action-btn" to={`/profile/${profile.id}`}>Public</Link>
+                      <Link className="admin-action-btn" to="/admin/subscriptions">Subscription</Link>
+                      <Action danger onClick={() => action(() => api.deleteAdminProfile(token, profile.id))}>Delete</Action>
+                    </div>
+                  </div>
+                );
+              })}
+              {!studioProfiles.length && <EmptyAdminState text="Brak profili w Studio." />}
+            </div>
+          </article>
+
+          <article className="admin-card profile-studio-form">
+            <div className="profile-studio-head">
+              <div>
+                <p className="eyebrow">{studioForm.id ? 'Edit profile' : 'Create profile'}</p>
+                <h2>{studioForm.id ? studioForm.display_name : 'Nowy profil preview'}</h2>
+              </div>
+              {studioForm.id && <button className="button" onClick={() => setStudioForm({ ...emptyStudioForm })}>Nowy</button>}
+            </div>
+            <div className="admin-form-grid">
+              <input placeholder="display_name" value={studioForm.display_name} onChange={(event) => setStudioForm({ ...studioForm, display_name: event.target.value })} />
+              <select value={studioForm.category} onChange={(event) => setStudioForm({ ...studioForm, category: event.target.value })}>
+                {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+              <input placeholder="city" value={studioForm.city} onChange={(event) => setStudioForm({ ...studioForm, city: event.target.value })} />
+              <input placeholder="area" value={studioForm.area} onChange={(event) => setStudioForm({ ...studioForm, area: event.target.value })} />
+              <input placeholder="work_city" value={studioForm.work_city} onChange={(event) => setStudioForm({ ...studioForm, work_city: event.target.value })} />
+              <input placeholder="work_area" value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value })} />
+              <input type="number" placeholder="age" value={studioForm.age} onChange={(event) => setStudioForm({ ...studioForm, age: Number(event.target.value) })} />
+              <input placeholder="nationality" value={studioForm.nationality} onChange={(event) => setStudioForm({ ...studioForm, nationality: event.target.value })} />
+              <input type="number" placeholder="height_cm" value={studioForm.height_cm} onChange={(event) => setStudioForm({ ...studioForm, height_cm: Number(event.target.value) })} />
+              <input type="number" placeholder="price_30min" value={studioForm.price_30min} onChange={(event) => setStudioForm({ ...studioForm, price_30min: Number(event.target.value) })} />
+              <input type="number" placeholder="price_1h" value={studioForm.price_1h} onChange={(event) => setStudioForm({ ...studioForm, price_1h: Number(event.target.value) })} />
+              <input type="number" placeholder="price_2h" value={studioForm.price_2h} onChange={(event) => setStudioForm({ ...studioForm, price_2h: Number(event.target.value) })} />
+              <input type="number" placeholder="price_night" value={studioForm.price_night} onChange={(event) => setStudioForm({ ...studioForm, price_night: Number(event.target.value) })} />
+              <select value={studioForm.operator_status} onChange={(event) => setStudioForm({ ...studioForm, operator_status: event.target.value })}>
+                {['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'].map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+              <select value={studioForm.premium_tier} onChange={(event) => setStudioForm({ ...studioForm, premium_tier: event.target.value })}>
+                {['standard', 'gold', 'elite', 'diamond'].map((tier) => <option key={tier} value={tier}>{tier}</option>)}
+              </select>
+              <input type="number" placeholder="admin_priority" value={studioForm.admin_priority} onChange={(event) => setStudioForm({ ...studioForm, admin_priority: Number(event.target.value) })} />
+              <select value={studioForm.moderation_status} onChange={(event) => setStudioForm({ ...studioForm, moderation_status: event.target.value })}>
+                {['pending', 'approved', 'rejected', 'suspended'].map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </div>
+            <div className="studio-service-picker">
+              <div className="profile-studio-head compact">
+                <div>
+                  <span>Services</span>
+                  <small>{studioForm.services.length} selected</small>
+                </div>
+                <div className="admin-actions-row">
+                  <Action onClick={() => setStudioForm({ ...studioForm, services: serviceOptions.map((service) => service.key) })}>Select all</Action>
+                  <Action onClick={() => setStudioForm({ ...studioForm, services: [] })}>Clear all</Action>
+                </div>
+              </div>
+              <div className="admin-form-grid">
+                <input placeholder="Search services" value={studioServiceSearch} onChange={(event) => setStudioServiceSearch(event.target.value)} />
+                <select value={studioServiceCategory} onChange={(event) => setStudioServiceCategory(event.target.value)}>
+                  {serviceCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </div>
+              <div className="service-category-actions">
+                {serviceCategories.filter((category) => category !== 'all').slice(0, 10).map((category) => (
+                  <button key={category} type="button" onClick={() => setStudioForm({ ...studioForm, services: mergeServices(studioForm.services, serviceOptions.filter((service) => service.category === category).map((service) => service.key)) })}>
+                    Select {category}
+                  </button>
+                ))}
+              </div>
+              <div className="service-checklist admin-service-checklist">
+                {serviceOptions
+                  .filter((service) => studioServiceCategory === 'all' || service.category === studioServiceCategory)
+                  .filter((service) => `${service.label} ${service.key}`.toLowerCase().includes(studioServiceSearch.toLowerCase()))
+                  .map((service) => (
+                    <button
+                      key={service.key}
+                      className={studioForm.services.includes(service.key) ? 'selected' : ''}
+                      type="button"
+                      onClick={() => setStudioForm({ ...studioForm, services: toggleStudioService(studioForm.services, service.key) })}
+                    >
+                      {service.label}
+                    </button>
+                  ))}
+              </div>
+            </div>
+            <textarea placeholder="description" value={studioForm.description} onChange={(event) => setStudioForm({ ...studioForm, description: event.target.value })} />
+            <textarea placeholder="moderation_note" value={studioForm.moderation_note} onChange={(event) => setStudioForm({ ...studioForm, moderation_note: event.target.value })} />
+            <input placeholder="suspended_reason" value={studioForm.suspended_reason} onChange={(event) => setStudioForm({ ...studioForm, suspended_reason: event.target.value })} />
+            <div className="toggle-grid studio-toggle-grid">
+              <label><input type="checkbox" checked={studioForm.verified} onChange={(event) => setStudioForm({ ...studioForm, verified: event.target.checked })} /> verified</label>
+              <label><input type="checkbox" checked={studioForm.is_seed_profile} onChange={(event) => setStudioForm({ ...studioForm, is_seed_profile: event.target.checked })} /> seed/demo</label>
+              <label><input type="checkbox" checked={studioForm.is_published} onChange={(event) => setStudioForm({ ...studioForm, is_published: event.target.checked })} /> published</label>
+            </div>
+            <label className="studio-upload-control">
+              <Upload size={17} />
+              <span>{studioFile ? studioFile.name : 'Wybierz zdjecie demo/stock/generated'}</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setStudioFile(event.target.files?.[0] || null)} />
+            </label>
+            <button className="button primary full" disabled={studioSaving} onClick={saveStudioProfile}>{studioSaving ? t('states.loading') : 'Zapisz profil'}</button>
+            {studioForm.id && studioFile && <button className="button full" disabled={studioSaving} onClick={() => uploadStudioPhoto()}>Upload photo</button>}
+
+            {selectedProfile?.profile_images?.length ? (
+              <div className="studio-photo-grid">
+                {selectedProfile.profile_images.map((image, index) => (
+                  <div className="studio-photo-card" key={image.id}>
+                    <img src={image.public_url} alt="" />
+                    <div className="admin-actions-row">
+                      <Action onClick={() => action(() => api.setAdminProfileCoverImage(token, selectedProfile.id, image.id))}>Cover</Action>
+                      <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, -1)))}>Up</Action>
+                      <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, 1)))}>Down</Action>
+                      <Action danger onClick={() => action(() => api.deleteAdminProfileImage(token, selectedProfile.id, image.id))}><Trash2 size={14} /></Action>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="muted">Zdjecia profilu pojawia sie tutaj po uploadzie.</p>}
+
+            {studioForm.services.length ? <p className="muted">Wybrane uslugi: {studioForm.services.map(serviceLabel).join(', ')}</p> : null}
+          </article>
+        </section>
+      );
+    }
+
     if (view === 'profiles') {
       return <AdminTable rows={filteredProfiles} columns={['display_name', 'user_id', 'city', 'category', 'status', 'verification_status', 'moderation_status', 'availability_status', 'primary_phone', 'phone_conflict_status', 'created_at']} format={(key, value) => key === 'category' ? option(String(value || 'other')) : value} actions={(profile) => (
         <>
@@ -513,10 +848,41 @@ export function AdminPage() {
     }
 
     if (view === 'subscriptions') {
-      return <AdminTable rows={subscriptions} columns={['display_name', 'listing_plan', 'subscription_status', 'subscription_started_at', 'subscription_expires_at', 'listing_price', 'listing_currency', 'is_test_account', 'admin_note']} />;
+      const cards = [
+        ['Requested', subscriptionStats.requested || 0],
+        ['Future', subscriptionStats.future || 0],
+        ['Active', subscriptionStats.active || 0],
+        ['Expired', subscriptionStats.expired || 0],
+        ['Incomplete', subscriptionStats.incomplete || 0],
+        ['Monthly revenue', `${Number(subscriptionStats.monthly_revenue || 0).toFixed(2)} EUR`],
+        ['Client activations 0.99', subscriptionStats.client_activations_099 || 0],
+        ['Escort subscriptions', subscriptionStats.escort_subscriptions || 0]
+      ];
+      return (
+        <>
+          <section className="admin-metric-grid">{cards.map(([label, value]) => <AdminStatCard key={label} label={String(label)} value={value} />)}</section>
+          <AdminTable rows={subscriptions} columns={['id', 'email', 'profile', 'plan', 'role', 'status', 'requested_at', 'start', 'end', 'progress', 'payment_provider']} format={(key, value) => key === 'progress' ? `${value || 0}%` : value} actions={(row) => (
+            <>
+              {row.type === 'profile_subscription' ? (
+                <>
+                  <Action onClick={() => action(() => api.activateAdminSubscription(token, String(row.profile_id || row.id), { plan: row.plan || 'escort_monthly', days: 30 }))}>Activate 30d</Action>
+                  <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 7))}>+7d</Action>
+                  <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 30))}>+30d</Action>
+                  <Action danger onClick={() => action(() => api.expireAdminSubscription(token, String(row.profile_id || row.id)))}>Expire</Action>
+                  <Action danger onClick={() => action(() => api.cancelAdminSubscription(token, String(row.profile_id || row.id)))}>Cancel</Action>
+                  {row.profile_id && <Link className="admin-action-btn" to={`/profile/${row.profile_id}`}>Profile</Link>}
+                  {row.user_id && <Link className="admin-action-btn" to="/admin/users">User</Link>}
+                </>
+              ) : (
+                <Action onClick={() => setModal({ title: String(row.email || row.id), body: JSON.stringify(row, null, 2) })}>View</Action>
+              )}
+            </>
+          )} />
+        </>
+      );
     }
 
-    if (view === 'token-transactions') {
+    if (view === 'token-transactions' || view === 'payments') {
       return (
         <>
           <section className="admin-card">
@@ -655,9 +1021,11 @@ function getAdminView(pathname: string) {
 function adminLabel(key: string) {
   const labels: Record<string, string> = {
     dashboard: 'Dashboard',
+    'profile-studio': 'Profile Studio',
     users: 'Uzytkownicy',
-    profiles: 'Profile / Ogloszenia',
+    profiles: 'Profile',
     subscriptions: 'Subskrypcje',
+    payments: 'Payments',
     'token-transactions': 'Transakcje tokenow',
     wallets: 'Portfele',
     referrals: 'Drzewo polecen',
@@ -677,6 +1045,41 @@ function adminLabel(key: string) {
     'activity-logs': 'Logi aktywnosci'
   };
   return labels[key] || key;
+}
+
+function profileMatchesAdminFilters(profile: Profile, query: string, filters: Record<string, string>) {
+  const haystack = JSON.stringify(profile).toLowerCase();
+  if (query && !haystack.includes(query.toLowerCase())) return false;
+  if (filters.city !== 'all' && profile.city !== filters.city) return false;
+  if (filters.type !== 'all' && profile.category !== filters.type) return false;
+  if (filters.published !== 'all' && Boolean(profile.is_published !== false) !== (filters.published === 'yes')) return false;
+  if (filters.suspended !== 'all') {
+    const suspended = profile.status === 'suspended' || profile.moderation_status === 'suspended';
+    if (suspended !== (filters.suspended === 'yes')) return false;
+  }
+  if (filters.seed !== 'all' && Boolean(profile.is_seed_profile) !== (filters.seed === 'yes')) return false;
+  if (filters.verified !== 'all' && Boolean(profile.verified) !== (filters.verified === 'yes')) return false;
+  if (filters.premium_tier !== 'all' && profile.premium_tier !== filters.premium_tier) return false;
+  if (filters.owner_email && !String(profile.owner_email || '').toLowerCase().includes(filters.owner_email.toLowerCase())) return false;
+  return true;
+}
+
+function toggleStudioService(values: string[], key: string) {
+  return values.includes(key) ? values.filter((item) => item !== key) : [...values, key];
+}
+
+function mergeServices(values: string[], next: string[]) {
+  return [...new Set([...values, ...next])];
+}
+
+function moveImageId(images: NonNullable<Profile['profile_images']>, index: number, direction: -1 | 1) {
+  const ids = images.map((image) => image.id);
+  const nextIndex = index + direction;
+  if (nextIndex < 0 || nextIndex >= ids.length) return ids;
+  const copy = [...ids];
+  const [item] = copy.splice(index, 1);
+  copy.splice(nextIndex, 0, item);
+  return copy;
 }
 
 function AdminStatCard({ label, value }: { label: string; value: unknown }) {

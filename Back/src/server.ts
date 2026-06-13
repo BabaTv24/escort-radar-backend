@@ -12,6 +12,7 @@ import { tokensRouter } from './routes/tokens.js';
 import { tagsRouter } from './routes/tags.js';
 import { clientActivationRouter } from './routes/clientActivation.js';
 import { authRouter } from './routes/auth.js';
+import { clientIntentRouter } from './routes/clientIntent.js';
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/booking-requests', bookingRequestsRouter);
 app.use('/api/tokens', tokensRouter);
 app.use('/api/tags', tagsRouter);
 app.use('/api/client-activation', clientActivationRouter);
+app.use('/api/client-intent', clientIntentRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });

@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, ClientProfile, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -94,8 +94,54 @@ export const api = {
   adminMe: (token: string) => request<{ admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/me', { token }),
   adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number> }>(`/api/admin/profiles${params}`, { token }),
   adminUsers: (token: string) => request<{ users: Record<string, unknown>[] }>('/api/admin/users', { token }),
-  adminSubscriptions: (token: string) => request<{ subscriptions: Record<string, unknown>[] }>('/api/admin/subscriptions', { token }),
+  adminSubscriptions: (token: string) => request<{ subscriptions: Record<string, unknown>[]; stats?: Record<string, number> }>('/api/admin/subscriptions', { token }),
   adminProfile: (token: string, id: string) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, { token }),
+  createAdminProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile }>('/api/admin/profiles', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
+  updateAdminProfile: (token: string, id: string, body: Partial<Profile>) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(body)
+  }),
+  deleteAdminProfile: (token: string, id: string) => request<void>(`/api/admin/profiles/${id}`, {
+    method: 'DELETE',
+    token
+  }),
+  publishAdminProfile: (token: string, id: string, is_published: boolean) => request<{ profile: Profile }>(`/api/admin/profiles/${id}/publish`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ is_published })
+  }),
+  moderateAdminProfile: (token: string, id: string, body: Record<string, unknown>) => request<{ profile: Profile }>(`/api/admin/profiles/${id}/moderation`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
+  seedBerlinProfiles: (token: string) => request<{ profiles: Profile[]; created: number }>('/api/admin/profiles/seed/berlin', {
+    method: 'POST',
+    token
+  }),
+  uploadAdminProfileImage: (token: string, id: string, form: FormData) => request<{ image: unknown }>(`/api/admin/profiles/${id}/images`, {
+    method: 'POST',
+    token,
+    body: form
+  }),
+  setAdminProfileCoverImage: (token: string, profileId: string, imageId: string) => request<{ image: unknown }>(`/api/admin/profiles/${profileId}/images/${imageId}/cover`, {
+    method: 'PATCH',
+    token
+  }),
+  deleteAdminProfileImage: (token: string, profileId: string, imageId: string) => request<void>(`/api/admin/profiles/${profileId}/images/${imageId}`, {
+    method: 'DELETE',
+    token
+  }),
+  reorderAdminProfileImages: (token: string, profileId: string, image_ids: string[]) => request<{ images: unknown[] }>(`/api/admin/profiles/${profileId}/images/reorder`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ image_ids })
+  }),
   adminReports: (token: string) => request<{ reports: AdminReport[]; reports_count: number }>('/api/admin/reports', { token }),
   adminBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/admin/bookings', { token }),
   adminSettings: (token: string) => request<{ settings: Record<string, unknown> }>('/api/admin/settings', { token }),
@@ -161,6 +207,24 @@ export const api = {
   adminWallets: (token: string) => request<{ wallets: Wallet[] }>('/api/admin/wallets', { token }),
   adminTokenTransactions: (token: string) => request<{ transactions: TokenTransaction[] }>('/api/admin/token-transactions', { token }),
   adminClientActivationPayments: (token: string) => request<{ client_activation_payments: Record<string, unknown>[] }>('/api/admin/client-activation-payments', { token }),
+  activateAdminSubscription: (token: string, id: string, body: Record<string, unknown>) => request<{ subscription: Record<string, unknown> }>(`/api/admin/subscriptions/${id}/activate`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
+  extendAdminSubscription: (token: string, id: string, days: number) => request<{ subscription: Record<string, unknown> }>(`/api/admin/subscriptions/${id}/extend`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ days })
+  }),
+  expireAdminSubscription: (token: string, id: string) => request<{ subscription: Record<string, unknown> }>(`/api/admin/subscriptions/${id}/expire`, {
+    method: 'POST',
+    token
+  }),
+  cancelAdminSubscription: (token: string, id: string) => request<{ subscription: Record<string, unknown> }>(`/api/admin/subscriptions/${id}/cancel`, {
+    method: 'POST',
+    token
+  }),
   adminPurchaseRequests: (token: string) => request<{ purchase_requests: TokenPurchaseRequest[] }>('/api/admin/token-purchase-requests', { token }),
   setPurchaseRequestStatus: (token: string, id: string, status: string, admin_note = '') => request(`/api/admin/token-purchase-requests/${id}/status`, {
     method: 'PATCH',
@@ -232,5 +296,17 @@ export const api = {
     method: 'PATCH',
     token,
     body: JSON.stringify({ amount, note })
-  })
+  }),
+  clientIntentMe: (token: string) => request<{ intent: ClientIntent | null; nearby_advertisers: Profile[]; notifications: RadarNotification[] }>('/api/client-intent/me', { token }),
+  createClientIntent: (token: string, body: Partial<ClientIntent>) => request<{ intent: ClientIntent; nearby_advertisers: Profile[] }>('/api/client-intent', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
+  updateClientIntentStatus: (token: string, body: Partial<ClientIntent>) => request<{ intent: ClientIntent }>('/api/client-intent/status', {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
+  advertiserNearbyClients: (token: string) => request<{ clients: ClientIntent[]; notifications: RadarNotification[] }>('/api/client-intent/advertiser/nearby-clients', { token })
 };

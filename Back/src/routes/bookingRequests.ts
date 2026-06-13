@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyUser } from '../middleware/auth.js';
+import { requireAdvertiserAccess, verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler, optionalText } from '../validation.js';
 
@@ -33,7 +33,7 @@ bookingRequestsRouter.post('/', asyncHandler(async (req, res) => {
   res.status(201).json({ booking_request: data });
 }));
 
-bookingRequestsRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
+bookingRequestsRouter.get('/me', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('booking_requests')
     .select('*, profiles!inner(id, display_name, user_id)')
@@ -45,7 +45,7 @@ bookingRequestsRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
   res.json({ booking_requests: data || [] });
 }));
 
-bookingRequestsRouter.get('/profiles/:id', verifyUser, asyncHandler(async (req, res) => {
+bookingRequestsRouter.get('/profiles/:id', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
   const { data: profile } = await supabaseAdmin.from('profiles').select('user_id').eq('id', req.params.id).single();
   if (!profile) return res.status(404).json({ error: 'Profile not found' });
   if (profile.user_id !== req.user!.id) return res.status(403).json({ error: 'Not your profile' });
@@ -60,7 +60,7 @@ bookingRequestsRouter.get('/profiles/:id', verifyUser, asyncHandler(async (req, 
   res.json({ booking_requests: data || [] });
 }));
 
-bookingRequestsRouter.patch('/:id/status', verifyUser, asyncHandler(async (req, res) => {
+bookingRequestsRouter.patch('/:id/status', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
   const status = String(req.body.status || '');
   if (!['pending', 'accepted', 'rejected', 'cancelled'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });

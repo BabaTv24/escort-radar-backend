@@ -27,6 +27,7 @@ import type { Profile, ProfileAccess } from '../types';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { getDemoProfile, getDemoProfiles } from '../data/demoProfiles';
 import { useI18n } from '../i18n';
+import { serviceLabel } from '../data/serviceCatalog';
 
 type ProfileTab = 'overview' | 'services' | 'prices' | 'reviews';
 
@@ -66,15 +67,24 @@ export function ProfilePage() {
   if (error) return <div className="page narrow"><ErrorState message={error} /></div>;
   if (!profile) return <div className="page narrow"><LoadingState /></div>;
 
-  const galleryImages = profileAccess?.full_gallery?.length ? profileAccess.full_gallery : profile.profile_images || [];
   const activated = profileAccess?.client_state === 'client_activated';
+  const galleryImages = activated && profileAccess?.full_gallery?.length ? profileAccess.full_gallery : profile.profile_images || [];
   const priceFrom = getPriceFrom(profile);
   const contactFallback = 'Kontakt nie zostal jeszcze dodany';
-  const locationLabel = `${profile.city}${profile.area ? `, ${profile.area}` : ''}`;
-  const statusLabel = profile.availability_status === 'available' ? 'Online now' : profile.availability_status === 'busy' ? 'Busy' : 'Offline';
+  const publicCity = profile.work_city || profile.city;
+  const publicArea = profile.work_area || profile.area || profile.approximate_location_area || '';
+  const locationLabel = `${publicCity}${publicArea ? `, ${publicArea}` : ''}`;
+  const locationPrivacyLabel = profile.location_mode === 'approximate'
+    ? 'Approximate location'
+    : profile.location_mode === 'exact_hidden'
+      ? 'Hidden exact location'
+      : 'City only';
+  const statusLabel = operatorStatusLabel(profile.operator_status || (profile.availability_status === 'available' ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE'));
+  const travelNotice = getTravelNotice(profile);
   const languages = profile.languages?.length ? profile.languages : ['DE', 'EN'];
   const visitTypes = profile.visit_types?.length ? profile.visit_types : ['incall', 'hotel'];
   const serviceTags = profile.service_tags?.length ? profile.service_tags : ['dinner-date', 'hotel', 'discreet'];
+  const selectedServices = profile.services || [];
   const similarProfiles = getDemoProfiles(profile.city).filter((item) => item.id !== profile.id).slice(0, 6);
 
   async function submitReport(event: FormEvent<HTMLFormElement>) {
@@ -127,9 +137,11 @@ export function ProfilePage() {
                 <span className={`status ${profile.availability_status || 'unavailable'}`}>{statusLabel}</span>
                 <h1>{profile.display_name}</h1>
                 <p><MapPin size={15} /> {locationLabel}{profile.distance_km ? ` - ${profile.distance_km} km` : ''}</p>
+                {travelNotice && <p>{travelNotice}</p>}
                 <div className="market-hero-facts">
                   <span><Star size={14} /> 4.9 rating</span>
                   <span>{priceFrom}</span>
+                  {profile.radar_score ? <span>Radar score {profile.radar_score}</span> : null}
                   <span>{profile.age ? `${profile.age} years` : 'Age verified'}</span>
                 </div>
               </div>
@@ -138,8 +150,14 @@ export function ProfilePage() {
 
             <div className="market-gallery-thumbs">
               {galleryImages.slice(1, 6).map((image, index) => (
-                <button key={image.id} type="button" onClick={() => setGalleryIndex(index + 1)}>
+                <button
+                  key={image.id}
+                  className={!activated ? 'locked-gallery-thumb' : ''}
+                  type="button"
+                  onClick={() => activated ? setGalleryIndex(index + 1) : startClientActivation()}
+                >
                   {image.public_url ? <img src={image.public_url} alt="" loading="lazy" /> : <div className="image-placeholder large">{t('profile.noImage')}</div>}
+                  {!activated && <span><LockKeyhole size={15} /> Unlock all photos for 0.99€</span>}
                 </button>
               ))}
               {!galleryImages.slice(1, 6).length && <span className="market-empty-inline">More verified photos coming soon.</span>}
@@ -160,6 +178,9 @@ export function ProfilePage() {
               <MarketFact icon={<ShieldCheck size={17} />} label="Verification" value={profile.verified ? 'Verified profile' : 'Verification pending'} />
               <MarketFact icon={<Languages size={17} />} label="Languages" value={languages.join(', ')} />
               <MarketFact icon={<MapPin size={17} />} label="Visit type" value={visitTypes.map(option).join(', ')} />
+              <MarketFact icon={<MapPin size={17} />} label="Location privacy" value={locationPrivacyLabel} />
+              <MarketFact icon={<MapPin size={17} />} label="Service radius" value={`${profile.service_radius_km || 25} km`} />
+              <MarketFact icon={<MapPin size={17} />} label="Hotspot" value={profile.hotspot_type || 'Not set'} />
               <MarketFact icon={<Clock size={17} />} label="Last active" value={profile.availability_status === 'available' ? 'Available now' : 'Recently active'} />
             </div>
           </MarketSection>
@@ -173,10 +194,16 @@ export function ProfilePage() {
                 </div>
               ))}
             </div>
+            {travelNotice && <p className="success">{travelNotice}</p>}
             <p className="muted-copy">{profile.availability_note || 'Schedule is confirmed directly before booking. Radar status updates with live availability.'}</p>
           </MarketSection>
 
           <MarketSection tab="services" activeTab={activeTab} eyebrow="Services" title="Selected experiences">
+            {selectedServices.length ? (
+              <div className="tag-list premium-tags">
+                {selectedServices.map((key) => <span key={key}>{serviceLabel(key)}</span>)}
+              </div>
+            ) : null}
             <TagList values={serviceTags} />
             {profile.tags?.length ? <div className="tag-list premium-tags">{profile.tags.map((tag) => <span key={tag.id}>{tag.label}</span>)}</div> : null}
             <div className="service-menu-columns">
@@ -325,6 +352,8 @@ export function ProfilePage() {
           onClose={() => setGalleryIndex(null)}
           touchStart={touchStart}
           setTouchStart={setTouchStart}
+          activated={activated}
+          onUnlock={startClientActivation}
         />
       )}
 
@@ -410,7 +439,31 @@ function getPriceFrom(profile: Profile) {
   return `${Math.min(...values)} ${profile.currency || 'EUR'}`;
 }
 
-function FullscreenGallery({ images, index, profile, onIndex, onClose, touchStart, setTouchStart }: {
+function operatorStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    ONLINE_NOW: 'Online now',
+    BUSY: 'Busy',
+    TRAVELING: 'Traveling',
+    AVAILABLE_TODAY: 'Available today',
+    APPOINTMENT_ONLY: 'Appointment only',
+    OFFLINE: 'Offline'
+  };
+  return labels[status] || 'Offline';
+}
+
+function getTravelNotice(profile: Profile) {
+  if (profile.operator_status !== 'TRAVELING' || !profile.travel_city) return '';
+  const arrival = profile.travel_arrival_date ? formatTravelDate(profile.travel_arrival_date) : '';
+  const departure = profile.travel_departure_date ? formatTravelDate(profile.travel_departure_date) : '';
+  if (arrival && departure) return `Visiting ${profile.travel_city} from ${arrival} to ${departure}`;
+  return `Visiting ${profile.travel_city}`;
+}
+
+function formatTravelDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+}
+
+function FullscreenGallery({ images, index, profile, onIndex, onClose, touchStart, setTouchStart, activated, onUnlock }: {
   images: NonNullable<Profile['profile_images']>;
   index: number;
   profile: Profile;
@@ -418,9 +471,12 @@ function FullscreenGallery({ images, index, profile, onIndex, onClose, touchStar
   onClose: () => void;
   touchStart: number | null;
   setTouchStart: (value: number | null) => void;
+  activated: boolean;
+  onUnlock: () => void;
 }) {
   const { t } = useI18n();
   const image = images[index];
+  const locked = !activated && index > 0;
   const previous = () => onIndex((index - 1 + images.length) % images.length);
   const next = () => onIndex((index + 1) % images.length);
 
@@ -457,7 +513,12 @@ function FullscreenGallery({ images, index, profile, onIndex, onClose, touchStar
           setTouchStart(null);
         }}
       >
-        {image?.public_url && <img src={image.public_url} alt="" />}
+        {image?.public_url && <img className={locked ? 'locked-gallery-image' : ''} src={image.public_url} alt="" />}
+        {locked && (
+          <button className="gallery-unlock-overlay" type="button" onClick={onUnlock}>
+            <LockKeyhole size={18} /> Unlock all photos for 0.99€
+          </button>
+        )}
         <figcaption>
           <span>{index + 1}/{images.length}</span>
           <strong>{profile.display_name}</strong>
