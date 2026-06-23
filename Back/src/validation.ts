@@ -8,7 +8,7 @@ export const allowedStatuses = ['pending', 'active', 'rejected', 'suspended'];
 export const allowedReportStatuses = ['open', 'reviewing', 'resolved', 'dismissed'];
 export const allowedVerificationStatuses = ['pending', 'verified', 'rejected', 'changes_requested'];
 export const allowedModerationStatuses = ['pending', 'approved', 'rejected', 'suspended'];
-export const allowedAdminReportStatuses = ['open', 'investigating', 'resolved', 'escalated'];
+export const allowedAdminReportStatuses = ['open', 'investigating', 'resolved', 'rejected', 'escalated'];
 
 export function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => {

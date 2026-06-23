@@ -99,17 +99,20 @@ profilesRouter.get('/:id/access', verifyUser, asyncHandler(async (req, res) => {
     .single();
   if (error || !data) return res.status(404).json({ error: 'Profile not found' });
 
-  const images = (data.profile_images || []).map((image: any) => {
-    const { data: publicUrl } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
-    return { ...image, public_url: publicUrl.publicUrl, is_cover: Boolean(image.is_primary) };
-  });
-
   const { data: vipUnlock } = await supabaseAdmin
     .from('vip_gallery_unlocks')
     .select('id, expires_at')
     .eq('user_id', req.user!.id)
     .eq('profile_id', req.params.id)
     .maybeSingle();
+
+  const images = (data.profile_images || []).filter((image: any) => {
+    if (image.is_hidden || image.moderation_status !== 'approved') return false;
+    return !image.is_private || Boolean(vipUnlock);
+  }).map((image: any) => {
+    const { data: publicUrl } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
+    return { ...image, public_url: publicUrl.publicUrl, is_cover: Boolean(image.is_primary) };
+  });
 
   res.json({
     access: {
@@ -308,7 +311,10 @@ profilesRouter.delete('/:id', verifyUser, requireAdvertiserOnboardingAccess, asy
 }));
 
 function withImageUrls(profile: any, wallet?: any) {
-  const images = (profile.profile_images || []).map((image: any) => {
+  const images = (profile.profile_images || []).filter((image: any) => {
+    if (image.is_hidden || image.moderation_status !== 'approved') return false;
+    return !image.is_private;
+  }).map((image: any) => {
     const { data } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
     return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
   }).sort((left: any, right: any) => {

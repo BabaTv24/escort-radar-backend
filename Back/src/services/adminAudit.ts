@@ -9,10 +9,15 @@ export async function writeAdminAuditLog(
 ) {
   const auditRow = {
     admin_email: adminEmail || null,
+    admin_id: adminEmail || null,
     action,
     target_type: targetType,
     target_id: targetId,
-    details
+    entity_type: targetType,
+    entity_id: targetId,
+    details,
+    after: details,
+    note: typeof details.note === 'string' ? details.note : null
   };
 
   await Promise.all([

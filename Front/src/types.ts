@@ -6,7 +6,10 @@ export type ProfileImage = {
   is_primary: boolean;
   is_cover?: boolean;
   is_blurred: boolean;
+  is_hidden?: boolean;
+  is_private?: boolean;
   moderation_status?: 'pending' | 'approved' | 'rejected' | 'blocked';
+  admin_note?: string | null;
   sort_order?: number;
   created_at?: string;
 };
@@ -23,8 +26,12 @@ export type Profile = {
   id: string;
   user_id?: string;
   display_name: string;
-  account_type?: 'private' | 'agency' | 'massage_salon' | 'club_party' | 'live_cam';
+  account_type?: 'private' | 'agency' | 'massage_salon' | 'club_party' | 'live_cam' | 'escort' | 'business';
+  profile_type?: 'private_escort' | 'agency' | 'club' | 'massage_salon' | 'live_cam' | 'couple' | 'trans' | 'gay' | 'other';
   primary_phone?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  telegram?: string | null;
   additional_phones?: string[];
   phone_owner_identity_label?: string | null;
   phone_rule_confirmed?: boolean;
@@ -37,6 +44,11 @@ export type Profile = {
   height?: number;
   height_cm?: number | null;
   nationality?: string | null;
+  business_name?: string | null;
+  business_type?: string | null;
+  contact_person?: string | null;
+  website?: string | null;
+  opening_hours?: Record<string, unknown> | string | null;
   body_type?: string;
   body_features?: string[];
   hair_color?: string;
@@ -126,6 +138,7 @@ export type Profile = {
   max_photos?: number;
   trial_ends_at?: string | null;
   created_at?: string;
+  updated_at?: string;
   profile_images?: ProfileImage[];
   images?: ProfileImage[];
   visibility_reason?: 'visible' | 'missing_payment' | 'pending_verification' | 'suspended' | 'blocked' | 'missing_required_fields' | 'no_images';
@@ -181,9 +194,14 @@ export type AdminReport = {
 export type AdminActivity = {
   id: string;
   admin_email?: string | null;
+  admin_id?: string | null;
   action: string;
-  target_type: string;
+  target_type?: string;
   target_id?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  note?: string | null;
+  details?: Record<string, unknown>;
   created_at: string;
 };
 

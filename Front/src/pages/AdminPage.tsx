@@ -12,22 +12,38 @@ type AdminUser = Record<string, any>;
 type SubscriptionRow = Record<string, any>;
 const adminTokenStorageKey = 'escort-radar-admin-token';
 const serviceCategories = ['all', ...Array.from(new Set(serviceOptions.map((service) => service.category)))];
+const studioTabs = ['account', 'basic', 'location', 'business', 'prices', 'status', 'services', 'subscription', 'moderation', 'photos'] as const;
 const emptyStudioForm = {
   id: '',
+  owner_email: '',
+  phone: '',
+  whatsapp: '',
+  telegram: '',
+  account_type: 'escort',
+  profile_type: 'private_escort',
   display_name: '',
   category: 'ladies',
   city: 'berlin',
   area: 'Mitte',
+  work_country: 'DE',
   work_city: 'Berlin',
   work_area: 'Mitte',
   age: 26,
   nationality: 'European',
   height_cm: 170,
+  languages: ['DE', 'EN'],
+  business_name: '',
+  business_type: '',
+  contact_person: '',
+  website: '',
+  opening_hours: '',
   price_30min: 120,
   price_1h: 180,
   price_2h: 320,
   price_night: 900,
+  currency: 'EUR',
   operator_status: 'AVAILABLE_TODAY',
+  availability_status: 'available',
   services: ['towarzystwo', 'dyskrecja'],
   description: '',
   verified: true,
@@ -37,7 +53,12 @@ const emptyStudioForm = {
   admin_priority: 100,
   moderation_status: 'approved',
   moderation_note: '',
-  suspended_reason: ''
+  suspended_reason: '',
+  listing_plan: 'admin_profile_studio',
+  subscription_status: 'trial',
+  subscription_start: '',
+  subscription_end: '',
+  subscription_note: ''
 };
 
 const sections = [
@@ -46,10 +67,12 @@ const sections = [
     items: [
       ['dashboard', '/admin', BarChart3],
       ['profiles', '/admin/profiles', Crown],
+      ['moderation', '/admin/moderation', Shield],
+      ['reports', '/admin/reports', Ban],
       ['subscriptions', '/admin/subscriptions', Coins],
+      ['revenue', '/admin/revenue', BarChart3],
       ['payments', '/admin/token-transactions', WalletCards],
       ['users', '/admin/users', Users],
-      ['reports', '/admin/reports', Ban],
       ['settings', '/admin/settings', Settings]
     ]
   },
@@ -78,7 +101,6 @@ const sections = [
     title: 'SYSTEM',
     items: [
       ['live-lab', '/admin/live-lab', FlaskConical],
-      ['moderation', '/admin/moderation', Shield],
       ['activity-logs', '/admin/activity-logs', BarChart3]
     ]
   }
@@ -96,7 +118,7 @@ export function AdminPage() {
   const [authRestoring, setAuthRestoring] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { t, option } = useI18n();
+  const { t, option, lang, setLang } = useI18n();
 
   const [stats, setStats] = useState<Record<string, number>>({});
   const [tokenStats, setTokenStats] = useState<Record<string, number>>({});
@@ -104,6 +126,7 @@ export function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
+  const [moderationQueues, setModerationQueues] = useState<Record<string, Profile[]>>({});
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -116,6 +139,8 @@ export function AdminPage() {
   const [clientReferrals, setClientReferrals] = useState<Record<string, any>[]>([]);
   const [activity, setActivity] = useState<AdminActivity[]>([]);
   const [revenueEvents, setRevenueEvents] = useState<Record<string, any>[]>([]);
+  const [revenueStats, setRevenueStats] = useState<Record<string, number>>({});
+  const [revenuePayments, setRevenuePayments] = useState<Record<string, any>[]>([]);
   const [topCities, setTopCities] = useState<Record<string, any>[]>([]);
   const [topCategories, setTopCategories] = useState<Record<string, any>[]>([]);
   const [topProfiles, setTopProfiles] = useState<Record<string, any>[]>([]);
@@ -125,8 +150,15 @@ export function AdminPage() {
   const [studioForm, setStudioForm] = useState({ ...emptyStudioForm });
   const [studioFile, setStudioFile] = useState<File | null>(null);
   const [studioSaving, setStudioSaving] = useState(false);
+  const [studioTab, setStudioTab] = useState<(typeof studioTabs)[number]>('account');
   const [studioServiceSearch, setStudioServiceSearch] = useState('');
   const [studioServiceCategory, setStudioServiceCategory] = useState('all');
+  const [expandedServiceCategories, setExpandedServiceCategories] = useState<Record<string, boolean>>({});
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+  const [bulkPremiumTier, setBulkPremiumTier] = useState('gold');
+  const [bulkSubscriptionStatus, setBulkSubscriptionStatus] = useState('active');
+  const [profilePanelMode, setProfilePanelMode] = useState<'overview' | 'edit' | 'photos' | 'services' | 'subscription'>('overview');
+  const [moderationFilter, setModerationFilter] = useState<'pending' | 'reported' | 'suspended' | 'rejected'>('pending');
   const [studioFilters, setStudioFilters] = useState({
     city: 'all',
     type: 'all',
@@ -316,7 +348,10 @@ export function AdminPage() {
         masterResult,
         tagResult,
         photoResult,
-        clientReferralResult
+        clientReferralResult,
+        moderationResult,
+        activityLogResult,
+        revenueResult
       ] = await Promise.allSettled([
         adminLoadRequest('adminStats', api.adminStats(accessToken)),
         adminLoadRequest('adminTokenStats', api.adminTokenStats(accessToken)),
@@ -332,7 +367,10 @@ export function AdminPage() {
         adminLoadRequest('adminMasterWallets', api.adminMasterWallets(accessToken)),
         adminLoadRequest('adminTags', api.adminTags(accessToken)),
         adminLoadRequest('adminPhotos', api.adminPhotos(accessToken)),
-        adminLoadRequest('adminClientReferrals', api.adminClientReferrals(accessToken))
+        adminLoadRequest('adminClientReferrals', api.adminClientReferrals(accessToken)),
+        adminLoadRequest('adminModeration', api.adminModeration(accessToken)),
+        adminLoadRequest('adminActivityLogs', api.adminActivityLogs(accessToken)),
+        adminLoadRequest('adminRevenue', api.adminRevenue(accessToken))
       ]);
 
       const statsData = settledValue(statsResult, { stats: {}, latest_activity: [], revenue_events: [], top_cities: [], top_categories: [], top_profiles: [] }, 'adminStats');
@@ -350,6 +388,9 @@ export function AdminPage() {
       const tagData = settledValue(tagResult, { tags: [] }, 'adminTags');
       const photoData = settledValue(photoResult, { photos: [] }, 'adminPhotos');
       const clientReferralData = settledValue(clientReferralResult, { referrals: [] }, 'adminClientReferrals');
+      const moderationData = settledValue(moderationResult, { profiles: [], queues: {} }, 'adminModeration');
+      const activityLogData = settledValue(activityLogResult, { activity_logs: [] }, 'adminActivityLogs');
+      const revenueData = settledValue(revenueResult, { stats: {}, payments: [] }, 'adminRevenue');
 
       setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
       setTokenStats(tokenData.stats);
@@ -357,6 +398,7 @@ export function AdminPage() {
       setUsers(usersData.users);
       setProfiles(profileData.profiles);
       setSubscriptions(subscriptionData.subscriptions);
+      setModerationQueues((moderationData as any).queues || {});
       setReports(reportData.reports);
       setBookings(bookingData.booking_requests);
       setWallets(walletData.wallets);
@@ -367,8 +409,10 @@ export function AdminPage() {
       setTags(tagData.tags);
       setPhotos(photoData.photos as Record<string, any>[]);
       setClientReferrals(clientReferralData.referrals);
-      setActivity(statsData.latest_activity);
+      setActivity((activityLogData.activity_logs?.length ? activityLogData.activity_logs : statsData.latest_activity) as AdminActivity[]);
       setRevenueEvents((statsData.revenue_events || []) as Record<string, any>[]);
+      setRevenueStats(revenueData.stats);
+      setRevenuePayments(revenueData.payments as Record<string, any>[]);
       setTopCities((statsData.top_cities || []) as Record<string, any>[]);
       setTopCategories((statsData.top_categories || []) as Record<string, any>[]);
       setTopProfiles((statsData.top_profiles || []) as Record<string, any>[]);
@@ -390,20 +434,35 @@ export function AdminPage() {
   function editStudioProfile(profile: Profile) {
     setStudioForm({
       id: profile.id,
+      owner_email: profile.owner_email || '',
+      phone: profile.phone || profile.primary_phone || '',
+      whatsapp: profile.whatsapp || '',
+      telegram: profile.telegram || '',
+      account_type: profile.account_type || 'escort',
+      profile_type: profile.profile_type || 'private_escort',
       display_name: profile.display_name || '',
       category: profile.category || 'ladies',
       city: profile.city || 'berlin',
       area: profile.area || profile.work_area || '',
+      work_country: profile.work_country || 'DE',
       work_city: profile.work_city || profile.city || '',
       work_area: profile.work_area || profile.area || '',
       age: profile.age || 26,
       nationality: profile.nationality || 'European',
       height_cm: profile.height_cm || profile.height || 170,
+      languages: profile.languages?.length ? profile.languages : ['DE', 'EN'],
+      business_name: profile.business_name || '',
+      business_type: profile.business_type || '',
+      contact_person: profile.contact_person || '',
+      website: profile.website || '',
+      opening_hours: typeof profile.opening_hours === 'string' ? profile.opening_hours : String((profile.opening_hours as any)?.note || ''),
       price_30min: Number(profile.price_30min || 0),
       price_1h: Number(profile.price_1h || 180),
       price_2h: Number(profile.price_2h || 0),
       price_night: Number(profile.price_night || 0),
+      currency: profile.currency || profile.listing_currency || 'EUR',
       operator_status: profile.operator_status || 'AVAILABLE_TODAY',
+      availability_status: profile.availability_status || 'available',
       services: profile.services?.length ? profile.services : ['towarzystwo', 'dyskrecja'],
       description: profile.description || '',
       verified: profile.verified !== false,
@@ -413,7 +472,35 @@ export function AdminPage() {
       admin_priority: Number(profile.admin_priority || 0),
       moderation_status: profile.moderation_status || 'approved',
       moderation_note: profile.moderation_note || '',
-      suspended_reason: profile.suspended_reason || ''
+      suspended_reason: profile.suspended_reason || '',
+      listing_plan: profile.listing_plan || profile.subscription_plan || 'admin_profile_studio',
+      subscription_status: profile.subscription_status || 'trial',
+      subscription_start: profile.subscription_start ? profile.subscription_start.slice(0, 10) : '',
+      subscription_end: profile.subscription_end ? profile.subscription_end.slice(0, 10) : '',
+      subscription_note: profile.subscription_note || ''
+    });
+    setProfilePanelMode('edit');
+  }
+
+  function openProfileOverview(profile: Profile) {
+    editStudioProfile(profile);
+    setProfilePanelMode('overview');
+  }
+
+  function toggleBulkProfile(id: string) {
+    setSelectedProfileIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  async function runBulkAction(operation: string, extra: Record<string, unknown> = {}) {
+    if (!selectedProfileIds.length) {
+      setMessage(t('admin.bulk.noneSelected'));
+      return;
+    }
+    const confirmed = window.confirm(t('admin.bulk.confirm', { count: selectedProfileIds.length }));
+    if (!confirmed) return;
+    await action(async () => {
+      await api.bulkAdminProfiles(token, { operation, profile_ids: selectedProfileIds, ...extra });
+      setSelectedProfileIds([]);
     });
   }
 
@@ -424,6 +511,8 @@ export function AdminPage() {
       const body = {
         ...studioForm,
         height: studioForm.height_cm,
+        languages: Array.isArray(studioForm.languages) ? studioForm.languages : String(studioForm.languages || '').split(',').map((item) => item.trim()).filter(Boolean),
+        opening_hours: studioForm.opening_hours ? { note: studioForm.opening_hours } : {},
         price_1h: Number(studioForm.price_1h || 0),
         price_30min: Number(studioForm.price_30min || 0),
         price_2h: Number(studioForm.price_2h || 0),
@@ -467,6 +556,236 @@ export function AdminPage() {
     } finally {
       setStudioSaving(false);
     }
+  }
+
+  function renderStudioEditorTab(selectedProfile?: Profile) {
+    const selectedServices = studioForm.services.map((key) => ({ key, label: serviceLabel(key) }));
+    const visibleServices = serviceOptions
+      .filter((service) => studioServiceCategory === 'all' || service.category === studioServiceCategory)
+      .filter((service) => `${service.label} ${service.key} ${service.category}`.toLowerCase().includes(studioServiceSearch.toLowerCase()));
+    const groupedServices = visibleServices.reduce<Record<string, typeof serviceOptions>>((groups, service) => {
+      groups[service.category] = [...(groups[service.category] || []), service];
+      return groups;
+    }, {});
+
+    if (studioTab === 'account') {
+      return <div className="admin-form-grid">
+        <AdminField label={t('admin.profileEditor.ownerEmail')} help={t('admin.profileEditor.ownerEmailHelp')}><input type="email" placeholder={t('admin.profileEditor.ownerEmailPlaceholder')} value={studioForm.owner_email} onChange={(event) => setStudioForm({ ...studioForm, owner_email: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.phone')}><input placeholder={t('admin.profileEditor.phonePlaceholder')} value={studioForm.phone} onChange={(event) => setStudioForm({ ...studioForm, phone: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.whatsapp')}><input placeholder={t('admin.profileEditor.whatsappPlaceholder')} value={studioForm.whatsapp} onChange={(event) => setStudioForm({ ...studioForm, whatsapp: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.telegram')}><input placeholder={t('admin.profileEditor.telegramPlaceholder')} value={studioForm.telegram} onChange={(event) => setStudioForm({ ...studioForm, telegram: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.accountType')}><select value={studioForm.account_type} onChange={(event) => setStudioForm({ ...studioForm, account_type: event.target.value })}>{['escort', 'business'].map((type) => <option key={type} value={type}>{t(`admin.status.${type}`)}</option>)}</select></AdminField>
+        <AdminField label={t('admin.profileEditor.profileType')}><select value={studioForm.profile_type} onChange={(event) => setStudioForm({ ...studioForm, profile_type: event.target.value })}>{['private_escort', 'agency', 'club', 'massage_salon', 'live_cam', 'couple', 'trans', 'gay', 'other'].map((type) => <option key={type} value={type}>{t(`admin.status.${type}`)}</option>)}</select></AdminField>
+      </div>;
+    }
+
+    if (studioTab === 'basic') {
+      return <>
+        <div className="admin-form-grid">
+          <AdminField label={t('admin.profileEditor.displayName')}><input placeholder={t('admin.profileEditor.displayNamePlaceholder')} value={studioForm.display_name} onChange={(event) => setStudioForm({ ...studioForm, display_name: event.target.value })} /></AdminField>
+          <AdminField label={t('admin.profileEditor.category')}><select value={studioForm.category} onChange={(event) => setStudioForm({ ...studioForm, category: event.target.value })}>{categoryOptions.map((category) => <option key={category} value={category}>{option(category)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.profileEditor.age')}><input type="number" value={studioForm.age} onChange={(event) => setStudioForm({ ...studioForm, age: Number(event.target.value) })} /></AdminField>
+          <AdminField label={t('admin.profileEditor.nationality')}><input placeholder={t('admin.profileEditor.nationalityPlaceholder')} value={studioForm.nationality} onChange={(event) => setStudioForm({ ...studioForm, nationality: event.target.value })} /></AdminField>
+          <AdminField label={t('admin.profileEditor.height')}><input type="number" value={studioForm.height_cm} onChange={(event) => setStudioForm({ ...studioForm, height_cm: Number(event.target.value) })} /></AdminField>
+          <AdminField label={t('admin.profileEditor.languages')}><input placeholder={t('admin.profileEditor.languagesPlaceholder')} value={studioForm.languages.join(', ')} onChange={(event) => setStudioForm({ ...studioForm, languages: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
+        </div>
+        <AdminField label={t('admin.profileEditor.description')}><textarea placeholder={t('admin.profileEditor.descriptionPlaceholder')} value={studioForm.description} onChange={(event) => setStudioForm({ ...studioForm, description: event.target.value })} /></AdminField>
+      </>;
+    }
+
+    if (studioTab === 'location') {
+      return <div className="admin-form-grid">
+        <AdminField label={t('admin.profileEditor.country')}><input placeholder="DE" value={studioForm.work_country} onChange={(event) => setStudioForm({ ...studioForm, work_country: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.city')}><input placeholder="berlin" value={studioForm.city} onChange={(event) => setStudioForm({ ...studioForm, city: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.area')}><input placeholder={t('admin.profileEditor.areaPlaceholder')} value={studioForm.area} onChange={(event) => setStudioForm({ ...studioForm, area: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.workCountry')}><input placeholder="DE" value={studioForm.work_country} onChange={(event) => setStudioForm({ ...studioForm, work_country: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.workCity')}><input placeholder="Berlin" value={studioForm.work_city} onChange={(event) => setStudioForm({ ...studioForm, work_city: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.workArea')}><input placeholder="Mitte" value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value })} /></AdminField>
+      </div>;
+    }
+
+    if (studioTab === 'business') {
+      return <div className="admin-form-grid">
+        <AdminField label={t('admin.profileEditor.businessName')}><input placeholder={t('admin.profileEditor.businessNamePlaceholder')} value={studioForm.business_name} onChange={(event) => setStudioForm({ ...studioForm, business_name: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.businessType')}><input placeholder={t('admin.profileEditor.businessTypePlaceholder')} value={studioForm.business_type} onChange={(event) => setStudioForm({ ...studioForm, business_type: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.contactPerson')}><input placeholder={t('admin.profileEditor.contactPersonPlaceholder')} value={studioForm.contact_person} onChange={(event) => setStudioForm({ ...studioForm, contact_person: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.website')}><input placeholder="https://example.com" value={studioForm.website} onChange={(event) => setStudioForm({ ...studioForm, website: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.openingHours')}><input placeholder={t('admin.profileEditor.openingHoursPlaceholder')} value={studioForm.opening_hours} onChange={(event) => setStudioForm({ ...studioForm, opening_hours: event.target.value })} /></AdminField>
+      </div>;
+    }
+
+    if (studioTab === 'prices') {
+      return <div className="admin-form-grid">
+        <AdminField label={t('admin.profileEditor.price30')}><input type="number" value={studioForm.price_30min} onChange={(event) => setStudioForm({ ...studioForm, price_30min: Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={studioForm.price_1h} onChange={(event) => setStudioForm({ ...studioForm, price_1h: Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.price2h')}><input type="number" value={studioForm.price_2h} onChange={(event) => setStudioForm({ ...studioForm, price_2h: Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.priceNight')}><input type="number" value={studioForm.price_night} onChange={(event) => setStudioForm({ ...studioForm, price_night: Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.currency')}><input value={studioForm.currency} onChange={(event) => setStudioForm({ ...studioForm, currency: event.target.value })} /></AdminField>
+      </div>;
+    }
+
+    if (studioTab === 'status') {
+      return <>
+        <div className="admin-form-grid">
+          <AdminField label={t('admin.profileEditor.operatorStatus')}><select value={studioForm.operator_status} onChange={(event) => setStudioForm({ ...studioForm, operator_status: event.target.value })}>{['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'].map((status) => <option key={status} value={status}>{status}</option>)}</select></AdminField>
+          <AdminField label={t('admin.profileEditor.availability')}><select value={studioForm.availability_status} onChange={(event) => setStudioForm({ ...studioForm, availability_status: event.target.value })}>{['available', 'busy', 'unavailable'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.profileEditor.premiumTier')} help={t('admin.profileEditor.premiumTierHelp')}><select value={studioForm.premium_tier} onChange={(event) => setStudioForm({ ...studioForm, premium_tier: event.target.value })}>{['standard', 'gold', 'elite', 'diamond'].map((tier) => <option key={tier} value={tier}>{t(`admin.status.${tier}`)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.profileEditor.adminPriority')}><input type="number" value={studioForm.admin_priority} onChange={(event) => setStudioForm({ ...studioForm, admin_priority: Number(event.target.value) })} /></AdminField>
+          <AdminField label={t('admin.profileEditor.moderationStatus')} help={t('admin.profileEditor.moderationStatusHelp')}><select value={studioForm.moderation_status} onChange={(event) => setStudioForm({ ...studioForm, moderation_status: event.target.value })}>{['pending', 'approved', 'rejected', 'suspended'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}</select></AdminField>
+        </div>
+        <div className="toggle-grid studio-toggle-grid">
+          <AdminField label={t('admin.profileEditor.verified')}><label><input type="checkbox" checked={studioForm.verified} onChange={(event) => setStudioForm({ ...studioForm, verified: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
+          <AdminField label={t('admin.profileEditor.seedDemo')} help={t('admin.profileEditor.seedDemoHelp')}><label><input type="checkbox" checked={studioForm.is_seed_profile} onChange={(event) => setStudioForm({ ...studioForm, is_seed_profile: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
+          <AdminField label={t('admin.profileEditor.published')} help={t('admin.profileEditor.publishedHelp')}><label><input type="checkbox" checked={studioForm.is_published} onChange={(event) => setStudioForm({ ...studioForm, is_published: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
+        </div>
+      </>;
+    }
+
+    if (studioTab === 'services') {
+      return <div className="studio-service-picker">
+        <div className="profile-studio-head compact">
+          <div>
+            <span>{t('admin.services.title')}</span>
+            <small>{t('admin.services.help')}</small>
+          </div>
+          <div className="admin-actions-row">
+            <Action onClick={() => setStudioForm({ ...studioForm, services: serviceOptions.map((service) => service.key) })}>{t('admin.actions.selectAll')}</Action>
+            <Action onClick={() => setStudioForm({ ...studioForm, services: [] })}>{t('admin.actions.clearAll')}</Action>
+          </div>
+        </div>
+        <div className="studio-selected-services">
+          <strong>{t('admin.services.selectedCount', { count: selectedServices.length })}</strong>
+          <div className="studio-badges">{selectedServices.length ? selectedServices.map((service) => <button key={service.key} type="button" onClick={() => setStudioForm({ ...studioForm, services: toggleStudioService(studioForm.services, service.key) })}>{service.label}</button>) : <i>{t('admin.services.noneSelected')}</i>}</div>
+        </div>
+        <div className="admin-form-grid">
+          <AdminField label={t('admin.services.search')}><input placeholder={t('admin.services.searchPlaceholder')} value={studioServiceSearch} onChange={(event) => setStudioServiceSearch(event.target.value)} /></AdminField>
+          <AdminField label={t('admin.services.categoryFilter')}><select value={studioServiceCategory} onChange={(event) => setStudioServiceCategory(event.target.value)}>{serviceCategories.map((category) => <option key={category} value={category}>{category === 'all' ? t('admin.common.all') : category}</option>)}</select></AdminField>
+        </div>
+        {Object.entries(groupedServices).map(([category, services]) => {
+          const expanded = expandedServiceCategories[category] ?? false;
+          return <div className="admin-service-group" key={category}>
+            <div className="profile-studio-head compact">
+              <button type="button" className="admin-action-btn" onClick={() => setExpandedServiceCategories({ ...expandedServiceCategories, [category]: !expanded })}>{expanded ? t('admin.actions.collapse') : t('admin.actions.expand')}</button>
+              <strong>{category}</strong>
+              <Action onClick={() => setStudioForm({ ...studioForm, services: mergeServices(studioForm.services, services.map((service) => service.key)) })}>{t('admin.services.selectCategory')}</Action>
+            </div>
+            {expanded && <div className="service-checklist admin-service-checklist">
+              {services.map((service) => (
+                <button key={service.key} className={studioForm.services.includes(service.key) ? 'selected' : ''} type="button" onClick={() => setStudioForm({ ...studioForm, services: toggleStudioService(studioForm.services, service.key) })}>{service.label}</button>
+              ))}
+            </div>}
+          </div>;
+        })}
+      </div>;
+    }
+
+    if (studioTab === 'subscription') {
+      return <>
+        <div className="admin-form-grid">
+          <AdminField label={t('admin.subscriptions.listingPlan')}><input placeholder="admin_profile_studio" value={studioForm.listing_plan} onChange={(event) => setStudioForm({ ...studioForm, listing_plan: event.target.value })} /></AdminField>
+          <AdminField label={t('admin.subscriptions.status')} help={t('admin.subscriptions.statusHelp')}><select value={studioForm.subscription_status} onChange={(event) => setStudioForm({ ...studioForm, subscription_status: event.target.value })}>{['requested', 'trial', 'active', 'expired', 'suspended', 'cancelled', 'test'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.subscriptions.startDate')}><input type="date" value={studioForm.subscription_start} onChange={(event) => setStudioForm({ ...studioForm, subscription_start: event.target.value })} /></AdminField>
+          <AdminField label={t('admin.subscriptions.endDate')}><input type="date" value={studioForm.subscription_end} onChange={(event) => setStudioForm({ ...studioForm, subscription_end: event.target.value })} /></AdminField>
+        </div>
+        <AdminField label={t('admin.subscriptions.adminNote')}><textarea placeholder={t('admin.subscriptions.adminNotePlaceholder')} value={studioForm.subscription_note} onChange={(event) => setStudioForm({ ...studioForm, subscription_note: event.target.value })} /></AdminField>
+      </>;
+    }
+
+    if (studioTab === 'moderation') {
+      return <>
+        <AdminField label={t('admin.moderation.note')}><textarea placeholder={t('admin.moderation.notePlaceholder')} value={studioForm.moderation_note} onChange={(event) => setStudioForm({ ...studioForm, moderation_note: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.moderation.suspensionReason')}><input placeholder={t('admin.moderation.suspensionReasonPlaceholder')} value={studioForm.suspended_reason} onChange={(event) => setStudioForm({ ...studioForm, suspended_reason: event.target.value })} /></AdminField>
+      </>;
+    }
+
+    return <>
+      <AdminField label={t('admin.photos.upload')} help={t('admin.photos.help')}>
+        <label className="studio-upload-control">
+          <Upload size={17} />
+          <span>{studioFile ? studioFile.name : t('admin.photos.choose')}</span>
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setStudioFile(event.target.files?.[0] || null)} />
+        </label>
+      </AdminField>
+      {studioForm.id && studioFile && <button className="button full" disabled={studioSaving} onClick={() => uploadStudioPhoto()}>{t('admin.photos.upload')}</button>}
+      {selectedProfile?.profile_images?.length ? (
+        <div className="studio-photo-grid">
+          {selectedProfile.profile_images.map((image, index) => (
+            <div className="studio-photo-card" key={image.id}>
+              <img src={image.public_url} alt="" />
+              <div className="admin-actions-row">
+                <Action onClick={() => action(() => api.setAdminProfileCoverImage(token, selectedProfile.id, image.id))}>{t('admin.photos.cover')}</Action>
+                <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, -1)))}>{t('admin.actions.up')}</Action>
+                <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, 1)))}>{t('admin.actions.down')}</Action>
+                <Action danger onClick={() => action(() => api.deleteAdminProfileImage(token, selectedProfile.id, image.id))}><Trash2 size={14} /></Action>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : <p className="muted">{t('admin.photos.empty')}</p>}
+    </>;
+  }
+
+  function renderProfileOverview(selectedProfile?: Profile) {
+    if (!selectedProfile) {
+      return (
+        <div className="profile-overview-empty">
+          <p className="eyebrow">{t('admin.profileOverview.title')}</p>
+          <h2>{t('admin.profileOverview.selectProfile')}</h2>
+        </div>
+      );
+    }
+
+    const image = selectedProfile.profile_images?.find((item) => item.is_primary) || selectedProfile.profile_images?.[0];
+    const reportCount = reports.filter((report) => report.profile_id === selectedProfile.id).length;
+    const fields = [
+      ['ownerEmail', selectedProfile.owner_email || t('admin.noEmail')],
+      ['profileType', selectedProfile.profile_type || selectedProfile.account_type || selectedProfile.category || '-'],
+      ['location', [selectedProfile.city, selectedProfile.area || selectedProfile.work_area].filter(Boolean).join(' / ') || '-'],
+      ['operatorStatus', selectedProfile.operator_status || selectedProfile.availability_status || '-'],
+      ['moderationStatus', selectedProfile.moderation_status || 'pending'],
+      ['publishedStatus', selectedProfile.is_published !== false ? t('admin.status.published') : t('admin.status.unpublished')],
+      ['subscriptionStatus', selectedProfile.subscription_status || 'free'],
+      ['premiumTier', selectedProfile.premium_tier || 'standard'],
+      ['photosCount', selectedProfile.profile_images?.length || 0],
+      ['servicesCount', selectedProfile.services?.length || selectedProfile.service_menu?.length || 0],
+      ['reportsCount', reportCount],
+      ['lastUpdated', selectedProfile.updated_at || selectedProfile.created_at || '-']
+    ];
+
+    return (
+      <div className="profile-overview-panel">
+        <div className="profile-overview-hero">
+          {image?.public_url ? <img src={image.public_url} alt="" /> : <div className="image-placeholder">{selectedProfile.display_name.slice(0, 1)}</div>}
+          <div>
+            <p className="eyebrow">{t('admin.profileOverview.title')}</p>
+            <h2>{selectedProfile.display_name}</h2>
+            <div className="studio-badges">
+              <i>{selectedProfile.status}</i>
+              <i>{selectedProfile.moderation_status || 'pending'}</i>
+              <i>{selectedProfile.subscription_status || 'free'}</i>
+            </div>
+          </div>
+        </div>
+        <div className="profile-overview-grid">
+          {fields.map(([key, value]) => (
+            <div key={key}>
+              <span>{t(`admin.profileOverview.${key}`)}</span>
+              <strong>{String(value)}</strong>
+            </div>
+          ))}
+        </div>
+        <div className="admin-actions-row overview-actions">
+          <Action onClick={() => setProfilePanelMode('edit')}>{t('admin.profileOverview.editData')}</Action>
+          <Action onClick={() => { setStudioTab('photos'); setProfilePanelMode('photos'); }}>{t('admin.profileOverview.managePhotos')}</Action>
+          <Action onClick={() => { setStudioTab('services'); setProfilePanelMode('services'); }}>{t('admin.profileOverview.manageServices')}</Action>
+          <Action onClick={() => { setStudioTab('subscription'); setProfilePanelMode('subscription'); }}>{t('admin.profileOverview.manageSubscription')}</Action>
+          <Action onClick={() => action(() => api.moderateAdminProfile(token, selectedProfile.id, { moderation_status: selectedProfile.moderation_status === 'suspended' ? 'approved' : 'suspended' }))}>
+            {selectedProfile.moderation_status === 'suspended' ? t('admin.actions.unsuspend') : t('admin.actions.suspend')}
+          </Action>
+          <Link className="admin-action-btn" to={`/profile/${selectedProfile.id}`}>{t('admin.actions.publicView')}</Link>
+        </div>
+      </div>
+    );
   }
 
   if (authRestoring) {
@@ -523,7 +842,7 @@ export function AdminPage() {
             <small>{section.title}</small>
             {section.items.map(([key, path, Icon]) => (
               <Link key={key} to={path} className={view === key || (view === 'dashboard' && key === 'dashboard') ? 'active' : ''}>
-                <Icon size={16} /> {adminLabel(key)}
+                <Icon size={16} /> {t(`admin.nav.${key}`)}
               </Link>
             ))}
           </div>
@@ -535,9 +854,14 @@ export function AdminPage() {
         <header className="admin-topbar">
           <div>
             <p className="eyebrow">Premium Control Center</p>
-            <h1>{adminLabel(view)}</h1>
+            <h1>{t(`admin.nav.${view}`)}</h1>
           </div>
           <div className="admin-search">
+            <select value={lang} onChange={(event) => setLang(event.target.value as 'pl' | 'de' | 'en')} aria-label="Admin language">
+              <option value="pl">PL</option>
+              <option value="de">DE</option>
+              <option value="en">EN</option>
+            </select>
             <input placeholder="Filtruj rekordy..." value={query} onChange={(event) => setQuery(event.target.value)} />
             <button className="button" onClick={() => load()}>{loading ? t('states.loading') : 'Odśwież'}</button>
           </div>
@@ -636,10 +960,10 @@ export function AdminPage() {
             <div className="profile-studio-head">
               <div>
                 <p className="eyebrow">Profile Control</p>
-                <h2>Wszystkie profile</h2>
+                <h2>{t('admin.profiles.allProfiles')}</h2>
               </div>
               <button className="button primary" disabled={studioSaving} onClick={seedBerlinStudioProfiles}>
-                <Crown size={16} /> Generate Berlin Demo Set
+                <Crown size={16} /> {t('admin.actions.generateBerlinDemo')}
               </button>
             </div>
             <div className="studio-filter-grid">
@@ -672,17 +996,30 @@ export function AdminPage() {
               <select value={studioFilters.premium_tier} onChange={(event) => setStudioFilters({ ...studioFilters, premium_tier: event.target.value })}>
                 {['all', 'standard', 'gold', 'elite', 'diamond'].map((item) => <option key={item} value={item}>tier: {item}</option>)}
               </select>
-              <input placeholder="owner email" value={studioFilters.owner_email} onChange={(event) => setStudioFilters({ ...studioFilters, owner_email: event.target.value })} />
+              <input placeholder={t('admin.filters.ownerEmail')} value={studioFilters.owner_email} onChange={(event) => setStudioFilters({ ...studioFilters, owner_email: event.target.value })} />
+            </div>
+            <div className="admin-bulk-bar">
+              <label><input type="checkbox" checked={studioProfiles.length > 0 && selectedProfileIds.length === studioProfiles.length} onChange={(event) => setSelectedProfileIds(event.target.checked ? studioProfiles.map((profile) => profile.id) : [])} /> {t('admin.bulk.selected', { count: selectedProfileIds.length })}</label>
+              <Action onClick={() => runBulkAction('approve')}>{t('admin.bulk.approve')}</Action>
+              <Action onClick={() => runBulkAction('publish')}>{t('admin.bulk.publish')}</Action>
+              <Action onClick={() => runBulkAction('unpublish')}>{t('admin.bulk.unpublish')}</Action>
+              <Action onClick={() => runBulkAction('suspend')}>{t('admin.bulk.suspend')}</Action>
+              <select value={bulkPremiumTier} onChange={(event) => setBulkPremiumTier(event.target.value)}>{['standard', 'gold', 'elite', 'diamond'].map((tier) => <option key={tier} value={tier}>{t(`admin.status.${tier}`)}</option>)}</select>
+              <Action onClick={() => runBulkAction('premium_tier', { premium_tier: bulkPremiumTier })}>{t('admin.bulk.setPremiumTier')}</Action>
+              <select value={bulkSubscriptionStatus} onChange={(event) => setBulkSubscriptionStatus(event.target.value)}>{['requested', 'trial', 'active', 'expired', 'suspended', 'cancelled', 'test'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}</select>
+              <Action onClick={() => runBulkAction('subscription_status', { subscription_status: bulkSubscriptionStatus })}>{t('admin.bulk.setSubscriptionStatus')}</Action>
+              <Action danger onClick={() => runBulkAction('delete')}>{t('admin.bulk.delete')}</Action>
             </div>
             <div className="profile-studio-table">
               {studioProfiles.map((profile) => {
                 const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
                 return (
                   <div className="studio-profile-row" key={profile.id}>
+                    <input type="checkbox" checked={selectedProfileIds.includes(profile.id)} onChange={() => toggleBulkProfile(profile.id)} aria-label={t('admin.bulk.toggleProfile')} />
                     {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{profile.display_name.slice(0, 1)}</span>}
-                    <div>
+                    <div role="button" tabIndex={0} onClick={() => openProfileOverview(profile)} onKeyDown={(event) => { if (event.key === 'Enter') openProfileOverview(profile); }}>
                       <strong>{profile.display_name}</strong>
-                      <small>ID: {profile.id.slice(0, 8)} / Owner: {profile.owner_email || profile.user_id || 'no user_id'}</small>
+                      <small>{t('admin.profiles.shortId')}: {profile.id.slice(0, 8)} / {t('admin.profiles.owner')}: {profile.owner_email || t('admin.profiles.adminCreated')}</small>
                       <small>{profile.category || 'type?'} / {profile.city} / {profile.area || profile.work_area || '-'} / {profile.operator_status || profile.availability_status}</small>
                       <div className="studio-badges">
                         <i>{profile.status}</i>
@@ -697,137 +1034,51 @@ export function AdminPage() {
                       </div>
                     </div>
                     <div className="admin-actions-row">
-                      <Action onClick={() => editStudioProfile(profile)}>Edit</Action>
+                      <Action onClick={() => openProfileOverview(profile)}>{t('admin.actions.view')}</Action>
+                      <Action onClick={() => editStudioProfile(profile)}>{t('admin.actions.edit')}</Action>
                       <Action onClick={() => action(() => api.publishAdminProfile(token, profile.id, profile.is_published === false))}>
-                        {profile.is_published === false ? 'Publish' : 'Unpublish'}
+                        {profile.is_published === false ? t('admin.actions.publish') : t('admin.actions.unpublish')}
                       </Action>
                       <Action onClick={() => action(() => api.setProfileStatus(token, profile.id, profile.status === 'suspended' || profile.moderation_status === 'suspended' ? 'active' : 'suspended'))}>
-                        {profile.status === 'suspended' || profile.moderation_status === 'suspended' ? 'Unsuspend' : 'Suspend'}
+                        {profile.status === 'suspended' || profile.moderation_status === 'suspended' ? t('admin.actions.unsuspend') : t('admin.actions.suspend')}
                       </Action>
                       <Action onClick={() => action(() => api.setProfileVerification(token, profile.id, profile.verified ? 'pending' : 'verified', profile.moderation_status || 'approved'))}>
-                        {profile.verified ? 'Unverify' : 'Verify'}
+                        {profile.verified ? t('admin.actions.unverify') : t('admin.actions.verify')}
                       </Action>
-                      <Action onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'approved', is_published: true }))}>Approve</Action>
-                      <Action danger onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'rejected' }))}>Reject</Action>
-                      <Link className="admin-action-btn" to={`/profile/${profile.id}`}>Public</Link>
-                      <Link className="admin-action-btn" to="/admin/subscriptions">Subscription</Link>
-                      <Action danger onClick={() => action(() => api.deleteAdminProfile(token, profile.id))}>Delete</Action>
+                      <Action onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'approved', is_published: true }))}>{t('admin.actions.approve')}</Action>
+                      <Action danger onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'rejected' }))}>{t('admin.actions.reject')}</Action>
+                      <Link className="admin-action-btn" to={`/profile/${profile.id}`}>{t('admin.actions.publicView')}</Link>
+                      <Link className="admin-action-btn" to="/admin/subscriptions">{t('admin.nav.subscriptions')}</Link>
+                      <Action danger onClick={() => action(() => api.deleteAdminProfile(token, profile.id))}>{t('admin.actions.delete')}</Action>
                     </div>
                   </div>
                 );
               })}
-              {!studioProfiles.length && <EmptyAdminState text="Brak profili w Studio." />}
+              {!studioProfiles.length && <EmptyAdminState text={t('admin.profiles.emptyStudio')} />}
             </div>
           </article>
 
           <article className="admin-card profile-studio-form">
             <div className="profile-studio-head">
               <div>
-                <p className="eyebrow">{studioForm.id ? 'Edit profile' : 'Create profile'}</p>
-                <h2>{studioForm.id ? studioForm.display_name : 'Nowy profil preview'}</h2>
+                <p className="eyebrow">{studioForm.id ? t('admin.profileOverview.title') : t('admin.profiles.createProfile')}</p>
+                <h2>{studioForm.id ? studioForm.display_name : t('admin.profiles.newPreviewProfile')}</h2>
               </div>
-              {studioForm.id && <button className="button" onClick={() => setStudioForm({ ...emptyStudioForm })}>Nowy</button>}
+              {studioForm.id && <button className="button" onClick={() => setStudioForm({ ...emptyStudioForm })}>{t('admin.actions.newProfile')}</button>}
             </div>
-            <div className="admin-form-grid">
-              <input placeholder="display_name" value={studioForm.display_name} onChange={(event) => setStudioForm({ ...studioForm, display_name: event.target.value })} />
-              <select value={studioForm.category} onChange={(event) => setStudioForm({ ...studioForm, category: event.target.value })}>
-                {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
-              </select>
-              <input placeholder="city" value={studioForm.city} onChange={(event) => setStudioForm({ ...studioForm, city: event.target.value })} />
-              <input placeholder="area" value={studioForm.area} onChange={(event) => setStudioForm({ ...studioForm, area: event.target.value })} />
-              <input placeholder="work_city" value={studioForm.work_city} onChange={(event) => setStudioForm({ ...studioForm, work_city: event.target.value })} />
-              <input placeholder="work_area" value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value })} />
-              <input type="number" placeholder="age" value={studioForm.age} onChange={(event) => setStudioForm({ ...studioForm, age: Number(event.target.value) })} />
-              <input placeholder="nationality" value={studioForm.nationality} onChange={(event) => setStudioForm({ ...studioForm, nationality: event.target.value })} />
-              <input type="number" placeholder="height_cm" value={studioForm.height_cm} onChange={(event) => setStudioForm({ ...studioForm, height_cm: Number(event.target.value) })} />
-              <input type="number" placeholder="price_30min" value={studioForm.price_30min} onChange={(event) => setStudioForm({ ...studioForm, price_30min: Number(event.target.value) })} />
-              <input type="number" placeholder="price_1h" value={studioForm.price_1h} onChange={(event) => setStudioForm({ ...studioForm, price_1h: Number(event.target.value) })} />
-              <input type="number" placeholder="price_2h" value={studioForm.price_2h} onChange={(event) => setStudioForm({ ...studioForm, price_2h: Number(event.target.value) })} />
-              <input type="number" placeholder="price_night" value={studioForm.price_night} onChange={(event) => setStudioForm({ ...studioForm, price_night: Number(event.target.value) })} />
-              <select value={studioForm.operator_status} onChange={(event) => setStudioForm({ ...studioForm, operator_status: event.target.value })}>
-                {['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'].map((status) => <option key={status} value={status}>{status}</option>)}
-              </select>
-              <select value={studioForm.premium_tier} onChange={(event) => setStudioForm({ ...studioForm, premium_tier: event.target.value })}>
-                {['standard', 'gold', 'elite', 'diamond'].map((tier) => <option key={tier} value={tier}>{tier}</option>)}
-              </select>
-              <input type="number" placeholder="admin_priority" value={studioForm.admin_priority} onChange={(event) => setStudioForm({ ...studioForm, admin_priority: Number(event.target.value) })} />
-              <select value={studioForm.moderation_status} onChange={(event) => setStudioForm({ ...studioForm, moderation_status: event.target.value })}>
-                {['pending', 'approved', 'rejected', 'suspended'].map((status) => <option key={status} value={status}>{status}</option>)}
-              </select>
-            </div>
-            <div className="studio-service-picker">
-              <div className="profile-studio-head compact">
-                <div>
-                  <span>Services</span>
-                  <small>{studioForm.services.length} selected</small>
-                </div>
-                <div className="admin-actions-row">
-                  <Action onClick={() => setStudioForm({ ...studioForm, services: serviceOptions.map((service) => service.key) })}>Select all</Action>
-                  <Action onClick={() => setStudioForm({ ...studioForm, services: [] })}>Clear all</Action>
-                </div>
-              </div>
-              <div className="admin-form-grid">
-                <input placeholder="Search services" value={studioServiceSearch} onChange={(event) => setStudioServiceSearch(event.target.value)} />
-                <select value={studioServiceCategory} onChange={(event) => setStudioServiceCategory(event.target.value)}>
-                  {serviceCategories.map((category) => <option key={category} value={category}>{category}</option>)}
-                </select>
-              </div>
-              <div className="service-category-actions">
-                {serviceCategories.filter((category) => category !== 'all').slice(0, 10).map((category) => (
-                  <button key={category} type="button" onClick={() => setStudioForm({ ...studioForm, services: mergeServices(studioForm.services, serviceOptions.filter((service) => service.category === category).map((service) => service.key)) })}>
-                    Select {category}
-                  </button>
-                ))}
-              </div>
-              <div className="service-checklist admin-service-checklist">
-                {serviceOptions
-                  .filter((service) => studioServiceCategory === 'all' || service.category === studioServiceCategory)
-                  .filter((service) => `${service.label} ${service.key}`.toLowerCase().includes(studioServiceSearch.toLowerCase()))
-                  .map((service) => (
-                    <button
-                      key={service.key}
-                      className={studioForm.services.includes(service.key) ? 'selected' : ''}
-                      type="button"
-                      onClick={() => setStudioForm({ ...studioForm, services: toggleStudioService(studioForm.services, service.key) })}
-                    >
-                      {service.label}
+            {profilePanelMode === 'overview' && studioForm.id ? renderProfileOverview(selectedProfile) : (
+              <>
+                <div className="studio-editor-tabs">
+                  {studioTabs.map((tab) => (
+                    <button key={tab} type="button" className={studioTab === tab ? 'active' : ''} onClick={() => setStudioTab(tab)}>
+                      {t(`admin.profileEditor.tabs.${tab}`)}
                     </button>
                   ))}
-              </div>
-            </div>
-            <textarea placeholder="description" value={studioForm.description} onChange={(event) => setStudioForm({ ...studioForm, description: event.target.value })} />
-            <textarea placeholder="moderation_note" value={studioForm.moderation_note} onChange={(event) => setStudioForm({ ...studioForm, moderation_note: event.target.value })} />
-            <input placeholder="suspended_reason" value={studioForm.suspended_reason} onChange={(event) => setStudioForm({ ...studioForm, suspended_reason: event.target.value })} />
-            <div className="toggle-grid studio-toggle-grid">
-              <label><input type="checkbox" checked={studioForm.verified} onChange={(event) => setStudioForm({ ...studioForm, verified: event.target.checked })} /> verified</label>
-              <label><input type="checkbox" checked={studioForm.is_seed_profile} onChange={(event) => setStudioForm({ ...studioForm, is_seed_profile: event.target.checked })} /> seed/demo</label>
-              <label><input type="checkbox" checked={studioForm.is_published} onChange={(event) => setStudioForm({ ...studioForm, is_published: event.target.checked })} /> published</label>
-            </div>
-            <label className="studio-upload-control">
-              <Upload size={17} />
-              <span>{studioFile ? studioFile.name : 'Wybierz zdjecie demo/stock/generated'}</span>
-              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setStudioFile(event.target.files?.[0] || null)} />
-            </label>
-            <button className="button primary full" disabled={studioSaving} onClick={saveStudioProfile}>{studioSaving ? t('states.loading') : 'Zapisz profil'}</button>
-            {studioForm.id && studioFile && <button className="button full" disabled={studioSaving} onClick={() => uploadStudioPhoto()}>Upload photo</button>}
-
-            {selectedProfile?.profile_images?.length ? (
-              <div className="studio-photo-grid">
-                {selectedProfile.profile_images.map((image, index) => (
-                  <div className="studio-photo-card" key={image.id}>
-                    <img src={image.public_url} alt="" />
-                    <div className="admin-actions-row">
-                      <Action onClick={() => action(() => api.setAdminProfileCoverImage(token, selectedProfile.id, image.id))}>Cover</Action>
-                      <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, -1)))}>Up</Action>
-                      <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, 1)))}>Down</Action>
-                      <Action danger onClick={() => action(() => api.deleteAdminProfileImage(token, selectedProfile.id, image.id))}><Trash2 size={14} /></Action>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="muted">Zdjecia profilu pojawia sie tutaj po uploadzie.</p>}
-
-            {studioForm.services.length ? <p className="muted">Wybrane uslugi: {studioForm.services.map(serviceLabel).join(', ')}</p> : null}
+                </div>
+                {renderStudioEditorTab(selectedProfile)}
+                <button className="button primary full" disabled={studioSaving} onClick={saveStudioProfile}>{studioSaving ? t('states.loading') : t('admin.actions.saveProfile')}</button>
+              </>
+            )}
           </article>
         </section>
       );
@@ -847,27 +1098,75 @@ export function AdminPage() {
       )} />;
     }
 
+    if (view === 'moderation') {
+      const queueProfiles = moderationQueues[moderationFilter] || [];
+      return (
+        <>
+          <section className="admin-metric-grid">
+            {(['pending', 'reported', 'suspended', 'rejected'] as const).map((status) => (
+              <button key={status} className={moderationFilter === status ? 'admin-card stat active-filter' : 'admin-card stat'} onClick={() => setModerationFilter(status)}>
+                <span>{t(`admin.moderation.queues.${status}`)}</span>
+                <strong>{moderationQueues[status]?.length || 0}</strong>
+              </button>
+            ))}
+          </section>
+          <div className="admin-list-table">
+            {queueProfiles.map((profile) => {
+              const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
+              return (
+                <article className="studio-profile-row" key={profile.id}>
+                  {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{profile.display_name.slice(0, 1)}</span>}
+                  <div>
+                    <strong>{profile.display_name}</strong>
+                    <small>{profile.owner_email || t('admin.noEmail')} / {profile.city} / {profile.updated_at || profile.created_at || '-'}</small>
+                    <div className="studio-badges">
+                      <i>{profile.moderation_status || 'pending'}</i>
+                      <i>{t('admin.reports.count', { count: Number((profile as any).report_count || 0) })}</i>
+                      <i>{profile.is_published !== false ? t('admin.status.published') : t('admin.status.unpublished')}</i>
+                    </div>
+                  </div>
+                  <div className="admin-actions-row">
+                    <Action onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'approved', is_published: true }))}>{t('admin.actions.approve')}</Action>
+                    <Action danger onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'rejected' }))}>{t('admin.actions.reject')}</Action>
+                    <Action onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: profile.moderation_status === 'suspended' ? 'approved' : 'suspended' }))}>{profile.moderation_status === 'suspended' ? t('admin.actions.unsuspend') : t('admin.actions.suspend')}</Action>
+                    <Action onClick={() => action(() => api.publishAdminProfile(token, profile.id, profile.is_published === false))}>{profile.is_published === false ? t('admin.actions.publish') : t('admin.actions.unpublish')}</Action>
+                    <Action onClick={() => setModal({ title: t('admin.moderation.note'), body: profile.moderation_note || '-' })}>{t('admin.moderation.note')}</Action>
+                    <Link className="admin-action-btn" to={`/profile/${profile.id}`}>{t('admin.actions.publicView')}</Link>
+                    <Action onClick={() => openProfileOverview(profile)}>{t('admin.actions.edit')}</Action>
+                  </div>
+                </article>
+              );
+            })}
+            {!queueProfiles.length && <EmptyAdminState text={t('admin.moderation.empty')} />}
+          </div>
+        </>
+      );
+    }
+
     if (view === 'subscriptions') {
       const cards = [
         ['Requested', subscriptionStats.requested || 0],
-        ['Future', subscriptionStats.future || 0],
+        ['Trial', subscriptionStats.trial || subscriptions.filter((row) => row.status === 'trial').length],
         ['Active', subscriptionStats.active || 0],
         ['Expired', subscriptionStats.expired || 0],
+        ['Suspended', subscriptionStats.suspended || subscriptions.filter((row) => row.status === 'suspended').length],
         ['Incomplete', subscriptionStats.incomplete || 0],
         ['Monthly revenue', `${Number(subscriptionStats.monthly_revenue || 0).toFixed(2)} EUR`],
         ['Client activations 0.99', subscriptionStats.client_activations_099 || 0],
-        ['Escort subscriptions', subscriptionStats.escort_subscriptions || 0]
+        ['Escort premium 49.99', subscriptionStats.escort_subscriptions || 0],
+        ['Business premium', subscriptionStats.business_subscriptions || subscriptions.filter((row) => ['business', 'agency', 'club', 'massage_salon', 'live_cam'].includes(String(row.role))).length]
       ];
       return (
         <>
           <section className="admin-metric-grid">{cards.map(([label, value]) => <AdminStatCard key={label} label={String(label)} value={value} />)}</section>
-          <AdminTable rows={subscriptions} columns={['id', 'email', 'profile', 'plan', 'role', 'status', 'requested_at', 'start', 'end', 'progress', 'payment_provider']} format={(key, value) => key === 'progress' ? `${value || 0}%` : value} actions={(row) => (
+          <AdminTable rows={subscriptions} columns={['profile', 'email', 'role', 'plan', 'status', 'payment_provider', 'start', 'end', 'days_left', 'amount_eur']} format={(key, value, row) => key === 'days_left' ? daysLeft(row.end) : key === 'amount_eur' ? `${Number(value || 0).toFixed(2)} ${row.currency || 'EUR'}` : value} actions={(row) => (
             <>
               {row.type === 'profile_subscription' ? (
                 <>
                   <Action onClick={() => action(() => api.activateAdminSubscription(token, String(row.profile_id || row.id), { plan: row.plan || 'escort_monthly', days: 30 }))}>Activate 30d</Action>
                   <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 7))}>+7d</Action>
                   <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 30))}>+30d</Action>
+                  <Action onClick={() => setModal({ title: t('admin.subscriptions.customDates'), body: JSON.stringify(row, null, 2) })}>{t('admin.subscriptions.customDates')}</Action>
                   <Action danger onClick={() => action(() => api.expireAdminSubscription(token, String(row.profile_id || row.id)))}>Expire</Action>
                   <Action danger onClick={() => action(() => api.cancelAdminSubscription(token, String(row.profile_id || row.id)))}>Cancel</Action>
                   {row.profile_id && <Link className="admin-action-btn" to={`/profile/${row.profile_id}`}>Profile</Link>}
@@ -878,6 +1177,24 @@ export function AdminPage() {
               )}
             </>
           )} />
+        </>
+      );
+    }
+
+    if (view === 'revenue') {
+      const cards = [
+        ['Today revenue', `${Number(revenueStats.today_revenue || 0).toFixed(2)} EUR`],
+        ['Monthly revenue', `${Number(revenueStats.monthly_revenue || 0).toFixed(2)} EUR`],
+        ['Client activations', revenueStats.client_activations || 0],
+        ['Escort subscriptions', revenueStats.escort_subscriptions || 0],
+        ['Business subscriptions', revenueStats.business_subscriptions || 0],
+        ['Expired subscriptions', revenueStats.expired_subscriptions || 0],
+        ['Upcoming renewals', revenueStats.upcoming_renewals || 0]
+      ];
+      return (
+        <>
+          <section className="admin-metric-grid">{cards.map(([label, value]) => <AdminStatCard key={label} label={String(label)} value={value} />)}</section>
+          <AdminTable rows={revenuePayments} columns={['id', 'email', 'profile', 'amount', 'currency', 'provider', 'status', 'created_at']} />
         </>
       );
     }
@@ -952,11 +1269,14 @@ export function AdminPage() {
     }
 
     if (view === 'reports') {
-      return <AdminTable rows={reports} columns={['profile_id', 'reason', 'message', 'reporter_email', 'admin_status', 'escalated_to_authorities', 'created_at']} actions={(report) => (
+      return <AdminTable rows={reports} columns={['id', 'profile_id', 'reporter_email', 'reason', 'message', 'admin_status', 'created_at']} actions={(report) => (
         <>
-          <Action onClick={() => action(() => api.setReportStatus(token, report.id, { admin_status: 'investigating' }))}>Investigating</Action>
-          <Action onClick={() => action(() => api.setReportStatus(token, report.id, { admin_status: 'resolved' }))}>Resolved</Action>
-          <Action danger onClick={() => action(() => api.setReportStatus(token, report.id, { admin_status: 'escalated', escalated_to_authorities: true }))}>Escalate</Action>
+          <Action onClick={() => action(() => api.updateAdminReport(token, report.id, { admin_status: 'investigating' }))}>{t('admin.reportStatus.investigating')}</Action>
+          <Action onClick={() => action(() => api.updateAdminReport(token, report.id, { admin_status: 'resolved' }))}>{t('admin.reportStatus.resolved')}</Action>
+          <Action danger onClick={() => action(() => api.updateAdminReport(token, report.id, { admin_status: 'rejected' }))}>{t('admin.reportStatus.rejected')}</Action>
+          <Action danger onClick={() => action(() => api.updateAdminReport(token, report.id, { admin_status: 'investigating', suspend_profile: true, admin_note: 'Suspended from Reports Center' }))}>{t('admin.reports.suspendProfile')}</Action>
+          <Link className="admin-action-btn" to={`/profile/${report.profile_id}`}>{t('admin.actions.publicView')}</Link>
+          <Action onClick={() => setModal({ title: report.reason, body: JSON.stringify(report, null, 2) })}>{t('admin.reports.internalNote')}</Action>
         </>
       )} />;
     }
@@ -980,7 +1300,9 @@ export function AdminPage() {
     }
 
     if (view === 'activity-logs') {
-      return <AdminTable rows={activity} columns={['admin_email', 'action', 'target_type', 'target_id', 'created_at']} />;
+      return <AdminTable rows={activity} columns={['created_at', 'admin_email', 'action', 'entity_type', 'entity_id', 'note']} actions={(row) => (
+        <Action onClick={() => setModal({ title: row.action, body: JSON.stringify(row, null, 2) })}>{t('admin.actions.view')}</Action>
+      )} />;
     }
 
     return <section className="admin-card"><h2>{adminLabel(view)}</h2><p>Modul przygotowany jako placeholder control center.</p></section>;
@@ -1090,6 +1412,16 @@ function MetricBlock({ label, value }: { label: string; value: unknown }) {
   return <div className="metric"><span>{label}</span><strong>{String(value ?? 0)}</strong></div>;
 }
 
+function AdminField({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
+  return (
+    <label className="admin-field">
+      <span>{label}</span>
+      {children}
+      {help ? <small>{help}</small> : null}
+    </label>
+  );
+}
+
 function EmptyAdminState({ text }: { text: string }) {
   return <p className="muted">{text}</p>;
 }
@@ -1097,6 +1429,13 @@ function EmptyAdminState({ text }: { text: string }) {
 function revenueLabel(value: unknown, emptyText: string) {
   const numeric = Number(value || 0);
   return numeric > 0 ? `${numeric.toFixed(2)} EUR` : emptyText;
+}
+
+function daysLeft(value: unknown) {
+  if (!value) return '-';
+  const end = new Date(String(value)).getTime();
+  if (!Number.isFinite(end)) return '-';
+  return Math.max(0, Math.ceil((end - Date.now()) / (24 * 60 * 60 * 1000)));
 }
 
 function ChartPlaceholder({ title }: { title: string }) {

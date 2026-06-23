@@ -93,6 +93,7 @@ export const api = {
   }>('/api/admin/stats', { token }),
   adminMe: (token: string) => request<{ admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/me', { token }),
   adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number> }>(`/api/admin/profiles${params}`, { token }),
+  adminModeration: (token: string) => request<{ profiles: Profile[]; queues: Record<string, Profile[]> }>('/api/admin/moderation', { token }),
   adminUsers: (token: string) => request<{ users: Record<string, unknown>[] }>('/api/admin/users', { token }),
   adminSubscriptions: (token: string) => request<{ subscriptions: Record<string, unknown>[]; stats?: Record<string, number> }>('/api/admin/subscriptions', { token }),
   adminProfile: (token: string, id: string) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, { token }),
@@ -120,6 +121,11 @@ export const api = {
     token,
     body: JSON.stringify(body)
   }),
+  bulkAdminProfiles: (token: string, body: Record<string, unknown>) => request<{ updated: number; operation: string; profiles?: Profile[] }>('/api/admin/profiles/bulk', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
   seedBerlinProfiles: (token: string) => request<{ profiles: Profile[]; created: number }>('/api/admin/profiles/seed/berlin', {
     method: 'POST',
     token
@@ -133,6 +139,11 @@ export const api = {
     method: 'PATCH',
     token
   }),
+  updateAdminProfileImage: (token: string, profileId: string, imageId: string, body: Record<string, unknown>) => request<{ image: unknown }>(`/api/admin/profiles/${profileId}/images/${imageId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
   deleteAdminProfileImage: (token: string, profileId: string, imageId: string) => request<void>(`/api/admin/profiles/${profileId}/images/${imageId}`, {
     method: 'DELETE',
     token
@@ -143,6 +154,18 @@ export const api = {
     body: JSON.stringify({ image_ids })
   }),
   adminReports: (token: string) => request<{ reports: AdminReport[]; reports_count: number }>('/api/admin/reports', { token }),
+  createAdminReport: (token: string, body: Record<string, unknown>) => request<{ report: AdminReport }>('/api/admin/reports', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
+  updateAdminReport: (token: string, id: string, body: Record<string, unknown>) => request<{ report: AdminReport }>(`/api/admin/reports/${id}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
+  adminActivityLogs: (token: string) => request<{ activity_logs: AdminActivity[] }>('/api/admin/activity-logs', { token }),
+  adminRevenue: (token: string) => request<{ stats: Record<string, number>; payments: Record<string, unknown>[] }>('/api/admin/revenue', { token }),
   adminBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/admin/bookings', { token }),
   adminSettings: (token: string) => request<{ settings: Record<string, unknown> }>('/api/admin/settings', { token }),
   setProfileStatus: (token: string, id: string, status: string) => request(`/api/admin/profiles/${id}/status`, {

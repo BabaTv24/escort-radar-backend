@@ -189,6 +189,80 @@ adminRouter.get('/audit-log', asyncHandler(async (_req, res) => {
   res.json({ audit_log: data || [] });
 }));
 
+adminRouter.get('/activity-logs', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('admin_activity_logs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ activity_logs: data || [] });
+}));
+
+adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const monthStart = new Date(dayStart.getFullYear(), dayStart.getMonth(), 1);
+
+  const [activationPayments, subscriptions] = await Promise.all([
+    supabaseAdmin.from('client_activation_payments').select('*').order('created_at', { ascending: false }).limit(1000),
+    supabaseAdmin.from('subscriptions').select('*').order('created_at', { ascending: false }).limit(1000)
+  ]);
+
+  if (activationPayments.error) return res.status(500).json({ error: activationPayments.error.message });
+  if (subscriptions.error) return res.status(500).json({ error: subscriptions.error.message });
+
+  const activationRows = activationPayments.data || [];
+  const subscriptionRows = subscriptions.data || [];
+  const paidActivationRows = activationRows.filter((payment) => ['paid', 'succeeded', 'active', 'test'].includes(String(payment.status || '')));
+  const activeSubscriptionRows = subscriptionRows.filter((row) => ['active', 'trial', 'test'].includes(String(row.status || '')));
+  const paymentRows = [
+    ...activationRows.map((payment) => ({
+      id: payment.id,
+      email: payment.email,
+      profile: 'Client activation',
+      amount: Number(payment.amount_cents || 0) / 100,
+      currency: String(payment.currency || 'eur').toUpperCase(),
+      provider: payment.provider || 'stripe',
+      status: payment.status || 'paid',
+      created_at: payment.created_at,
+      type: 'client_activation'
+    })),
+    ...subscriptionRows.map((subscription) => ({
+      id: subscription.id,
+      email: subscription.email,
+      profile: subscription.profile_display_name || subscription.profile_id,
+      amount: Number(subscription.amount_eur || 0),
+      currency: subscription.currency || 'EUR',
+      provider: subscription.provider || 'manual_admin',
+      status: subscription.status,
+      created_at: subscription.created_at || subscription.requested_at,
+      type: 'subscription'
+    }))
+  ].sort((left, right) => new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime());
+
+  const dailyRevenue = paymentRows
+    .filter((row) => row.status !== 'failed' && row.created_at && new Date(row.created_at) >= dayStart)
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const monthlyRevenue = paymentRows
+    .filter((row) => row.status !== 'failed' && row.created_at && new Date(row.created_at) >= monthStart)
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+  res.json({
+    stats: {
+      today_revenue: Number(dailyRevenue.toFixed(2)),
+      monthly_revenue: Number(monthlyRevenue.toFixed(2)),
+      client_activations: paidActivationRows.length,
+      escort_subscriptions: activeSubscriptionRows.filter((row) => ['escort', 'private_escort', 'private'].includes(String(row.role || ''))).length,
+      business_subscriptions: activeSubscriptionRows.filter((row) => ['business', 'agency', 'club', 'massage_salon', 'live_cam'].includes(String(row.role || ''))).length,
+      expired_subscriptions: subscriptionRows.filter((row) => row.status === 'expired').length,
+      upcoming_renewals: subscriptionRows.filter((row) => row.current_period_end && new Date(row.current_period_end).getTime() > Date.now()).length
+    },
+    payments: paymentRows
+  });
+}));
+
 adminRouter.get('/profiles', asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.query.phone);
   let query = supabaseAdmin
@@ -217,7 +291,7 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
 
   const rows = (data || []).map((profile) => withAdminImageUrls({
     ...profile,
-    owner_email: profile.user_id ? ownerEmailById.get(profile.user_id) || null : null
+    owner_email: profile.owner_email || (profile.user_id ? ownerEmailById.get(profile.user_id) || null : null)
   }));
   res.json({
     profiles: rows,
@@ -231,6 +305,35 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
   });
 }));
 
+adminRouter.get('/moderation', asyncHandler(async (_req, res) => {
+  const { data: profiles, error } = await supabaseAdmin
+    .from('profiles')
+    .select('*, profile_images(*), reports(id, admin_status)')
+    .order('updated_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+  const rows = (profiles || []).map((profile) => {
+    const reports = profile.reports || [];
+    return withAdminImageUrls({
+      ...profile,
+      report_count: reports.length,
+      open_report_count: reports.filter((report: any) => ['open', 'investigating'].includes(String(report.admin_status || 'open'))).length
+    });
+  });
+
+  res.json({
+    queues: {
+      pending: rows.filter((profile) => profile.moderation_status === 'pending'),
+      reported: rows.filter((profile) => Number(profile.open_report_count || 0) > 0),
+      suspended: rows.filter((profile) => profile.status === 'suspended' || profile.moderation_status === 'suspended'),
+      rejected: rows.filter((profile) => profile.status === 'rejected' || profile.moderation_status === 'rejected')
+    },
+    profiles: rows
+  });
+}));
+
 adminRouter.post('/profiles', asyncHandler(async (req, res) => {
   const profileData = normalizeAdminProfilePayload(req.body);
   if ('error' in profileData) return res.status(400).json({ error: profileData.error });
@@ -238,9 +341,9 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
   const payload = {
     ...profileData.data,
     slug: `${slugify(String(profileData.data.display_name))}-${Date.now().toString(36)}`,
-    subscription_status: 'test',
+    subscription_status: profileData.data.subscription_status || 'trial',
     verification_status: profileData.data.verified ? 'verified' : 'pending',
-    moderation_status: 'approved',
+    moderation_status: profileData.data.moderation_status || 'pending',
     verified_at: profileData.data.verified ? new Date().toISOString() : null,
     location_updated_at: new Date().toISOString()
   };
@@ -252,6 +355,7 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
     .single();
 
   if (error) return res.status(400).json({ error: error.message });
+  await upsertManualSubscription(data, req.user?.email || req.user?.id || null);
   await logAdminAction(req.user?.email, 'profile_studio_created', 'profile', data.id, payload);
   res.status(201).json({ profile: withAdminImageUrls(data) });
 }));
@@ -416,12 +520,17 @@ adminRouter.patch('/users/:id/suspend', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
-  const [profilesResult, activationPaymentsResult, usersResult] = await Promise.all([
+  const [profilesResult, subscriptionsResult, activationPaymentsResult, usersResult] = await Promise.all([
     supabaseAdmin
       .from('profiles')
-      .select('id, user_id, display_name, city, account_type, listing_plan, listing_price, listing_currency, subscription_status, subscription_started_at, subscription_expires_at, subscription_plan, subscription_start, subscription_end, subscription_requested_at, subscription_managed_by, subscription_note, is_test_account, premium_tier, created_at')
+      .select('id, user_id, owner_email, display_name, city, account_type, profile_type, category, listing_plan, listing_price, listing_currency, currency, subscription_status, subscription_started_at, subscription_expires_at, subscription_plan, subscription_start, subscription_end, subscription_requested_at, subscription_managed_by, subscription_note, is_test_account, premium_tier, created_at')
       .order('created_at', { ascending: false })
       .limit(800),
+    supabaseAdmin
+      .from('subscriptions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1000),
     supabaseAdmin
       .from('client_activation_payments')
       .select('*')
@@ -431,35 +540,41 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
   ]);
 
   if (profilesResult.error) return res.status(500).json({ error: profilesResult.error.message });
+  if (subscriptionsResult.error) return res.status(500).json({ error: subscriptionsResult.error.message });
   if (activationPaymentsResult.error) return res.status(500).json({ error: activationPaymentsResult.error.message });
 
   const emailById = new Map<string, string>();
   (usersResult.data?.users || []).forEach((user) => emailById.set(user.id, user.email || ''));
+  const subscriptionByProfileId = new Map<string, any>();
+  (subscriptionsResult.data || []).forEach((subscription) => {
+    if (subscription.profile_id) subscriptionByProfileId.set(subscription.profile_id, subscription);
+  });
   const now = Date.now();
   const profileRows = (profilesResult.data || []).map((profile) => {
-    const start = profile.subscription_start || profile.subscription_started_at || null;
-    const end = profile.subscription_end || profile.subscription_expires_at || null;
-    const status = String(profile.subscription_status || 'free');
+    const subscription = subscriptionByProfileId.get(profile.id);
+    const start = subscription?.current_period_start || profile.subscription_start || profile.subscription_started_at || null;
+    const end = subscription?.current_period_end || profile.subscription_end || profile.subscription_expires_at || null;
+    const status = String(subscription?.status || profile.subscription_status || 'free');
     return {
-      id: profile.id,
+      id: subscription?.id || profile.id,
       type: 'profile_subscription',
-      email: profile.user_id ? emailById.get(profile.user_id) || null : null,
+      email: subscription?.email || profile.owner_email || (profile.user_id ? emailById.get(profile.user_id) || null : null),
       user_id: profile.user_id,
       profile_id: profile.id,
-      profile: profile.display_name,
+      profile: subscription?.profile_display_name || profile.display_name,
       city: profile.city,
-      plan: profile.subscription_plan || profile.listing_plan || 'escort_monthly',
-      role: profile.account_type || 'escort',
+      plan: subscription?.plan || profile.subscription_plan || profile.listing_plan || 'escort_monthly',
+      role: subscription?.role || profile.profile_type || profile.account_type || 'escort',
       status,
       requested_at: profile.subscription_requested_at || profile.created_at,
       start,
       end,
       progress: subscriptionProgress(start, end),
-      payment_provider: status === 'test' ? 'admin' : 'manual',
-      amount_eur: Number(profile.listing_price || 49.99),
-      currency: profile.listing_currency || 'EUR',
+      payment_provider: subscription?.provider || (status === 'test' ? 'manual_admin' : 'manual'),
+      amount_eur: Number(subscription?.amount_eur ?? profile.listing_price ?? 49.99),
+      currency: subscription?.currency || profile.currency || profile.listing_currency || 'EUR',
       premium_tier: profile.premium_tier || 'standard',
-      note: profile.subscription_note || null
+      note: subscription?.admin_note || profile.subscription_note || null
     };
   });
 
@@ -490,20 +605,23 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
     subscriptions,
     stats: {
       requested: profileSubscriptions.filter((row) => ['free', 'trial', 'pending', 'requested'].includes(row.status)).length,
+      trial: profileSubscriptions.filter((row) => row.status === 'trial').length,
       future: profileSubscriptions.filter((row) => row.start && new Date(row.start).getTime() > now).length,
       active: profileSubscriptions.filter((row) => row.status === 'active' && (!row.end || new Date(row.end).getTime() > now)).length,
       expired: profileSubscriptions.filter((row) => row.status === 'expired' || Boolean(row.end && new Date(row.end).getTime() <= now)).length,
+      suspended: profileSubscriptions.filter((row) => row.status === 'suspended').length,
       incomplete: profileSubscriptions.filter((row) => ['past_due', 'incomplete', 'cancelled'].includes(row.status)).length,
       monthly_revenue: profileSubscriptions.filter((row) => row.status === 'active').reduce((sum, row) => sum + Number(row.amount_eur || 0), 0),
       client_activations_099: clientActivationRows.filter((row) => row.status === 'paid').length,
-      escort_subscriptions: profileSubscriptions.filter((row) => ['escort', 'private'].includes(String(row.role))).length
+      escort_subscriptions: profileSubscriptions.filter((row) => ['escort', 'private', 'private_escort'].includes(String(row.role))).length,
+      business_subscriptions: profileSubscriptions.filter((row) => ['business', 'agency', 'club', 'massage_salon', 'live_cam'].includes(String(row.role))).length
     }
   });
 }));
 
 adminRouter.patch('/subscriptions/:id', asyncHandler(async (req, res) => {
   const status = String(req.body.subscription_status || req.body.status || '');
-  if (!['free', 'active', 'past_due', 'cancelled', 'expired', 'test'].includes(status)) return res.status(400).json({ error: 'Invalid subscription status' });
+  if (!['free', 'requested', 'trial', 'active', 'past_due', 'incomplete', 'cancelled', 'canceled', 'expired', 'suspended', 'test'].includes(status)) return res.status(400).json({ error: 'Invalid subscription status' });
 
   const patch = {
     subscription_status: status,
@@ -511,7 +629,8 @@ adminRouter.patch('/subscriptions/:id', asyncHandler(async (req, res) => {
     plan: optionalText(req.body.plan || req.body.listing_plan, 80),
     subscription_started_at: optionalText(req.body.subscription_started_at, 80),
     subscription_expires_at: optionalText(req.body.subscription_expires_at, 80),
-    admin_note: optionalText(req.body.admin_note, 4000)
+    admin_note: optionalText(req.body.admin_note, 4000),
+    subscription_note: optionalText(req.body.admin_note || req.body.subscription_note, 4000)
   };
 
   const { data, error } = await supabaseAdmin
@@ -522,6 +641,7 @@ adminRouter.patch('/subscriptions/:id', asyncHandler(async (req, res) => {
     .single();
 
   if (error) return res.status(400).json({ error: error.message });
+  await upsertManualSubscription(data, req.user?.email || req.user?.id || null);
   await logAdminAction(req.user?.email, 'subscription_updated', 'profile_subscription', req.params.id, patch);
   res.json({ subscription: data });
 }));
@@ -704,6 +824,7 @@ adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
     .single();
 
   if (error) return res.status(400).json({ error: error.message });
+  await upsertManualSubscription(data, req.user?.email || req.user?.id || null);
   await logAdminAction(req.user?.email, 'profile_studio_updated', 'profile', req.params.id, patch);
   res.json({ profile: withAdminImageUrls(data) });
 }));
@@ -794,6 +915,62 @@ adminRouter.post('/profiles/:id/images', adminUpload.single('image'), asyncHandl
   res.status(201).json({ image });
 }));
 
+adminRouter.post('/profiles/bulk', asyncHandler(async (req, res) => {
+  const ids = Array.isArray(req.body.profile_ids)
+    ? req.body.profile_ids.map((id: unknown) => String(id)).filter(Boolean).slice(0, 200)
+    : [];
+  const operation = String(req.body.operation || req.body.action || '');
+  if (!ids.length) return res.status(400).json({ error: 'profile_ids are required' });
+
+  const patch: Record<string, unknown> = {};
+  if (operation === 'approve') {
+    patch.moderation_status = 'approved';
+    patch.status = 'active';
+    patch.reviewed_by = req.user?.email || req.user?.id || null;
+    patch.reviewed_at = new Date().toISOString();
+  } else if (operation === 'publish') {
+    patch.is_published = true;
+  } else if (operation === 'unpublish') {
+    patch.is_published = false;
+  } else if (operation === 'suspend') {
+    patch.status = 'suspended';
+    patch.moderation_status = 'suspended';
+    patch.suspended_at = new Date().toISOString();
+    patch.suspended_reason = optionalText(req.body.note || req.body.reason, 1000);
+  } else if (operation === 'premium_tier') {
+    const tier = String(req.body.premium_tier || '');
+    if (!premiumTiers.includes(tier)) return res.status(400).json({ error: 'Invalid premium tier' });
+    patch.premium_tier = tier;
+  } else if (operation === 'subscription_status') {
+    const status = normalizeAdminSubscriptionStatus(req.body.subscription_status);
+    patch.subscription_status = status;
+    patch.subscription_managed_by = req.user?.email || req.user?.id || null;
+    patch.subscription_note = optionalText(req.body.note, 2000);
+  } else if (operation === 'delete') {
+    const { data: images } = await supabaseAdmin.from('profile_images').select('storage_path').in('profile_id', ids);
+    const storagePaths = (images || []).map((image) => image.storage_path).filter(Boolean);
+    if (storagePaths.length) await supabaseAdmin.storage.from(config.storageBucket).remove(storagePaths);
+    const { error } = await supabaseAdmin.from('profiles').delete().in('id', ids);
+    if (error) return res.status(400).json({ error: error.message });
+    await logAdminAction(req.user?.email, 'profiles_bulk_deleted', 'profile', null, { profile_ids: ids, note: optionalText(req.body.note, 1000) });
+    return res.json({ updated: ids.length, operation });
+  } else {
+    return res.status(400).json({ error: 'Invalid bulk operation' });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update(patch)
+    .in('id', ids)
+    .select('*, profile_images(*)');
+  if (error) return res.status(400).json({ error: error.message });
+  if (operation === 'subscription_status') {
+    await Promise.all((data || []).map((profile) => upsertManualSubscription(profile, req.user?.email || req.user?.id || null)));
+  }
+  await logAdminAction(req.user?.email, `profiles_bulk_${operation}`, 'profile', null, { profile_ids: ids, ...patch });
+  res.json({ updated: data?.length || 0, operation, profiles: (data || []).map(withAdminImageUrls) });
+}));
+
 adminRouter.patch('/profiles/:profileId/images/reorder', asyncHandler(async (req, res) => {
   const imageIds: string[] = Array.isArray(req.body.image_ids) ? req.body.image_ids.map((item: unknown) => String(item)).filter(Boolean) : [];
   if (!imageIds.length) return res.status(400).json({ error: 'image_ids are required' });
@@ -808,6 +985,36 @@ adminRouter.patch('/profiles/:profileId/images/reorder', asyncHandler(async (req
   if (error) return res.status(400).json({ error: error.message });
   await logAdminAction(req.user?.email, 'profile_images_reordered', 'profile', req.params.profileId, { image_ids: imageIds });
   res.json({ images: (data || []).map(withPublicImageUrl) });
+}));
+
+adminRouter.patch('/profiles/:profileId/images/:imageId', asyncHandler(async (req, res) => {
+  const patch: Record<string, unknown> = {};
+  if (Object.prototype.hasOwnProperty.call(req.body, 'is_hidden')) patch.is_hidden = Boolean(req.body.is_hidden);
+  if (Object.prototype.hasOwnProperty.call(req.body, 'is_private')) patch.is_private = Boolean(req.body.is_private);
+  if (Object.prototype.hasOwnProperty.call(req.body, 'sort_order')) patch.sort_order = optionalInteger(req.body.sort_order, 0, 10000);
+  if (Object.prototype.hasOwnProperty.call(req.body, 'admin_note')) patch.admin_note = optionalText(req.body.admin_note, 1000);
+  if (req.body.moderation_status || req.body.status) {
+    const status = String(req.body.moderation_status || req.body.status);
+    if (!['pending', 'approved', 'rejected', 'blocked'].includes(status)) return res.status(400).json({ error: 'Invalid photo status' });
+    patch.moderation_status = status;
+  }
+  if (req.body.is_cover === true || req.body.is_primary === true) {
+    await supabaseAdmin.from('profile_images').update({ is_primary: false }).eq('profile_id', req.params.profileId);
+    patch.is_primary = true;
+  }
+  if (!Object.keys(patch).length) return res.status(400).json({ error: 'No valid image fields provided' });
+
+  const { data, error } = await supabaseAdmin
+    .from('profile_images')
+    .update(patch)
+    .eq('id', req.params.imageId)
+    .eq('profile_id', req.params.profileId)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'profile_image_updated_by_admin', 'profile_image', req.params.imageId, { profile_id: req.params.profileId, ...patch });
+  res.json({ image: withPublicImageUrl(data) });
 }));
 
 adminRouter.patch('/profiles/:profileId/images/:imageId/cover', asyncHandler(async (req, res) => {
@@ -1060,17 +1267,46 @@ adminRouter.get('/reports', asyncHandler(async (_req, res) => {
   res.json({ reports: data || [], reports_count: data?.length || 0 });
 }));
 
+adminRouter.post('/reports', asyncHandler(async (req, res) => {
+  const profileId = String(req.body.profile_id || '');
+  const reason = optionalText(req.body.reason, 120);
+  if (!profileId || !reason) return res.status(400).json({ error: 'profile_id and reason are required' });
+
+  const payload = {
+    profile_id: profileId,
+    reporter_user_id: optionalText(req.body.reporter_user_id, 80),
+    reporter_email: optionalText(req.body.reporter_email, 240),
+    reason,
+    message: optionalText(req.body.message, 4000),
+    status: 'open',
+    admin_status: 'open',
+    admin_note: optionalText(req.body.admin_note, 4000)
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('reports')
+    .insert(payload)
+    .select('*, profiles(display_name, city, status, moderation_status)')
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'report_created_by_admin', 'report', data.id, payload);
+  res.status(201).json({ report: data });
+}));
+
 adminRouter.patch('/reports/:id/status', asyncHandler(async (req, res) => {
   const adminStatus = String(req.body.admin_status || req.body.status || '');
   if (!allowedAdminReportStatuses.includes(adminStatus)) return res.status(400).json({ error: 'Invalid report status' });
 
   const patch: Record<string, unknown> = {
     admin_status: adminStatus,
-    status: adminStatus === 'investigating' ? 'reviewing' : adminStatus === 'escalated' ? 'reviewing' : adminStatus,
+    status: reportPublicStatus(adminStatus),
     admin_note: optionalText(req.body.admin_note, 4000),
     escalated_to_authorities: Boolean(req.body.escalated_to_authorities)
   };
-  if (adminStatus === 'resolved') patch.resolved_at = new Date().toISOString();
+  if (adminStatus === 'resolved' || adminStatus === 'rejected') {
+    patch.resolved_at = new Date().toISOString();
+    patch.resolved_by = req.user?.email || req.user?.id || null;
+  }
 
   const { data, error } = await supabaseAdmin
     .from('reports')
@@ -1081,6 +1317,45 @@ adminRouter.patch('/reports/:id/status', asyncHandler(async (req, res) => {
 
   if (error) return res.status(400).json({ error: error.message });
   await logAdminAction(req.user?.email, 'report_status_updated', 'report', req.params.id, patch);
+  res.json({ report: data });
+}));
+
+adminRouter.patch('/reports/:id', asyncHandler(async (req, res) => {
+  const adminStatus = String(req.body.admin_status || req.body.status || '');
+  if (adminStatus && !allowedAdminReportStatuses.includes(adminStatus)) return res.status(400).json({ error: 'Invalid report status' });
+
+  const patch: Record<string, unknown> = {
+    admin_note: optionalText(req.body.admin_note, 4000)
+  };
+  if (adminStatus) {
+    patch.admin_status = adminStatus;
+    patch.status = reportPublicStatus(adminStatus);
+  }
+  if (adminStatus === 'resolved' || adminStatus === 'rejected') {
+    patch.resolved_at = new Date().toISOString();
+    patch.resolved_by = req.user?.email || req.user?.id || null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('reports')
+    .update(patch)
+    .eq('id', req.params.id)
+    .select('*, profiles(display_name, city, status, moderation_status)')
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  if (req.body.suspend_profile && data.profile_id) {
+    await supabaseAdmin
+      .from('profiles')
+      .update({
+        status: 'suspended',
+        moderation_status: 'suspended',
+        suspended_at: new Date().toISOString(),
+        suspended_reason: optionalText(req.body.suspension_reason || req.body.admin_note, 1000)
+      })
+      .eq('id', data.profile_id);
+  }
+  await logAdminAction(req.user?.email, 'report_updated', 'report', req.params.id, { ...patch, suspend_profile: Boolean(req.body.suspend_profile) });
   res.json({ report: data });
 }));
 
@@ -1456,6 +1731,8 @@ async function logAdminAction(adminEmail: string | undefined, action: string, ta
 function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Record<string, unknown> } | { error: string } {
   const displayName = optionalText(body.display_name, 80);
   if (!displayName) return { error: 'display_name is required' };
+  const ownerEmail = optionalEmail(body.owner_email || body.email);
+  if (!ownerEmail) return { error: 'owner_email is required' };
 
   const city = String(body.city || 'berlin').trim().toLowerCase();
   if (!['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].includes(city)) return { error: 'Unsupported city' };
@@ -1468,26 +1745,49 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
   const age = optionalInteger(body.age, 18, 99);
   const height = optionalInteger(body.height_cm ?? body.height, 120, 230);
   const category = normalizeAdminCategory(body.category);
+  const accountType = normalizeAdminAccountType(body.account_type);
+  const profileType = normalizeAdminProfileType(body.profile_type);
+  const subscriptionStatus = normalizeAdminSubscriptionStatus(body.subscription_status);
+  const subscriptionStart = parseAdminDate(body.subscription_start) || (subscriptionStatus === 'trial' ? new Date() : null);
+  const subscriptionEnd = parseAdminDate(body.subscription_end) || (subscriptionStatus === 'trial' && subscriptionStart ? new Date(subscriptionStart.getTime() + 30 * 24 * 60 * 60 * 1000) : null);
+  const languages = Array.isArray(body.languages)
+    ? body.languages.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
+    : ['DE', 'EN'];
+  const currency = optionalText(body.currency, 8) || 'EUR';
+  const listingPlan = optionalText(body.listing_plan || body.subscription_plan, 80) || 'admin_profile_studio';
 
   return {
     data: {
+      owner_email: ownerEmail,
+      primary_phone: optionalText(body.phone || body.primary_phone, 40),
+      phone: optionalText(body.phone || body.primary_phone, 40),
+      whatsapp: optionalText(body.whatsapp, 80),
+      telegram: optionalText(body.telegram, 80),
+      account_type: accountType,
+      profile_type: profileType,
       display_name: displayName,
       city,
       area: optionalText(body.area, 80),
+      work_country: optionalText(body.work_country, 80) || 'DE',
       work_city: optionalText(body.work_city, 100) || adminCityLabel(city),
       work_area: optionalText(body.work_area, 120) || optionalText(body.area, 80),
       category,
       description: optionalText(body.description, 2000) || 'Preview profile generated for marketplace layout and internal quality checks. Replace with verified advertiser content before real publication.',
-      languages: ['DE', 'EN'],
+      languages,
       age,
       height,
       height_cm: height,
       nationality: optionalText(body.nationality, 80),
+      business_name: optionalText(body.business_name, 160),
+      business_type: optionalText(body.business_type, 120),
+      contact_person: optionalText(body.contact_person, 120),
+      website: optionalText(body.website, 240),
+      opening_hours: normalizeOpeningHours(body.opening_hours),
       price_30min: optionalMoney(body.price_30min),
       price_1h: optionalMoney(body.price_1h) || 180,
       price_2h: optionalMoney(body.price_2h),
       price_night: optionalMoney(body.price_night),
-      currency: 'EUR',
+      currency,
       services: services.data,
       service_menu: services.data.map((service) => ({ name: service, enabled: true, included: true, extra_price: null, note: null })),
       visit_types: Array.isArray(body.visit_types) ? body.visit_types.map((item) => String(item)).slice(0, 8) : ['incall', 'hotel'],
@@ -1499,10 +1799,15 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       premium_tier: premiumTiers.includes(premiumTier) ? premiumTier : 'standard',
       admin_priority: optionalInteger(body.admin_priority, 0, 10000) || 0,
       status: isPublished ? 'active' : 'active',
-      subscription_status: 'test',
-      listing_plan: 'admin_profile_studio',
-      listing_price: 0,
-      listing_currency: 'EUR',
+      subscription_status: subscriptionStatus,
+      subscription_plan: listingPlan,
+      subscription_start: subscriptionStart?.toISOString() || null,
+      subscription_end: subscriptionEnd?.toISOString() || null,
+      subscription_requested_at: new Date().toISOString(),
+      subscription_note: optionalText(body.subscription_note, 2000),
+      listing_plan: listingPlan,
+      listing_price: optionalMoney(body.listing_price) ?? optionalMoney(body.price_1h) ?? 0,
+      listing_currency: currency,
       max_photos: 6,
       moderation_status: allowedModerationStatuses.includes(String(body.moderation_status || 'approved')) ? String(body.moderation_status || 'approved') : 'approved',
       moderation_note: optionalText(body.moderation_note, 2000),
@@ -1668,6 +1973,32 @@ function normalizeAdminCategory(value: unknown) {
   return ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'].includes(category) ? category : 'ladies';
 }
 
+function normalizeAdminAccountType(value: unknown) {
+  const accountType = String(value || 'escort');
+  return ['escort', 'business', 'private', 'agency', 'massage_salon', 'club_party', 'live_cam'].includes(accountType) ? accountType : 'escort';
+}
+
+function normalizeAdminProfileType(value: unknown) {
+  const profileType = String(value || 'private_escort');
+  return ['private_escort', 'agency', 'club', 'massage_salon', 'live_cam', 'couple', 'trans', 'gay', 'other'].includes(profileType) ? profileType : 'private_escort';
+}
+
+function normalizeAdminSubscriptionStatus(value: unknown) {
+  const status = String(value || 'trial');
+  return ['free', 'requested', 'trial', 'active', 'past_due', 'incomplete', 'cancelled', 'canceled', 'expired', 'suspended', 'test'].includes(status) ? status : 'trial';
+}
+
+function optionalEmail(value: unknown) {
+  const email = String(value || '').trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.slice(0, 240) : null;
+}
+
+function normalizeOpeningHours(value: unknown) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  const text = optionalText(value, 1000);
+  return text ? { note: text } : {};
+}
+
 function adminCityLabel(slug: string) {
   const labels: Record<string, string> = {
     berlin: 'Berlin',
@@ -1748,6 +2079,12 @@ function parseAdminDate(value: unknown) {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+function reportPublicStatus(adminStatus: string) {
+  if (adminStatus === 'investigating' || adminStatus === 'escalated') return 'reviewing';
+  if (adminStatus === 'rejected') return 'dismissed';
+  return adminStatus;
+}
+
 function subscriptionPatch(input: { status: string; plan?: string; start?: Date; end?: Date; managedBy?: string | null; note?: string | null }) {
   const patch: Record<string, unknown> = {
     subscription_status: input.status,
@@ -1787,7 +2124,40 @@ async function updateProfileSubscription(profileId: string, patch: Record<string
     .single();
 
   if (error) throw new Error(error.message);
+  await upsertManualSubscription(data, String(patch.subscription_managed_by || 'admin'));
   return data;
+}
+
+async function upsertManualSubscription(profile: Record<string, any>, managedBy: string | null | undefined) {
+  if (!profile?.id) return;
+  const start = profile.subscription_start || profile.subscription_started_at || null;
+  const end = profile.subscription_end || profile.subscription_expires_at || null;
+  const payload = {
+    user_id: profile.user_id || null,
+    profile_id: profile.id,
+    email: profile.owner_email || null,
+    profile_display_name: profile.display_name || null,
+    role: profile.profile_type || profile.account_type || profile.category || 'escort',
+    plan: profile.subscription_plan || profile.listing_plan || profile.plan || 'admin_profile_studio',
+    status: profile.subscription_status || 'trial',
+    provider: 'manual_admin',
+    amount_eur: Number(profile.listing_price || 0),
+    currency: profile.currency || profile.listing_currency || 'EUR',
+    current_period_start: start,
+    current_period_end: end,
+    managed_by: managedBy || profile.subscription_managed_by || null,
+    admin_note: profile.subscription_note || null,
+    metadata: {
+      source: 'admin_profile_studio',
+      profile_type: profile.profile_type || null,
+      is_seed_profile: Boolean(profile.is_seed_profile)
+    }
+  };
+
+  const { error } = await supabaseAdmin
+    .from('subscriptions')
+    .upsert(payload, { onConflict: 'profile_id' });
+  if (error) throw new Error(error.message);
 }
 
 function normalizeSettings(rows: Array<{ key: string; value: unknown }>) {
