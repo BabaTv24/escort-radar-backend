@@ -555,10 +555,18 @@ export function AdminPage() {
       const result = studioForm.id
         ? await api.updateAdminProfile(token, studioForm.id, body)
         : await api.createAdminProfile(token, body);
-      if (studioFile) await uploadStudioPhoto(result.profile.id);
-      setStudioForm({ ...emptyStudioForm });
+      setProfiles((current) => {
+        const exists = current.some((profile) => profile.id === result.profile.id);
+        return exists
+          ? current.map((profile) => profile.id === result.profile.id ? { ...profile, ...result.profile } : profile)
+          : [result.profile, ...current];
+      });
       setStudioFile(null);
-      await load();
+      if (studioForm.id) {
+        editStudioProfile(result.profile);
+      } else {
+        setStudioForm({ ...emptyStudioForm });
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Nie udalo sie zapisac profilu.');
     } finally {
@@ -567,7 +575,9 @@ export function AdminPage() {
   }
 
   async function uploadStudioPhoto(profileId = studioForm.id) {
-    if (!profileId) {
+    const selected = profiles.find((profile) => profile.id === profileId);
+    console.info('[admin photo upload] profile_id=', profileId || null);
+    if (!profileId || !selected) {
       setMessage(t('admin.photos.saveFirst'));
       return;
     }
@@ -579,11 +589,18 @@ export function AdminPage() {
       const image = result.image as NonNullable<Profile['profile_images']>[number];
       setProfiles((current) => current.map((profile) => {
         if (profile.id !== profileId) return profile;
-        const images = sortAdminImages([...(profile.profile_images || []), image]);
+        const existingImages = image.is_cover || image.is_primary
+          ? (profile.profile_images || []).map((item) => ({ ...item, is_primary: false, is_cover: false }))
+          : (profile.profile_images || []);
+        const images = sortAdminImages([...existingImages, image]);
         return { ...profile, profile_images: images, images };
       }));
       setStudioFile(null);
+      setStudioTab('photos');
+      setProfilePanelMode('photos');
       setMessage(t('admin.messages.photoUploaded'));
+      console.info('[admin photo upload] success image_id=', image.id);
+      console.info('[admin photo upload] keeping selected profile=', profileId);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     }
