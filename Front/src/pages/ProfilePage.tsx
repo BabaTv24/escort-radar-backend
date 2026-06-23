@@ -82,6 +82,7 @@ export function ProfilePage() {
   const statusLabel = operatorStatusLabel(profile.operator_status || (profile.availability_status === 'available' ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE'));
   const travelNotice = getTravelNotice(profile);
   const languages = profile.languages?.length ? profile.languages : ['DE', 'EN'];
+  const moreAboutRows = getMoreAboutRows(profile, languages, t);
   const visitTypes = profile.visit_types?.length ? profile.visit_types : ['incall', 'hotel'];
   const serviceTags = profile.service_tags?.length ? profile.service_tags : ['dinner-date', 'hotel', 'discreet'];
   const selectedServices = profile.services || [];
@@ -184,6 +185,16 @@ export function ProfilePage() {
               <MarketFact icon={<Clock size={17} />} label="Last active" value={profile.availability_status === 'available' ? 'Available now' : 'Recently active'} />
             </div>
           </MarketSection>
+
+          {moreAboutRows.length ? (
+            <MarketSection tab="overview" activeTab={activeTab} eyebrow={t('profile.moreAbout.title')} title={t('profile.moreAbout.title')}>
+              <div className="market-detail-grid">
+                {moreAboutRows.map((row) => (
+                  <MarketFact key={row.label} icon={<BadgeCheck size={17} />} label={row.label} value={row.value} />
+                ))}
+              </div>
+            </MarketSection>
+          ) : null}
 
           <MarketSection tab="overview" activeTab={activeTab} eyebrow="Availability" title="Schedule and radar status">
             <div className="market-schedule-grid">
@@ -429,6 +440,27 @@ function MarketFact({ icon, label, value }: { icon: ReactNode; label: string; va
       <strong>{value}</strong>
     </div>
   );
+}
+
+function getMoreAboutRows(profile: Profile, languages: string[], t: (key: string, vars?: Record<string, string | number>) => string) {
+  const rows = [
+    ['gender', profile.gender],
+    ['orientation', profile.orientation],
+    ['age', profile.age ? String(profile.age) : ''],
+    ['height', profile.height_cm || profile.height ? `${profile.height_cm || profile.height} cm` : ''],
+    ['weight', profile.weight_kg ? `${profile.weight_kg} kg` : ''],
+    ['bust', profile.bust],
+    ['eyes', profile.eyes],
+    ['hair', profile.hair || profile.hair_color],
+    ['travel', profile.travel],
+    ['languages', languages.length ? languages.join(', ') : ''],
+    ['ethnicity', profile.ethnicity || profile.origin],
+    ['nationality', profile.nationality],
+    ['zodiacSign', profile.zodiac_sign]
+  ];
+  return rows
+    .map(([key, value]) => ({ label: t(`profile.moreAbout.${key}`), value: String(value || '').trim() }))
+    .filter((row) => row.value);
 }
 
 function getPriceFrom(profile: Profile) {

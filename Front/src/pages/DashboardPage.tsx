@@ -45,8 +45,18 @@ const emptyProfile: Partial<Profile> = {
   work_place_label: '',
   category: 'ladies',
   description: '',
+  gender: '',
   age: 25,
   height: 170,
+  height_cm: 170,
+  weight_kg: null,
+  bust: '',
+  eyes: '',
+  hair: '',
+  travel: '',
+  ethnicity: '',
+  nationality: '',
+  zodiac_sign: '',
   body_type: '',
   body_features: [],
   hair_color: '',
@@ -791,8 +801,18 @@ export function DashboardPage() {
             {creatorTab === 'listing' && <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.appearance')}</h2>
               <div className="form-grid">
+                <input placeholder={t('profile.moreAbout.gender')} value={profile.gender || ''} onChange={(event) => setProfile({ ...profile, gender: event.target.value })} />
+                <input placeholder={t('profile.moreAbout.orientation')} value={profile.orientation || ''} onChange={(event) => setProfile({ ...profile, orientation: event.target.value })} />
                 <input type="number" min="18" placeholder={t('form.age')} value={profile.age || ''} onChange={(event) => setProfile({ ...profile, age: Number(event.target.value) })} />
-                <input type="number" min="120" placeholder={t('form.height')} value={profile.height || ''} onChange={(event) => setProfile({ ...profile, height: Number(event.target.value) })} />
+                <input type="number" min="120" placeholder={t('form.height')} value={profile.height_cm || profile.height || ''} onChange={(event) => setProfile({ ...profile, height: Number(event.target.value), height_cm: Number(event.target.value) })} />
+                <input type="number" min="35" placeholder={t('profile.moreAbout.weight')} value={profile.weight_kg || ''} onChange={(event) => setProfile({ ...profile, weight_kg: event.target.value ? Number(event.target.value) : null })} />
+                <input placeholder={t('profile.moreAbout.bust')} value={profile.bust || ''} onChange={(event) => setProfile({ ...profile, bust: event.target.value })} />
+                <input placeholder={t('profile.moreAbout.eyes')} value={profile.eyes || ''} onChange={(event) => setProfile({ ...profile, eyes: event.target.value })} />
+                <input placeholder={t('profile.moreAbout.hair')} value={profile.hair || ''} onChange={(event) => setProfile({ ...profile, hair: event.target.value })} />
+                <input placeholder={t('profile.moreAbout.travel')} value={profile.travel || ''} onChange={(event) => setProfile({ ...profile, travel: event.target.value })} />
+                <input placeholder={t('profile.moreAbout.ethnicity')} value={profile.ethnicity || ''} onChange={(event) => setProfile({ ...profile, ethnicity: event.target.value })} />
+                <input placeholder={t('profile.moreAbout.nationality')} value={profile.nationality || ''} onChange={(event) => setProfile({ ...profile, nationality: event.target.value })} />
+                <input placeholder={t('profile.moreAbout.zodiacSign')} value={profile.zodiac_sign || ''} onChange={(event) => setProfile({ ...profile, zodiac_sign: event.target.value })} />
                 <select value={profile.body_type || ''} onChange={(event) => setProfile({ ...profile, body_type: event.target.value })}>
                   <option value="">{t('filters.bodyType')}</option>
                   {bodyTypeOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
@@ -1575,6 +1595,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   onSaveDraft: (profile: Partial<Profile>, successMessage?: string) => Promise<void>;
   onLogout: () => void;
 }) {
+  const { t } = useI18n();
   const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text'>(savedProfile ? 'operator' : 'setup');
   const [serviceSearch, setServiceSearch] = useState('');
   const [geoMessage, setGeoMessage] = useState('');
@@ -2050,6 +2071,27 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               value={profile.description || ''}
               onChange={(event) => onProfileChange({ ...profile, description: event.target.value })}
             />
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">{t('profile.moreAbout.title')}</p>
+                <h2>{t('profile.moreAbout.title')}</h2>
+              </div>
+            </div>
+            <div className="form-grid">
+              <input placeholder={t('profile.moreAbout.gender')} value={profile.gender || ''} onChange={(event) => onProfileChange({ ...profile, gender: event.target.value })} />
+              <input placeholder={t('profile.moreAbout.orientation')} value={profile.orientation || ''} onChange={(event) => onProfileChange({ ...profile, orientation: event.target.value })} />
+              <input type="number" min="18" max="99" placeholder={t('profile.moreAbout.age')} value={profile.age || ''} onChange={(event) => onProfileChange({ ...profile, age: event.target.value ? Number(event.target.value) : undefined })} />
+              <input type="number" min="120" max="230" placeholder={t('profile.moreAbout.height')} value={profile.height_cm || profile.height || ''} onChange={(event) => onProfileChange({ ...profile, height: event.target.value ? Number(event.target.value) : undefined, height_cm: event.target.value ? Number(event.target.value) : null })} />
+              <input type="number" min="35" max="200" placeholder={t('profile.moreAbout.weight')} value={profile.weight_kg || ''} onChange={(event) => onProfileChange({ ...profile, weight_kg: event.target.value ? Number(event.target.value) : null })} />
+              <input placeholder={t('profile.moreAbout.bust')} value={profile.bust || ''} onChange={(event) => onProfileChange({ ...profile, bust: event.target.value })} />
+              <input placeholder={t('profile.moreAbout.eyes')} value={profile.eyes || ''} onChange={(event) => onProfileChange({ ...profile, eyes: event.target.value })} />
+              <input placeholder={t('profile.moreAbout.hair')} value={profile.hair || ''} onChange={(event) => onProfileChange({ ...profile, hair: event.target.value })} />
+              <input placeholder={t('profile.moreAbout.travel')} value={profile.travel || ''} onChange={(event) => onProfileChange({ ...profile, travel: event.target.value })} />
+              <input placeholder={t('profile.moreAbout.languages')} value={Array.isArray(profile.languages) ? profile.languages.join(', ') : String(profile.languages || '')} onChange={(event) => onProfileChange({ ...profile, languages: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} />
+              <input placeholder={t('profile.moreAbout.ethnicity')} value={profile.ethnicity || ''} onChange={(event) => onProfileChange({ ...profile, ethnicity: event.target.value })} />
+              <input placeholder={t('profile.moreAbout.nationality')} value={profile.nationality || ''} onChange={(event) => onProfileChange({ ...profile, nationality: event.target.value })} />
+              <input placeholder={t('profile.moreAbout.zodiacSign')} value={profile.zodiac_sign || ''} onChange={(event) => onProfileChange({ ...profile, zodiac_sign: event.target.value })} />
+            </div>
           </section>
         )}
 
@@ -2158,8 +2200,19 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
   return {
     id: savedProfile?.id || 'preview',
     display_name: profile.display_name || 'Preview profile',
+    gender: profile.gender || null,
+    orientation: profile.orientation || null,
     age: profile.age || 25,
     height: profile.height || 170,
+    height_cm: profile.height_cm || profile.height || 170,
+    weight_kg: profile.weight_kg ?? null,
+    bust: profile.bust || null,
+    eyes: profile.eyes || null,
+    hair: profile.hair || null,
+    travel: profile.travel || null,
+    ethnicity: profile.ethnicity || null,
+    nationality: profile.nationality || null,
+    zodiac_sign: profile.zodiac_sign || null,
     body_type: profile.body_type,
     body_features: profile.body_features || [],
     hair_color: profile.hair_color,
@@ -2176,7 +2229,6 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     category: profile.category || 'ladies',
     description: profile.description || '',
     languages: Array.isArray(profile.languages) ? profile.languages : ['EN'],
-    orientation: profile.orientation,
     audience: profile.audience || [],
     visit_types: profile.visit_types || [],
     service_tags: profile.service_tags || [],

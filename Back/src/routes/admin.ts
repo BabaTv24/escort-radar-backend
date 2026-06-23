@@ -1870,6 +1870,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
   const isPublished = body.is_published !== false;
   const age = optionalInteger(body.age, 18, 99);
   const height = optionalInteger(body.height_cm ?? body.height, 120, 230);
+  const weight = optionalInteger(body.weight_kg, 35, 200);
   const category = normalizeAdminCategory(body.category);
   const accountType = normalizeAdminAccountType(body.account_type);
   const profileType = normalizeAdminProfileType(body.profile_type);
@@ -1902,10 +1903,19 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       category,
       description: optionalText(body.description, 2000) || 'Preview profile generated for marketplace layout and internal quality checks. Replace with verified advertiser content before real publication.',
       languages,
+      gender: optionalText(body.gender, 40),
+      orientation: optionalText(body.orientation, 80),
       age,
       height,
       height_cm: height,
+      weight_kg: weight,
+      bust: optionalText(body.bust, 40),
+      eyes: optionalText(body.eyes, 40),
+      hair: optionalText(body.hair, 60),
+      travel: optionalText(body.travel, 120),
+      ethnicity: optionalText(body.ethnicity, 80),
       nationality: optionalText(body.nationality, 80),
+      zodiac_sign: optionalText(body.zodiac_sign, 40),
       business_name: optionalText(body.business_name, 160),
       business_type: optionalText(body.business_type, 120),
       contact_person: optionalText(body.contact_person, 120),
@@ -2152,6 +2162,7 @@ function normalizeAdminServices(value: unknown): { data: string[] } | { error: s
 }
 
 function optionalInteger(value: unknown, min: number, max: number) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
   return Math.min(Math.max(Math.round(number), min), max);

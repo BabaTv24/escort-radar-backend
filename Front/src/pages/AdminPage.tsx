@@ -35,9 +35,18 @@ const emptyStudioForm = {
   longitude: '',
   location_mode: 'city_only',
   service_radius_km: 25,
+  gender: '',
+  orientation: '',
   age: 26,
   nationality: 'European',
   height_cm: 170,
+  weight_kg: '',
+  bust: '',
+  eyes: '',
+  hair: '',
+  travel: '',
+  ethnicity: '',
+  zodiac_sign: '',
   languages: ['DE', 'EN'],
   business_name: '',
   business_type: '',
@@ -466,9 +475,18 @@ export function AdminPage() {
       longitude: profile.longitude === null || profile.longitude === undefined ? '' : String(profile.longitude),
       location_mode: profile.location_mode || 'city_only',
       service_radius_km: profile.service_radius_km || 25,
+      gender: profile.gender || '',
+      orientation: profile.orientation || '',
       age: profile.age || 26,
       nationality: profile.nationality || 'European',
       height_cm: profile.height_cm || profile.height || 170,
+      weight_kg: profile.weight_kg ? String(profile.weight_kg) : '',
+      bust: profile.bust || '',
+      eyes: profile.eyes || '',
+      hair: profile.hair || '',
+      travel: profile.travel || '',
+      ethnicity: profile.ethnicity || '',
+      zodiac_sign: profile.zodiac_sign || '',
       languages: profile.languages?.length ? profile.languages : ['DE', 'EN'],
       business_name: profile.business_name || '',
       business_type: profile.business_type || '',
@@ -562,6 +580,7 @@ export function AdminPage() {
         price_night: Number(studioForm.price_night || 0),
         age: Number(studioForm.age || 0),
         height_cm: Number(studioForm.height_cm || 0),
+        weight_kg: studioForm.weight_kg === '' ? null : Number(studioForm.weight_kg),
         admin_priority: Number(studioForm.admin_priority || 0),
         latitude: studioForm.latitude === '' ? null : Number(studioForm.latitude),
         longitude: studioForm.longitude === '' ? null : Number(studioForm.longitude),
@@ -729,10 +748,19 @@ export function AdminPage() {
         <div className="admin-form-grid">
           <AdminField label={t('admin.profileEditor.displayName')}><input placeholder={t('admin.profileEditor.displayNamePlaceholder')} value={studioForm.display_name} onChange={(event) => setStudioForm({ ...studioForm, display_name: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.category')}><select value={studioForm.category} onChange={(event) => setStudioForm({ ...studioForm, category: event.target.value })}>{categoryOptions.map((category) => <option key={category} value={category}>{option(category)}</option>)}</select></AdminField>
+          <AdminField label={t('profile.moreAbout.gender')}><input value={studioForm.gender} onChange={(event) => setStudioForm({ ...studioForm, gender: event.target.value })} /></AdminField>
+          <AdminField label={t('profile.moreAbout.orientation')}><input value={studioForm.orientation} onChange={(event) => setStudioForm({ ...studioForm, orientation: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.age')}><input type="number" value={studioForm.age} onChange={(event) => setStudioForm({ ...studioForm, age: Number(event.target.value) })} /></AdminField>
           <AdminField label={t('admin.profileEditor.nationality')}><input placeholder={t('admin.profileEditor.nationalityPlaceholder')} value={studioForm.nationality} onChange={(event) => setStudioForm({ ...studioForm, nationality: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.height')}><input type="number" value={studioForm.height_cm} onChange={(event) => setStudioForm({ ...studioForm, height_cm: Number(event.target.value) })} /></AdminField>
+          <AdminField label={t('profile.moreAbout.weight')}><input type="number" value={studioForm.weight_kg} onChange={(event) => setStudioForm({ ...studioForm, weight_kg: event.target.value })} /></AdminField>
+          <AdminField label={t('profile.moreAbout.bust')}><input value={studioForm.bust} onChange={(event) => setStudioForm({ ...studioForm, bust: event.target.value })} /></AdminField>
+          <AdminField label={t('profile.moreAbout.eyes')}><input value={studioForm.eyes} onChange={(event) => setStudioForm({ ...studioForm, eyes: event.target.value })} /></AdminField>
+          <AdminField label={t('profile.moreAbout.hair')}><input value={studioForm.hair} onChange={(event) => setStudioForm({ ...studioForm, hair: event.target.value })} /></AdminField>
+          <AdminField label={t('profile.moreAbout.travel')}><input value={studioForm.travel} onChange={(event) => setStudioForm({ ...studioForm, travel: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.languages')}><input placeholder={t('admin.profileEditor.languagesPlaceholder')} value={studioForm.languages.join(', ')} onChange={(event) => setStudioForm({ ...studioForm, languages: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
+          <AdminField label={t('profile.moreAbout.ethnicity')}><input value={studioForm.ethnicity} onChange={(event) => setStudioForm({ ...studioForm, ethnicity: event.target.value })} /></AdminField>
+          <AdminField label={t('profile.moreAbout.zodiacSign')}><input value={studioForm.zodiac_sign} onChange={(event) => setStudioForm({ ...studioForm, zodiac_sign: event.target.value })} /></AdminField>
         </div>
         <AdminField label={t('admin.profileEditor.description')}><textarea placeholder={t('admin.profileEditor.descriptionPlaceholder')} value={studioForm.description} onChange={(event) => setStudioForm({ ...studioForm, description: event.target.value })} /></AdminField>
       </>;

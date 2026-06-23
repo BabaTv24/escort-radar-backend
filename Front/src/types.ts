@@ -42,10 +42,19 @@ export type Profile = {
   referral_code?: string | null;
   referred_by_code?: string | null;
   referral_count?: number;
+  gender?: string | null;
+  orientation?: string | null;
   age?: number;
   height?: number;
   height_cm?: number | null;
+  weight_kg?: number | null;
+  bust?: string | null;
+  eyes?: string | null;
+  hair?: string | null;
+  travel?: string | null;
+  ethnicity?: string | null;
   nationality?: string | null;
+  zodiac_sign?: string | null;
   business_name?: string | null;
   business_type?: string | null;
   contact_person?: string | null;
@@ -67,7 +76,6 @@ export type Profile = {
   category?: string | null;
   description?: string | null;
   languages: string[];
-  orientation?: string;
   audience?: string[];
   visit_types?: string[];
   service_tags?: string[];

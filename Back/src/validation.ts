@@ -69,15 +69,25 @@ export function validateProfileInput(body: Record<string, unknown>) {
       description: optionalText(body.description, 2000),
       languages: Array.isArray(body.languages)
         ? body.languages.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
-        : [],
+        : String(body.languages || '').split(',').map((item) => item.trim()).filter(Boolean).slice(0, 8),
+      gender: optionalText(body.gender, 40),
       age: optionalNumber(body.age, 18, 99),
       height: optionalNumber(body.height, 120, 230),
+      height_cm: optionalNumber(body.height_cm ?? body.height, 120, 230),
+      weight_kg: optionalNumber(body.weight_kg, 35, 200),
       body_type: optionalText(body.body_type, 80),
       body_features: optionalArray(body.body_features, 12),
       hair_color: optionalText(body.hair_color, 80),
+      hair: optionalText(body.hair, 60),
+      bust: optionalText(body.bust, 40),
+      eyes: optionalText(body.eyes, 40),
       origin: optionalText(body.origin, 80),
       experience_type: optionalText(body.experience_type, 80),
-      orientation: optionalText(body.orientation, 60),
+      orientation: optionalText(body.orientation, 80),
+      travel: optionalText(body.travel, 120),
+      ethnicity: optionalText(body.ethnicity, 80),
+      nationality: optionalText(body.nationality, 80),
+      zodiac_sign: optionalText(body.zodiac_sign, 40),
       audience: optionalArray(body.audience, 6),
       visit_types: optionalArray(body.visit_types, 8),
       service_tags: optionalArray(body.service_tags, 16),
@@ -134,6 +144,7 @@ function optionalArray(value: unknown, max: number) {
 }
 
 function optionalNumber(value: unknown, min: number, max: number) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
   return Math.min(Math.max(Math.round(number), min), max);
