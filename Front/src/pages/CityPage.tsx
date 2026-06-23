@@ -151,9 +151,11 @@ export function CityPage() {
           <span>Status</span>
           <select value={draftFilters.availability_status} onChange={(event) => updateRadarFilter('availability_status', event.target.value)}>
             <option value="all">{t('status.all')}</option>
-            <option value="available">{t('status.available')}</option>
-            <option value="busy">{t('status.busy')}</option>
-            <option value="unavailable">{t('status.unavailable')}</option>
+            <option value="online">{t('status.onlineNow')}</option>
+            <option value="BUSY">{t('status.busy')}</option>
+            <option value="APPOINTMENT_ONLY">{t('status.appointmentOnly')}</option>
+            <option value="TRAVELING">{t('status.traveling')}</option>
+            <option value="OFFLINE">{t('status.offline')}</option>
           </select>
         </label>
 
@@ -383,7 +385,7 @@ function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocat
       if (!centerRange.inRange) return false;
     }
     if (filters.category && profile.category !== filters.category) return false;
-    if (filters.availability_status !== 'all' && profile.availability_status !== filters.availability_status) return false;
+    if (!matchesOperatorStatusFilter(profile, filters.availability_status)) return false;
     const radarRange = isProfileInRadarRange(profile, searcherLocation, filters.radius);
     if (!radarRange.inRange) return false;
     profile.distance_km = radarRange.distance_km;
@@ -435,6 +437,15 @@ function cityName(slug: string) {
 
 function getOperatorStatus(profile: Profile) {
   return profile.operator_status || (profile.available_now ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE');
+}
+
+function matchesOperatorStatusFilter(profile: Profile, status: string) {
+  if (status === 'all') return true;
+  const operatorStatus = getOperatorStatus(profile);
+  if (status === 'online' || status === 'available') return operatorStatus === 'ONLINE_NOW' || operatorStatus === 'AVAILABLE_TODAY';
+  if (status === 'busy') return operatorStatus === 'BUSY';
+  if (status === 'unavailable') return operatorStatus === 'OFFLINE';
+  return operatorStatus === status;
 }
 
 function getStatusClass(profile: Profile) {

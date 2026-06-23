@@ -202,9 +202,12 @@ textarea { min-height: 8rem; resize: vertical; }
 .image-placeholder.large { min-height: 320px; }
 .status { display: inline-flex; align-items: center; width: fit-content; padding: .32rem .55rem; border-radius: 999px; background: rgba(255,255,255,.1); color: #ddd2bb; font-size: .78rem; }
 .card-image .status { position: absolute; left: .75rem; top: .75rem; }
-.status.live, .status.available { background: rgba(8, 247, 184, .14); color: #08f7b8; box-shadow: 0 0 24px rgba(8, 247, 184, .22); }
+.status.live, .status.available, .status.online-now { background: rgba(34,197,94,.15); color: #86efac; box-shadow: 0 0 24px rgba(34,197,94,.22); }
+.status.available-today { background: rgba(20,184,166,.14); color: #5eead4; box-shadow: 0 0 24px rgba(20,184,166,.2); }
 .status.busy { background: rgba(255, 176, 64, .14); color: #ffb040; box-shadow: 0 0 24px rgba(255, 176, 64, .18); }
-.status.unavailable { background: rgba(255, 88, 88, .14); color: #ff7777; }
+.status.appointment-only { background: rgba(167,139,250,.14); color: #c4b5fd; box-shadow: 0 0 24px rgba(167,139,250,.18); }
+.status.traveling { background: rgba(56,189,248,.14); color: #7dd3fc; box-shadow: 0 0 24px rgba(56,189,248,.18); }
+.status.unavailable, .status.offline { background: rgba(107,114,128,.16); color: #cbd5e1; box-shadow: none; }
 .card-body, .profile-summary, .form-panel, .legal-panel, .table-panel { padding: .9rem; }
 .card-body h3 { margin: 0; font-size: 1.22rem; display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
 .card-body h3 span, .profile-summary h1 span { color: #f7d46b; font-size: .72em; font-weight: 700; }

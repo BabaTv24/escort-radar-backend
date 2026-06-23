@@ -32,7 +32,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
   const { t } = useI18n();
   const visibleProfiles = profiles
     .map((profile) => ({ profile, radar: isProfileInRadarRange(profile, searcherLocation, radius) }))
-    .filter(({ profile, radar }) => radar.inRange && (status === 'all' || profile.availability_status === status));
+    .filter(({ profile, radar }) => radar.inRange && matchesOperatorStatusFilter(profile, status));
 
   return (
     <section className={compact ? 'radar-panel compact' : 'radar-panel'}>
@@ -55,9 +55,16 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         <div className="radar-control-group">
           <span>{t('radar.status')}</span>
           <div className="segmented-pills">
-            {['all', 'available', 'busy', 'unavailable'].map((item) => (
-              <button key={item} className={status === item ? 'selected' : ''} type="button" onClick={() => onStatusChange(item)}>
-                {t(`status.${item}`)}
+            {[
+              ['all', t('status.all')],
+              ['online', t('status.onlineNow')],
+              ['BUSY', t('status.busy')],
+              ['APPOINTMENT_ONLY', t('status.appointmentOnly')],
+              ['TRAVELING', t('status.traveling')],
+              ['OFFLINE', t('status.offline')]
+            ].map(([value, label]) => (
+              <button key={value} className={status === value ? 'selected' : ''} type="button" onClick={() => onStatusChange(value)}>
+                {label}
               </button>
             ))}
           </div>
@@ -68,6 +75,8 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           <span><i className="dot online-now" /> Online now</span>
           <span><i className="dot available-today" /> Available today</span>
           <span><i className="dot busy" /> {t('status.busy')}</span>
+          <span><i className="dot appointment-only" /> {t('status.appointmentOnly')}</span>
+          <span><i className="dot traveling" /> {t('status.traveling')}</span>
           <span><i className="dot offline" /> Offline</span>
         </div>
         {compact && <Link to={`/city/${city}`} className="button primary">{t('radar.cta')}</Link>}
@@ -103,6 +112,19 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
       </div>
     </section>
   );
+}
+
+function getOperatorStatus(profile: Profile) {
+  return profile.operator_status || (profile.available_now ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE');
+}
+
+function matchesOperatorStatusFilter(profile: Profile, status: string) {
+  if (status === 'all') return true;
+  const operatorStatus = getOperatorStatus(profile);
+  if (status === 'online' || status === 'available') return operatorStatus === 'ONLINE_NOW' || operatorStatus === 'AVAILABLE_TODAY';
+  if (status === 'busy') return operatorStatus === 'BUSY';
+  if (status === 'unavailable') return operatorStatus === 'OFFLINE';
+  return operatorStatus === status;
 }
 
 function getRadarPoint(profile: Profile, index: number, radius: number, distanceKm?: number | null) {

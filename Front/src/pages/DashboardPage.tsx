@@ -2317,7 +2317,7 @@ function prepareProfilePayload(profile: Partial<Profile>, savedProfile: Profile 
       ? profile.languages.map((item) => String(item).trim()).filter(Boolean)
       : String(profile.languages || '').split(',').map((item) => item.trim()).filter(Boolean),
     is_test_account: Boolean(savedProfile?.is_test_account),
-    available_now: profile.availability_status === 'available' || Boolean(profile.available_now)
+    available_now: profile.operator_status ? profile.operator_status === 'ONLINE_NOW' : Boolean(profile.available_now)
   };
 }
 

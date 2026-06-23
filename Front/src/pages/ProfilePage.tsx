@@ -80,6 +80,7 @@ export function ProfilePage() {
       ? 'Hidden exact location'
       : 'City only';
   const statusLabel = operatorStatusLabel(profile.operator_status || (profile.availability_status === 'available' ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE'));
+  const statusClass = operatorStatusClass(profile.operator_status || (profile.availability_status === 'available' ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE'));
   const travelNotice = getTravelNotice(profile);
   const languages = profile.languages?.length ? profile.languages : ['DE', 'EN'];
   const moreAboutRows = getMoreAboutRows(profile, languages, t);
@@ -135,7 +136,7 @@ export function ProfilePage() {
                   <span>Premium</span>
                   <span><Video size={14} /> Live Cam</span>
                 </div>
-                <span className={`status ${profile.availability_status || 'unavailable'}`}>{statusLabel}</span>
+                <span className={`status ${statusClass}`}>{statusLabel}</span>
                 <h1>{profile.display_name}</h1>
                 <p><MapPin size={15} /> {locationLabel}{profile.distance_km ? ` - ${profile.distance_km} km` : ''}</p>
                 {travelNotice && <p>{travelNotice}</p>}
@@ -320,7 +321,7 @@ export function ProfilePage() {
         </main>
 
         <aside className="market-contact-panel">
-          <span className={`status ${profile.availability_status || 'unavailable'}`}>{statusLabel}</span>
+          <span className={`status ${statusClass}`}>{statusLabel}</span>
           <h2>{profile.display_name}</h2>
           <p><MapPin size={15} /> {locationLabel}</p>
           <div className="market-contact-price">
@@ -481,6 +482,18 @@ function operatorStatusLabel(status: string) {
     OFFLINE: 'Offline'
   };
   return labels[status] || 'Offline';
+}
+
+function operatorStatusClass(status: string) {
+  const classes: Record<string, string> = {
+    ONLINE_NOW: 'online-now',
+    AVAILABLE_TODAY: 'available-today',
+    BUSY: 'busy',
+    APPOINTMENT_ONLY: 'appointment-only',
+    TRAVELING: 'traveling',
+    OFFLINE: 'offline'
+  };
+  return classes[status] || 'offline';
 }
 
 function getTravelNotice(profile: Profile) {

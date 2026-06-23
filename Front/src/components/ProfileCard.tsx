@@ -8,7 +8,8 @@ export function ProfileCard({ profile }: { profile: Profile }) {
   const { t, option } = useI18n();
   const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
   const status = profile.availability_status || (profile.available_now ? 'available' : 'unavailable');
-  const operatorLabel = operatorStatusLabel(profile.operator_status || (status === 'available' ? 'ONLINE_NOW' : status === 'busy' ? 'BUSY' : 'OFFLINE'));
+  const operatorStatus = profile.operator_status || (status === 'available' ? 'ONLINE_NOW' : status === 'busy' ? 'BUSY' : 'OFFLINE');
+  const operatorLabel = operatorStatusLabel(operatorStatus);
   const priceFrom = getPriceFrom(profile);
   const reviewCount = 12 + (profile.id.length % 37);
   const rating = (4.6 + (profile.id.length % 4) / 10).toFixed(1);
@@ -25,7 +26,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
     <article className="profile-card premium-profile-card">
       <div className="card-image">
         {primary?.public_url ? <img src={primary.public_url} alt="" loading="lazy" /> : <div className="image-placeholder">{t('app.name')}</div>}
-        <span className={`status ${status}`}>{operatorLabel}</span>
+        <span className={`status ${operatorStatusClass(operatorStatus)}`}>{operatorLabel}</span>
         <div className="premium-card-badges">
           {badges.map((badge) => <span key={badge}>{badge}</span>)}
         </div>
@@ -68,6 +69,18 @@ export function ProfileCard({ profile }: { profile: Profile }) {
       </div>
     </article>
   );
+}
+
+function operatorStatusClass(status: string) {
+  const classes: Record<string, string> = {
+    ONLINE_NOW: 'online-now',
+    AVAILABLE_TODAY: 'available-today',
+    BUSY: 'busy',
+    APPOINTMENT_ONLY: 'appointment-only',
+    TRAVELING: 'traveling',
+    OFFLINE: 'offline'
+  };
+  return classes[status] || 'offline';
 }
 
 function operatorStatusLabel(status: string) {
