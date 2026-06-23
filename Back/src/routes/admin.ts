@@ -569,6 +569,10 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
       requested_at: profile.subscription_requested_at || profile.created_at,
       start,
       end,
+      subscription_start: profile.subscription_start || profile.subscription_started_at || null,
+      subscription_end: profile.subscription_end || profile.subscription_expires_at || null,
+      current_period_start: subscription?.current_period_start || null,
+      current_period_end: subscription?.current_period_end || null,
       progress: subscriptionProgress(start, end),
       payment_provider: subscription?.provider || (status === 'test' ? 'manual_admin' : 'manual'),
       amount_eur: Number(subscription?.amount_eur ?? profile.listing_price ?? 49.99),
@@ -685,6 +689,86 @@ adminRouter.post('/subscriptions/:id/extend', asyncHandler(async (req, res) => {
   const profile = await updateProfileSubscription(req.params.id, patch);
   await logAdminAction(req.user?.email, 'subscription_extended', 'profile', req.params.id, { days, ...patch });
   res.json({ subscription: profile });
+}));
+
+adminRouter.post('/subscriptions/:id/set-dates', asyncHandler(async (req, res) => {
+  console.info('[admin subscriptions set-dates]', {
+    id: req.params.id,
+    start: req.body.start || req.body.subscription_start || null,
+    end: req.body.end || req.body.subscription_end || null,
+    status: req.body.status || req.body.subscription_status || null
+  });
+  const start = parseAdminDate(req.body.start || req.body.subscription_start);
+  const end = parseAdminDate(req.body.end || req.body.subscription_end);
+  const status = normalizeAdminSubscriptionStatus(req.body.status || req.body.subscription_status || 'active');
+  if (!start || !end) {
+    console.info('[admin subscriptions set-dates] error reason=invalid_dates');
+    return res.status(400).json({ error: 'Valid start and end dates are required' });
+  }
+  if (end.getTime() <= start.getTime()) {
+    console.info('[admin subscriptions set-dates] error reason=end_before_start');
+    return res.status(400).json({ error: 'End date must be after start date' });
+  }
+
+  const note = optionalText(req.body.note || req.body.admin_note || req.body.subscription_note, 2000);
+  const { data: existingSubscription } = await supabaseAdmin
+    .from('subscriptions')
+    .select('*')
+    .or(`id.eq.${req.params.id},profile_id.eq.${req.params.id}`)
+    .maybeSingle();
+  const profileId = existingSubscription?.profile_id || req.params.id;
+  const patch = subscriptionPatch({
+    status,
+    start,
+    end,
+    managedBy: req.user?.email || req.user?.id,
+    note
+  });
+
+  const profile = await updateProfileSubscription(profileId, patch);
+  const subscriptionPatchRow = {
+    user_id: profile.user_id || existingSubscription?.user_id || null,
+    profile_id: profile.id,
+    email: profile.owner_email || existingSubscription?.email || null,
+    profile_display_name: profile.display_name || existingSubscription?.profile_display_name || null,
+    role: profile.profile_type || profile.account_type || profile.category || existingSubscription?.role || 'escort',
+    plan: profile.subscription_plan || profile.listing_plan || existingSubscription?.plan || 'escort_monthly',
+    status,
+    provider: existingSubscription?.provider || 'manual_admin',
+    amount_eur: Number(existingSubscription?.amount_eur ?? profile.listing_price ?? 49.99),
+    currency: existingSubscription?.currency || profile.currency || profile.listing_currency || 'EUR',
+    current_period_start: start.toISOString(),
+    current_period_end: end.toISOString(),
+    managed_by: req.user?.email || req.user?.id || existingSubscription?.managed_by || null,
+    admin_note: note,
+    metadata: {
+      ...(existingSubscription?.metadata || {}),
+      source: 'admin_set_dates',
+      updated_by: req.user?.email || req.user?.id || null
+    }
+  };
+  const { data: subscription, error: subscriptionError } = await supabaseAdmin
+    .from('subscriptions')
+    .upsert(subscriptionPatchRow, { onConflict: 'profile_id' })
+    .select()
+    .single();
+  if (subscriptionError) {
+    console.info('[admin subscriptions set-dates] error reason=', subscriptionError.message);
+    return res.status(400).json({ error: subscriptionError.message });
+  }
+
+  await logAdminAction(req.user?.email, 'subscription_dates_set', 'profile_subscription', profile.id, {
+    ...patch,
+    note
+  });
+  console.info('[admin subscriptions set-dates] success', {
+    id: subscription.id,
+    profile_id: subscription.profile_id,
+    start: subscription.current_period_start,
+    end: subscription.current_period_end,
+    status: subscription.status
+  });
+  res.json({ subscription });
 }));
 
 adminRouter.post('/subscriptions/:id/expire', asyncHandler(async (req, res) => {

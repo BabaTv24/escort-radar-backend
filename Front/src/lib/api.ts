@@ -240,6 +240,11 @@ export const api = {
     token,
     body: JSON.stringify({ days })
   }),
+  setAdminSubscriptionDates: (token: string, id: string, body: Record<string, unknown>) => request<{ subscription: Record<string, unknown> }>(`/api/admin/subscriptions/${id}/set-dates`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
   expireAdminSubscription: (token: string, id: string) => request<{ subscription: Record<string, unknown> }>(`/api/admin/subscriptions/${id}/expire`, {
     method: 'POST',
     token

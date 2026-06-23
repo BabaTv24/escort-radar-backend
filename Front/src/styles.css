@@ -440,6 +440,17 @@ textarea { min-height: 8rem; resize: vertical; }
 .profile-overview-grid strong { display: block; margin-top: .25rem; color: #fff8e6; overflow-wrap: anywhere; }
 .overview-actions { justify-content: flex-start; }
 .studio-profile-row > input[type="checkbox"] { width: 1rem; min-width: 1rem; align-self: center; }
+.subscription-progress { display: grid; gap: .32rem; min-width: 170px; }
+.subscription-progress span { font-weight: 800; color: #fff8e6; }
+.subscription-progress div { height: .55rem; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid rgba(247,212,107,.1); }
+.subscription-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #08f7b8, #f7d46b); }
+.subscription-progress small { color: #bbb2a0; }
+.subscription-progress.ending i { background: linear-gradient(90deg, #f59e0b, #f7d46b); }
+.subscription-progress.future i { background: linear-gradient(90deg, #94a3b8, #f7d46b); }
+.subscription-progress.expired i { background: #ff5d6c; }
+.subscription-progress.expired span { color: #ff8fa1; }
+.subscription-progress.inactive i { background: rgba(255,255,255,.18); }
+.subscription-progress.inactive span { color: #9b9488; }
 .admin-inline-form { display: flex; gap: .65rem; margin-bottom: 1rem; }
 .admin-modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: rgba(0,0,0,.72); backdrop-filter: blur(10px); }
 .admin-modal { width: min(760px, 100%); max-height: 82vh; overflow: auto; border: 1px solid rgba(247,212,107,.24); border-radius: .85rem; padding: 1rem; background: #08080a; }

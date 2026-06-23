@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { isValidElement, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Camera, Coins, Crown, FlaskConical, LogOut, MessageSquare, Settings, Shield, Tags, Trash2, Upload, Users, WalletCards } from 'lucide-react';
@@ -146,6 +146,13 @@ export function AdminPage() {
   const [topProfiles, setTopProfiles] = useState<Record<string, any>[]>([]);
   const [query, setQuery] = useState('');
   const [modal, setModal] = useState<{ title: string; body: string } | null>(null);
+  const [subscriptionDateEditor, setSubscriptionDateEditor] = useState<{
+    row: SubscriptionRow;
+    start: string;
+    end: string;
+    status: string;
+    note: string;
+  } | null>(null);
   const [newTag, setNewTag] = useState({ label: '', group_key: 'premium' });
   const [studioForm, setStudioForm] = useState({ ...emptyStudioForm });
   const [studioFile, setStudioFile] = useState<File | null>(null);
@@ -501,6 +508,30 @@ export function AdminPage() {
     await action(async () => {
       await api.bulkAdminProfiles(token, { operation, profile_ids: selectedProfileIds, ...extra });
       setSelectedProfileIds([]);
+    });
+  }
+
+  function openSubscriptionDateEditor(row: SubscriptionRow) {
+    setSubscriptionDateEditor({
+      row,
+      start: formatDateInput(readSubscriptionStart(row)),
+      end: formatDateInput(readSubscriptionEnd(row)),
+      status: String(row.status || 'active'),
+      note: String(row.note || '')
+    });
+  }
+
+  async function saveSubscriptionDates() {
+    if (!subscriptionDateEditor) return;
+    await action(async () => {
+      await api.setAdminSubscriptionDates(token, String(subscriptionDateEditor.row.profile_id || subscriptionDateEditor.row.id), {
+        start: subscriptionDateEditor.start,
+        end: subscriptionDateEditor.end,
+        status: subscriptionDateEditor.status,
+        note: subscriptionDateEditor.note
+      });
+      setSubscriptionDateEditor(null);
+      setMessage(t('admin.messages.subscriptionDatesSaved'));
     });
   }
 
@@ -880,6 +911,33 @@ export function AdminPage() {
           </article>
         </div>
       )}
+      {subscriptionDateEditor && (
+        <div className="admin-modal-backdrop" onClick={() => setSubscriptionDateEditor(null)}>
+          <article className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <h2>{t('admin.subscriptionActions.setCustomDates')}</h2>
+            <div className="admin-form-grid">
+              <AdminField label={t('admin.subscriptions.startDate')}>
+                <input type="date" value={subscriptionDateEditor.start} onChange={(event) => setSubscriptionDateEditor({ ...subscriptionDateEditor, start: event.target.value })} />
+              </AdminField>
+              <AdminField label={t('admin.subscriptions.endDate')}>
+                <input type="date" value={subscriptionDateEditor.end} onChange={(event) => setSubscriptionDateEditor({ ...subscriptionDateEditor, end: event.target.value })} />
+              </AdminField>
+              <AdminField label={t('admin.subscriptions.status')}>
+                <select value={subscriptionDateEditor.status} onChange={(event) => setSubscriptionDateEditor({ ...subscriptionDateEditor, status: event.target.value })}>
+                  {['requested', 'trial', 'active', 'expired', 'suspended', 'cancelled'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}
+                </select>
+              </AdminField>
+            </div>
+            <AdminField label={t('admin.subscriptions.adminNote')}>
+              <textarea placeholder={t('admin.subscriptions.adminNotePlaceholder')} value={subscriptionDateEditor.note} onChange={(event) => setSubscriptionDateEditor({ ...subscriptionDateEditor, note: event.target.value })} />
+            </AdminField>
+            <div className="admin-actions-row">
+              <button className="button primary" onClick={saveSubscriptionDates}>{t('admin.buttons.saveDates')}</button>
+              <button className="button" onClick={() => setSubscriptionDateEditor(null)}>{t('admin.buttons.cancel')}</button>
+            </div>
+          </article>
+        </div>
+      )}
     </div>
   );
 
@@ -888,36 +946,36 @@ export function AdminPage() {
       const registeredClients = stats.registered_clients || users.filter((user) => user.account_type === 'client').length;
       const activatedClients = stats.activated_clients || 0;
       const cards = [
-        ['Revenue today', revenueLabel(stats.daily_revenue_eur, 'No payments recorded today')],
-        ['Revenue this month', revenueLabel(stats.monthly_revenue_eur, 'No payments this month')],
-        ['Client activation revenue', revenueLabel(stats.client_activation_revenue_eur, 'No activation revenue yet')],
-        ['Client activations', stats.client_activation_transactions || clientActivationPayments.length],
-        ['Activated clients', activatedClients],
-        ['Free clients', stats.free_clients || 0],
-        ['Active profiles', stats.active_profiles || 0],
-        ['Available profiles', stats.available_profiles || profiles.filter((profile) => profile.available_now).length],
-        ['Bookings today', stats.bookings_today || 0],
-        ['Coins in circulation', tokenStats.token_circulation || 0],
-        ['Token sales', tokenStats.approved_purchase_value || 0],
-        ['Transakcje', (stats.client_activation_transactions || clientActivationPayments.length) + transactions.length],
-        ['Do weryfikacji', stats.pending_verification || 0],
-        ['Zgloszenia naduzyc', reports.length]
+        ['admin.dashboard.revenueToday', revenueLabel(stats.daily_revenue_eur, t('admin.dashboard.noPaymentsToday'))],
+        ['admin.dashboard.revenueThisMonth', revenueLabel(stats.monthly_revenue_eur, t('admin.dashboard.noPaymentsMonth'))],
+        ['admin.dashboard.clientActivationRevenue', revenueLabel(stats.client_activation_revenue_eur, t('admin.dashboard.noActivationRevenue'))],
+        ['admin.dashboard.clientActivations', stats.client_activation_transactions || clientActivationPayments.length],
+        ['admin.dashboard.activatedClients', activatedClients],
+        ['admin.dashboard.freeClients', stats.free_clients || 0],
+        ['admin.dashboard.activeProfiles', stats.active_profiles || 0],
+        ['admin.dashboard.availableProfiles', stats.available_profiles || profiles.filter((profile) => profile.available_now).length],
+        ['admin.dashboard.bookingsToday', stats.bookings_today || 0],
+        ['admin.dashboard.coinsInCirculation', tokenStats.token_circulation || 0],
+        ['admin.dashboard.tokenSales', tokenStats.approved_purchase_value || 0],
+        ['admin.dashboard.transactions', (stats.client_activation_transactions || clientActivationPayments.length) + transactions.length],
+        ['admin.dashboard.pendingVerification', stats.pending_verification || 0],
+        ['admin.dashboard.abuseReports', reports.length]
       ];
       return (
         <>
-          <section className="admin-metric-grid">{cards.map(([label, value]) => <AdminStatCard key={label} label={String(label)} value={value} />)}</section>
+          <section className="admin-metric-grid">{cards.map(([label, value]) => <AdminStatCard key={String(label)} label={t(String(label))} value={value} />)}</section>
           <section className="admin-chart-grid">
             <article className="admin-card">
               <h2>Recent Revenue Events</h2>
-              {revenueEvents.length ? <AdminTable rows={revenueEvents} columns={['date', 'email', 'type', 'amount', 'currency', 'status', 'provider']} /> : <EmptyAdminState text="No payments recorded today" />}
+              {revenueEvents.length ? <AdminTable rows={revenueEvents} columns={['date', 'email', 'type', 'amount', 'currency', 'status', 'provider']} labels={tableLabels(t, ['date', 'email', 'type', 'amount', 'currency', 'status', 'provider'])} /> : <EmptyAdminState text={t('admin.dashboard.noPaymentsToday')} />}
             </article>
             <article className="admin-card">
               <h2>Client Activation Funnel</h2>
               <div className="metrics-grid">
-                <MetricBlock label="Registered clients" value={registeredClients} />
-                <MetricBlock label="Activated clients" value={activatedClients} />
-                <MetricBlock label="Conversion" value={`${stats.activation_conversion_rate || 0}%`} />
-                <MetricBlock label="Revenue" value={revenueLabel(stats.client_activation_revenue_eur, '0 EUR')} />
+                <MetricBlock label={t('admin.dashboard.registeredClients')} value={registeredClients} />
+                <MetricBlock label={t('admin.dashboard.activatedClients')} value={activatedClients} />
+                <MetricBlock label={t('admin.dashboard.conversion')} value={`${stats.activation_conversion_rate || 0}%`} />
+                <MetricBlock label={t('admin.dashboard.revenue')} value={revenueLabel(stats.client_activation_revenue_eur, '0 EUR')} />
               </div>
             </article>
             <article className="admin-card">
@@ -940,7 +998,7 @@ export function AdminPage() {
     if (view === 'users') {
       return <AdminTable rows={filteredUsers} columns={['email', 'role', 'account_type', 'client_state', 'client_activated_at', 'avatar_url', 'public_user_id', 'referral_code', 'token_balance', 'profile_count', 'created_at', 'status']} actions={(user) => (
         <>
-          <Action onClick={() => setModal({ title: String(user.email), body: JSON.stringify(user, null, 2) })}>View</Action>
+          <Action onClick={() => setModal({ title: String(user.email), body: JSON.stringify(user, null, 2) })}>{t('admin.actions.view')}</Action>
           <Action onClick={() => setModal({ title: 'Edit user', body: JSON.stringify(user, null, 2) })}>Edit</Action>
           <Action onClick={() => action(() => api.adminAdjustCoins(token, String(user.id), 100, 'Manual admin credit'))}>+100 Coins</Action>
           <Action danger onClick={() => action(() => api.adminAdjustCoins(token, String(user.id), -25, 'Manual admin debit'))}>-25 Coins</Action>
@@ -1087,8 +1145,8 @@ export function AdminPage() {
     if (view === 'profiles') {
       return <AdminTable rows={filteredProfiles} columns={['display_name', 'user_id', 'city', 'category', 'status', 'verification_status', 'moderation_status', 'availability_status', 'primary_phone', 'phone_conflict_status', 'created_at']} format={(key, value) => key === 'category' ? option(String(value || 'other')) : value} actions={(profile) => (
         <>
-          <Action onClick={() => setModal({ title: profile.display_name, body: JSON.stringify(profile, null, 2) })}>View</Action>
-          <Action onClick={() => action(() => api.setProfileStatus(token, profile.id, 'active'))}>Approve</Action>
+          <Action onClick={() => setModal({ title: profile.display_name, body: JSON.stringify(profile, null, 2) })}>{t('admin.actions.view')}</Action>
+          <Action onClick={() => action(() => api.setProfileStatus(token, profile.id, 'active'))}>{t('admin.actions.approve')}</Action>
           <Action onClick={() => action(() => api.setProfileVerification(token, profile.id, 'verified'))}>Verify</Action>
           <Action danger onClick={() => action(() => api.setProfileVerification(token, profile.id, profile.verification_status || 'pending', 'suspended'))}>Suspend</Action>
           <Action danger onClick={() => action(() => api.setProfilePromotion(token, profile.id, { days: 1, shadowbanned: true }))}>Shadowban</Action>
@@ -1145,35 +1203,41 @@ export function AdminPage() {
 
     if (view === 'subscriptions') {
       const cards = [
-        ['Requested', subscriptionStats.requested || 0],
-        ['Trial', subscriptionStats.trial || subscriptions.filter((row) => row.status === 'trial').length],
-        ['Active', subscriptionStats.active || 0],
-        ['Expired', subscriptionStats.expired || 0],
-        ['Suspended', subscriptionStats.suspended || subscriptions.filter((row) => row.status === 'suspended').length],
-        ['Incomplete', subscriptionStats.incomplete || 0],
-        ['Monthly revenue', `${Number(subscriptionStats.monthly_revenue || 0).toFixed(2)} EUR`],
-        ['Client activations 0.99', subscriptionStats.client_activations_099 || 0],
-        ['Escort premium 49.99', subscriptionStats.escort_subscriptions || 0],
-        ['Business premium', subscriptionStats.business_subscriptions || subscriptions.filter((row) => ['business', 'agency', 'club', 'massage_salon', 'live_cam'].includes(String(row.role))).length]
+        ['admin.subscriptions.stats.requested', subscriptionStats.requested || 0],
+        ['admin.subscriptions.stats.trial', subscriptionStats.trial || subscriptions.filter((row) => row.status === 'trial').length],
+        ['admin.subscriptions.stats.active', subscriptionStats.active || 0],
+        ['admin.subscriptions.stats.expired', subscriptionStats.expired || 0],
+        ['admin.subscriptions.stats.suspended', subscriptionStats.suspended || subscriptions.filter((row) => row.status === 'suspended').length],
+        ['admin.subscriptions.stats.incomplete', subscriptionStats.incomplete || 0],
+        ['admin.subscriptions.stats.monthlyRevenue', `${Number(subscriptionStats.monthly_revenue || 0).toFixed(2)} EUR`],
+        ['admin.subscriptions.stats.clientActivations', subscriptionStats.client_activations_099 || 0],
+        ['admin.subscriptions.stats.escortPremium', subscriptionStats.escort_subscriptions || 0],
+        ['admin.subscriptions.stats.businessPremium', subscriptionStats.business_subscriptions || subscriptions.filter((row) => ['business', 'agency', 'club', 'massage_salon', 'live_cam'].includes(String(row.role))).length]
       ];
+      const subscriptionLabels = tableLabels(t, ['profile', 'email', 'role', 'plan', 'status', 'provider', 'start', 'end', 'progress', 'amount']);
       return (
         <>
-          <section className="admin-metric-grid">{cards.map(([label, value]) => <AdminStatCard key={label} label={String(label)} value={value} />)}</section>
-          <AdminTable rows={subscriptions} columns={['profile', 'email', 'role', 'plan', 'status', 'payment_provider', 'start', 'end', 'days_left', 'amount_eur']} format={(key, value, row) => key === 'days_left' ? daysLeft(row.end) : key === 'amount_eur' ? `${Number(value || 0).toFixed(2)} ${row.currency || 'EUR'}` : value} actions={(row) => (
+          <section className="admin-metric-grid">{cards.map(([label, value]) => <AdminStatCard key={String(label)} label={t(String(label))} value={value} />)}</section>
+          <AdminTable rows={subscriptions} columns={['profile', 'email', 'role', 'plan', 'status', 'payment_provider', 'start', 'end', 'progress', 'amount_eur']} labels={{ ...subscriptionLabels, payment_provider: t('admin.table.provider'), amount_eur: t('admin.table.amount') }} format={(key, value, row) => {
+            if (key === 'progress') return <SubscriptionProgressCell row={row} t={t} />;
+            if (key === 'amount_eur') return `${Number(value || 0).toFixed(2)} ${row.currency || 'EUR'}`;
+            if (key === 'status') return t(`admin.status.${String(value || 'requested')}`);
+            return value;
+          }} actions={(row) => (
             <>
               {row.type === 'profile_subscription' ? (
                 <>
-                  <Action onClick={() => action(() => api.activateAdminSubscription(token, String(row.profile_id || row.id), { plan: row.plan || 'escort_monthly', days: 30 }))}>Activate 30d</Action>
-                  <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 7))}>+7d</Action>
-                  <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 30))}>+30d</Action>
-                  <Action onClick={() => setModal({ title: t('admin.subscriptions.customDates'), body: JSON.stringify(row, null, 2) })}>{t('admin.subscriptions.customDates')}</Action>
-                  <Action danger onClick={() => action(() => api.expireAdminSubscription(token, String(row.profile_id || row.id)))}>Expire</Action>
-                  <Action danger onClick={() => action(() => api.cancelAdminSubscription(token, String(row.profile_id || row.id)))}>Cancel</Action>
-                  {row.profile_id && <Link className="admin-action-btn" to={`/profile/${row.profile_id}`}>Profile</Link>}
-                  {row.user_id && <Link className="admin-action-btn" to="/admin/users">User</Link>}
+                  <Action onClick={() => action(() => api.activateAdminSubscription(token, String(row.profile_id || row.id), { plan: row.plan || 'escort_monthly', days: 30 }).then(() => setMessage(t('admin.messages.subscriptionActivated'))))}>{t('admin.subscriptionActions.activate30')}</Action>
+                  <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 7).then(() => setMessage(t('admin.messages.subscriptionExtended'))))}>{t('admin.subscriptionActions.extend7')}</Action>
+                  <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 30).then(() => setMessage(t('admin.messages.subscriptionExtended'))))}>{t('admin.subscriptionActions.extend30')}</Action>
+                  <Action onClick={() => openSubscriptionDateEditor(row)}>{t('admin.subscriptionActions.setCustomDates')}</Action>
+                  <Action danger onClick={() => action(() => api.expireAdminSubscription(token, String(row.profile_id || row.id)).then(() => setMessage(t('admin.messages.subscriptionExpired'))))}>{t('admin.subscriptionActions.expire')}</Action>
+                  <Action danger onClick={() => action(() => api.cancelAdminSubscription(token, String(row.profile_id || row.id)).then(() => setMessage(t('admin.messages.subscriptionCancelled'))))}>{t('admin.subscriptionActions.cancel')}</Action>
+                  {row.profile_id && <Link className="admin-action-btn" to={`/profile/${row.profile_id}`}>{t('admin.table.profile')}</Link>}
+                  {row.user_id && <Link className="admin-action-btn" to="/admin/users">{t('admin.table.user')}</Link>}
                 </>
               ) : (
-                <Action onClick={() => setModal({ title: String(row.email || row.id), body: JSON.stringify(row, null, 2) })}>View</Action>
+                <Action onClick={() => setModal({ title: String(row.email || row.id), body: JSON.stringify(row, null, 2) })}>{t('admin.actions.view')}</Action>
               )}
             </>
           )} />
@@ -1188,7 +1252,7 @@ export function AdminPage() {
         ['Client activations', revenueStats.client_activations || 0],
         ['Escort subscriptions', revenueStats.escort_subscriptions || 0],
         ['Business subscriptions', revenueStats.business_subscriptions || 0],
-        ['Expired subscriptions', revenueStats.expired_subscriptions || 0],
+        ['admin.revenue.expiredSubscriptions', revenueStats.expired_subscriptions || 0],
         ['Upcoming renewals', revenueStats.upcoming_renewals || 0]
       ];
       return (
@@ -1209,8 +1273,8 @@ export function AdminPage() {
           <AdminTable rows={clientActivationPayments} columns={['email', 'amount_cents', 'currency', 'status', 'provider', 'stripe_session_id', 'stripe_payment_intent_id', 'created_at']} />
           <AdminTable rows={purchases} columns={['id', 'user_id', 'token_amount', 'eur_price', 'bonus_tokens', 'status', 'created_at']} actions={(purchase) => (
             <>
-              <Action onClick={() => action(() => api.setPurchaseRequestStatus(token, purchase.id, 'approved'))}>Approve</Action>
-              <Action danger onClick={() => action(() => api.setPurchaseRequestStatus(token, purchase.id, 'failed'))}>Reject</Action>
+              <Action onClick={() => action(() => api.setPurchaseRequestStatus(token, purchase.id, 'approved'))}>{t('admin.actions.approve')}</Action>
+              <Action danger onClick={() => action(() => api.setPurchaseRequestStatus(token, purchase.id, 'failed'))}>{t('admin.actions.reject')}</Action>
             </>
           )} />
           <AdminTable rows={transactions} columns={['id', 'from_wallet_id', 'to_wallet_id', 'transaction_type', 'amount', 'status', 'created_at']} />
@@ -1239,7 +1303,7 @@ export function AdminPage() {
 
     if (view === 'referrals') {
       return <AdminTable rows={clientReferrals} columns={['referral_code', 'user_id', 'referred_by_code', 'click_count', 'registration_count', 'activation_count', 'earned_coins', 'created_at']} actions={(row) => (
-        <Action onClick={() => setModal({ title: String(row.referral_code), body: JSON.stringify(row, null, 2) })}>View</Action>
+        <Action onClick={() => setModal({ title: String(row.referral_code), body: JSON.stringify(row, null, 2) })}>{t('admin.actions.view')}</Action>
       )} />;
     }
 
@@ -1261,8 +1325,8 @@ export function AdminPage() {
     if (view === 'photos') {
       return <AdminTable rows={photos} columns={['id', 'profile_id', 'storage_path', 'moderation_status', 'created_at']} actions={(photo) => (
         <>
-          <Action onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'approved'))}>Approve</Action>
-          <Action danger onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'rejected'))}>Reject</Action>
+          <Action onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'approved'))}>{t('admin.actions.approve')}</Action>
+          <Action danger onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'rejected'))}>{t('admin.actions.reject')}</Action>
           <Action danger onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'blocked'))}>Block</Action>
         </>
       )} />;
@@ -1426,6 +1490,31 @@ function EmptyAdminState({ text }: { text: string }) {
   return <p className="muted">{text}</p>;
 }
 
+function SubscriptionProgressCell({ row, t }: { row: SubscriptionRow; t: (key: string, vars?: Record<string, string | number>) => string }) {
+  const start = readSubscriptionStart(row);
+  const end = readSubscriptionEnd(row);
+  const info = subscriptionProgressInfo(start, end);
+  if (info.state === 'inactive') {
+    return (
+      <div className="subscription-progress inactive">
+        <span>{t('admin.subscriptions.timerInactive')}</span>
+        <div><i style={{ width: '0%' }} /></div>
+        <small>{t('admin.subscriptions.progressPercent', { percent: 0 })}</small>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`subscription-progress ${info.state}`}>
+      <span>{info.daysLeft > 0 ? t('admin.subscriptions.daysLeftValue', { count: info.daysLeft }) : t('admin.status.expired')}</span>
+      <div><i style={{ width: `${info.percent}%` }} /></div>
+      <small>
+        {t('admin.subscriptions.progressPercent', { percent: info.percent })} / {formatDateInput(start) || '-'} - {formatDateInput(end) || '-'}
+      </small>
+    </div>
+  );
+}
+
 function revenueLabel(value: unknown, emptyText: string) {
   const numeric = Number(value || 0);
   return numeric > 0 ? `${numeric.toFixed(2)} EUR` : emptyText;
@@ -1438,16 +1527,53 @@ function daysLeft(value: unknown) {
   return Math.max(0, Math.ceil((end - Date.now()) / (24 * 60 * 60 * 1000)));
 }
 
+function tableLabels(t: (key: string, vars?: Record<string, string | number>) => string, columns: string[]) {
+  return columns.reduce<Record<string, string>>((labels, column) => {
+    labels[column] = t(`admin.table.${column}`);
+    return labels;
+  }, { actions: t('admin.table.actions') });
+}
+
+function formatDateInput(value: unknown) {
+  if (!value) return '';
+  const date = new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : '';
+}
+
+function readSubscriptionStart(row: Record<string, unknown>) {
+  return row.subscription_start || row.current_period_start || row.start_at || row.started_at || row.start || null;
+}
+
+function readSubscriptionEnd(row: Record<string, unknown>) {
+  return row.subscription_end || row.current_period_end || row.end_at || row.expires_at || row.end || null;
+}
+
+function subscriptionProgressInfo(startValue: unknown, endValue: unknown) {
+  const start = startValue ? new Date(String(startValue)).getTime() : NaN;
+  const end = endValue ? new Date(String(endValue)).getTime() : NaN;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return { totalDays: 0, daysUsed: 0, daysLeft: 0, percent: 0, state: 'inactive' };
+  }
+  const now = Date.now();
+  const totalDays = Math.max(1, Math.ceil((end - start) / 86400000));
+  if (now < start) return { totalDays, daysUsed: 0, daysLeft: Math.ceil((end - now) / 86400000), percent: 0, state: 'future' };
+  const daysUsed = Math.max(0, Math.ceil((Math.min(now, end) - start) / 86400000));
+  const left = Math.max(0, Math.ceil((end - now) / 86400000));
+  const percent = Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
+  const state = now >= end ? 'expired' : left < 3 ? 'ending' : 'active';
+  return { totalDays, daysUsed, daysLeft: left, percent, state };
+}
+
 function ChartPlaceholder({ title }: { title: string }) {
   return <article className="admin-card chart"><h2>{title}</h2><div className="chart-bars">{[42, 68, 51, 78, 62, 88, 74].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div></article>;
 }
 
-function AdminTable<T extends Record<string, any>>({ rows, columns, actions, format }: { rows: T[]; columns: string[]; actions?: (row: T) => ReactNode; format?: (key: string, value: unknown, row: T) => unknown }) {
+function AdminTable<T extends Record<string, any>>({ rows, columns, actions, format, labels }: { rows: T[]; columns: string[]; actions?: (row: T) => ReactNode; format?: (key: string, value: unknown, row: T) => unknown; labels?: Record<string, string> }) {
   return (
     <section className="admin-table-card">
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}{actions && <th>Actions</th>}</tr></thead>
+          <thead><tr>{columns.map((column) => <th key={column}>{labels?.[column] || column}</th>)}{actions && <th>{labels?.actions || 'Actions'}</th>}</tr></thead>
           <tbody>
             {rows.map((row, index) => (
               <tr key={row.id || index}>
@@ -1464,6 +1590,7 @@ function AdminTable<T extends Record<string, any>>({ rows, columns, actions, for
 }
 
 function CellValue({ value }: { value: unknown }) {
+  if (isValidElement(value)) return value;
   if (typeof value === 'boolean') return <StatusBadge value={value ? 'yes' : 'no'} />;
   if (typeof value === 'string' && ['active', 'pending', 'verified', 'suspended', 'blocked', 'rejected', 'conflict', 'approved', 'failed'].includes(value)) return <StatusBadge value={value} />;
   if (value === null || value === undefined || value === '') return <>-</>;
