@@ -62,6 +62,7 @@ export type Profile = {
   work_country?: string | null;
   work_city?: string | null;
   work_area?: string | null;
+  postal_code?: string | null;
   work_place_label?: string | null;
   category?: string | null;
   description?: string | null;

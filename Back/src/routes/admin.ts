@@ -76,6 +76,48 @@ adminRouter.get('/me', asyncHandler(async (req, res) => {
   });
 }));
 
+adminRouter.get('/location-catalog', asyncHandler(async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('location_catalog')
+    .select('*')
+    .order('country_code', { ascending: true })
+    .order('city', { ascending: true })
+    .order('sort_order', { ascending: true });
+
+  if (error) {
+    console.info('[admin location catalog] fallback reason=', error.message);
+    return res.json({ locations: [] });
+  }
+  res.json({ locations: data || [] });
+}));
+
+adminRouter.post('/location-catalog', asyncHandler(async (req, res) => {
+  const countryCode = String(req.body.country_code || '').trim().toUpperCase();
+  const countryName = optionalText(req.body.country_name, 120);
+  const city = optionalText(req.body.city, 120);
+  if (!/^[A-Z]{2}$/.test(countryCode)) return res.status(400).json({ error: 'Valid country_code is required' });
+  if (!countryName || !city) return res.status(400).json({ error: 'country_name and city are required' });
+
+  const row = {
+    country_code: countryCode,
+    country_name: countryName,
+    city,
+    district: optionalText(req.body.district, 120),
+    postal_code: optionalText(req.body.postal_code, 40),
+    is_active: req.body.is_active !== false,
+    sort_order: optionalInteger(req.body.sort_order, 0, 10000) || 0
+  };
+  const { data, error } = await supabaseAdmin
+    .from('location_catalog')
+    .insert(row)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'location_catalog_created', 'location_catalog', data.id, row);
+  res.status(201).json({ location: data });
+}));
+
 adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
@@ -1855,6 +1897,8 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       work_country: optionalText(body.work_country, 80) || 'DE',
       work_city: optionalText(body.work_city, 100) || adminCityLabel(city),
       work_area: optionalText(body.work_area, 120) || optionalText(body.area, 80),
+      postal_code: optionalText(body.postal_code, 20),
+      work_place_label: optionalText(body.work_place_label, 180),
       category,
       description: optionalText(body.description, 2000) || 'Preview profile generated for marketplace layout and internal quality checks. Replace with verified advertiser content before real publication.',
       languages,
@@ -1893,6 +1937,10 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       listing_price: optionalMoney(body.listing_price) ?? optionalMoney(body.price_1h) ?? 0,
       listing_currency: currency,
       max_photos: 6,
+      latitude: optionalCoordinate(body.latitude, -90, 90),
+      longitude: optionalCoordinate(body.longitude, -180, 180),
+      location_mode: ['exact_hidden', 'approximate', 'city_only'].includes(String(body.location_mode || 'city_only')) ? String(body.location_mode || 'city_only') : 'city_only',
+      service_radius_km: optionalInteger(body.service_radius_km, 1, 100) || 25,
       moderation_status: allowedModerationStatuses.includes(String(body.moderation_status || 'approved')) ? String(body.moderation_status || 'approved') : 'approved',
       moderation_note: optionalText(body.moderation_note, 2000),
       suspended_reason: optionalText(body.suspended_reason, 1000),
@@ -2113,6 +2161,13 @@ function optionalMoney(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) return null;
   return Math.round(number * 100) / 100;
+}
+
+function optionalCoordinate(value: unknown, min: number, max: number) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.min(Math.max(number, min), max);
 }
 
 function operatorStatusPatch(status: string) {

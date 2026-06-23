@@ -7,6 +7,7 @@ import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Pro
 import { useI18n } from '../i18n';
 import { categoryOptions } from '../data/filterOptions';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
+import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
 
 type AdminUser = Record<string, any>;
 type SubscriptionRow = Record<string, any>;
@@ -28,6 +29,12 @@ const emptyStudioForm = {
   work_country: 'DE',
   work_city: 'Berlin',
   work_area: 'Mitte',
+  postal_code: '',
+  work_place_label: '',
+  latitude: '',
+  longitude: '',
+  location_mode: 'city_only',
+  service_radius_km: 25,
   age: 26,
   nationality: 'European',
   height_cm: 170,
@@ -63,7 +70,7 @@ const emptyStudioForm = {
 
 const sections = [
   {
-    title: 'CONTROL',
+    title: 'ADMIN',
     items: [
       ['dashboard', '/admin', BarChart3],
       ['profiles', '/admin/profiles', Crown],
@@ -71,40 +78,22 @@ const sections = [
       ['reports', '/admin/reports', Ban],
       ['subscriptions', '/admin/subscriptions', Coins],
       ['revenue', '/admin/revenue', BarChart3],
-      ['payments', '/admin/token-transactions', WalletCards],
-      ['users', '/admin/users', Users],
-      ['settings', '/admin/settings', Settings]
-    ]
-  },
-  {
-    title: 'OPERATIONS',
-    items: [
-      ['wallets', '/admin/wallets', WalletCards],
-      ['referrals', '/admin/referrals', Users],
       ['photos', '/admin/photos', Camera],
-      ['tags', '/admin/tags', Tags],
-      ['reviews', '/admin/reviews', MessageSquare],
-      ['live-cam', '/admin/live-cam', Camera],
-      ['video-manager', '/admin/video-manager', Camera]
-    ]
-  },
-  {
-    title: 'KOMUNIKACJA',
-    items: [
-      ['email-center', '/admin/email-center', MessageSquare],
-      ['chat-manager', '/admin/chat-manager', MessageSquare],
-      ['push', '/admin/push', MessageSquare],
-      ['sms-center', '/admin/sms-center', MessageSquare]
-    ]
-  },
-  {
-    title: 'SYSTEM',
-    items: [
-      ['live-lab', '/admin/live-lab', FlaskConical],
-      ['activity-logs', '/admin/activity-logs', BarChart3]
+      ['settings', '/admin/settings', Settings]
     ]
   }
 ] as const;
+
+type LocationCatalogRow = {
+  id?: string;
+  country_code: string;
+  country_name: string;
+  city: string;
+  district?: string | null;
+  postal_code?: string | null;
+  is_active?: boolean;
+  sort_order?: number;
+};
 
 export function AdminPage() {
   const [email, setEmail] = useState('');
@@ -144,6 +133,16 @@ export function AdminPage() {
   const [topCities, setTopCities] = useState<Record<string, any>[]>([]);
   const [topCategories, setTopCategories] = useState<Record<string, any>[]>([]);
   const [topProfiles, setTopProfiles] = useState<Record<string, any>[]>([]);
+  const [adminLocationRows, setAdminLocationRows] = useState<LocationCatalogRow[]>([]);
+  const [newLocationRow, setNewLocationRow] = useState<LocationCatalogRow>({
+    country_code: 'DE',
+    country_name: 'Germany',
+    city: 'Berlin',
+    district: '',
+    postal_code: '',
+    is_active: true,
+    sort_order: 0
+  });
   const [query, setQuery] = useState('');
   const [modal, setModal] = useState<{ title: string; body: string } | null>(null);
   const [subscriptionDateEditor, setSubscriptionDateEditor] = useState<{
@@ -166,6 +165,9 @@ export function AdminPage() {
   const [bulkSubscriptionStatus, setBulkSubscriptionStatus] = useState('active');
   const [profilePanelMode, setProfilePanelMode] = useState<'overview' | 'edit' | 'photos' | 'services' | 'subscription'>('overview');
   const [moderationFilter, setModerationFilter] = useState<'pending' | 'reported' | 'suspended' | 'rejected'>('pending');
+  const [adminPlaceQuery, setAdminPlaceQuery] = useState('');
+  const [adminPlaceSuggestions, setAdminPlaceSuggestions] = useState<Record<string, any>[]>([]);
+  const [adminPlaceLoading, setAdminPlaceLoading] = useState(false);
   const [studioFilters, setStudioFilters] = useState({
     city: 'all',
     type: 'all',
@@ -358,7 +360,8 @@ export function AdminPage() {
         clientReferralResult,
         moderationResult,
         activityLogResult,
-        revenueResult
+        revenueResult,
+        locationCatalogResult
       ] = await Promise.allSettled([
         adminLoadRequest('adminStats', api.adminStats(accessToken)),
         adminLoadRequest('adminTokenStats', api.adminTokenStats(accessToken)),
@@ -377,7 +380,8 @@ export function AdminPage() {
         adminLoadRequest('adminClientReferrals', api.adminClientReferrals(accessToken)),
         adminLoadRequest('adminModeration', api.adminModeration(accessToken)),
         adminLoadRequest('adminActivityLogs', api.adminActivityLogs(accessToken)),
-        adminLoadRequest('adminRevenue', api.adminRevenue(accessToken))
+        adminLoadRequest('adminRevenue', api.adminRevenue(accessToken)),
+        adminLoadRequest('adminLocationCatalog', api.adminLocationCatalog(accessToken))
       ]);
 
       const statsData = settledValue(statsResult, { stats: {}, latest_activity: [], revenue_events: [], top_cities: [], top_categories: [], top_profiles: [] }, 'adminStats');
@@ -398,6 +402,7 @@ export function AdminPage() {
       const moderationData = settledValue(moderationResult, { profiles: [], queues: {} }, 'adminModeration');
       const activityLogData = settledValue(activityLogResult, { activity_logs: [] }, 'adminActivityLogs');
       const revenueData = settledValue(revenueResult, { stats: {}, payments: [] }, 'adminRevenue');
+      const adminLocationData = settledValue(locationCatalogResult, { locations: [] }, 'adminLocationCatalog');
 
       setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
       setTokenStats(tokenData.stats);
@@ -423,6 +428,7 @@ export function AdminPage() {
       setTopCities((statsData.top_cities || []) as Record<string, any>[]);
       setTopCategories((statsData.top_categories || []) as Record<string, any>[]);
       setTopProfiles((statsData.top_profiles || []) as Record<string, any>[]);
+      setAdminLocationRows((adminLocationData.locations || []) as LocationCatalogRow[]);
     } finally {
       setLoading(false);
     }
@@ -454,6 +460,12 @@ export function AdminPage() {
       work_country: profile.work_country || 'DE',
       work_city: profile.work_city || profile.city || '',
       work_area: profile.work_area || profile.area || '',
+      postal_code: profile.postal_code || '',
+      work_place_label: profile.work_place_label || '',
+      latitude: profile.latitude === null || profile.latitude === undefined ? '' : String(profile.latitude),
+      longitude: profile.longitude === null || profile.longitude === undefined ? '' : String(profile.longitude),
+      location_mode: profile.location_mode || 'city_only',
+      service_radius_km: profile.service_radius_km || 25,
       age: profile.age || 26,
       nationality: profile.nationality || 'European',
       height_cm: profile.height_cm || profile.height || 170,
@@ -550,8 +562,11 @@ export function AdminPage() {
         price_night: Number(studioForm.price_night || 0),
         age: Number(studioForm.age || 0),
         height_cm: Number(studioForm.height_cm || 0),
-        admin_priority: Number(studioForm.admin_priority || 0)
-      } as Partial<Profile>;
+        admin_priority: Number(studioForm.admin_priority || 0),
+        latitude: studioForm.latitude === '' ? null : Number(studioForm.latitude),
+        longitude: studioForm.longitude === '' ? null : Number(studioForm.longitude),
+        service_radius_km: Number(studioForm.service_radius_km || 25)
+      } as unknown as Partial<Profile>;
       const result = studioForm.id
         ? await api.updateAdminProfile(token, studioForm.id, body)
         : await api.createAdminProfile(token, body);
@@ -593,7 +608,7 @@ export function AdminPage() {
           ? (profile.profile_images || []).map((item) => ({ ...item, is_primary: false, is_cover: false }))
           : (profile.profile_images || []);
         const images = sortAdminImages([...existingImages, image]);
-        return { ...profile, profile_images: images, images };
+        return { ...profile, profile_images: images, images, photos_count: images.length } as Profile;
       }));
       setStudioFile(null);
       setStudioTab('photos');
@@ -617,6 +632,74 @@ export function AdminPage() {
       setMessage(error instanceof Error ? error.message : 'Nie udalo sie wygenerowac profili Berlina.');
     } finally {
       setStudioSaving(false);
+    }
+  }
+
+  async function searchAdminPlace() {
+    setMessage('');
+    const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+    if (!googleMapsKey) {
+      setMessage(t('admin.location.googleMissing'));
+      setAdminPlaceSuggestions([]);
+      return;
+    }
+    if (!adminPlaceQuery.trim()) {
+      setMessage(t('admin.location.typePlaceFirst'));
+      return;
+    }
+    setAdminPlaceLoading(true);
+    try {
+      const google = await loadGooglePlaces(googleMapsKey);
+      const service = new google.maps.places.AutocompleteService();
+      service.getPlacePredictions({ input: adminPlaceQuery, types: ['geocode', 'establishment'] }, (predictions: any[] | null, status: string) => {
+        setAdminPlaceLoading(false);
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions?.length) {
+          setMessage(t('admin.location.noPlaceFound'));
+          setAdminPlaceSuggestions([]);
+          return;
+        }
+        setAdminPlaceSuggestions(predictions.slice(0, 5));
+      });
+    } catch {
+      setAdminPlaceLoading(false);
+      setMessage(t('admin.location.googleLoadFailed'));
+    }
+  }
+
+  async function selectAdminPlace(placeId: string) {
+    const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+    if (!googleMapsKey) return;
+    setAdminPlaceLoading(true);
+    try {
+      const google = await loadGooglePlaces(googleMapsKey);
+      const node = document.createElement('div');
+      const service = new google.maps.places.PlacesService(node);
+      service.getDetails({ placeId, fields: ['name', 'formatted_address', 'geometry', 'address_components'] }, (place: any, status: string) => {
+        setAdminPlaceLoading(false);
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
+          setMessage(t('admin.location.googleLoadFailed'));
+          return;
+        }
+        const parsed = parseGooglePlace(place);
+        setStudioForm({
+          ...studioForm,
+          work_country: parsed.country || studioForm.work_country,
+          work_city: parsed.city || studioForm.work_city,
+          work_area: parsed.area || studioForm.work_area,
+          area: parsed.area || studioForm.area,
+          city: getLegacyCitySlug(parsed.city || studioForm.work_city),
+          postal_code: parsed.postal_code || studioForm.postal_code,
+          work_place_label: parsed.label || studioForm.work_place_label,
+          latitude: parsed.latitude === null || parsed.latitude === undefined ? '' : String(parsed.latitude),
+          longitude: parsed.longitude === null || parsed.longitude === undefined ? '' : String(parsed.longitude),
+          location_mode: 'approximate'
+        });
+        setAdminPlaceQuery(parsed.label || '');
+        setAdminPlaceSuggestions([]);
+      });
+    } catch {
+      setAdminPlaceLoading(false);
+      setMessage(t('admin.location.googleLoadFailed'));
     }
   }
 
@@ -656,13 +739,30 @@ export function AdminPage() {
     }
 
     if (studioTab === 'location') {
+      const countries = getAdminLocationCountries(adminLocationRows);
+      const country = getAdminLocationCountry(countries, studioForm.work_country);
+      const cities = country.cities;
+      const cityConfig = getAdminLocationCity(country, studioForm.work_city);
+      const districts = cityConfig?.districts || [];
       return <div className="admin-form-grid">
-        <AdminField label={t('admin.profileEditor.country')}><input placeholder="DE" value={studioForm.work_country} onChange={(event) => setStudioForm({ ...studioForm, work_country: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.city')}><input placeholder="berlin" value={studioForm.city} onChange={(event) => setStudioForm({ ...studioForm, city: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.area')}><input placeholder={t('admin.profileEditor.areaPlaceholder')} value={studioForm.area} onChange={(event) => setStudioForm({ ...studioForm, area: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.workCountry')}><input placeholder="DE" value={studioForm.work_country} onChange={(event) => setStudioForm({ ...studioForm, work_country: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.workCity')}><input placeholder="Berlin" value={studioForm.work_city} onChange={(event) => setStudioForm({ ...studioForm, work_city: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.workArea')}><input placeholder="Mitte" value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.workCountry')}><select value={country.code} onChange={(event) => {
+          const nextCountry = getAdminLocationCountry(countries, event.target.value);
+          const nextCity = nextCountry.cities[0]?.name || '';
+          const nextArea = nextCountry.cities[0]?.districts[0] || '';
+          setStudioForm({ ...studioForm, work_country: nextCountry.code, work_city: nextCity, city: getLegacyCitySlug(nextCity), work_area: nextArea, area: nextArea });
+        }}>{countries.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></AdminField>
+        <AdminField label={t('admin.profileEditor.workCity')}><input list="admin-city-options" placeholder={t('admin.location.manualCity')} value={studioForm.work_city} onChange={(event) => {
+          const nextArea = getAdminLocationCity(country, event.target.value)?.districts[0] || '';
+          setStudioForm({ ...studioForm, work_city: event.target.value, city: getLegacyCitySlug(event.target.value), work_area: nextArea, area: nextArea });
+        }} /></AdminField>
+        <datalist id="admin-city-options">{cities.map((city) => <option key={city.name} value={city.name} />)}</datalist>
+        <AdminField label={t('admin.profileEditor.workArea')}><input list="admin-district-options" placeholder={t('admin.profileEditor.areaPlaceholder')} value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value })} /></AdminField>
+        <datalist id="admin-district-options">{districts.map((district) => <option key={district} value={district} />)}</datalist>
+        <AdminField label={t('admin.location.postalCode')}><input maxLength={20} placeholder="12043" value={studioForm.postal_code} onChange={(event) => setStudioForm({ ...studioForm, postal_code: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.location.placeLabel')}><input placeholder={t('admin.location.placeLabelPlaceholder')} value={studioForm.work_place_label} onChange={(event) => setStudioForm({ ...studioForm, work_place_label: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.location.radius')}><select value={studioForm.service_radius_km} onChange={(event) => setStudioForm({ ...studioForm, service_radius_km: Number(event.target.value) })}>{[1, 5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}</select></AdminField>
+        <AdminField label={t('admin.location.mode')}><select value={studioForm.location_mode} onChange={(event) => setStudioForm({ ...studioForm, location_mode: event.target.value })}>{['city_only', 'approximate', 'exact_hidden'].map((mode) => <option key={mode} value={mode}>{t(`admin.locationMode.${mode}`)}</option>)}</select></AdminField>
+        <AdminField label={t('admin.location.placeSearch')}><><input placeholder={t('admin.location.placeSearchPlaceholder')} value={adminPlaceQuery} onChange={(event) => setAdminPlaceQuery(event.target.value)} /><button type="button" className="button" disabled={adminPlaceLoading} onClick={searchAdminPlace}>{adminPlaceLoading ? t('states.loading') : t('admin.location.searchPlace')}</button>{adminPlaceSuggestions.length ? <div className="place-suggestions">{adminPlaceSuggestions.map((suggestion) => <button key={suggestion.place_id} type="button" onClick={() => selectAdminPlace(suggestion.place_id)}>{suggestion.description}</button>)}</div> : null}</></AdminField>
       </div>;
     }
 
@@ -776,27 +876,36 @@ export function AdminPage() {
         </>
       )}
       {selectedProfile?.profile_images?.length ? (
+        <>
+        <div className="profile-studio-head compact">
+          <strong>{t('admin.photos.count', { count: selectedProfile.profile_images.length, max: 12 })}</strong>
+          <small>{t('admin.photos.adminSeesAll')}</small>
+        </div>
         <div className="studio-photo-grid">
-          {selectedProfile.profile_images.map((image, index) => (
+          {sortAdminImages(selectedProfile.profile_images).map((image, index, orderedImages) => (
             <div className="studio-photo-card" key={image.id}>
               <img src={adminImageSrc(image)} alt="" />
               <div className="studio-photo-badges">
                 {(image.is_cover || image.is_primary) && <i>{t('admin.photos.badge.cover')}</i>}
                 {image.is_hidden && <i>{t('admin.photos.badge.hidden')}</i>}
                 {image.is_private && <i>{t('admin.photos.badge.private')}</i>}
+                <i>#{Number(image.sort_order || 0) + 1}</i>
                 <i>{t(`admin.status.${image.moderation_status || 'approved'}`)}</i>
               </div>
               <div className="admin-actions-row">
                 <Action onClick={() => action(() => api.setAdminProfileCoverImage(token, selectedProfile.id, image.id))}>{t('admin.photos.cover')}</Action>
-                <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, -1)))}>{t('admin.actions.up')}</Action>
-                <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, 1)))}>{t('admin.actions.down')}</Action>
+                <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(orderedImages, index, -1)))}>{t('admin.actions.up')}</Action>
+                <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(orderedImages, index, 1)))}>{t('admin.actions.down')}</Action>
                 <Action onClick={() => action(() => api.updateAdminProfileImage(token, selectedProfile.id, image.id, { is_hidden: !image.is_hidden }))}>{image.is_hidden ? t('admin.photos.unhide') : t('admin.photos.hide')}</Action>
                 <Action onClick={() => action(() => api.updateAdminProfileImage(token, selectedProfile.id, image.id, { is_private: !image.is_private }))}>{image.is_private ? t('admin.photos.makePublic') : t('admin.photos.makePrivate')}</Action>
+                <Action onClick={() => action(() => api.updateAdminProfileImage(token, selectedProfile.id, image.id, { moderation_status: 'approved' }))}>{t('admin.actions.approve')}</Action>
+                <Action danger onClick={() => action(() => api.updateAdminProfileImage(token, selectedProfile.id, image.id, { moderation_status: 'rejected' }))}>{t('admin.actions.reject')}</Action>
                 <Action danger onClick={() => action(() => api.deleteAdminProfileImage(token, selectedProfile.id, image.id))}><Trash2 size={14} /></Action>
               </div>
             </div>
           ))}
         </div>
+        </>
       ) : <p className="muted">{t('admin.photos.empty')}</p>}
     </>;
   }
@@ -1275,6 +1384,7 @@ export function AdminPage() {
                   <Action onClick={() => action(() => api.activateAdminSubscription(token, String(row.profile_id || row.id), { plan: row.plan || 'escort_monthly', days: 30 }).then(() => setMessage(t('admin.messages.subscriptionActivated'))))}>{t('admin.subscriptionActions.activate30')}</Action>
                   <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 7).then(() => setMessage(t('admin.messages.subscriptionExtended'))))}>{t('admin.subscriptionActions.extend7')}</Action>
                   <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 30).then(() => setMessage(t('admin.messages.subscriptionExtended'))))}>{t('admin.subscriptionActions.extend30')}</Action>
+                  <Action onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 90).then(() => setMessage(t('admin.messages.subscriptionExtended'))))}>{t('admin.subscriptionActions.extend90')}</Action>
                   <Action onClick={() => openSubscriptionDateEditor(row)}>{t('admin.subscriptionActions.setCustomDates')}</Action>
                   <Action danger onClick={() => action(() => api.expireAdminSubscription(token, String(row.profile_id || row.id)).then(() => setMessage(t('admin.messages.subscriptionExpired'))))}>{t('admin.subscriptionActions.expire')}</Action>
                   <Action danger onClick={() => action(() => api.cancelAdminSubscription(token, String(row.profile_id || row.id)).then(() => setMessage(t('admin.messages.subscriptionCancelled'))))}>{t('admin.subscriptionActions.cancel')}</Action>
@@ -1391,17 +1501,37 @@ export function AdminPage() {
     }
 
     if (view === 'settings') {
-      return <section className="admin-settings-grid">
-        <AdminStatCard label="Listing price" value="49.99 EUR" />
-        <AdminStatCard label="Token price" value="0.15 EUR" />
-        <AdminStatCard label="Max photos" value="6" />
-        <AdminStatCard label="Default language" value="DE" />
-        <AdminStatCard label="Demo profiles" value="enabled" />
-        <AdminStatCard label="Bookings" value="enabled" />
-        <AdminStatCard label="Live cam placeholder" value="enabled" />
-        <AdminStatCard label="Token shop" value="enabled" />
-        <AdminStatCard label="Admin access" value="app_metadata.role/admin" />
-      </section>;
+      return <>
+        <section className="admin-settings-grid">
+          <AdminStatCard label={t('admin.settingsFields.price')} value="49.99 EUR" />
+          <AdminStatCard label={t('admin.settingsFields.maxPhotos')} value="12" />
+          <AdminStatCard label={t('admin.settingsFields.defaultLanguage')} value="DE" />
+          <AdminStatCard label={t('admin.settingsFields.languages')} value="PL / DE / EN" />
+          <AdminStatCard label={t('admin.locations.source')} value={adminLocationRows.length ? t('admin.locations.database') : t('admin.locations.fallback')} />
+          <AdminStatCard label={t('admin.settingsFields.frozenModules')} value={t('admin.settingsFields.frozenModulesValue')} />
+        </section>
+        <section className="admin-card admin-inline-form">
+          <h2>{t('admin.locations.title')}</h2>
+          <input placeholder={t('admin.locations.countryCode')} value={newLocationRow.country_code} onChange={(event) => setNewLocationRow({ ...newLocationRow, country_code: event.target.value.toUpperCase().slice(0, 2) })} />
+          <input placeholder={t('admin.locations.countryName')} value={newLocationRow.country_name} onChange={(event) => setNewLocationRow({ ...newLocationRow, country_name: event.target.value })} />
+          <input placeholder={t('admin.locations.city')} value={newLocationRow.city} onChange={(event) => setNewLocationRow({ ...newLocationRow, city: event.target.value })} />
+          <input placeholder={t('admin.locations.district')} value={newLocationRow.district || ''} onChange={(event) => setNewLocationRow({ ...newLocationRow, district: event.target.value })} />
+          <input placeholder={t('admin.location.postalCode')} value={newLocationRow.postal_code || ''} onChange={(event) => setNewLocationRow({ ...newLocationRow, postal_code: event.target.value })} />
+          <button className="button primary" onClick={() => action(() => api.createAdminLocationCatalog(token, newLocationRow).then(() => {
+            setNewLocationRow({ country_code: 'DE', country_name: 'Germany', city: 'Berlin', district: '', postal_code: '', is_active: true, sort_order: 0 });
+            setMessage(t('admin.messages.locationSaved'));
+          }))}>{t('admin.locations.add')}</button>
+        </section>
+        <AdminTable rows={adminLocationRows} columns={['country_code', 'country_name', 'city', 'district', 'postal_code', 'is_active', 'sort_order']} labels={{
+          country_code: t('admin.locations.countryCode'),
+          country_name: t('admin.locations.countryName'),
+          city: t('admin.locations.city'),
+          district: t('admin.locations.district'),
+          postal_code: t('admin.location.postalCode'),
+          is_active: t('admin.common.enabled'),
+          sort_order: t('admin.locations.sortOrder')
+        }} />
+      </>;
     }
 
     if (view === 'live-lab') {
@@ -1528,6 +1658,47 @@ function adminImageSrc(image: NonNullable<Profile['profile_images']>[number]) {
   return image.public_url || image.image_url || image.url || '';
 }
 
+let adminGooglePlacesPromise: Promise<any> | null = null;
+
+function loadGooglePlaces(apiKey: string) {
+  if ((window as any).google?.maps?.places) return Promise.resolve((window as any).google);
+  if (adminGooglePlacesPromise) return adminGooglePlacesPromise;
+
+  adminGooglePlacesPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
+    script.async = true;
+    script.onload = () => {
+      const google = (window as any).google;
+      google?.maps?.places ? resolve(google) : reject(new Error('Google Places unavailable'));
+    };
+    script.onerror = () => reject(new Error('Google Maps failed to load'));
+    document.head.appendChild(script);
+  });
+
+  return adminGooglePlacesPromise;
+}
+
+function parseGooglePlace(place: any) {
+  const components = Array.isArray(place.address_components) ? place.address_components : [];
+  const byType = (type: string) => components.find((component: any) => component.types?.includes(type))?.long_name || '';
+  const city = byType('locality') || byType('postal_town') || byType('administrative_area_level_2');
+  const area = byType('sublocality') || byType('sublocality_level_1') || byType('neighborhood') || byType('administrative_area_level_3');
+  const countryCode = components.find((component: any) => component.types?.includes('country'))?.short_name || byType('country');
+  const postalCode = byType('postal_code');
+  const latitude = place.geometry?.location?.lat ? Number(place.geometry.location.lat().toFixed(6)) : null;
+  const longitude = place.geometry?.location?.lng ? Number(place.geometry.location.lng().toFixed(6)) : null;
+  return {
+    city,
+    area,
+    country: countryCode,
+    postal_code: postalCode,
+    latitude,
+    longitude,
+    label: place.formatted_address || place.name || ''
+  };
+}
+
 function AdminStatCard({ label, value }: { label: string; value: unknown }) {
   return <article className="admin-card stat"><span>{label}</span><strong>{String(value ?? 0)}</strong></article>;
 }
@@ -1559,7 +1730,7 @@ function SubscriptionProgressCell({ row, t }: { row: SubscriptionRow; t: (key: s
       <div className="subscription-progress inactive">
         <span>{t('admin.subscriptions.timerInactive')}</span>
         <div><i style={{ width: '0%' }} /></div>
-        <small>{t('admin.subscriptions.progressPercent', { percent: 0 })}</small>
+        <small>{t('admin.subscriptions.progressPercent', { percent: 0 })} / {t('admin.subscriptions.timelineInactive')}</small>
       </div>
     );
   }
@@ -1571,6 +1742,7 @@ function SubscriptionProgressCell({ row, t }: { row: SubscriptionRow; t: (key: s
       <small>
         {t('admin.subscriptions.progressPercent', { percent: info.percent })} / {formatDateInput(start) || '-'} - {formatDateInput(end) || '-'}
       </small>
+      <small>{t('admin.subscriptions.timeline', { status: t(`admin.status.${String(row.status || info.state)}`) })}</small>
     </div>
   );
 }
@@ -1606,6 +1778,42 @@ function readSubscriptionStart(row: Record<string, unknown>) {
 
 function readSubscriptionEnd(row: Record<string, unknown>) {
   return row.subscription_end || row.current_period_end || row.end_at || row.expires_at || row.end || null;
+}
+
+function getAdminLocationCountries(rows: LocationCatalogRow[]) {
+  if (!rows.length) return locationCatalog;
+  const countries = new Map<string, { code: string; name: string; cities: { name: string; districts: string[] }[] }>();
+  rows
+    .filter((row) => row.is_active !== false)
+    .sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0))
+    .forEach((row) => {
+      const code = String(row.country_code || 'DE').toUpperCase();
+      const country = countries.get(code) || { code, name: row.country_name || code, cities: [] };
+      const cityName = String(row.city || '').trim();
+      if (!cityName) return;
+      let city = country.cities.find((item) => normalizeLocationValue(item.name) === normalizeLocationValue(cityName));
+      if (!city) {
+        city = { name: cityName, districts: [] };
+        country.cities.push(city);
+      }
+      const district = String(row.district || '').trim();
+      if (district && !city.districts.some((item) => normalizeLocationValue(item) === normalizeLocationValue(district))) {
+        city.districts.push(district);
+      }
+      countries.set(code, country);
+    });
+  const values = Array.from(countries.values());
+  return values.length ? values : locationCatalog;
+}
+
+function getAdminLocationCountry(countries: ReturnType<typeof getAdminLocationCountries>, value: string | null | undefined) {
+  const normalized = normalizeLocationValue(value || '');
+  return countries.find((country) => normalizeLocationValue(country.code) === normalized || normalizeLocationValue(country.name) === normalized) || countries[0] || locationCatalog[0];
+}
+
+function getAdminLocationCity(country: ReturnType<typeof getAdminLocationCountries>[number], value: string | null | undefined) {
+  const normalized = normalizeLocationValue(value || '');
+  return country.cities.find((city) => normalizeLocationValue(city.name) === normalized) || null;
 }
 
 function subscriptionProgressInfo(startValue: unknown, endValue: unknown) {

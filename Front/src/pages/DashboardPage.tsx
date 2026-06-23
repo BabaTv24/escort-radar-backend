@@ -27,6 +27,7 @@ import {
   visitTypeOptions
 } from '../data/filterOptions';
 import { serviceLabel, serviceOptions } from '../data/serviceCatalog';
+import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog } from '../data/locationCatalog';
 
 const emptyProfile: Partial<Profile> = {
   display_name: '',
@@ -40,6 +41,7 @@ const emptyProfile: Partial<Profile> = {
   work_country: 'Germany',
   work_city: 'Berlin',
   work_area: '',
+  postal_code: '',
   work_place_label: '',
   category: 'ladies',
   description: '',
@@ -1704,6 +1706,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             work_country: parsed.country || profile.work_country || 'Germany',
             work_city: parsed.city || profile.work_city || normalizeCityName(profile.city || 'berlin'),
             work_area: parsed.area || profile.work_area || '',
+            postal_code: parsed.postal_code || profile.postal_code || '',
             work_place_label: parsed.label || place.formatted_address || place.name || '',
             city: parsed.legacyCity || profile.city || 'berlin',
             area: parsed.area || profile.area || '',
@@ -1738,6 +1741,9 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   }, [savedProfile?.id, profile.auto_location_while_online, currentOperatorStatus, profile]);
 
   const selectedServices = profile.services || [];
+  const selectedCountry = getCountryByNameOrCode(profile.work_country || 'Germany');
+  const locationCities = getCitiesForCountry(selectedCountry.code);
+  const locationDistricts = getDistrictsForCity(selectedCountry.code, profile.work_city || '');
   const filteredServices = serviceOptions.filter((service) => {
     const query = serviceSearch.trim().toLowerCase();
     if (!query) return true;
@@ -1913,9 +1919,23 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               </div>
             </div>
             <div className="one-hand-inline-fields">
-              <input placeholder="Country" value={profile.work_country || ''} onChange={(event) => onProfileChange({ ...profile, work_country: event.target.value })} />
-              <input placeholder="City" value={profile.work_city || ''} onChange={(event) => onProfileChange({ ...profile, work_city: event.target.value, city: normalizeLegacyCity(event.target.value) || profile.city || 'berlin' })} />
+              <select value={selectedCountry.code} onChange={(event) => {
+                const nextCountry = getCountryByNameOrCode(event.target.value);
+                const nextCity = nextCountry.cities[0]?.name || '';
+                const nextArea = nextCountry.cities[0]?.districts[0] || '';
+                onProfileChange({ ...profile, work_country: nextCountry.name, work_city: nextCity, city: getLegacyCitySlug(nextCity), work_area: nextArea, area: nextArea });
+              }}>{locationCatalog.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select>
+              <select value={profile.work_city || ''} onChange={(event) => {
+                const nextArea = getDistrictsForCity(selectedCountry.code, event.target.value)[0] || '';
+                onProfileChange({ ...profile, work_city: event.target.value, city: getLegacyCitySlug(event.target.value), work_area: nextArea, area: nextArea });
+              }}>{locationCities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}</select>
+              <input placeholder="Manual city" value={profile.work_city || ''} onChange={(event) => onProfileChange({ ...profile, work_city: event.target.value, city: normalizeLegacyCity(event.target.value) || getLegacyCitySlug(event.target.value) })} />
+              <select value={locationDistricts.includes(profile.work_area || '') ? profile.work_area || '' : ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })}>
+                <option value="">Manual district</option>
+                {locationDistricts.map((district) => <option key={district} value={district}>{district}</option>)}
+              </select>
               <input placeholder="District / area" value={profile.work_area || ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })} />
+              <input placeholder="Postal code" value={profile.postal_code || ''} onChange={(event) => onProfileChange({ ...profile, postal_code: event.target.value.slice(0, 20) })} />
               <input placeholder="Place label (hotel, apartment, club)" value={profile.work_place_label || ''} onChange={(event) => onProfileChange({ ...profile, work_place_label: event.target.value })} />
               <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value, work_city: profile.work_city || normalizeCityName(event.target.value) })}>
                 {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
@@ -2151,6 +2171,7 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     work_country: profile.work_country || 'Germany',
     work_city: profile.work_city || normalizeCityName(profile.city || 'berlin'),
     work_area: profile.work_area || profile.area || 'Central',
+    postal_code: profile.postal_code || null,
     work_place_label: profile.work_place_label || '',
     category: profile.category || 'ladies',
     description: profile.description || '',
@@ -2227,6 +2248,7 @@ function profileToForm(profile: Profile): Partial<Profile> {
     work_country: profile.work_country || null,
     work_city: profile.work_city || null,
     work_area: profile.work_area || null,
+    postal_code: profile.postal_code || null,
     work_place_label: profile.work_place_label || null,
     location_updated_at: profile.location_updated_at || null,
     auto_location_on_login: Boolean(profile.auto_location_on_login),
@@ -2294,12 +2316,14 @@ function parseGooglePlace(place: any) {
   const city = byType('locality') || byType('postal_town') || byType('administrative_area_level_2');
   const area = byType('sublocality') || byType('sublocality_level_1') || byType('neighborhood') || byType('administrative_area_level_3');
   const country = byType('country');
+  const postalCode = byType('postal_code');
   const latitude = place.geometry?.location?.lat ? Number(place.geometry.location.lat().toFixed(6)) : null;
   const longitude = place.geometry?.location?.lng ? Number(place.geometry.location.lng().toFixed(6)) : null;
   return {
     city,
     area,
     country,
+    postal_code: postalCode,
     latitude,
     longitude,
     label: place.name || place.formatted_address || '',

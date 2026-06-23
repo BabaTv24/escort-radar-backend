@@ -41,8 +41,8 @@ export function validateProfileInput(body: Record<string, unknown>) {
     return { error: 'display_name must be between 2 and 80 characters' };
   }
 
-  if (!allowedCities.includes(city)) {
-    return { error: 'Unsupported city' };
+  if (city.length < 2 || city.length > 120) {
+    return { error: 'city must be between 2 and 120 characters' };
   }
 
   const servicesProvided = Object.prototype.hasOwnProperty.call(body, 'services');
@@ -63,6 +63,7 @@ export function validateProfileInput(body: Record<string, unknown>) {
       work_country: optionalText(body.work_country, 80),
       work_city: optionalText(body.work_city, 100),
       work_area: optionalText(body.work_area, 120),
+      postal_code: optionalText(body.postal_code, 20),
       work_place_label: optionalText(body.work_place_label, 180),
       category: normalizeCategory(body.category),
       description: optionalText(body.description, 2000),
@@ -207,6 +208,7 @@ function normalizeAccountType(value: unknown) {
 }
 
 function optionalCoordinate(value: unknown, min: number, max: number) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
   return Math.min(Math.max(number, min), max);

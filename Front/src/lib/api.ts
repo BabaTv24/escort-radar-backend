@@ -271,6 +271,12 @@ export const api = {
     body: JSON.stringify(body)
   }),
   adminPhotos: (token: string) => request<{ photos: unknown[] }>('/api/admin/photos', { token }),
+  adminLocationCatalog: (token: string) => request<{ locations: Record<string, unknown>[] }>('/api/admin/location-catalog', { token }),
+  createAdminLocationCatalog: (token: string, body: Record<string, unknown>) => request<{ location: Record<string, unknown> }>('/api/admin/location-catalog', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
   setPhotoStatus: (token: string, id: string, moderation_status: string) => request(`/api/admin/photos/${id}/status`, {
     method: 'PATCH',
     token,

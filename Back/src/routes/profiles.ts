@@ -343,17 +343,12 @@ function withImageUrls(profile: any, wallet?: any) {
 function sanitizePublicProfile(profile: any) {
   const { primary_phone, additional_phones, whatsapp, telegram, latitude, longitude, work_place_label, ...publicProfile } = profile;
   const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
-  const approximateCoords = publicProfile.location_mode !== 'city_only'
-    && typeof latitude === 'number'
-    && typeof longitude === 'number'
-    ? {
-        latitude: Math.round(latitude * 100) / 100,
-        longitude: Math.round(longitude * 100) / 100
-      }
-    : {};
+  const postalCode = publicProfile.location_mode === 'approximate' || publicProfile.location_mode === 'exact_hidden'
+    ? publicProfile.postal_code
+    : null;
   return {
     ...publicProfile,
-    ...approximateCoords,
+    postal_code: postalCode,
     profile_images: visibleImages,
     images: visibleImages,
     locked_features: ['phone_number', 'whatsapp', 'telegram', 'full_gallery', 'vip_gallery', 'gifts', 'live_cam']
