@@ -3,6 +3,8 @@ export type ProfileImage = {
   profile_id?: string;
   storage_path: string;
   public_url?: string;
+  url?: string;
+  image_url?: string;
   is_primary: boolean;
   is_cover?: boolean;
   is_blurred: boolean;

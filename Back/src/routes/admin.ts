@@ -2125,13 +2125,28 @@ function operatorStatusPatch(status: string) {
 function withAdminImageUrls(profile: any) {
   const images = (profile.profile_images || [])
     .map(withPublicImageUrl)
-    .sort((left: any, right: any) => Number(left.sort_order || 0) - Number(right.sort_order || 0));
+    .sort((left: any, right: any) => {
+      if (Boolean(left.is_cover) !== Boolean(right.is_cover)) return left.is_cover ? -1 : 1;
+      const sortDiff = Number(left.sort_order || 0) - Number(right.sort_order || 0);
+      if (sortDiff !== 0) return sortDiff;
+      return new Date(left.created_at || 0).getTime() - new Date(right.created_at || 0).getTime();
+    });
   return { ...profile, profile_images: images, images };
 }
 
 function withPublicImageUrl(image: any) {
   const { data } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(image.storage_path);
-  return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
+  return {
+    ...image,
+    public_url: data.publicUrl,
+    url: data.publicUrl,
+    image_url: data.publicUrl,
+    is_cover: Boolean(image.is_primary),
+    is_hidden: Boolean(image.is_hidden),
+    is_private: Boolean(image.is_private),
+    moderation_status: image.moderation_status || 'approved',
+    sort_order: Number(image.sort_order || 0)
+  };
 }
 
 function logAdminProfileImageUpload(status: 'start' | 'success' | 'error', req: any, extra: Record<string, unknown> = {}) {

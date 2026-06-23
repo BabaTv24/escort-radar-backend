@@ -567,12 +567,26 @@ export function AdminPage() {
   }
 
   async function uploadStudioPhoto(profileId = studioForm.id) {
-    if (!profileId || !studioFile) return;
+    if (!profileId) {
+      setMessage(t('admin.photos.saveFirst'));
+      return;
+    }
+    if (!studioFile) return;
     const form = new FormData();
     form.append('image', studioFile);
-    await api.uploadAdminProfileImage(token, profileId, form);
-    setStudioFile(null);
-    await load();
+    try {
+      const result = await api.uploadAdminProfileImage(token, profileId, form);
+      const image = result.image as NonNullable<Profile['profile_images']>[number];
+      setProfiles((current) => current.map((profile) => {
+        if (profile.id !== profileId) return profile;
+        const images = sortAdminImages([...(profile.profile_images || []), image]);
+        return { ...profile, profile_images: images, images };
+      }));
+      setStudioFile(null);
+      setMessage(t('admin.messages.photoUploaded'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
   }
 
   async function seedBerlinStudioProfiles() {
@@ -730,23 +744,37 @@ export function AdminPage() {
     }
 
     return <>
-      <AdminField label={t('admin.photos.upload')} help={t('admin.photos.help')}>
-        <label className="studio-upload-control">
-          <Upload size={17} />
-          <span>{studioFile ? studioFile.name : t('admin.photos.choose')}</span>
-          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setStudioFile(event.target.files?.[0] || null)} />
-        </label>
-      </AdminField>
-      {studioForm.id && studioFile && <button className="button full" disabled={studioSaving} onClick={() => uploadStudioPhoto()}>{t('admin.photos.upload')}</button>}
+      {!studioForm.id ? (
+        <p className="muted">{t('admin.photos.saveFirst')}</p>
+      ) : (
+        <>
+          <AdminField label={t('admin.photos.upload')} help={t('admin.photos.help')}>
+            <label className="studio-upload-control">
+              <Upload size={17} />
+              <span>{studioFile ? studioFile.name : t('admin.photos.choose')}</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setStudioFile(event.target.files?.[0] || null)} />
+            </label>
+          </AdminField>
+          {studioFile && <button className="button full" disabled={studioSaving} onClick={() => uploadStudioPhoto()}>{t('admin.photos.upload')}</button>}
+        </>
+      )}
       {selectedProfile?.profile_images?.length ? (
         <div className="studio-photo-grid">
           {selectedProfile.profile_images.map((image, index) => (
             <div className="studio-photo-card" key={image.id}>
-              <img src={image.public_url} alt="" />
+              <img src={adminImageSrc(image)} alt="" />
+              <div className="studio-photo-badges">
+                {(image.is_cover || image.is_primary) && <i>{t('admin.photos.badge.cover')}</i>}
+                {image.is_hidden && <i>{t('admin.photos.badge.hidden')}</i>}
+                {image.is_private && <i>{t('admin.photos.badge.private')}</i>}
+                <i>{t(`admin.status.${image.moderation_status || 'approved'}`)}</i>
+              </div>
               <div className="admin-actions-row">
                 <Action onClick={() => action(() => api.setAdminProfileCoverImage(token, selectedProfile.id, image.id))}>{t('admin.photos.cover')}</Action>
                 <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, -1)))}>{t('admin.actions.up')}</Action>
                 <Action onClick={() => action(() => api.reorderAdminProfileImages(token, selectedProfile.id, moveImageId(selectedProfile.profile_images || [], index, 1)))}>{t('admin.actions.down')}</Action>
+                <Action onClick={() => action(() => api.updateAdminProfileImage(token, selectedProfile.id, image.id, { is_hidden: !image.is_hidden }))}>{image.is_hidden ? t('admin.photos.unhide') : t('admin.photos.hide')}</Action>
+                <Action onClick={() => action(() => api.updateAdminProfileImage(token, selectedProfile.id, image.id, { is_private: !image.is_private }))}>{image.is_private ? t('admin.photos.makePublic') : t('admin.photos.makePrivate')}</Action>
                 <Action danger onClick={() => action(() => api.deleteAdminProfileImage(token, selectedProfile.id, image.id))}><Trash2 size={14} /></Action>
               </div>
             </div>
@@ -1466,6 +1494,21 @@ function moveImageId(images: NonNullable<Profile['profile_images']>, index: numb
   const [item] = copy.splice(index, 1);
   copy.splice(nextIndex, 0, item);
   return copy;
+}
+
+function sortAdminImages<T extends { is_cover?: boolean; is_primary?: boolean; sort_order?: number; created_at?: string }>(images: T[]) {
+  return [...images].sort((left, right) => {
+    const leftCover = Boolean(left.is_cover || left.is_primary);
+    const rightCover = Boolean(right.is_cover || right.is_primary);
+    if (leftCover !== rightCover) return leftCover ? -1 : 1;
+    const sortDiff = Number(left.sort_order || 0) - Number(right.sort_order || 0);
+    if (sortDiff !== 0) return sortDiff;
+    return new Date(left.created_at || 0).getTime() - new Date(right.created_at || 0).getTime();
+  });
+}
+
+function adminImageSrc(image: NonNullable<Profile['profile_images']>[number]) {
+  return image.public_url || image.image_url || image.url || '';
 }
 
 function AdminStatCard({ label, value }: { label: string; value: unknown }) {

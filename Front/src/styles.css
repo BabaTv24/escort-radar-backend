@@ -3343,6 +3343,21 @@ body {
   aspect-ratio: 4 / 5;
   object-fit: cover;
 }
+.studio-photo-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  padding: .45rem .45rem 0;
+}
+.studio-photo-badges i {
+  border: 1px solid rgba(247,212,107,.18);
+  border-radius: 999px;
+  padding: .22rem .42rem;
+  color: #f7d46b;
+  background: rgba(247,212,107,.08);
+  font-size: .72rem;
+  font-style: normal;
+}
 .studio-photo-card .admin-actions-row {
   padding: .45rem;
 }
