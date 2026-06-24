@@ -1605,6 +1605,11 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   const [placeSuggestions, setPlaceSuggestions] = useState<any[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
   const [accountMessage, setAccountMessage] = useState('');
+  const [accountMessageError, setAccountMessageError] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const autoLocationRan = useRef(false);
   const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const primaryImage = savedProfile?.profile_images?.[0]?.public_url;
@@ -1643,16 +1648,54 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
 
   async function requestPasswordReset() {
     setAccountMessage('');
+    setAccountMessageError(false);
     const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
       redirectTo: `${window.location.origin}/dashboard`
     });
+    setAccountMessageError(Boolean(error));
     setAccountMessage(error ? error.message : t('dashboard.account.resetSent'));
+  }
+
+  async function changePassword() {
+    setAccountMessage('');
+    setAccountMessageError(false);
+    if (!currentPassword) {
+      setAccountMessageError(true);
+      setAccountMessage(t('dashboard.account.currentPasswordRequired'));
+      return;
+    }
+    if (newPassword.length < 8) {
+      setAccountMessageError(true);
+      setAccountMessage(t('dashboard.account.passwordTooShort'));
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setAccountMessageError(true);
+      setAccountMessage(t('dashboard.account.passwordMismatch'));
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      const { error: reauthError } = await supabase.auth.signInWithPassword({ email: userEmail, password: currentPassword });
+      if (reauthError) throw reauthError;
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setAccountMessage(t('dashboard.account.passwordChanged'));
+    } catch (error) {
+      setAccountMessageError(true);
+      setAccountMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setPasswordSaving(false);
+    }
   }
 
   async function useCurrentGps() {
     setGeoMessage('');
     if (!navigator.geolocation) {
-      setGeoMessage('GPS is not available in this browser. You can set city manually.');
+      setGeoMessage(t('dashboard.advertiser.gpsUnavailable'));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -1667,11 +1710,11 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           location_mode: 'approximate' as const
         };
         onProfileChange(nextProfile);
-        setGeoMessage('GPS detected. Saving location...');
+        setGeoMessage(t('dashboard.advertiser.gpsSaving'));
         await onSaveDraft(nextProfile);
-        setGeoMessage('Location saved. Exact GPS is hidden from public profile.');
+        setGeoMessage(t('dashboard.advertiser.gpsSaved'));
       },
-      () => setGeoMessage('GPS permission denied. You can set city manually.'),
+      () => setGeoMessage(t('dashboard.advertiser.gpsDenied')),
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
     );
   }
@@ -1679,20 +1722,20 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   async function clearGps() {
     const nextProfile = { ...profile, latitude: null, longitude: null, location_mode: 'city_only' as const };
     onProfileChange(nextProfile);
-    setGeoMessage('GPS cleared. Saving city-only location...');
+    setGeoMessage(t('dashboard.advertiser.gpsClearing'));
     await onSaveDraft(nextProfile);
-    setGeoMessage('GPS cleared. Public profile uses city/area only.');
+    setGeoMessage(t('dashboard.advertiser.gpsCleared'));
   }
 
   async function searchPlace() {
     setGeoMessage('');
     if (!googleMapsKey) {
-      setGeoMessage('Google Maps key is not configured. Use manual city and area fields.');
+      setGeoMessage(t('dashboard.advertiser.googleMissing'));
       setPlaceSuggestions([]);
       return;
     }
     if (!placeQuery.trim()) {
-      setGeoMessage('Type a place, hotel, club, street, or city first.');
+      setGeoMessage(t('dashboard.advertiser.typePlace'));
       return;
     }
     setPlaceLoading(true);
@@ -1704,7 +1747,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
         (predictions: any[] | null, status: string) => {
           setPlaceLoading(false);
           if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions?.length) {
-            setGeoMessage('No place found. Use manual city and area fields.');
+            setGeoMessage(t('dashboard.advertiser.noPlace'));
             setPlaceSuggestions([]);
             return;
           }
@@ -1713,7 +1756,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
       );
     } catch {
       setPlaceLoading(false);
-      setGeoMessage('Google Maps could not load. Use manual city and area fields.');
+      setGeoMessage(t('dashboard.advertiser.googleFailed'));
     }
   }
 
@@ -1729,7 +1772,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
         async (place: any, status: string) => {
           setPlaceLoading(false);
           if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
-            setGeoMessage('Place details could not be loaded. Use manual city and area fields.');
+            setGeoMessage(t('dashboard.advertiser.placeDetailsFailed'));
             return;
           }
           const parsed = parseGooglePlace(place);
@@ -1749,12 +1792,12 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           onProfileChange(nextProfile);
           setPlaceQuery(parsed.label || place.formatted_address || '');
           setPlaceSuggestions([]);
-          setGeoMessage('Place selected. Save work location to persist it.');
+          setGeoMessage(t('dashboard.advertiser.placeSelected'));
         }
       );
     } catch {
       setPlaceLoading(false);
-      setGeoMessage('Google Maps could not load. Use manual city and area fields.');
+      setGeoMessage(t('dashboard.advertiser.googleFailed'));
     }
   }
 
@@ -1794,41 +1837,41 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           {primaryImage ? <img src={primaryImage} alt="" /> : <UserRound size={34} />}
         </div>
         <div className="one-hand-identity">
-          <span className="eyebrow">Today</span>
+          <span className="eyebrow">{t('dashboard.advertiser.today')}</span>
           <h1>{displayName}</h1>
           <p><MapPin size={14} /> {workLocationLabel}</p>
         </div>
         <button className="one-hand-logout" type="button" onClick={onLogout}><LogOut size={18} /></button>
       </section>
 
-      <section className="one-hand-status-toggle" aria-label="Availability status">
+      <section className="one-hand-status-toggle" aria-label={t('dashboard.advertiser.availabilityStatus')}>
         {[
-          ['ONLINE_NOW', 'ONLINE NOW'],
-          ['AVAILABLE_TODAY', 'TODAY'],
-          ['TRAVELING', 'TRAVEL'],
-          ['APPOINTMENT_ONLY', 'APPOINTMENT'],
-          ['BUSY', 'BUSY'],
-          ['OFFLINE', 'OFFLINE']
-        ].map(([status, label]) => (
+          'ONLINE_NOW',
+          'AVAILABLE_TODAY',
+          'TRAVELING',
+          'APPOINTMENT_ONLY',
+          'BUSY',
+          'OFFLINE'
+        ].map((status) => (
           <button
             key={status}
             className={currentOperatorStatus === status ? `active ${operatorToAvailability(status as NonNullable<Profile['operator_status']>)}` : ''}
             type="button"
             onClick={() => setOperatorStatus(status as NonNullable<Profile['operator_status']>)}
           >
-            {label}
+            {t(`dashboard.advertiser.status.${status}`)}
           </button>
         ))}
       </section>
 
-      <section className="one-hand-actions" aria-label="Primary actions">
-        {!savedProfile && <ActionButton active={panel === 'setup'} icon={<UserRound size={22} />} label="Quick Setup" onClick={() => setPanel('setup')} />}
-        <ActionButton active={panel === 'photos'} icon={<ImagePlus size={22} />} label="Add Photos" onClick={() => setPanel('photos')} />
-        <ActionButton active={panel === 'location'} icon={<MapPin size={22} />} label="Location" onClick={() => setPanel('location')} />
-        <ActionButton active={panel === 'operator'} icon={<RadioTower size={22} />} label="Operator" onClick={() => setPanel('operator')} />
-        <ActionButton active={panel === 'prices'} icon={<Gem size={22} />} label="Prices" onClick={() => setPanel('prices')} />
-        <ActionButton active={panel === 'services'} icon={<Sparkles size={22} />} label="Services" onClick={() => setPanel('services')} />
-        <ActionButton active={panel === 'text'} icon={<UserRound size={22} />} label="Profile Text" onClick={() => setPanel('text')} />
+      <section className="one-hand-actions" aria-label={t('dashboard.advertiser.primaryActions')}>
+        {!savedProfile && <ActionButton active={panel === 'setup'} icon={<UserRound size={22} />} label={t('dashboard.advertiser.setup')} onClick={() => setPanel('setup')} />}
+        <ActionButton active={panel === 'photos'} icon={<ImagePlus size={22} />} label={t('dashboard.advertiser.photos')} onClick={() => setPanel('photos')} />
+        <ActionButton active={panel === 'location'} icon={<MapPin size={22} />} label={t('dashboard.advertiser.location')} onClick={() => setPanel('location')} />
+        <ActionButton active={panel === 'operator'} icon={<RadioTower size={22} />} label={t('dashboard.advertiser.operator')} onClick={() => setPanel('operator')} />
+        <ActionButton active={panel === 'prices'} icon={<Gem size={22} />} label={t('dashboard.advertiser.prices')} onClick={() => setPanel('prices')} />
+        <ActionButton active={panel === 'services'} icon={<Sparkles size={22} />} label={t('dashboard.advertiser.services')} onClick={() => setPanel('services')} />
+        <ActionButton active={panel === 'text'} icon={<UserRound size={22} />} label={t('dashboard.advertiser.profileText')} onClick={() => setPanel('text')} />
         <ActionButton active={panel === 'account'} icon={<UserRound size={22} />} label={t('dashboard.account.title')} onClick={() => setPanel('account')} />
         <ActionButton active={panel === 'visibility'} icon={<BadgeCheck size={22} />} label={t('dashboard.visibility.title')} onClick={() => setPanel('visibility')} />
       </section>
@@ -1837,32 +1880,32 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
         className="one-hand-panel"
         onSubmit={(event) => {
           event.preventDefault();
-          void onSaveDraft(profile, panel === 'services' ? 'Services saved' : undefined);
+          void onSaveDraft(profile, panel === 'services' ? t('dashboard.advertiser.servicesSaved') : t('dashboard.advertiser.profileSaved'));
         }}
       >
         {panel === 'setup' && (
           <section className="one-hand-card">
             <div className="one-hand-section-head">
               <div>
-                <p className="eyebrow">Complete your profile in 3 minutes</p>
-                <h2>Quick Setup</h2>
+                <p className="eyebrow">{t('dashboard.advertiser.setupHint')}</p>
+                <h2>{t('dashboard.advertiser.setup')}</h2>
               </div>
             </div>
             <div className="one-hand-inline-fields">
-              <input placeholder="Profile name" value={profile.display_name || ''} onChange={(event) => onProfileChange({ ...profile, display_name: event.target.value })} required />
+              <input placeholder={t('form.displayName')} value={profile.display_name || ''} onChange={(event) => onProfileChange({ ...profile, display_name: event.target.value })} required />
               <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value })}>
                 {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
-              <input placeholder="District" value={profile.area || ''} onChange={(event) => onProfileChange({ ...profile, area: event.target.value })} />
-              <input inputMode="numeric" type="number" placeholder="1 hour price" value={profile.price_1h || ''} onChange={(event) => onProfileChange({ ...profile, price_1h: event.target.value ? Number(event.target.value) : null })} />
+              <input placeholder={t('dashboard.advertiser.district')} value={profile.area || ''} onChange={(event) => onProfileChange({ ...profile, area: event.target.value })} />
+              <input inputMode="numeric" type="number" placeholder={t('form.price1h')} value={profile.price_1h || ''} onChange={(event) => onProfileChange({ ...profile, price_1h: event.target.value ? Number(event.target.value) : null })} />
             </div>
             <textarea
               rows={4}
-              placeholder="Short public profile text"
+              placeholder={t('dashboard.advertiser.shortPublicText')}
               value={profile.description || ''}
               onChange={(event) => onProfileChange({ ...profile, description: event.target.value })}
             />
-            <p className="muted">Save once to create the profile. Photo upload unlocks immediately after the profile exists.</p>
+            <p className="muted">{t('dashboard.advertiser.setupSaveHint')}</p>
           </section>
         )}
 
@@ -1870,26 +1913,26 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <section className="one-hand-card photo-manager">
             <div className="one-hand-section-head">
               <div>
-                <p className="eyebrow">Photo management</p>
-                <h2>Add photo</h2>
+                <p className="eyebrow">{t('dashboard.advertiser.photoManagement')}</p>
+                <h2>{t('dashboard.advertiser.addPhoto')}</h2>
               </div>
               <span>{imageCount}/{savedProfile?.max_photos || 6}</span>
             </div>
             <label className="one-hand-upload">
               <input type="file" accept="image/*" onChange={onUploadImage} disabled={!savedProfile} />
               <UploadCloud size={24} />
-              <strong>{savedProfile ? 'Camera or gallery' : 'Create profile first'}</strong>
-              <span>{savedProfile ? (uploadStatus === 'uploading' ? 'Uploading...' : 'Tap once, choose photo, done.') : 'Go to Quick Setup, fill name/city/price, then Save changes.'}</span>
+              <strong>{savedProfile ? t('dashboard.advertiser.cameraOrGallery') : t('dashboard.advertiser.createProfileFirst')}</strong>
+              <span>{savedProfile ? (uploadStatus === 'uploading' ? t('dashboard.advertiser.uploading') : t('dashboard.advertiser.photoUploadHint')) : t('dashboard.advertiser.photoLockedHint')}</span>
             </label>
             <div className="one-hand-photo-strip">
               {(savedProfile?.profile_images || []).map((image) => (
                 <div className="one-hand-photo-item" key={image.id}>
                   <img src={image.public_url} alt="" />
                   <button type="button" onClick={() => onSetCoverImage(image.id)}>{image.is_cover || image.is_primary ? t('creator.coverImage') : t('creator.cover')}</button>
-                  <button type="button" onClick={() => onDeleteImage(image.id)}>Delete</button>
+                  <button type="button" onClick={() => onDeleteImage(image.id)}>{t('buttons.delete')}</button>
                 </div>
               ))}
-              {!imageCount && <p>No photos yet. Add your first profile photo.</p>}
+              {!imageCount && <p>{t('dashboard.advertiser.noPhotos')}</p>}
             </div>
           </section>
         )}
@@ -1898,10 +1941,10 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <section className="one-hand-card">
             <div className="one-hand-section-head">
               <div>
-                <p className="eyebrow">Radar operator mode</p>
-                <h2>{operatorStatusLabel(currentOperatorStatus)}</h2>
+                <p className="eyebrow">{t('dashboard.advertiser.operatorMode')}</p>
+                <h2>{t(`dashboard.advertiser.status.${currentOperatorStatus}`)}</h2>
               </div>
-              <span>Score {savedProfile?.radar_score || profile.radar_score || 0}</span>
+              <span>{t('dashboard.advertiser.score')} {savedProfile?.radar_score || profile.radar_score || 0}</span>
             </div>
             <div className="one-hand-inline-fields">
               <input type="time" value={profile.working_today_start || ''} onChange={(event) => onProfileChange({ ...profile, working_today_start: event.target.value })} />
@@ -1910,27 +1953,27 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <input type="time" value={profile.working_tomorrow_end || ''} onChange={(event) => onProfileChange({ ...profile, working_tomorrow_end: event.target.value })} />
             </div>
             <div className="toggle-grid">
-              <label><input type="checkbox" checked={Boolean(profile.working_24_7)} onChange={(event) => onProfileChange({ ...profile, working_24_7: event.target.checked })} /> 24/7 today</label>
-              <button className="button" type="button" onClick={() => onProfileChange({ ...profile, working_tomorrow_start: profile.working_today_start, working_tomorrow_end: profile.working_today_end })}>Copy today to tomorrow</button>
+              <label><input type="checkbox" checked={Boolean(profile.working_24_7)} onChange={(event) => onProfileChange({ ...profile, working_24_7: event.target.checked })} /> {t('dashboard.advertiser.today247')}</label>
+              <button className="button" type="button" onClick={() => onProfileChange({ ...profile, working_tomorrow_start: profile.working_today_start, working_tomorrow_end: profile.working_today_end })}>{t('dashboard.advertiser.copyToday')}</button>
             </div>
             <div className="one-hand-inline-fields">
-              <input placeholder="Next city" value={profile.travel_city || ''} onChange={(event) => onProfileChange({ ...profile, travel_city: event.target.value })} />
+              <input placeholder={t('dashboard.advertiser.nextCity')} value={profile.travel_city || ''} onChange={(event) => onProfileChange({ ...profile, travel_city: event.target.value })} />
               <input type="date" value={profile.travel_arrival_date || ''} onChange={(event) => onProfileChange({ ...profile, travel_arrival_date: event.target.value })} />
               <input type="date" value={profile.travel_departure_date || ''} onChange={(event) => onProfileChange({ ...profile, travel_departure_date: event.target.value })} />
               <select value={profile.hotspot_type || ''} onChange={(event) => onProfileChange({ ...profile, hotspot_type: event.target.value as Profile['hotspot_type'] || null })}>
-                <option value="">Hotspot type</option>
+                <option value="">{t('dashboard.advertiser.hotspotType')}</option>
                 {['hotel', 'apartment', 'club', 'private', 'mobile', 'vacation'].map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </div>
             <div className="operator-analytics-grid">
-              <div><span>Profile ranking</span><strong>{savedProfile?.radar_score || profile.radar_score || 0}</strong></div>
-              <div><span>Bookings</span><strong>{bookingCount}</strong></div>
-              <div><span>Nearby active clients</span><strong>{nearbyClients.length}</strong></div>
-              <div><span>Notifications</span><strong>{notifications.length}</strong></div>
-              <div><span>Views</span><strong>Not tracked</strong></div>
-              <div><span>Favorites</span><strong>Not tracked</strong></div>
-              <div><span>Messages</span><strong>Not tracked</strong></div>
-              <div><span>Last GPS update</span><strong>{savedProfile?.location_updated_at ? new Date(savedProfile.location_updated_at).toLocaleString() : 'Not set'}</strong></div>
+              <div><span>{t('dashboard.advertiser.profileRanking')}</span><strong>{savedProfile?.radar_score || profile.radar_score || 0}</strong></div>
+              <div><span>{t('dashboard.advertiser.bookings')}</span><strong>{bookingCount}</strong></div>
+              <div><span>{t('dashboard.advertiser.nearbyClients')}</span><strong>{nearbyClients.length}</strong></div>
+              <div><span>{t('dashboard.advertiser.notifications')}</span><strong>{notifications.length}</strong></div>
+              <div><span>{t('dashboard.advertiser.views')}</span><strong>{t('dashboard.advertiser.notTracked')}</strong></div>
+              <div><span>{t('dashboard.advertiser.favorites')}</span><strong>{t('dashboard.advertiser.notTracked')}</strong></div>
+              <div><span>{t('dashboard.advertiser.messages')}</span><strong>{t('dashboard.advertiser.notTracked')}</strong></div>
+              <div><span>{t('dashboard.advertiser.lastGpsUpdate')}</span><strong>{savedProfile?.location_updated_at ? new Date(savedProfile.location_updated_at).toLocaleString() : t('dashboard.advertiser.notSet')}</strong></div>
             </div>
             <div className="booking-list">
               {nearbyClients.slice(0, 5).map((client) => (
@@ -1939,9 +1982,9 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
                   <span>{client.budget_min || 0}-{client.budget_max || 'open'}</span>
                 </div>
               ))}
-              {!nearbyClients.length && <p className="muted">No nearby active client requests yet.</p>}
+              {!nearbyClients.length && <p className="muted">{t('dashboard.advertiser.noNearbyClients')}</p>}
             </div>
-            <button className="button primary" type="submit">Save operator mode</button>
+            <button className="button primary" type="submit">{t('dashboard.advertiser.saveOperator')}</button>
           </section>
         )}
 
@@ -1949,7 +1992,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <section className="one-hand-card">
             <div className="one-hand-section-head">
               <div>
-                <p className="eyebrow">Current work location</p>
+                <p className="eyebrow">{t('dashboard.advertiser.currentLocation')}</p>
                 <h2>{workLocationLabel}</h2>
               </div>
             </div>
@@ -1964,32 +2007,32 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
                 const nextArea = getDistrictsForCity(selectedCountry.code, event.target.value)[0] || '';
                 onProfileChange({ ...profile, work_city: event.target.value, city: getLegacyCitySlug(event.target.value), work_area: nextArea, area: nextArea });
               }}>{locationCities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}</select>
-              <input placeholder="Manual city" value={profile.work_city || ''} onChange={(event) => onProfileChange({ ...profile, work_city: event.target.value, city: normalizeLegacyCity(event.target.value) || getLegacyCitySlug(event.target.value) })} />
+              <input placeholder={t('dashboard.advertiser.manualCity')} value={profile.work_city || ''} onChange={(event) => onProfileChange({ ...profile, work_city: event.target.value, city: normalizeLegacyCity(event.target.value) || getLegacyCitySlug(event.target.value) })} />
               <select value={locationDistricts.includes(profile.work_area || '') ? profile.work_area || '' : ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })}>
-                <option value="">Manual district</option>
+                <option value="">{t('dashboard.advertiser.manualDistrict')}</option>
                 {locationDistricts.map((district) => <option key={district} value={district}>{district}</option>)}
               </select>
-              <input placeholder="District / area" value={profile.work_area || ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })} />
-              <input placeholder="Postal code" value={profile.postal_code || ''} onChange={(event) => onProfileChange({ ...profile, postal_code: event.target.value.slice(0, 20) })} />
-              <input placeholder="Place label (hotel, apartment, club)" value={profile.work_place_label || ''} onChange={(event) => onProfileChange({ ...profile, work_place_label: event.target.value })} />
+              <input placeholder={t('dashboard.advertiser.districtArea')} value={profile.work_area || ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })} />
+              <input placeholder={t('dashboard.advertiser.postalCode')} value={profile.postal_code || ''} onChange={(event) => onProfileChange({ ...profile, postal_code: event.target.value.slice(0, 20) })} />
+              <input placeholder={t('dashboard.advertiser.placeLabel')} value={profile.work_place_label || ''} onChange={(event) => onProfileChange({ ...profile, work_place_label: event.target.value })} />
               <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value, work_city: profile.work_city || normalizeCityName(event.target.value) })}>
                 {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
-              <input placeholder="Approximate public area" value={profile.approximate_location_area || ''} onChange={(event) => onProfileChange({ ...profile, approximate_location_area: event.target.value })} />
+              <input placeholder={t('dashboard.advertiser.approximateArea')} value={profile.approximate_location_area || ''} onChange={(event) => onProfileChange({ ...profile, approximate_location_area: event.target.value })} />
               <select value={profile.service_radius_km || 25} onChange={(event) => onProfileChange({ ...profile, service_radius_km: Number(event.target.value) })}>
                 {[1, 5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}
               </select>
               <select value={profile.location_mode || 'city_only'} onChange={(event) => onProfileChange({ ...profile, location_mode: event.target.value as Profile['location_mode'] })}>
-                <option value="city_only">City only</option>
-                <option value="approximate">Approximate area</option>
-                <option value="exact_hidden">Exact GPS hidden</option>
+                <option value="city_only">{t('dashboard.advertiser.cityOnly')}</option>
+                <option value="approximate">{t('dashboard.advertiser.approximateMode')}</option>
+                <option value="exact_hidden">{t('dashboard.advertiser.exactHidden')}</option>
               </select>
-              <input placeholder="Latitude" value={profile.latitude ?? ''} onChange={(event) => onProfileChange({ ...profile, latitude: event.target.value ? Number(event.target.value) : null })} />
-              <input placeholder="Longitude" value={profile.longitude ?? ''} onChange={(event) => onProfileChange({ ...profile, longitude: event.target.value ? Number(event.target.value) : null })} />
+              <input placeholder={t('dashboard.advertiser.latitude')} value={profile.latitude ?? ''} onChange={(event) => onProfileChange({ ...profile, latitude: event.target.value ? Number(event.target.value) : null })} />
+              <input placeholder={t('dashboard.advertiser.longitude')} value={profile.longitude ?? ''} onChange={(event) => onProfileChange({ ...profile, longitude: event.target.value ? Number(event.target.value) : null })} />
             </div>
             <div className="place-search-panel">
-              <input placeholder={googleMapsKey ? 'Search place or address...' : 'Manual location mode - Google key missing'} value={placeQuery} onChange={(event) => setPlaceQuery(event.target.value)} />
-              <button className="button" type="button" onClick={searchPlace} disabled={placeLoading}>{placeLoading ? 'Searching...' : 'Search place'}</button>
+              <input placeholder={googleMapsKey ? t('dashboard.advertiser.searchPlacePlaceholder') : t('dashboard.advertiser.googleMissingPlaceholder')} value={placeQuery} onChange={(event) => setPlaceQuery(event.target.value)} />
+              <button className="button" type="button" onClick={searchPlace} disabled={placeLoading}>{placeLoading ? t('dashboard.advertiser.searching') : t('dashboard.advertiser.searchPlace')}</button>
               {placeSuggestions.length ? (
                 <div className="place-suggestions">
                   {placeSuggestions.map((suggestion) => (
@@ -2001,15 +2044,15 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               ) : null}
             </div>
             <div className="toggle-grid">
-              <label><input type="checkbox" checked={Boolean(profile.auto_location_on_login)} onChange={(event) => onProfileChange({ ...profile, auto_location_on_login: event.target.checked })} /> Auto update GPS on login</label>
-              <label><input type="checkbox" checked={Boolean(profile.auto_location_while_online)} onChange={(event) => onProfileChange({ ...profile, auto_location_while_online: event.target.checked })} /> Auto update every 15 minutes while ONLINE</label>
+              <label><input type="checkbox" checked={Boolean(profile.auto_location_on_login)} onChange={(event) => onProfileChange({ ...profile, auto_location_on_login: event.target.checked })} /> {t('dashboard.advertiser.autoGpsLogin')}</label>
+              <label><input type="checkbox" checked={Boolean(profile.auto_location_while_online)} onChange={(event) => onProfileChange({ ...profile, auto_location_while_online: event.target.checked })} /> {t('dashboard.advertiser.autoGpsOnline')}</label>
             </div>
             <div className="one-hand-location-actions">
-              <button className="button" type="button" onClick={useCurrentGps}>Use current GPS</button>
-              <button className="button" type="button" onClick={clearGps}>Clear GPS</button>
-              <button className="button primary" type="submit">Save work location</button>
+              <button className="button" type="button" onClick={useCurrentGps}>{t('dashboard.advertiser.useGps')}</button>
+              <button className="button" type="button" onClick={clearGps}>{t('dashboard.advertiser.clearGps')}</button>
+              <button className="button primary" type="submit">{t('dashboard.advertiser.saveLocation')}</button>
             </div>
-            <p className="muted">Public profile shows city/area only. Exact GPS is stored for owner/admin tooling and approximate radar logic.</p>
+            <p className="muted">{t('dashboard.advertiser.locationPrivacy')}</p>
             {geoMessage && <p className={geoMessage.includes('denied') || geoMessage.includes('not available') ? 'error-text' : 'success'}>{geoMessage}</p>}
           </section>
         )}
@@ -2018,16 +2061,16 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <section className="one-hand-card">
             <div className="one-hand-section-head">
               <div>
-                <p className="eyebrow">Services</p>
-                <h2>Choose offered services</h2>
+                <p className="eyebrow">{t('dashboard.advertiser.services')}</p>
+                <h2>{t('dashboard.advertiser.chooseServices')}</h2>
               </div>
               <span>{selectedServices.length}/100</span>
             </div>
-            <input placeholder="Search services..." value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} />
+            <input placeholder={t('dashboard.advertiser.searchServices')} value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} />
             <div className="selected-service-strip">
               {selectedServices.length ? selectedServices.map((key) => (
                 <button key={key} type="button" onClick={() => toggleService(key)}>{serviceLabel(key)}</button>
-              )) : <p>No services selected yet.</p>}
+              )) : <p>{t('dashboard.advertiser.noServices')}</p>}
             </div>
             <div className="service-checklist">
               {Object.entries(groupedServices).map(([category, services]) => (
@@ -2048,8 +2091,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
                 </div>
               ))}
             </div>
-            <p className="muted">18+ only. All services must be consensual and compliant with local law. Admin can moderate or hide options later.</p>
-            <button className="button primary" type="submit">Save services</button>
+            <p className="muted">{t('dashboard.advertiser.servicesSafety')}</p>
+            <button className="button primary" type="submit">{t('dashboard.advertiser.saveServices')}</button>
           </section>
         )}
 
@@ -2057,20 +2100,23 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <section className="one-hand-card">
             <div className="one-hand-section-head">
               <div>
-                <p className="eyebrow">Prices</p>
-                <h2>Inline edit</h2>
+                <p className="eyebrow">{t('dashboard.advertiser.prices')}</p>
+                <h2>{t('dashboard.advertiser.editPrices')}</h2>
               </div>
               <span>{profile.currency || 'EUR'}</span>
             </div>
             <div className="one-hand-price-grid">
-              <PriceEditor label="30 min" value={profile.price_30min} onChange={(value) => updatePrice('price_30min', value)} />
-              <PriceEditor label="1 hour" value={profile.price_1h} onChange={(value) => updatePrice('price_1h', value)} />
-              <PriceEditor label="2 hours" value={profile.price_2h} onChange={(value) => updatePrice('price_2h', value)} />
-              <PriceEditor label="Night" value={profile.price_night} onChange={(value) => updatePrice('price_night', value)} />
+              <PriceEditor label={t('form.price30')} value={profile.price_30min} onChange={(value) => updatePrice('price_30min', value)} />
+              <PriceEditor label={t('form.price1h')} value={profile.price_1h} onChange={(value) => updatePrice('price_1h', value)} />
+              <PriceEditor label={t('form.price2h')} value={profile.price_2h} onChange={(value) => updatePrice('price_2h', value)} />
+              <PriceEditor label={t('form.priceNight')} value={profile.price_night} onChange={(value) => updatePrice('price_night', value)} />
             </div>
-            <select value={profile.currency || 'EUR'} onChange={(event) => onProfileChange({ ...profile, currency: event.target.value })}>
-              {['EUR', 'PLN', 'CHF', 'GBP', 'USD'].map((currency) => <option key={currency} value={currency}>{currency}</option>)}
-            </select>
+            <label className="admin-field">
+              <span>{t('form.currency')}</span>
+              <select value={profile.currency || 'EUR'} onChange={(event) => onProfileChange({ ...profile, currency: event.target.value })}>
+                {['EUR', 'PLN', 'CHF', 'GBP', 'USD'].map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+              </select>
+            </label>
           </section>
         )}
 
@@ -2078,14 +2124,14 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <section className="one-hand-card">
             <div className="one-hand-section-head">
               <div>
-                <p className="eyebrow">Profile text</p>
-                <h2>Short description</h2>
+                <p className="eyebrow">{t('dashboard.advertiser.profileText')}</p>
+                <h2>{t('dashboard.advertiser.shortDescription')}</h2>
               </div>
             </div>
             <input placeholder={t('form.displayName')} value={profile.display_name || ''} onChange={(event) => onProfileChange({ ...profile, display_name: event.target.value })} />
             <textarea
               rows={6}
-              placeholder="Write a short profile description shown on your public profile."
+              placeholder={t('dashboard.advertiser.descriptionPlaceholder')}
               value={profile.description || ''}
               onChange={(event) => onProfileChange({ ...profile, description: event.target.value })}
             />
@@ -2126,12 +2172,17 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <input placeholder={t('dashboard.account.phone')} value={profile.phone || profile.primary_phone || ''} onChange={(event) => onProfileChange({ ...profile, phone: event.target.value, primary_phone: event.target.value })} />
               <input placeholder={t('dashboard.account.whatsapp')} value={profile.whatsapp || ''} onChange={(event) => onProfileChange({ ...profile, whatsapp: event.target.value })} />
               <input placeholder={t('dashboard.account.telegram')} value={profile.telegram || ''} onChange={(event) => onProfileChange({ ...profile, telegram: event.target.value })} />
+              <input type="password" autoComplete="current-password" placeholder={t('dashboard.account.currentPassword')} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+              <input type="password" autoComplete="new-password" placeholder={t('dashboard.account.newPassword')} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+              <input type="password" autoComplete="new-password" placeholder={t('dashboard.account.confirmNewPassword')} value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} />
             </div>
+            <p className="muted">{t('dashboard.account.passwordHelp')}</p>
             <div className="admin-actions-row">
+              <button className="button primary" type="button" disabled={passwordSaving} onClick={changePassword}>{passwordSaving ? t('states.loading') : t('dashboard.account.changePassword')}</button>
               <button className="button" type="button" onClick={requestPasswordReset}>{t('dashboard.account.resetPassword')}</button>
               <button className="button" type="button" onClick={onLogout}>{t('buttons.logout')}</button>
             </div>
-            {accountMessage && <p className={accountMessage.includes('sent') ? 'success' : 'muted'}>{accountMessage}</p>}
+            {accountMessage && <p className={accountMessageError ? 'error-text' : 'success'}>{accountMessage}</p>}
           </section>
         )}
 
@@ -2145,9 +2196,9 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             </div>
             <dl className="admin-detail-list">
               <dt>{t('dashboard.visibility.publicStatus')}</dt><dd>{savedProfile?.is_published === false ? t('admin.status.unpublished') : t('admin.status.published')}</dd>
-              <dt>{t('dashboard.visibility.moderation')}</dt><dd>{savedProfile?.moderation_status || 'pending'}</dd>
-              <dt>{t('dashboard.visibility.subscription')}</dt><dd>{savedProfile?.subscription_status || 'free'}</dd>
-              <dt>{t('dashboard.visibility.premiumTier')}</dt><dd>{savedProfile?.premium_tier || 'standard'}</dd>
+              <dt>{t('dashboard.visibility.moderation')}</dt><dd>{t(`admin.status.${savedProfile?.moderation_status || 'pending'}`)}</dd>
+              <dt>{t('dashboard.visibility.subscription')}</dt><dd>{t(`admin.status.${savedProfile?.subscription_status || 'free'}`)}</dd>
+              <dt>{t('dashboard.visibility.premiumTier')}</dt><dd>{t(`admin.status.${savedProfile?.premium_tier || 'standard'}`)}</dd>
             </dl>
             {savedProfile && <Link className="button primary" to={`/profile/${savedProfile.id}`}>{t('dashboard.viewPublicProfile')}</Link>}
           </section>
@@ -2155,21 +2206,21 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
 
         <div className="one-hand-save">
           <button className="button primary" type="submit" disabled={dashboardStatus === 'saving'}>
-            {dashboardStatus === 'saving' ? 'Saving...' : 'Save changes'}
+            {dashboardStatus === 'saving' ? t('dashboard.saving') : t('dashboard.advertiser.saveChanges')}
           </button>
-          {savedProfile && <Link className="button" to={`/profile/${savedProfile.id}`}>Open public profile</Link>}
+          {savedProfile && <Link className="button" to={`/profile/${savedProfile.id}`}>{t('dashboard.viewPublicProfile')}</Link>}
         </div>
         {message && <p className={dashboardStatus === 'error' ? 'error-text' : 'success'}>{message}</p>}
       </form>
 
       <nav className="one-hand-bottom-nav">
-        {!savedProfile && <button type="button" className={panel === 'setup' ? 'active' : ''} onClick={() => setPanel('setup')}><UserRound size={18} />Setup</button>}
-        <button type="button" className={panel === 'photos' ? 'active' : ''} onClick={() => setPanel('photos')}><ImagePlus size={18} />Photos</button>
-        <button type="button" className={panel === 'location' ? 'active' : ''} onClick={() => setPanel('location')}><MapPin size={18} />Location</button>
-        <button type="button" className={panel === 'operator' ? 'active' : ''} onClick={() => setPanel('operator')}><RadioTower size={18} />Operator</button>
-        <button type="button" className={panel === 'prices' ? 'active' : ''} onClick={() => setPanel('prices')}><Gem size={18} />Prices</button>
-        <button type="button" className={panel === 'services' ? 'active' : ''} onClick={() => setPanel('services')}><Sparkles size={18} />Services</button>
-        {savedProfile && <button type="button" className={panel === 'text' ? 'active' : ''} onClick={() => setPanel('text')}><UserRound size={18} />Text</button>}
+        {!savedProfile && <button type="button" className={panel === 'setup' ? 'active' : ''} onClick={() => setPanel('setup')}><UserRound size={18} />{t('dashboard.advertiser.setup')}</button>}
+        <button type="button" className={panel === 'photos' ? 'active' : ''} onClick={() => setPanel('photos')}><ImagePlus size={18} />{t('dashboard.advertiser.photosShort')}</button>
+        <button type="button" className={panel === 'location' ? 'active' : ''} onClick={() => setPanel('location')}><MapPin size={18} />{t('dashboard.advertiser.location')}</button>
+        <button type="button" className={panel === 'operator' ? 'active' : ''} onClick={() => setPanel('operator')}><RadioTower size={18} />{t('dashboard.advertiser.operator')}</button>
+        <button type="button" className={panel === 'prices' ? 'active' : ''} onClick={() => setPanel('prices')}><Gem size={18} />{t('dashboard.advertiser.prices')}</button>
+        <button type="button" className={panel === 'services' ? 'active' : ''} onClick={() => setPanel('services')}><Sparkles size={18} />{t('dashboard.advertiser.services')}</button>
+        {savedProfile && <button type="button" className={panel === 'text' ? 'active' : ''} onClick={() => setPanel('text')}><UserRound size={18} />{t('dashboard.advertiser.textShort')}</button>}
         {savedProfile && <button type="button" className={panel === 'account' ? 'active' : ''} onClick={() => setPanel('account')}><UserRound size={18} />{t('dashboard.account.short')}</button>}
         {savedProfile && <button type="button" className={panel === 'visibility' ? 'active' : ''} onClick={() => setPanel('visibility')}><BadgeCheck size={18} />{t('dashboard.visibility.short')}</button>}
       </nav>
