@@ -97,10 +97,24 @@ export const api = {
   adminUsers: (token: string) => request<{ users: Record<string, unknown>[] }>('/api/admin/users', { token }),
   adminSubscriptions: (token: string) => request<{ subscriptions: Record<string, unknown>[]; stats?: Record<string, number> }>('/api/admin/subscriptions', { token }),
   adminProfile: (token: string, id: string) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, { token }),
-  createAdminProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile }>('/api/admin/profiles', {
+  createAdminProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile; account_created?: boolean; user_linked?: boolean }>('/api/admin/profiles', {
     method: 'POST',
     token,
     body: JSON.stringify(body)
+  }),
+  adminProfileMagicLink: (token: string, id: string) => request<{ link: string }>(`/api/admin/profiles/${id}/magic-link`, {
+    method: 'POST',
+    token
+  }),
+  adminProfilePasswordReset: (token: string, id: string) => request<{ link: string }>(`/api/admin/profiles/${id}/password-reset`, {
+    method: 'POST',
+    token
+  }),
+  adminProfileSecurity: (token: string, id: string) => request<{ security: Record<string, any> }>(`/api/admin/profiles/${id}/security`, { token }),
+  importAdminProfiles: (token: string, form: FormData) => request<{ report: { created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } }>('/api/admin/profiles/import', {
+    method: 'POST',
+    token,
+    body: form
   }),
   updateAdminProfile: (token: string, id: string, body: Partial<Profile>) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, {
     method: 'PUT',

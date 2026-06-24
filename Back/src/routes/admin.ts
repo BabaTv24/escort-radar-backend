@@ -24,6 +24,10 @@ const adminUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 }
 });
+const adminImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 const premiumTiers = ['standard', 'gold', 'elite', 'diamond'];
 const operatorStatuses = ['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'];
@@ -379,11 +383,30 @@ adminRouter.get('/moderation', asyncHandler(async (_req, res) => {
 adminRouter.post('/profiles', asyncHandler(async (req, res) => {
   const profileData = normalizeAdminProfilePayload(req.body);
   if ('error' in profileData) return res.status(400).json({ error: profileData.error });
+  if (req.body.password && req.body.password !== req.body.confirm_password) return res.status(400).json({ error: 'Passwords do not match' });
 
-  const payload = {
+  const starter = starterPackagePatch(req.body.starter_package, String(profileData.data.account_type || 'escort'));
+  let authUser: any = null;
+  let authUserCreated = false;
+  try {
+    const accountResult = await resolveAdminProfileUser({
+      email: String(profileData.data.owner_email || ''),
+      password: optionalText(req.body.password, 200),
+      accountType: String(profileData.data.account_type || 'escort'),
+      plan: starter.listing_plan,
+      subscriptionStatus: starter.subscription_status
+    });
+    authUser = accountResult.user;
+    authUserCreated = accountResult.created;
+  } catch (accountError) {
+    return res.status(400).json({ error: accountError instanceof Error ? accountError.message : 'Could not create login account' });
+  }
+
+  const payload: Record<string, any> = {
     ...profileData.data,
+    ...starter,
+    user_id: authUser?.id || null,
     slug: `${slugify(String(profileData.data.display_name))}-${Date.now().toString(36)}`,
-    subscription_status: profileData.data.subscription_status || 'trial',
     verification_status: profileData.data.verified ? 'verified' : 'pending',
     moderation_status: profileData.data.moderation_status || 'pending',
     verified_at: profileData.data.verified ? new Date().toISOString() : null,
@@ -396,10 +419,80 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
     .select('*, profile_images(*)')
     .single();
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    if (authUserCreated && authUser?.id) await supabaseAdmin.auth.admin.deleteUser(authUser.id);
+    return res.status(400).json({ error: error.message });
+  }
   await upsertManualSubscription(data, req.user?.email || req.user?.id || null);
+  if (authUser?.id) {
+    await logAccountAccess(req, data.id, authUser.id, authUserCreated ? 'admin_created_account' : 'admin_linked_user');
+  }
   await logAdminAction(req.user?.email, 'profile_studio_created', 'profile', data.id, payload);
-  res.status(201).json({ profile: withAdminImageUrls(data) });
+  res.status(201).json({ profile: withAdminImageUrls(data), account_created: authUserCreated, user_linked: Boolean(authUser) });
+}));
+
+adminRouter.post('/profiles/import', adminImportUpload.single('file'), asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'CSV or XLSX file is required' });
+  const rows = await parseProfileImport(req.file);
+  const report: { created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } = {
+    created: 0,
+    skipped: 0,
+    failed: 0,
+    errors: []
+  };
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = normalizeImportRow(rows[index]);
+    try {
+      if (!row.email || !row.display_name) throw new Error('email and display_name are required');
+      const existingProfile = await findProfileByOwnerEmail(row.email);
+      if (existingProfile) {
+        report.skipped += 1;
+        report.errors.push({ row: index + 2, email: row.email, error: 'Profile already exists' });
+        continue;
+      }
+      const normalized = normalizeAdminProfilePayload(row);
+      if ('error' in normalized) throw new Error(normalized.error);
+      const starter = starterPackagePatch(row.starter_package || row.plan, String(normalized.data.account_type || 'escort'));
+      const account = await resolveAdminProfileUser({
+        email: row.email,
+        password: optionalText(row.password, 200),
+        accountType: String(normalized.data.account_type || 'escort'),
+        plan: starter.listing_plan,
+        subscriptionStatus: starter.subscription_status
+      });
+      const payload: Record<string, any> = {
+        ...normalized.data,
+        ...starter,
+        user_id: account.user?.id || null,
+        slug: `${slugify(String(normalized.data.display_name))}-${Date.now().toString(36)}-${index}`,
+        verification_status: row.verified ? 'verified' : 'pending',
+        moderation_status: row.verified ? 'approved' : 'pending',
+        verified: Boolean(row.verified),
+        is_published: Boolean(row.published),
+        verified_at: row.verified ? new Date().toISOString() : null,
+        location_updated_at: new Date().toISOString()
+      };
+      const { data, error } = await supabaseAdmin.from('profiles').insert(payload).select().single();
+      if (error) {
+        if (account.created && account.user?.id) await supabaseAdmin.auth.admin.deleteUser(account.user.id);
+        throw new Error(error.message);
+      }
+      await upsertManualSubscription(data, req.user?.email || req.user?.id || null);
+      if (account.user?.id) await logAccountAccess(req, data.id, account.user.id, account.created ? 'admin_created_account' : 'admin_linked_user');
+      report.created += 1;
+    } catch (rowError) {
+      report.failed += 1;
+      report.errors.push({ row: index + 2, email: row.email || undefined, error: rowError instanceof Error ? rowError.message : 'Import failed' });
+    }
+  }
+
+  await logAdminAction(req.user?.email, 'profiles_imported', 'profile', null, {
+    created: report.created,
+    skipped: report.skipped,
+    failed: report.failed
+  });
+  res.json({ report });
 }));
 
 adminRouter.post('/profiles/seed/berlin', asyncHandler(async (req, res) => {
@@ -977,6 +1070,73 @@ adminRouter.patch('/profiles/:id/publish', asyncHandler(async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
   await logAdminAction(req.user?.email, isPublished ? 'profile_published' : 'profile_unpublished', 'profile', req.params.id, patch);
   res.json({ profile: withAdminImageUrls(data) });
+}));
+
+adminRouter.get('/profiles/:id/security', asyncHandler(async (req, res) => {
+  const { data: profile, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, user_id, owner_email')
+    .eq('id', req.params.id)
+    .single();
+  if (error || !profile) return res.status(404).json({ error: 'Profile not found' });
+
+  let user: any = null;
+  if (profile.user_id) {
+    const userResult = await supabaseAdmin.auth.admin.getUserById(profile.user_id);
+    user = userResult.data.user || null;
+  } else if (profile.owner_email) {
+    user = await findAuthUserByEmail(profile.owner_email);
+  }
+  const { data: logs } = await supabaseAdmin
+    .from('account_access_logs')
+    .select('*')
+    .eq('profile_id', profile.id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  res.json({
+    security: {
+      user_id: user?.id || profile.user_id || null,
+      email: user?.email || profile.owner_email || null,
+      last_login: user?.last_sign_in_at || null,
+      account_created_at: user?.created_at || null,
+      email_confirmed: Boolean(user?.email_confirmed_at || user?.confirmed_at),
+      banned: Boolean(user?.banned_until && new Date(user.banned_until).getTime() > Date.now()),
+      last_ip: null,
+      user_agent: null,
+      logs: logs || []
+    }
+  });
+}));
+
+adminRouter.post('/profiles/:id/magic-link', asyncHandler(async (req, res) => {
+  const target = await getAdminProfileAuthTarget(req.params.id);
+  const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'magiclink',
+    email: target.email,
+    options: { redirectTo: `${config.frontendUrl}/dashboard` }
+  });
+  if (error) return res.status(400).json({ error: error.message });
+  const link = data.properties?.action_link;
+  if (!link) return res.status(500).json({ error: 'Magic link was not generated' });
+  await logAccountAccess(req, target.profileId, target.userId, 'magic_link_generated');
+  await logAdminAction(req.user?.email, 'profile_magic_link_generated', 'profile', target.profileId, { user_id: target.userId });
+  res.json({ link });
+}));
+
+adminRouter.post('/profiles/:id/password-reset', asyncHandler(async (req, res) => {
+  const target = await getAdminProfileAuthTarget(req.params.id);
+  const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'recovery',
+    email: target.email,
+    options: { redirectTo: `${config.frontendUrl}/dashboard` }
+  });
+  if (error) return res.status(400).json({ error: error.message });
+  const link = data.properties?.action_link;
+  if (!link) return res.status(500).json({ error: 'Password reset link was not generated' });
+  await logAccountAccess(req, target.profileId, target.userId, 'password_reset_generated');
+  await logAdminAction(req.user?.email, 'profile_password_reset_generated', 'profile', target.profileId, { user_id: target.userId });
+  res.json({ link });
 }));
 
 adminRouter.post('/profiles/:id/images', adminUpload.single('image'), asyncHandler(async (req, res) => {
@@ -2122,7 +2282,7 @@ function normalizeAdminAccountType(value: unknown) {
 
 function normalizeAdminProfileType(value: unknown) {
   const profileType = String(value || 'private_escort');
-  return ['private_escort', 'agency', 'club', 'massage_salon', 'live_cam', 'couple', 'trans', 'gay', 'other'].includes(profileType) ? profileType : 'private_escort';
+  return ['private_escort', 'agency', 'club', 'massage_salon', 'live_cam', 'couple', 'trans', 'gay', 'male_escort', 'other'].includes(profileType) ? profileType : 'private_escort';
 }
 
 function normalizeAdminSubscriptionStatus(value: unknown) {
@@ -2323,6 +2483,175 @@ async function upsertManualSubscription(profile: Record<string, any>, managedBy:
     .from('subscriptions')
     .upsert(payload, { onConflict: 'profile_id' });
   if (error) throw new Error(error.message);
+}
+
+function starterPackagePatch(value: unknown, accountType: string): Record<string, any> {
+  const starterPackage = String(value || 'trial_30').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const now = new Date();
+  const premiumPlan = accountType === 'business' ? 'business_monthly' : 'escort_monthly';
+  const addDays = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+  const base = {
+    subscription_start: now.toISOString(),
+    subscription_started_at: now.toISOString(),
+    subscription_managed_by: 'manual_admin'
+  };
+  if (['free', 'inactive'].includes(starterPackage)) {
+    return { ...base, subscription_status: 'free', subscription_end: null, subscription_expires_at: null, listing_plan: 'free', subscription_plan: 'free', premium_tier: 'standard', is_published: false };
+  }
+  if (['trial_7', 'trial_7_days'].includes(starterPackage)) {
+    return { ...base, subscription_status: 'trial', subscription_end: addDays(7), subscription_expires_at: addDays(7), listing_plan: 'trial_7', subscription_plan: 'trial_7', premium_tier: 'standard' };
+  }
+  if (['premium_30', 'premium_30_days'].includes(starterPackage)) {
+    return { ...base, subscription_status: 'active', subscription_end: addDays(30), subscription_expires_at: addDays(30), listing_plan: premiumPlan, subscription_plan: premiumPlan, premium_tier: 'gold' };
+  }
+  if (['vip_30', 'vip_30_days'].includes(starterPackage)) {
+    return { ...base, subscription_status: 'active', subscription_end: addDays(30), subscription_expires_at: addDays(30), listing_plan: `${premiumPlan}_vip`, subscription_plan: `${premiumPlan}_vip`, premium_tier: 'diamond' };
+  }
+  if (starterPackage === 'lifetime') {
+    const lifetimeEnd = '2099-12-31T23:59:59.000Z';
+    return { ...base, subscription_status: 'active', subscription_end: lifetimeEnd, subscription_expires_at: lifetimeEnd, listing_plan: `${premiumPlan}_lifetime`, subscription_plan: `${premiumPlan}_lifetime`, premium_tier: 'diamond' };
+  }
+  return { ...base, subscription_status: 'trial', subscription_end: addDays(30), subscription_expires_at: addDays(30), listing_plan: 'trial_30', subscription_plan: 'trial_30', premium_tier: 'standard' };
+}
+
+async function findAuthUserByEmail(emailValue: unknown) {
+  const email = optionalEmail(emailValue);
+  if (!email) return null;
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw new Error(error.message);
+    const user = data.users.find((item) => item.email?.toLowerCase() === email);
+    if (user) return user;
+    if (data.users.length < 1000) break;
+  }
+  return null;
+}
+
+async function findProfileByOwnerEmail(emailValue: unknown) {
+  const email = optionalEmail(emailValue);
+  if (!email) return null;
+  const { data } = await supabaseAdmin.from('profiles').select('id, user_id, owner_email').ilike('owner_email', email).limit(1).maybeSingle();
+  return data || null;
+}
+
+async function resolveAdminProfileUser(input: { email: string; password: string | null; accountType: string; plan: string; subscriptionStatus: string }) {
+  const email = optionalEmail(input.email);
+  if (!email) throw new Error('Valid owner email is required');
+  const existing = await findAuthUserByEmail(email);
+  if (existing) {
+    const { data: linkedProfile } = await supabaseAdmin.from('profiles').select('id').eq('user_id', existing.id).limit(1).maybeSingle();
+    if (linkedProfile) throw new Error('User already exists and is linked to another profile');
+    await supabaseAdmin.auth.admin.updateUserById(existing.id, {
+      app_metadata: {
+        ...(existing.app_metadata || {}),
+        auth_account_type: input.accountType,
+        plan: input.plan,
+        subscription_status: input.subscriptionStatus
+      }
+    });
+    return { user: existing, created: false };
+  }
+  if (!input.password) return { user: null, created: false };
+  if (input.password.length < 8) throw new Error('Password must contain at least 8 characters');
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password: input.password,
+    email_confirm: true,
+    app_metadata: {
+      auth_account_type: input.accountType,
+      plan: input.plan,
+      subscription_status: input.subscriptionStatus
+    }
+  });
+  if (error || !data.user) throw new Error(error?.message || 'Could not create login account');
+  return { user: data.user, created: true };
+}
+
+async function getAdminProfileAuthTarget(profileId: string) {
+  const { data: profile, error } = await supabaseAdmin.from('profiles').select('id, user_id, owner_email').eq('id', profileId).single();
+  if (error || !profile) throw new Error('Profile not found');
+  let user = profile.user_id ? (await supabaseAdmin.auth.admin.getUserById(profile.user_id)).data.user : null;
+  if (!user && profile.owner_email) user = await findAuthUserByEmail(profile.owner_email);
+  if (!user?.email) throw new Error('Profile has no login account');
+  if (!profile.user_id) {
+    const { data: linkedProfile } = await supabaseAdmin.from('profiles').select('id').eq('user_id', user.id).neq('id', profile.id).limit(1).maybeSingle();
+    if (linkedProfile) throw new Error('User is linked to another profile');
+    await supabaseAdmin.from('profiles').update({ user_id: user.id, owner_email: user.email }).eq('id', profile.id);
+  }
+  return { profileId: profile.id, userId: user.id, email: user.email };
+}
+
+async function logAccountAccess(req: any, profileId: string, userId: string, action: string) {
+  const ip = String(req.ip || req.headers?.['x-forwarded-for'] || '').slice(0, 200) || null;
+  const userAgent = optionalText(req.headers?.['user-agent'], 500);
+  const { error } = await supabaseAdmin.from('account_access_logs').insert({
+    user_id: userId,
+    profile_id: profileId,
+    action,
+    ip,
+    user_agent: userAgent
+  });
+  if (error) console.info('[account access log] skipped reason=', error.message);
+}
+
+async function parseProfileImport(file: Express.Multer.File) {
+  const name = file.originalname.toLowerCase();
+  if (name.endsWith('.csv') || file.mimetype.includes('csv')) return parseCsv(file.buffer.toString('utf8'));
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+  }
+  throw new Error('Unsupported import format. Use CSV or XLSX.');
+}
+
+function parseCsv(input: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (char === '"') {
+      if (quoted && input[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else quoted = !quoted;
+    } else if (char === ',' && !quoted) {
+      row.push(cell);
+      cell = '';
+    } else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && input[index + 1] === '\n') index += 1;
+      row.push(cell);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      cell = '';
+    } else cell += char;
+  }
+  row.push(cell);
+  if (row.some((value) => value.trim())) rows.push(row);
+  const headers = (rows.shift() || []).map((header) => header.trim().toLowerCase());
+  return rows.map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() || ''])));
+}
+
+function normalizeImportRow(input: Record<string, unknown>): Record<string, any> {
+  const booleanValue = (value: unknown) => ['1', 'true', 'yes', 'y', 'tak', 'ja'].includes(String(value || '').trim().toLowerCase());
+  return {
+    ...input,
+    email: String(input.email || '').trim().toLowerCase(),
+    owner_email: String(input.email || '').trim().toLowerCase(),
+    display_name: String(input.display_name || '').trim(),
+    phone: String(input.phone || '').trim(),
+    work_country: String(input.country || input.work_country || 'DE').trim(),
+    work_city: String(input.city || input.work_city || 'Berlin').trim(),
+    city: String(input.city || 'berlin').trim().toLowerCase(),
+    work_area: String(input.area || input.work_area || '').trim(),
+    services: String(input.services || '').split(/[;,|]/).map((item) => item.trim()).filter(Boolean),
+    price_1h: Number(input.price_1h || 0),
+    published: booleanValue(input.published),
+    verified: booleanValue(input.verified)
+  };
 }
 
 function normalizeSettings(rows: Array<{ key: string; value: unknown }>) {

@@ -29,7 +29,7 @@ export type Profile = {
   user_id?: string;
   display_name: string;
   account_type?: 'private' | 'agency' | 'massage_salon' | 'club_party' | 'live_cam' | 'escort' | 'business';
-  profile_type?: 'private_escort' | 'agency' | 'club' | 'massage_salon' | 'live_cam' | 'couple' | 'trans' | 'gay' | 'other';
+  profile_type?: 'private_escort' | 'agency' | 'club' | 'massage_salon' | 'live_cam' | 'couple' | 'trans' | 'gay' | 'male_escort' | 'other';
   primary_phone?: string | null;
   phone?: string | null;
   whatsapp?: string | null;

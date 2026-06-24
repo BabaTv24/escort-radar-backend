@@ -17,6 +17,9 @@ const studioTabs = ['account', 'basic', 'location', 'business', 'prices', 'statu
 const emptyStudioForm = {
   id: '',
   owner_email: '',
+  password: '',
+  confirm_password: '',
+  starter_package: 'trial_30',
   phone: '',
   whatsapp: '',
   telegram: '',
@@ -143,6 +146,10 @@ export function AdminPage() {
   const [topCategories, setTopCategories] = useState<Record<string, any>[]>([]);
   const [topProfiles, setTopProfiles] = useState<Record<string, any>[]>([]);
   const [adminLocationRows, setAdminLocationRows] = useState<LocationCatalogRow[]>([]);
+  const [accountAccessLink, setAccountAccessLink] = useState('');
+  const [accountSecurity, setAccountSecurity] = useState<Record<string, any> | null>(null);
+  const [profileImportFile, setProfileImportFile] = useState<File | null>(null);
+  const [profileImportReport, setProfileImportReport] = useState<{ created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } | null>(null);
   const [newLocationRow, setNewLocationRow] = useState<LocationCatalogRow>({
     country_code: 'DE',
     country_name: 'Germany',
@@ -457,6 +464,9 @@ export function AdminPage() {
     setStudioForm({
       id: profile.id,
       owner_email: profile.owner_email || '',
+      password: '',
+      confirm_password: '',
+      starter_package: profile.subscription_status === 'active' ? 'premium_30' : profile.subscription_status === 'free' ? 'free' : 'trial_30',
       phone: profile.phone || profile.primary_phone || '',
       whatsapp: profile.whatsapp || '',
       telegram: profile.telegram || '',
@@ -517,6 +527,8 @@ export function AdminPage() {
       subscription_note: profile.subscription_note || ''
     });
     setProfilePanelMode('edit');
+    setAccountAccessLink('');
+    setAccountSecurity(null);
   }
 
   function openProfileOverview(profile: Profile) {
@@ -566,6 +578,10 @@ export function AdminPage() {
   }
 
   async function saveStudioProfile() {
+    if (!studioForm.id && studioForm.password !== studioForm.confirm_password) {
+      setMessage(t('admin.accounts.passwordsDoNotMatch'));
+      return;
+    }
     setStudioSaving(true);
     setMessage('');
     try {
@@ -601,8 +617,51 @@ export function AdminPage() {
       } else {
         setStudioForm({ ...emptyStudioForm });
       }
+      const accountCreated = 'account_created' in result && Boolean(result.account_created);
+      const userLinked = 'user_linked' in result && Boolean(result.user_linked);
+      setMessage(accountCreated ? t('admin.accounts.accountCreated') : userLinked ? t('admin.accounts.userLinked') : t('admin.messages.profileSaved'));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Nie udalo sie zapisac profilu.');
+    } finally {
+      setStudioSaving(false);
+    }
+  }
+
+  async function generateAccountLink(kind: 'magic' | 'reset') {
+    if (!studioForm.id) return;
+    try {
+      const result = kind === 'magic'
+        ? await api.adminProfileMagicLink(token, studioForm.id)
+        : await api.adminProfilePasswordReset(token, studioForm.id);
+      setAccountAccessLink(result.link);
+      setMessage(t('admin.accounts.linkGenerated'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
+  }
+
+  async function loadAccountSecurity() {
+    if (!studioForm.id) return;
+    try {
+      const result = await api.adminProfileSecurity(token, studioForm.id);
+      setAccountSecurity(result.security);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
+  }
+
+  async function importProfiles() {
+    if (!profileImportFile) return;
+    const form = new FormData();
+    form.append('file', profileImportFile);
+    setStudioSaving(true);
+    try {
+      const result = await api.importAdminProfiles(token, form);
+      setProfileImportReport(result.report);
+      setMessage(t('admin.accounts.importFinished'));
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     } finally {
       setStudioSaving(false);
     }
@@ -733,14 +792,37 @@ export function AdminPage() {
     }, {});
 
     if (studioTab === 'account') {
-      return <div className="admin-form-grid">
-        <AdminField label={t('admin.profileEditor.ownerEmail')} help={t('admin.profileEditor.ownerEmailHelp')}><input type="email" placeholder={t('admin.profileEditor.ownerEmailPlaceholder')} value={studioForm.owner_email} onChange={(event) => setStudioForm({ ...studioForm, owner_email: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.phone')}><input placeholder={t('admin.profileEditor.phonePlaceholder')} value={studioForm.phone} onChange={(event) => setStudioForm({ ...studioForm, phone: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.whatsapp')}><input placeholder={t('admin.profileEditor.whatsappPlaceholder')} value={studioForm.whatsapp} onChange={(event) => setStudioForm({ ...studioForm, whatsapp: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.telegram')}><input placeholder={t('admin.profileEditor.telegramPlaceholder')} value={studioForm.telegram} onChange={(event) => setStudioForm({ ...studioForm, telegram: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.accountType')}><select value={studioForm.account_type} onChange={(event) => setStudioForm({ ...studioForm, account_type: event.target.value })}>{['escort', 'business'].map((type) => <option key={type} value={type}>{t(`admin.status.${type}`)}</option>)}</select></AdminField>
-        <AdminField label={t('admin.profileEditor.profileType')}><select value={studioForm.profile_type} onChange={(event) => setStudioForm({ ...studioForm, profile_type: event.target.value })}>{['private_escort', 'agency', 'club', 'massage_salon', 'live_cam', 'couple', 'trans', 'gay', 'other'].map((type) => <option key={type} value={type}>{t(`admin.status.${type}`)}</option>)}</select></AdminField>
-      </div>;
+      return <>
+        <div className="admin-form-grid">
+          <AdminField label={t('admin.profileEditor.ownerEmail')} help={t('admin.profileEditor.ownerEmailHelp')}><input type="email" placeholder={t('admin.profileEditor.ownerEmailPlaceholder')} value={studioForm.owner_email} onChange={(event) => setStudioForm({ ...studioForm, owner_email: event.target.value })} /></AdminField>
+          {!studioForm.id && <AdminField label={t('admin.accounts.password')}><input type="password" autoComplete="new-password" value={studioForm.password} onChange={(event) => setStudioForm({ ...studioForm, password: event.target.value })} /></AdminField>}
+          {!studioForm.id && <AdminField label={t('admin.accounts.confirmPassword')}><input type="password" autoComplete="new-password" value={studioForm.confirm_password} onChange={(event) => setStudioForm({ ...studioForm, confirm_password: event.target.value })} /></AdminField>}
+          <AdminField label={t('admin.profileEditor.phone')}><input placeholder={t('admin.profileEditor.phonePlaceholder')} value={studioForm.phone} onChange={(event) => setStudioForm({ ...studioForm, phone: event.target.value })} /></AdminField>
+          <AdminField label={t('admin.profileEditor.whatsapp')}><input placeholder={t('admin.profileEditor.whatsappPlaceholder')} value={studioForm.whatsapp} onChange={(event) => setStudioForm({ ...studioForm, whatsapp: event.target.value })} /></AdminField>
+          <AdminField label={t('admin.profileEditor.telegram')}><input placeholder={t('admin.profileEditor.telegramPlaceholder')} value={studioForm.telegram} onChange={(event) => setStudioForm({ ...studioForm, telegram: event.target.value })} /></AdminField>
+          <AdminField label={t('admin.profileEditor.accountType')}><select value={studioForm.account_type} onChange={(event) => setStudioForm({ ...studioForm, account_type: event.target.value })}>{['escort', 'business'].map((type) => <option key={type} value={type}>{t(`admin.status.${type}`)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.profileEditor.profileType')}><select value={studioForm.profile_type} onChange={(event) => setStudioForm({ ...studioForm, profile_type: event.target.value })}>{['private_escort', 'agency', 'massage_salon', 'club', 'live_cam', 'couple', 'trans', 'gay', 'male_escort', 'other'].map((type) => <option key={type} value={type}>{t(`admin.status.${type}`)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.accounts.starterPackage')}><select value={studioForm.starter_package} onChange={(event) => setStudioForm({ ...studioForm, starter_package: event.target.value })}>{['free', 'trial_7', 'trial_30', 'premium_30', 'vip_30', 'lifetime'].map((item) => <option key={item} value={item}>{t(`admin.accounts.package.${item}`)}</option>)}</select></AdminField>
+        </div>
+        {studioForm.id && <section className="admin-card">
+          <h3>{t('admin.accounts.accountSecurity')}</h3>
+          <div className="admin-actions-row">
+            <Action onClick={() => generateAccountLink('magic')}>{t('admin.accounts.magicLink')}</Action>
+            <Action onClick={() => generateAccountLink('reset')}>{t('admin.accounts.resetPasswordLink')}</Action>
+            <Action onClick={loadAccountSecurity}>{t('admin.accounts.loadSecurity')}</Action>
+          </div>
+          {accountAccessLink && <AdminField label={t('admin.accounts.generatedLink')} help={t('admin.accounts.shareVerifiedOwnerOnly')}><><input readOnly value={accountAccessLink} /><button type="button" className="button" onClick={() => navigator.clipboard?.writeText(accountAccessLink)}>{t('admin.accounts.copyLink')}</button></></AdminField>}
+          {accountSecurity && <dl className="admin-detail-list">
+            <dt>{t('admin.accounts.userId')}</dt><dd>{accountSecurity.user_id || '-'}</dd>
+            <dt>{t('admin.accounts.lastLogin')}</dt><dd>{accountSecurity.last_login ? new Date(accountSecurity.last_login).toLocaleString() : t('admin.accounts.notTracked')}</dd>
+            <dt>{t('admin.accounts.lastIp')}</dt><dd>{accountSecurity.last_ip || t('admin.accounts.notTracked')}</dd>
+            <dt>{t('admin.accounts.device')}</dt><dd>{accountSecurity.user_agent || t('admin.accounts.notTracked')}</dd>
+            <dt>{t('admin.accounts.createdAt')}</dt><dd>{accountSecurity.account_created_at ? new Date(accountSecurity.account_created_at).toLocaleString() : '-'}</dd>
+            <dt>{t('admin.accounts.emailConfirmed')}</dt><dd>{accountSecurity.email_confirmed ? t('admin.common.yes') : t('admin.common.no')}</dd>
+            <dt>{t('admin.accounts.banned')}</dt><dd>{accountSecurity.banned ? t('admin.common.yes') : t('admin.common.no')}</dd>
+          </dl>}
+        </section>}
+      </>;
     }
 
     if (studioTab === 'basic') {
@@ -1202,10 +1284,22 @@ export function AdminPage() {
                 <p className="eyebrow">Profile Control</p>
                 <h2>{t('admin.profiles.allProfiles')}</h2>
               </div>
-              <button className="button primary" disabled={studioSaving} onClick={seedBerlinStudioProfiles}>
-                <Crown size={16} /> {t('admin.actions.generateBerlinDemo')}
-              </button>
+              <div className="admin-actions-row">
+                <label className="admin-action-btn">
+                  {t('admin.accounts.importProfiles')}
+                  <input hidden type="file" accept=".csv,.xlsx,.xls" onChange={(event) => setProfileImportFile(event.target.files?.[0] || null)} />
+                </label>
+                <button className="button" disabled={!profileImportFile || studioSaving} onClick={importProfiles}>{profileImportFile?.name || t('admin.accounts.import')}</button>
+                <button className="button primary" disabled={studioSaving} onClick={seedBerlinStudioProfiles}>
+                  <Crown size={16} /> {t('admin.actions.generateBerlinDemo')}
+                </button>
+              </div>
             </div>
+            {profileImportReport && <section className="admin-card">
+              <h3>{t('admin.accounts.importReport')}</h3>
+              <p>{t('admin.accounts.importSummary', { created: profileImportReport.created, skipped: profileImportReport.skipped, failed: profileImportReport.failed })}</p>
+              {profileImportReport.errors.length ? <ul>{profileImportReport.errors.map((error) => <li key={`${error.row}-${error.email || ''}`}>{t('admin.accounts.importRowError', { row: error.row, email: error.email || '-', error: error.error })}</li>)}</ul> : null}
+            </section>}
             <div className="studio-filter-grid">
               <select value={studioFilters.city} onChange={(event) => setStudioFilters({ ...studioFilters, city: event.target.value })}>
                 {['all', 'berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
