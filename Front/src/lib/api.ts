@@ -106,6 +106,11 @@ export const api = {
     method: 'POST',
     token
   }),
+  createAdminProfileAccount: (token: string, id: string, body: { email: string; password: string; confirm_password: string }) => request<{ profile: Profile; account_created: boolean; user_linked: boolean }>(`/api/admin/profiles/${id}/create-account`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
   adminProfilePasswordReset: (token: string, id: string) => request<{ link: string }>(`/api/admin/profiles/${id}/password-reset`, {
     method: 'POST',
     token

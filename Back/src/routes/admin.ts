@@ -1072,20 +1072,93 @@ adminRouter.patch('/profiles/:id/publish', asyncHandler(async (req, res) => {
   res.json({ profile: withAdminImageUrls(data) });
 }));
 
+adminRouter.post('/profiles/:id/create-account', asyncHandler(async (req, res) => {
+  const { data: profile, error } = await supabaseAdmin
+    .from('profiles')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
+  logAdminAccount('create_account', profile, 'start');
+  if (error || !profile) {
+    logAdminAccount('create_account', { id: req.params.id }, 'error reason=profile_not_found');
+    return res.status(404).json({ error: 'profile_not_found' });
+  }
+  if (profile.user_id) {
+    logAdminAccount('create_account', profile, 'error reason=auth_user_exists');
+    return res.status(409).json({ error: 'auth_user_exists' });
+  }
+  const email = optionalEmail(req.body.email || profile.owner_email);
+  const password = optionalText(req.body.password, 200);
+  if (!email) {
+    logAdminAccount('create_account', profile, 'error reason=valid_email_required');
+    return res.status(400).json({ error: 'valid_email_required' });
+  }
+  if (!password || password.length < 8) {
+    logAdminAccount('create_account', profile, 'error reason=password_too_short');
+    return res.status(400).json({ error: 'password_too_short' });
+  }
+  if (password !== req.body.confirm_password) {
+    logAdminAccount('create_account', profile, 'error reason=passwords_do_not_match');
+    return res.status(400).json({ error: 'passwords_do_not_match' });
+  }
+
+  const plan = String(profile.subscription_plan || profile.listing_plan || 'admin_profile_studio');
+  const subscriptionStatus = String(profile.subscription_status || 'trial');
+  let account: Awaited<ReturnType<typeof resolveAdminProfileUser>>;
+  try {
+    account = await resolveAdminProfileUser({
+      email,
+      password,
+      accountType: String(profile.account_type || 'escort'),
+      plan,
+      subscriptionStatus
+    });
+  } catch (accountError) {
+    const reason = accountError instanceof Error ? accountError.message : 'account_creation_failed';
+    logAdminAccount('create_account', profile, `error reason=${reason}`);
+    return res.status(400).json({ error: reason });
+  }
+  if (!account.user?.id) {
+    logAdminAccount('create_account', profile, 'error reason=auth_user_missing');
+    return res.status(400).json({ error: 'auth_user_missing' });
+  }
+
+  const { data: updatedProfile, error: updateError } = await supabaseAdmin
+    .from('profiles')
+    .update({ user_id: account.user.id, owner_email: email })
+    .eq('id', profile.id)
+    .select('*, profile_images(*)')
+    .single();
+  if (updateError) {
+    if (account.created) await supabaseAdmin.auth.admin.deleteUser(account.user.id);
+    logAdminAccount('create_account', profile, `error reason=${updateError.message}`);
+    return res.status(400).json({ error: updateError.message });
+  }
+
+  await upsertManualSubscription(updatedProfile, req.user?.email || req.user?.id || null);
+  await logAccountAccess(req, profile.id, account.user.id, account.created ? 'admin_created_account' : 'admin_linked_user');
+  await logAdminAction(req.user?.email, account.created ? 'profile_login_account_created' : 'profile_auth_user_linked', 'profile', profile.id, { user_id: account.user.id });
+  logAdminAccount('create_account', updatedProfile, 'success');
+  res.json({ profile: withAdminImageUrls(updatedProfile), account_created: account.created, user_linked: !account.created });
+}));
+
 adminRouter.get('/profiles/:id/security', asyncHandler(async (req, res) => {
   const { data: profile, error } = await supabaseAdmin
     .from('profiles')
     .select('id, user_id, owner_email')
     .eq('id', req.params.id)
     .single();
-  if (error || !profile) return res.status(404).json({ error: 'Profile not found' });
-
-  let user: any = null;
-  if (profile.user_id) {
-    const userResult = await supabaseAdmin.auth.admin.getUserById(profile.user_id);
-    user = userResult.data.user || null;
-  } else if (profile.owner_email) {
-    user = await findAuthUserByEmail(profile.owner_email);
+  logAdminAccount('security', profile || { id: req.params.id }, 'start');
+  if (error || !profile) return res.status(404).json({ error: 'profile_not_found' });
+  if (!profile.user_id) {
+    logAdminAccount('security', profile, 'error reason=auth_user_missing');
+    return res.status(409).json({ error: 'auth_user_missing' });
+  }
+  const userResult = await supabaseAdmin.auth.admin.getUserById(profile.user_id);
+  const user = userResult.data.user || null;
+  if (userResult.error || !user) {
+    logAdminAccount('security', profile, `error reason=${userResult.error?.message || 'auth_user_missing'}`);
+    return res.status(404).json({ error: 'auth_user_missing' });
   }
   const { data: logs } = await supabaseAdmin
     .from('account_access_logs')
@@ -1094,14 +1167,19 @@ adminRouter.get('/profiles/:id/security', asyncHandler(async (req, res) => {
     .order('created_at', { ascending: false })
     .limit(20);
 
+  logAdminAccount('security', profile, 'success');
   res.json({
     security: {
-      user_id: user?.id || profile.user_id || null,
-      email: user?.email || profile.owner_email || null,
-      last_login: user?.last_sign_in_at || null,
-      account_created_at: user?.created_at || null,
-      email_confirmed: Boolean(user?.email_confirmed_at || user?.confirmed_at),
-      banned: Boolean(user?.banned_until && new Date(user.banned_until).getTime() > Date.now()),
+      user_id: user.id,
+      email: user.email || profile.owner_email || null,
+      last_login: user.last_sign_in_at || null,
+      last_sign_in_at: user.last_sign_in_at || null,
+      account_created_at: user.created_at || null,
+      created_at: user.created_at || null,
+      email_confirmed: Boolean(user.email_confirmed_at || user.confirmed_at),
+      banned_until: user.banned_until || null,
+      banned: Boolean(user.banned_until && new Date(user.banned_until).getTime() > Date.now()),
+      suspended: Boolean(user.banned_until && new Date(user.banned_until).getTime() > Date.now()),
       last_ip: null,
       user_agent: null,
       logs: logs || []
@@ -1111,31 +1189,55 @@ adminRouter.get('/profiles/:id/security', asyncHandler(async (req, res) => {
 
 adminRouter.post('/profiles/:id/magic-link', asyncHandler(async (req, res) => {
   const target = await getAdminProfileAuthTarget(req.params.id);
+  if ('error' in target) {
+    logAdminAccount('magic_link', target.profile, `error reason=${target.error}`);
+    return res.status(target.status || 400).json({ error: target.error });
+  }
+  logAdminAccount('magic_link', target.profile, 'start');
   const { data, error } = await supabaseAdmin.auth.admin.generateLink({
     type: 'magiclink',
     email: target.email,
     options: { redirectTo: `${config.frontendUrl}/dashboard` }
   });
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    logAdminAccount('magic_link', target.profile, `error reason=${error.message}`);
+    return res.status(400).json({ error: error.message });
+  }
   const link = data.properties?.action_link;
-  if (!link) return res.status(500).json({ error: 'Magic link was not generated' });
+  if (!link) {
+    logAdminAccount('magic_link', target.profile, 'error reason=magic_link_not_generated');
+    return res.status(500).json({ error: 'magic_link_not_generated' });
+  }
   await logAccountAccess(req, target.profileId, target.userId, 'magic_link_generated');
   await logAdminAction(req.user?.email, 'profile_magic_link_generated', 'profile', target.profileId, { user_id: target.userId });
+  logAdminAccount('magic_link', target.profile, 'success');
   res.json({ link });
 }));
 
 adminRouter.post('/profiles/:id/password-reset', asyncHandler(async (req, res) => {
   const target = await getAdminProfileAuthTarget(req.params.id);
+  if ('error' in target) {
+    logAdminAccount('password_reset', target.profile, `error reason=${target.error}`);
+    return res.status(target.status || 400).json({ error: target.error });
+  }
+  logAdminAccount('password_reset', target.profile, 'start');
   const { data, error } = await supabaseAdmin.auth.admin.generateLink({
     type: 'recovery',
     email: target.email,
     options: { redirectTo: `${config.frontendUrl}/dashboard` }
   });
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    logAdminAccount('password_reset', target.profile, `error reason=${error.message}`);
+    return res.status(400).json({ error: error.message });
+  }
   const link = data.properties?.action_link;
-  if (!link) return res.status(500).json({ error: 'Password reset link was not generated' });
+  if (!link) {
+    logAdminAccount('password_reset', target.profile, 'error reason=password_reset_not_generated');
+    return res.status(500).json({ error: 'password_reset_not_generated' });
+  }
   await logAccountAccess(req, target.profileId, target.userId, 'password_reset_generated');
   await logAdminAction(req.user?.email, 'profile_password_reset_generated', 'profile', target.profileId, { user_id: target.userId });
+  logAdminAccount('password_reset', target.profile, 'success');
   res.json({ link });
 }));
 
@@ -2569,16 +2671,18 @@ async function resolveAdminProfileUser(input: { email: string; password: string 
 
 async function getAdminProfileAuthTarget(profileId: string) {
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('id, user_id, owner_email').eq('id', profileId).single();
-  if (error || !profile) throw new Error('Profile not found');
-  let user = profile.user_id ? (await supabaseAdmin.auth.admin.getUserById(profile.user_id)).data.user : null;
-  if (!user && profile.owner_email) user = await findAuthUserByEmail(profile.owner_email);
-  if (!user?.email) throw new Error('Profile has no login account');
-  if (!profile.user_id) {
-    const { data: linkedProfile } = await supabaseAdmin.from('profiles').select('id').eq('user_id', user.id).neq('id', profile.id).limit(1).maybeSingle();
-    if (linkedProfile) throw new Error('User is linked to another profile');
-    await supabaseAdmin.from('profiles').update({ user_id: user.id, owner_email: user.email }).eq('id', profile.id);
-  }
-  return { profileId: profile.id, userId: user.id, email: user.email };
+  if (error || !profile) return { error: 'profile_not_found', status: 404, profile: { id: profileId, user_id: null, owner_email: null } };
+  if (!profile.user_id) return { error: 'auth_user_missing', status: 409, profile };
+  const userResult = await supabaseAdmin.auth.admin.getUserById(profile.user_id);
+  const user = userResult.data.user;
+  if (userResult.error || !user?.email) return { error: 'auth_user_missing', status: 404, profile };
+  return { profileId: profile.id, userId: user.id, email: user.email, profile };
+}
+
+function logAdminAccount(action: string, profile: Record<string, any> | null | undefined, result: string) {
+  console.info(
+    `[admin account] action=${action} profile_id=${profile?.id || '-'} has_user_id=${Boolean(profile?.user_id)} owner_email=${profile?.owner_email || '-'} ${result}`
+  );
 }
 
 async function logAccountAccess(req: any, profileId: string, userId: string, action: string) {
