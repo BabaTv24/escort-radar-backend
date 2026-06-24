@@ -1090,14 +1090,15 @@ adminRouter.post('/profiles/:id/create-account', asyncHandler(async (req, res) =
   const email = optionalEmail(req.body.email || profile.owner_email);
   const password = optionalText(req.body.password, 200);
   if (!email) {
-    logAdminAccount('create_account', profile, 'error reason=valid_email_required');
-    return res.status(400).json({ error: 'valid_email_required' });
+    logAdminAccount('create_account', profile, 'error reason=owner_email_required');
+    return res.status(400).json({ error: 'owner_email_required' });
   }
-  if (!password || password.length < 8) {
+  const existingAuthUser = await findAuthUserByEmail(email);
+  if (!existingAuthUser && (!password || password.length < 8)) {
     logAdminAccount('create_account', profile, 'error reason=password_too_short');
     return res.status(400).json({ error: 'password_too_short' });
   }
-  if (password !== req.body.confirm_password) {
+  if (!existingAuthUser && password !== req.body.confirm_password) {
     logAdminAccount('create_account', profile, 'error reason=passwords_do_not_match');
     return res.status(400).json({ error: 'passwords_do_not_match' });
   }
@@ -1108,7 +1109,7 @@ adminRouter.post('/profiles/:id/create-account', asyncHandler(async (req, res) =
   try {
     account = await resolveAdminProfileUser({
       email,
-      password,
+      password: existingAuthUser ? null : password,
       accountType: String(profile.account_type || 'escort'),
       plan,
       subscriptionStatus
@@ -1142,6 +1143,69 @@ adminRouter.post('/profiles/:id/create-account', asyncHandler(async (req, res) =
   res.json({ profile: withAdminImageUrls(updatedProfile), account_created: account.created, user_linked: !account.created });
 }));
 
+adminRouter.post('/profiles/:id/set-temp-password', asyncHandler(async (req, res) => {
+  const { data: profile, error } = await supabaseAdmin.from('profiles').select('*').eq('id', req.params.id).single();
+  logAdminAccount('set_temp_password', profile || { id: req.params.id }, 'start');
+  if (error || !profile) return res.status(404).json({ error: 'profile_not_found' });
+  const password = optionalText(req.body.password, 200);
+  if (!password || password.length < 8) {
+    logAdminAccount('set_temp_password', profile, 'error reason=password_too_short');
+    return res.status(400).json({ error: 'password_too_short' });
+  }
+  if (password !== req.body.confirm_password) {
+    logAdminAccount('set_temp_password', profile, 'error reason=passwords_do_not_match');
+    return res.status(400).json({ error: 'passwords_do_not_match' });
+  }
+  const email = optionalEmail(profile.owner_email);
+  if (!email) {
+    logAdminAccount('set_temp_password', profile, 'error reason=owner_email_required');
+    return res.status(400).json({ error: 'owner_email_required' });
+  }
+
+  let target = await resolveProfileAuthUser(profile);
+  if ('error' in target && target.error === 'auth_user_missing') {
+    const account = await resolveAdminProfileUser({
+      email,
+      password,
+      accountType: String(profile.account_type || 'escort'),
+      plan: String(profile.subscription_plan || profile.listing_plan || 'admin_profile_studio'),
+      subscriptionStatus: String(profile.subscription_status || 'trial')
+    });
+    if (!account.user?.id) return res.status(400).json({ error: 'auth_user_missing' });
+    const { data: linked, error: linkError } = await supabaseAdmin
+      .from('profiles')
+      .update({ user_id: account.user.id, owner_email: email })
+      .eq('id', profile.id)
+      .select('*, profile_images(*)')
+      .single();
+    if (linkError) {
+      if (account.created) await supabaseAdmin.auth.admin.deleteUser(account.user.id);
+      return res.status(400).json({ error: linkError.message });
+    }
+    target = { profile: linked, user: account.user };
+  }
+  if ('error' in target) return res.status(target.status || 400).json({ error: target.error });
+
+  const { data: updatedUser, error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(target.user.id, {
+    password,
+    app_metadata: {
+      ...(target.user.app_metadata || {}),
+      auth_account_type: profile.account_type || 'escort',
+      plan: profile.subscription_plan || profile.listing_plan || 'admin_profile_studio',
+      subscription_status: profile.subscription_status || 'trial'
+    }
+  });
+  if (passwordError || !updatedUser.user) {
+    logAdminAccount('set_temp_password', profile, `error reason=${passwordError?.message || 'password_update_failed'}`);
+    return res.status(400).json({ error: passwordError?.message || 'password_update_failed' });
+  }
+  await upsertManualSubscription(target.profile, req.user?.email || req.user?.id || null);
+  await logAccountAccess(req, target.profile.id, target.user.id, 'temporary_password_set');
+  await logAdminAction(req.user?.email, 'profile_temporary_password_set', 'profile', target.profile.id, { user_id: target.user.id });
+  logAdminAccount('set_temp_password', target.profile, 'success');
+  res.json({ profile: withAdminImageUrls(target.profile), user_id: target.user.id });
+}));
+
 adminRouter.get('/profiles/:id/security', asyncHandler(async (req, res) => {
   const { data: profile, error } = await supabaseAdmin
     .from('profiles')
@@ -1150,16 +1214,12 @@ adminRouter.get('/profiles/:id/security', asyncHandler(async (req, res) => {
     .single();
   logAdminAccount('security', profile || { id: req.params.id }, 'start');
   if (error || !profile) return res.status(404).json({ error: 'profile_not_found' });
-  if (!profile.user_id) {
-    logAdminAccount('security', profile, 'error reason=auth_user_missing');
-    return res.status(409).json({ error: 'auth_user_missing' });
+  const target = await resolveProfileAuthUser(profile);
+  if ('error' in target) {
+    logAdminAccount('security', profile, `error reason=${target.error}`);
+    return res.status(target.status || 400).json({ error: target.error });
   }
-  const userResult = await supabaseAdmin.auth.admin.getUserById(profile.user_id);
-  const user = userResult.data.user || null;
-  if (userResult.error || !user) {
-    logAdminAccount('security', profile, `error reason=${userResult.error?.message || 'auth_user_missing'}`);
-    return res.status(404).json({ error: 'auth_user_missing' });
-  }
+  const user = target.user;
   const { data: logs } = await supabaseAdmin
     .from('account_access_logs')
     .select('*')
@@ -1239,6 +1299,52 @@ adminRouter.post('/profiles/:id/password-reset', asyncHandler(async (req, res) =
   await logAdminAction(req.user?.email, 'profile_password_reset_generated', 'profile', target.profileId, { user_id: target.userId });
   logAdminAccount('password_reset', target.profile, 'success');
   res.json({ link });
+}));
+
+adminRouter.post('/profiles/:id/send-login-email', asyncHandler(async (req, res) => {
+  const target = await getAdminProfileAuthTarget(req.params.id);
+  if ('error' in target) {
+    logAdminAccount('send_login_email', target.profile, `error reason=${target.error}`);
+    return res.status(target.status || 400).json({ error: target.error });
+  }
+  logAdminAccount('send_login_email', target.profile, 'start');
+  const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'magiclink',
+    email: target.email,
+    options: { redirectTo: `${config.frontendUrl}/dashboard` }
+  });
+  if (error || !data.properties?.action_link) {
+    logAdminAccount('send_login_email', target.profile, `error reason=${error?.message || 'magic_link_not_generated'}`);
+    return res.status(400).json({ error: error?.message || 'magic_link_not_generated' });
+  }
+  const delivery = buildAdminEmailFallback('login', target.email, data.properties.action_link);
+  await logAccountAccess(req, target.profileId, target.userId, 'login_email_prepared');
+  await logAdminAction(req.user?.email, 'profile_login_email_prepared', 'profile', target.profileId, { user_id: target.userId, sent: false });
+  logAdminAccount('send_login_email', target.profile, 'success');
+  res.json(delivery);
+}));
+
+adminRouter.post('/profiles/:id/send-reset-email', asyncHandler(async (req, res) => {
+  const target = await getAdminProfileAuthTarget(req.params.id);
+  if ('error' in target) {
+    logAdminAccount('send_reset_email', target.profile, `error reason=${target.error}`);
+    return res.status(target.status || 400).json({ error: target.error });
+  }
+  logAdminAccount('send_reset_email', target.profile, 'start');
+  const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'recovery',
+    email: target.email,
+    options: { redirectTo: `${config.frontendUrl}/dashboard` }
+  });
+  if (error || !data.properties?.action_link) {
+    logAdminAccount('send_reset_email', target.profile, `error reason=${error?.message || 'password_reset_not_generated'}`);
+    return res.status(400).json({ error: error?.message || 'password_reset_not_generated' });
+  }
+  const delivery = buildAdminEmailFallback('reset', target.email, data.properties.action_link);
+  await logAccountAccess(req, target.profileId, target.userId, 'reset_email_prepared');
+  await logAdminAction(req.user?.email, 'profile_reset_email_prepared', 'profile', target.profileId, { user_id: target.userId, sent: false });
+  logAdminAccount('send_reset_email', target.profile, 'success');
+  res.json(delivery);
 }));
 
 adminRouter.post('/profiles/:id/images', adminUpload.single('image'), asyncHandler(async (req, res) => {
@@ -2669,14 +2775,65 @@ async function resolveAdminProfileUser(input: { email: string; password: string 
   return { user: data.user, created: true };
 }
 
-async function getAdminProfileAuthTarget(profileId: string) {
+type ResolvedProfileAuthUser =
+  | { profile: Record<string, any>; user: any }
+  | { error: string; status: number };
+
+type AdminProfileAuthTarget =
+  | { profileId: string; userId: string; email: string; profile: Record<string, any> }
+  | { error: string; status: number; profile: Record<string, any> };
+
+async function getAdminProfileAuthTarget(profileId: string): Promise<AdminProfileAuthTarget> {
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('id, user_id, owner_email').eq('id', profileId).single();
   if (error || !profile) return { error: 'profile_not_found', status: 404, profile: { id: profileId, user_id: null, owner_email: null } };
-  if (!profile.user_id) return { error: 'auth_user_missing', status: 409, profile };
-  const userResult = await supabaseAdmin.auth.admin.getUserById(profile.user_id);
-  const user = userResult.data.user;
-  if (userResult.error || !user?.email) return { error: 'auth_user_missing', status: 404, profile };
-  return { profileId: profile.id, userId: user.id, email: user.email, profile };
+  const target = await resolveProfileAuthUser(profile);
+  if ('error' in target) return { ...target, profile };
+  if (!target.user.email) return { error: 'owner_email_required', status: 400, profile };
+  return { profileId: target.profile.id, userId: target.user.id, email: target.user.email, profile: target.profile };
+}
+
+async function resolveProfileAuthUser(profile: Record<string, any>): Promise<ResolvedProfileAuthUser> {
+  const email = optionalEmail(profile.owner_email);
+  if (profile.user_id) {
+    const result = await supabaseAdmin.auth.admin.getUserById(profile.user_id);
+    if (result.data.user) return { profile, user: result.data.user };
+  }
+  if (!email) return { error: 'owner_email_required', status: 400 };
+  const user = await findAuthUserByEmail(email);
+  if (!user) return { error: 'auth_user_missing', status: 409 };
+  const { data: linkedProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .neq('id', profile.id)
+    .limit(1)
+    .maybeSingle();
+  if (linkedProfile) return { error: 'auth_user_linked_elsewhere', status: 409 };
+  const { data: updatedProfile, error } = await supabaseAdmin
+    .from('profiles')
+    .update({ user_id: user.id, owner_email: user.email || email })
+    .eq('id', profile.id)
+    .select('*, profile_images(*)')
+    .single();
+  if (error) return { error: error.message, status: 400 };
+  return { profile: updatedProfile, user };
+}
+
+function buildAdminEmailFallback(type: 'login' | 'reset', email: string, link: string) {
+  const login = type === 'login';
+  const subject = login ? 'Escort Radar - login access' : 'Escort Radar - password reset';
+  const emailBody = login
+    ? `Hello,\n\nUse this secure link to sign in to your Escort Radar account:\n${link}\n\nDo not share this link with anyone.`
+    : `Hello,\n\nUse this secure link to set a new password for your Escort Radar account:\n${link}\n\nIf you did not request this change, contact support.`;
+  return {
+    sent: false,
+    provider: null,
+    email_to: email,
+    subject,
+    email_body: emailBody,
+    link,
+    reason: 'mail_provider_not_configured'
+  };
 }
 
 function logAdminAccount(action: string, profile: Record<string, any> | null | undefined, result: string) {

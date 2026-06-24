@@ -147,8 +147,9 @@ export function AdminPage() {
   const [topProfiles, setTopProfiles] = useState<Record<string, any>[]>([]);
   const [adminLocationRows, setAdminLocationRows] = useState<LocationCatalogRow[]>([]);
   const [accountAccessLink, setAccountAccessLink] = useState('');
+  const [accountEmailBody, setAccountEmailBody] = useState('');
   const [accountSecurity, setAccountSecurity] = useState<Record<string, any> | null>(null);
-  const [accountActionLoading, setAccountActionLoading] = useState<'create' | 'magic' | 'reset' | 'security' | ''>('');
+  const [accountActionLoading, setAccountActionLoading] = useState<'create' | 'temp' | 'magic' | 'reset' | 'send-login' | 'send-reset' | 'security' | ''>('');
   const [profileImportFile, setProfileImportFile] = useState<File | null>(null);
   const [profileImportReport, setProfileImportReport] = useState<{ created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } | null>(null);
   const [newLocationRow, setNewLocationRow] = useState<LocationCatalogRow>({
@@ -529,6 +530,7 @@ export function AdminPage() {
     });
     setProfilePanelMode('edit');
     setAccountAccessLink('');
+    setAccountEmailBody('');
     setAccountSecurity(null);
     setAccountActionLoading('');
   }
@@ -640,6 +642,7 @@ export function AdminPage() {
         ? await api.adminProfileMagicLink(token, studioForm.id)
         : await api.adminProfilePasswordReset(token, studioForm.id);
       setAccountAccessLink(result.link);
+      await refreshSelectedAdminProfile(studioForm.id);
       setMessage(t('admin.accounts.linkGenerated'));
     } catch (error) {
       setMessage(adminAccountErrorMessage(error, t));
@@ -655,6 +658,7 @@ export function AdminPage() {
     try {
       const result = await api.adminProfileSecurity(token, studioForm.id);
       setAccountSecurity(result.security);
+      await refreshSelectedAdminProfile(studioForm.id);
     } catch (error) {
       setMessage(adminAccountErrorMessage(error, t));
     } finally {
@@ -676,18 +680,72 @@ export function AdminPage() {
         password: studioForm.password,
         confirm_password: studioForm.confirm_password
       });
-      const refreshed = await api.adminProfile(token, studioForm.id);
-      setProfiles((current) => current.map((profile) => profile.id === refreshed.profile.id ? refreshed.profile : profile));
-      editStudioProfile(refreshed.profile);
+      const refreshedProfile = await refreshSelectedAdminProfile(studioForm.id);
       setStudioTab('account');
       setMessage(t('admin.accounts.accountCreated'));
-      const security = await api.adminProfileSecurity(token, refreshed.profile.id);
+      const security = await api.adminProfileSecurity(token, refreshedProfile.id);
       setAccountSecurity(security.security);
     } catch (error) {
       setMessage(adminAccountErrorMessage(error, t));
     } finally {
       setAccountActionLoading('');
     }
+  }
+
+  async function setTemporaryPassword() {
+    if (!studioForm.id) return;
+    if (studioForm.password !== studioForm.confirm_password) {
+      setMessage(t('admin.accounts.passwordsDoNotMatch'));
+      return;
+    }
+    setAccountActionLoading('temp');
+    setMessage('');
+    try {
+      await api.setAdminProfileTempPassword(token, studioForm.id, {
+        password: studioForm.password,
+        confirm_password: studioForm.confirm_password
+      });
+      const refreshed = await refreshSelectedAdminProfile(studioForm.id);
+      setStudioForm((current) => ({ ...current, password: '', confirm_password: '' }));
+      setMessage(t('admin.accounts.tempPasswordSet'));
+      if (refreshed) {
+        const security = await api.adminProfileSecurity(token, refreshed.id);
+        setAccountSecurity(security.security);
+      }
+    } catch (error) {
+      setMessage(adminAccountErrorMessage(error, t));
+    } finally {
+      setAccountActionLoading('');
+    }
+  }
+
+  async function sendAccountEmail(kind: 'login' | 'reset') {
+    if (!studioForm.id) return;
+    setAccountActionLoading(kind === 'login' ? 'send-login' : 'send-reset');
+    setMessage('');
+    try {
+      const result = kind === 'login'
+        ? await api.sendAdminProfileLoginEmail(token, studioForm.id)
+        : await api.sendAdminProfileResetEmail(token, studioForm.id);
+      setAccountAccessLink(result.link);
+      setAccountEmailBody(`To: ${result.email_to}\nSubject: ${result.subject}\n\n${result.email_body}`);
+      setMessage(result.sent ? t('admin.accounts.emailSent') : t('admin.accounts.emailPrepared'));
+      await refreshSelectedAdminProfile(studioForm.id);
+    } catch (error) {
+      setMessage(adminAccountErrorMessage(error, t));
+    } finally {
+      setAccountActionLoading('');
+    }
+  }
+
+  async function refreshSelectedAdminProfile(profileId: string) {
+    const refreshed = await api.adminProfile(token, profileId);
+    setProfiles((current) => current.map((profile) => profile.id === refreshed.profile.id ? refreshed.profile : profile));
+    setStudioForm((current) => ({
+      ...current,
+      owner_email: refreshed.profile.owner_email || current.owner_email
+    }));
+    return refreshed.profile;
   }
 
   async function importProfiles() {
@@ -833,11 +891,12 @@ export function AdminPage() {
 
     if (studioTab === 'account') {
       const hasLoginAccount = Boolean(selectedProfile?.user_id);
+      const canResolveLoginAccount = hasLoginAccount || Boolean(studioForm.owner_email);
       return <>
         <div className="admin-form-grid">
           <AdminField label={t('admin.profileEditor.ownerEmail')} help={t('admin.profileEditor.ownerEmailHelp')}><input type="email" placeholder={t('admin.profileEditor.ownerEmailPlaceholder')} value={studioForm.owner_email} onChange={(event) => setStudioForm({ ...studioForm, owner_email: event.target.value })} /></AdminField>
-          {(!studioForm.id || !hasLoginAccount) && <AdminField label={t('admin.accounts.password')}><input type="password" autoComplete="new-password" value={studioForm.password} onChange={(event) => setStudioForm({ ...studioForm, password: event.target.value })} /></AdminField>}
-          {(!studioForm.id || !hasLoginAccount) && <AdminField label={t('admin.accounts.confirmPassword')}><input type="password" autoComplete="new-password" value={studioForm.confirm_password} onChange={(event) => setStudioForm({ ...studioForm, confirm_password: event.target.value })} /></AdminField>}
+          <AdminField label={studioForm.id ? t('admin.accounts.tempPassword') : t('admin.accounts.password')}><input type="password" autoComplete="new-password" value={studioForm.password} onChange={(event) => setStudioForm({ ...studioForm, password: event.target.value })} /></AdminField>
+          <AdminField label={studioForm.id ? t('admin.accounts.confirmTempPassword') : t('admin.accounts.confirmPassword')}><input type="password" autoComplete="new-password" value={studioForm.confirm_password} onChange={(event) => setStudioForm({ ...studioForm, confirm_password: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.phone')}><input placeholder={t('admin.profileEditor.phonePlaceholder')} value={studioForm.phone} onChange={(event) => setStudioForm({ ...studioForm, phone: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.whatsapp')}><input placeholder={t('admin.profileEditor.whatsappPlaceholder')} value={studioForm.whatsapp} onChange={(event) => setStudioForm({ ...studioForm, whatsapp: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.telegram')}><input placeholder={t('admin.profileEditor.telegramPlaceholder')} value={studioForm.telegram} onChange={(event) => setStudioForm({ ...studioForm, telegram: event.target.value })} /></AdminField>
@@ -847,16 +906,23 @@ export function AdminPage() {
         </div>
         {studioForm.id && <section className="admin-card">
           <h3>{t('admin.accounts.accountSecurity')}</h3>
+          <p><strong>{t('admin.accounts.loginStatus')}:</strong> {hasLoginAccount ? t('admin.accounts.connected') : t('admin.accounts.missing')}</p>
+          <p><strong>{t('admin.accounts.userId')}:</strong> {selectedProfile?.user_id || accountSecurity?.user_id || '-'}</p>
           {!hasLoginAccount && <p className="muted">{t('admin.accounts.authUserMissingHelp')}</p>}
           <div className="admin-actions-row">
             {!hasLoginAccount && <Action disabled={Boolean(accountActionLoading)} onClick={createExistingProfileAccount}>{accountActionLoading === 'create' ? t('states.loading') : t('admin.accounts.createLoginAccount')}</Action>}
-            <Action disabled={Boolean(accountActionLoading)} onClick={() => generateAccountLink('magic')}>{accountActionLoading === 'magic' ? t('states.loading') : t('admin.accounts.magicLink')}</Action>
-            <Action disabled={Boolean(accountActionLoading)} onClick={() => generateAccountLink('reset')}>{accountActionLoading === 'reset' ? t('states.loading') : t('admin.accounts.resetPasswordLink')}</Action>
-            <Action disabled={Boolean(accountActionLoading)} onClick={loadAccountSecurity}>{accountActionLoading === 'security' ? t('states.loading') : t('admin.accounts.loadSecurity')}</Action>
+            <Action disabled={Boolean(accountActionLoading) || !canResolveLoginAccount} onClick={setTemporaryPassword}>{accountActionLoading === 'temp' ? t('states.loading') : t('admin.accounts.setTempPassword')}</Action>
+            <Action disabled={Boolean(accountActionLoading) || !canResolveLoginAccount} onClick={() => generateAccountLink('magic')}>{accountActionLoading === 'magic' ? t('states.loading') : t('admin.accounts.magicLink')}</Action>
+            <Action disabled={Boolean(accountActionLoading) || !canResolveLoginAccount} onClick={() => generateAccountLink('reset')}>{accountActionLoading === 'reset' ? t('states.loading') : t('admin.accounts.resetPasswordLink')}</Action>
+            <Action disabled={Boolean(accountActionLoading) || !canResolveLoginAccount} onClick={() => sendAccountEmail('login')}>{accountActionLoading === 'send-login' ? t('states.loading') : t('admin.accounts.sendLoginEmail')}</Action>
+            <Action disabled={Boolean(accountActionLoading) || !canResolveLoginAccount} onClick={() => sendAccountEmail('reset')}>{accountActionLoading === 'send-reset' ? t('states.loading') : t('admin.accounts.sendResetEmail')}</Action>
+            <Action disabled={Boolean(accountActionLoading) || !canResolveLoginAccount} onClick={loadAccountSecurity}>{accountActionLoading === 'security' ? t('states.loading') : t('admin.accounts.loadSecurity')}</Action>
           </div>
           {accountAccessLink && <AdminField label={t('admin.accounts.generatedLink')} help={t('admin.accounts.shareVerifiedOwnerOnly')}><><input readOnly value={accountAccessLink} /><button type="button" className="button" onClick={() => navigator.clipboard?.writeText(accountAccessLink)}>{t('admin.accounts.copyLink')}</button></></AdminField>}
+          {accountEmailBody && <AdminField label={t('admin.accounts.emailBody')} help={t('admin.accounts.mailFallback')}><><textarea readOnly value={accountEmailBody} /><button type="button" className="button" onClick={() => navigator.clipboard?.writeText(accountEmailBody)}>{t('admin.accounts.copyEmail')}</button></></AdminField>}
           {accountSecurity && <dl className="admin-detail-list">
             <dt>{t('admin.accounts.userId')}</dt><dd>{accountSecurity.user_id || '-'}</dd>
+            <dt>{t('admin.profileEditor.ownerEmail')}</dt><dd>{accountSecurity.email || studioForm.owner_email || '-'}</dd>
             <dt>{t('admin.accounts.lastLogin')}</dt><dd>{accountSecurity.last_login ? new Date(accountSecurity.last_login).toLocaleString() : t('admin.accounts.notTracked')}</dd>
             <dt>{t('admin.accounts.lastIp')}</dt><dd>{accountSecurity.last_ip || t('admin.accounts.notTracked')}</dd>
             <dt>{t('admin.accounts.device')}</dt><dd>{accountSecurity.user_agent || t('admin.accounts.notTracked')}</dd>
@@ -2046,5 +2112,7 @@ function adminAccountErrorMessage(error: unknown, t: (key: string, vars?: Record
   if (message.includes('passwords_do_not_match')) return t('admin.accounts.passwordsDoNotMatch');
   if (message.includes('password_too_short')) return t('admin.accounts.passwordTooShort');
   if (message.includes('valid_email_required')) return t('admin.accounts.validEmailRequired');
+  if (message.includes('owner_email_required')) return t('admin.accounts.ownerEmailRequired');
+  if (message.includes('auth_user_linked_elsewhere')) return t('admin.accounts.authUserLinkedElsewhere');
   return message || t('states.requestFailed');
 }

@@ -111,11 +111,24 @@ export const api = {
     token,
     body: JSON.stringify(body)
   }),
+  setAdminProfileTempPassword: (token: string, id: string, body: { password: string; confirm_password: string }) => request<{ profile: Profile; user_id: string }>(`/api/admin/profiles/${id}/set-temp-password`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
   adminProfilePasswordReset: (token: string, id: string) => request<{ link: string }>(`/api/admin/profiles/${id}/password-reset`, {
     method: 'POST',
     token
   }),
   adminProfileSecurity: (token: string, id: string) => request<{ security: Record<string, any> }>(`/api/admin/profiles/${id}/security`, { token }),
+  sendAdminProfileLoginEmail: (token: string, id: string) => request<{ sent: boolean; email_to: string; subject: string; email_body: string; link: string; reason?: string }>(`/api/admin/profiles/${id}/send-login-email`, {
+    method: 'POST',
+    token
+  }),
+  sendAdminProfileResetEmail: (token: string, id: string) => request<{ sent: boolean; email_to: string; subject: string; email_body: string; link: string; reason?: string }>(`/api/admin/profiles/${id}/send-reset-email`, {
+    method: 'POST',
+    token
+  }),
   importAdminProfiles: (token: string, form: FormData) => request<{ report: { created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } }>('/api/admin/profiles/import', {
     method: 'POST',
     token,
