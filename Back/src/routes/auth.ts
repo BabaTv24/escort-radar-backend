@@ -98,20 +98,43 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
 }));
 
 async function resolveAuthAccountType(userId: string, appMetadata: Record<string, unknown>): Promise<'client' | 'escort' | 'business'> {
-  const metadataType = normalizeAuthAccountType(appMetadata.auth_account_type);
-  if (metadataType) return metadataType;
-
-  const { data: profile } = await supabaseAdmin
+  let { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('account_type')
+    .select('id, account_type')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (!profile) return 'client';
+  if (!profile) {
+    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const email = authUser.user?.email?.trim().toLowerCase();
+    if (email) {
+      const { data: emailProfiles } = await supabaseAdmin
+        .from('profiles')
+        .select('id, account_type, user_id')
+        .ilike('owner_email', email)
+        .is('user_id', null)
+        .order('created_at', { ascending: false })
+        .limit(2);
+      const emailProfile = emailProfiles?.length === 1 ? emailProfiles[0] : null;
+      if (emailProfile) {
+        const { data: linked } = await supabaseAdmin
+          .from('profiles')
+          .update({ user_id: userId })
+          .eq('id', emailProfile.id)
+          .is('user_id', null)
+          .select('id, account_type')
+          .maybeSingle();
+        profile = linked || null;
+      }
+    }
+  }
 
-  const inferredType = ['agency', 'massage_salon', 'club_party', 'live_cam'].includes(String(profile.account_type || ''))
+  const metadataType = normalizeAuthAccountType(appMetadata.auth_account_type);
+  if (!profile) return metadataType || 'client';
+
+  const inferredType = ['business', 'agency', 'massage_salon', 'club_party', 'live_cam'].includes(String(profile.account_type || ''))
     ? 'business'
     : 'escort';
 

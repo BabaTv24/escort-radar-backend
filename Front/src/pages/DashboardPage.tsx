@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, Heart, ImagePlus, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
+import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, Heart, ImagePlus, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
@@ -605,6 +605,7 @@ export function DashboardPage() {
         uploadStatus={uploadStatus}
         onProfileChange={setProfile}
         onUploadImage={uploadImage}
+        onSetCoverImage={setCoverImage}
         onDeleteImage={deleteImage}
         onSaveDraft={persistProfile}
         onLogout={logout}
@@ -1579,7 +1580,7 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
   );
 }
 
-function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onDeleteImage, onSaveDraft, onLogout }: {
+function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onLogout }: {
   profile: Partial<Profile>;
   savedProfile: Profile | null;
   userEmail: string;
@@ -1591,17 +1592,19 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   uploadStatus: string;
   onProfileChange: (profile: Partial<Profile>) => void;
   onUploadImage: (event: ChangeEvent<HTMLInputElement>) => void;
+  onSetCoverImage: (imageId: string) => void;
   onDeleteImage: (imageId: string) => void;
   onSaveDraft: (profile: Partial<Profile>, successMessage?: string) => Promise<void>;
   onLogout: () => void;
 }) {
   const { t } = useI18n();
-  const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text'>(savedProfile ? 'operator' : 'setup');
+  const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text' | 'account' | 'visibility'>(savedProfile ? 'operator' : 'setup');
   const [serviceSearch, setServiceSearch] = useState('');
   const [geoMessage, setGeoMessage] = useState('');
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeSuggestions, setPlaceSuggestions] = useState<any[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
+  const [accountMessage, setAccountMessage] = useState('');
   const autoLocationRan = useRef(false);
   const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const primaryImage = savedProfile?.profile_images?.[0]?.public_url;
@@ -1636,6 +1639,14 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
       ? current.filter((item) => item !== key)
       : current.length >= 100 ? current : [...current, key];
     onProfileChange({ ...profile, services: next });
+  }
+
+  async function requestPasswordReset() {
+    setAccountMessage('');
+    const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
+      redirectTo: `${window.location.origin}/dashboard`
+    });
+    setAccountMessage(error ? error.message : t('dashboard.account.resetSent'));
   }
 
   async function useCurrentGps() {
@@ -1818,6 +1829,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
         <ActionButton active={panel === 'prices'} icon={<Gem size={22} />} label="Prices" onClick={() => setPanel('prices')} />
         <ActionButton active={panel === 'services'} icon={<Sparkles size={22} />} label="Services" onClick={() => setPanel('services')} />
         <ActionButton active={panel === 'text'} icon={<UserRound size={22} />} label="Profile Text" onClick={() => setPanel('text')} />
+        <ActionButton active={panel === 'account'} icon={<UserRound size={22} />} label={t('dashboard.account.title')} onClick={() => setPanel('account')} />
+        <ActionButton active={panel === 'visibility'} icon={<BadgeCheck size={22} />} label={t('dashboard.visibility.title')} onClick={() => setPanel('visibility')} />
       </section>
 
       <form
@@ -1869,9 +1882,10 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <span>{savedProfile ? (uploadStatus === 'uploading' ? 'Uploading...' : 'Tap once, choose photo, done.') : 'Go to Quick Setup, fill name/city/price, then Save changes.'}</span>
             </label>
             <div className="one-hand-photo-strip">
-              {(savedProfile?.profile_images || []).slice(0, 6).map((image) => (
+              {(savedProfile?.profile_images || []).map((image) => (
                 <div className="one-hand-photo-item" key={image.id}>
                   <img src={image.public_url} alt="" />
+                  <button type="button" onClick={() => onSetCoverImage(image.id)}>{image.is_cover || image.is_primary ? t('creator.coverImage') : t('creator.cover')}</button>
                   <button type="button" onClick={() => onDeleteImage(image.id)}>Delete</button>
                 </div>
               ))}
@@ -2054,6 +2068,9 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <PriceEditor label="2 hours" value={profile.price_2h} onChange={(value) => updatePrice('price_2h', value)} />
               <PriceEditor label="Night" value={profile.price_night} onChange={(value) => updatePrice('price_night', value)} />
             </div>
+            <select value={profile.currency || 'EUR'} onChange={(event) => onProfileChange({ ...profile, currency: event.target.value })}>
+              {['EUR', 'PLN', 'CHF', 'GBP', 'USD'].map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+            </select>
           </section>
         )}
 
@@ -2065,6 +2082,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
                 <h2>Short description</h2>
               </div>
             </div>
+            <input placeholder={t('form.displayName')} value={profile.display_name || ''} onChange={(event) => onProfileChange({ ...profile, display_name: event.target.value })} />
             <textarea
               rows={6}
               placeholder="Write a short profile description shown on your public profile."
@@ -2095,6 +2113,46 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           </section>
         )}
 
+        {panel === 'account' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">{t('dashboard.account.title')}</p>
+                <h2>{userEmail}</h2>
+              </div>
+            </div>
+            <div className="form-grid">
+              <input type="email" readOnly value={userEmail} aria-label={t('dashboard.account.email')} />
+              <input placeholder={t('dashboard.account.phone')} value={profile.phone || profile.primary_phone || ''} onChange={(event) => onProfileChange({ ...profile, phone: event.target.value, primary_phone: event.target.value })} />
+              <input placeholder={t('dashboard.account.whatsapp')} value={profile.whatsapp || ''} onChange={(event) => onProfileChange({ ...profile, whatsapp: event.target.value })} />
+              <input placeholder={t('dashboard.account.telegram')} value={profile.telegram || ''} onChange={(event) => onProfileChange({ ...profile, telegram: event.target.value })} />
+            </div>
+            <div className="admin-actions-row">
+              <button className="button" type="button" onClick={requestPasswordReset}>{t('dashboard.account.resetPassword')}</button>
+              <button className="button" type="button" onClick={onLogout}>{t('buttons.logout')}</button>
+            </div>
+            {accountMessage && <p className={accountMessage.includes('sent') ? 'success' : 'muted'}>{accountMessage}</p>}
+          </section>
+        )}
+
+        {panel === 'visibility' && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">{t('dashboard.visibility.title')}</p>
+                <h2>{savedProfile?.display_name || profile.display_name || '-'}</h2>
+              </div>
+            </div>
+            <dl className="admin-detail-list">
+              <dt>{t('dashboard.visibility.publicStatus')}</dt><dd>{savedProfile?.is_published === false ? t('admin.status.unpublished') : t('admin.status.published')}</dd>
+              <dt>{t('dashboard.visibility.moderation')}</dt><dd>{savedProfile?.moderation_status || 'pending'}</dd>
+              <dt>{t('dashboard.visibility.subscription')}</dt><dd>{savedProfile?.subscription_status || 'free'}</dd>
+              <dt>{t('dashboard.visibility.premiumTier')}</dt><dd>{savedProfile?.premium_tier || 'standard'}</dd>
+            </dl>
+            {savedProfile && <Link className="button primary" to={`/profile/${savedProfile.id}`}>{t('dashboard.viewPublicProfile')}</Link>}
+          </section>
+        )}
+
         <div className="one-hand-save">
           <button className="button primary" type="submit" disabled={dashboardStatus === 'saving'}>
             {dashboardStatus === 'saving' ? 'Saving...' : 'Save changes'}
@@ -2112,6 +2170,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
         <button type="button" className={panel === 'prices' ? 'active' : ''} onClick={() => setPanel('prices')}><Gem size={18} />Prices</button>
         <button type="button" className={panel === 'services' ? 'active' : ''} onClick={() => setPanel('services')}><Sparkles size={18} />Services</button>
         {savedProfile && <button type="button" className={panel === 'text' ? 'active' : ''} onClick={() => setPanel('text')}><UserRound size={18} />Text</button>}
+        {savedProfile && <button type="button" className={panel === 'account' ? 'active' : ''} onClick={() => setPanel('account')}><UserRound size={18} />{t('dashboard.account.short')}</button>}
+        {savedProfile && <button type="button" className={panel === 'visibility' ? 'active' : ''} onClick={() => setPanel('visibility')}><BadgeCheck size={18} />{t('dashboard.visibility.short')}</button>}
       </nav>
       <p className="one-hand-email">{userEmail}</p>
     </div>

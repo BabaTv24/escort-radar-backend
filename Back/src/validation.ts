@@ -54,6 +54,8 @@ export function validateProfileInput(body: Record<string, unknown>) {
       display_name: displayName,
       account_type: normalizeAccountType(body.account_type),
       primary_phone: optionalText(body.primary_phone, 40),
+      whatsapp: optionalText(body.whatsapp, 80),
+      telegram: optionalText(body.telegram, 80),
       additional_phones: optionalArray(body.additional_phones, 8),
       phone_owner_identity_label: optionalText(body.phone_owner_identity_label, 120),
       phone_rule_confirmed: Boolean(body.phone_rule_confirmed),

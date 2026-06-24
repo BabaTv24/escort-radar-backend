@@ -1112,5 +1112,19 @@
   "admin.accounts.package.trial_30": "Trial 30 Tage",
   "admin.accounts.package.premium_30": "Premium 30 Tage",
   "admin.accounts.package.vip_30": "VIP 30 Tage",
-  "admin.accounts.package.lifetime": "Lebenslang"
+  "admin.accounts.package.lifetime": "Lebenslang",
+  "dashboard.account.title": "Konto",
+  "dashboard.account.short": "Konto",
+  "dashboard.account.email": "E-Mail",
+  "dashboard.account.phone": "Telefon",
+  "dashboard.account.whatsapp": "WhatsApp",
+  "dashboard.account.telegram": "Telegram",
+  "dashboard.account.resetPassword": "Link zur Passwortänderung senden",
+  "dashboard.account.resetSent": "Ein Link zur Passwortänderung wurde per E-Mail gesendet.",
+  "dashboard.visibility.title": "Sichtbarkeit",
+  "dashboard.visibility.short": "Status",
+  "dashboard.visibility.publicStatus": "Öffentliches Profil",
+  "dashboard.visibility.moderation": "Moderation",
+  "dashboard.visibility.subscription": "Abonnement",
+  "dashboard.visibility.premiumTier": "Premium-Stufe"
 }

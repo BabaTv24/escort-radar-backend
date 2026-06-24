@@ -1112,5 +1112,19 @@
   "admin.accounts.package.trial_30": "Trial 30 dni",
   "admin.accounts.package.premium_30": "Premium 30 dni",
   "admin.accounts.package.vip_30": "VIP 30 dni",
-  "admin.accounts.package.lifetime": "Dożywotni"
+  "admin.accounts.package.lifetime": "Dożywotni",
+  "dashboard.account.title": "Konto",
+  "dashboard.account.short": "Konto",
+  "dashboard.account.email": "Email",
+  "dashboard.account.phone": "Telefon",
+  "dashboard.account.whatsapp": "WhatsApp",
+  "dashboard.account.telegram": "Telegram",
+  "dashboard.account.resetPassword": "Wyślij link zmiany hasła",
+  "dashboard.account.resetSent": "Link zmiany hasła został wysłany na email.",
+  "dashboard.visibility.title": "Widoczność",
+  "dashboard.visibility.short": "Status",
+  "dashboard.visibility.publicStatus": "Profil publiczny",
+  "dashboard.visibility.moderation": "Moderacja",
+  "dashboard.visibility.subscription": "Subskrypcja",
+  "dashboard.visibility.premiumTier": "Poziom premium"
 }

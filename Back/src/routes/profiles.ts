@@ -62,13 +62,37 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
 
 profilesRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
   logProfileDebug('GET /api/profiles/me start', req, { status: 'start' });
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from('profiles')
     .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
     .eq('user_id', req.user!.id)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (!data && !error && req.user?.email) {
+    const email = req.user.email.trim().toLowerCase();
+    const { data: emailProfiles, error: emailError } = await supabaseAdmin
+      .from('profiles')
+      .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
+      .ilike('owner_email', email)
+      .is('user_id', null)
+      .order('created_at', { ascending: false })
+      .limit(2);
+    const emailProfile = emailProfiles?.length === 1 ? emailProfiles[0] : null;
+    if (emailError) error = emailError;
+    if (emailProfile) {
+      const { data: linkedProfile, error: linkError } = await supabaseAdmin
+        .from('profiles')
+        .update({ user_id: req.user.id })
+        .eq('id', emailProfile.id)
+        .is('user_id', null)
+        .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
+        .maybeSingle();
+      if (linkError) error = linkError;
+      data = linkedProfile || null;
+    }
+  }
 
   if (error) {
     logProfileDebug('GET /api/profiles/me error', req, { status: 'error', supabase_error: error.message });
@@ -80,7 +104,7 @@ profilesRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
     profile_id: data?.id || null,
     images: data?.profile_images?.length || 0
   });
-  res.json({ profile: data ? withImageUrls(data, wallet) : null, wallet });
+  res.json({ profile: data ? withOwnerImageUrls(data, wallet) : null, wallet });
 }));
 
 profilesRouter.get('/:id/access', verifyUser, asyncHandler(async (req, res) => {
@@ -337,6 +361,22 @@ function withImageUrls(profile: any, wallet?: any) {
     } : undefined,
     visibility_reason: getVisibilityReason({ ...profile, profile_images: images }),
     radar_score: calculateRadarScore({ ...profile, profile_images: images })
+  };
+}
+
+function withOwnerImageUrls(profile: any, wallet?: any) {
+  const images = (profile.profile_images || []).map((image: any) => {
+    const { data } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
+    return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
+  }).sort((left: any, right: any) => {
+    if (Boolean(left.is_primary) !== Boolean(right.is_primary)) return left.is_primary ? -1 : 1;
+    return Number(left.sort_order || 0) - Number(right.sort_order || 0);
+  });
+  const hydrated = withImageUrls({ ...profile, profile_images: [] }, wallet);
+  return {
+    ...hydrated,
+    profile_images: images,
+    images
   };
 }
 
