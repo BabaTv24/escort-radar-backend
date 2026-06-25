@@ -1,6 +1,6 @@
 {
   "name": "Escort Radar",
-  "short_name": "Radar",
+  "short_name": "Escort Radar",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#050505",
@@ -8,10 +8,16 @@
   "description": "Privacy-first adult nightlife marketplace for verified 18+ users.",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

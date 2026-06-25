@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://escort-radar.fun/sitemap.xml
