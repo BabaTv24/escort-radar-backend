@@ -6,7 +6,10 @@ export function LoadingState({ label }: { label?: string }) {
   return <div className="state-panel">{text}</div>;
 }
 
-export function ErrorState({ message }: { message: string }) {
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const { t } = useI18n();
-  return <div className="state-panel error">{message || t('states.requestFailed')}</div>;
+  return <div className="state-panel error">
+    <span>{message || t('states.requestFailed')}</span>
+    {onRetry && <button className="button" type="button" onClick={onRetry}>Retry</button>}
+  </div>;
 }

@@ -18,7 +18,18 @@ const serverBuildTime = new Date().toISOString();
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: config.frontendUrl, credentials: true }));
+const allowedOrigins = new Set([
+  config.frontendUrl,
+  'https://escort-radar.fun',
+  'https://www.escort-radar.fun'
+]);
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error('CORS origin not allowed'));
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/health', (_req, res) => {

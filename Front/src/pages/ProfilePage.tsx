@@ -25,16 +25,18 @@ import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import type { Profile, ProfileAccess } from '../types';
 import { ErrorState, LoadingState } from '../components/LoadingState';
-import { getDemoProfile, getDemoProfiles } from '../data/demoProfiles';
 import { useI18n } from '../i18n';
 import { serviceLabel } from '../data/serviceCatalog';
+import { getPublicProfiles, mapApiProfileToPublicProfile } from '../lib/publicProfiles';
 
 type ProfileTab = 'overview' | 'services' | 'prices' | 'reviews';
 
 export function ProfilePage() {
   const { id = '' } = useParams();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [similarProfiles, setSimilarProfiles] = useState<Profile[]>([]);
   const [error, setError] = useState('');
+  const [retryKey, setRetryKey] = useState(0);
   const [reportMessage, setReportMessage] = useState('');
   const [bookingMessage, setBookingMessage] = useState('');
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
@@ -46,9 +48,16 @@ export function ProfilePage() {
   const { t, option } = useI18n();
 
   useEffect(() => {
+    setError('');
+    setProfile(null);
     api.profile(id)
       .then(async (data) => {
-        setProfile(data.profile);
+        const mapped = mapApiProfileToPublicProfile(data.profile);
+        if (!mapped) throw new Error('Profile data is invalid.');
+        setProfile(mapped);
+        getPublicProfiles(new URLSearchParams({ city: mapped.city }))
+          .then((profiles) => setSimilarProfiles(profiles.filter((item) => item.id !== mapped.id).slice(0, 6)))
+          .catch(() => setSimilarProfiles([]));
         const session = await supabase.auth.getSession();
         const token = session.data.session?.access_token;
         if (token) {
@@ -58,13 +67,11 @@ export function ProfilePage() {
         }
       })
       .catch((err) => {
-        const demo = getDemoProfile(id);
-        if (demo) setProfile(demo);
-        else setError(err.message);
+        setError(err instanceof Error ? err.message : 'Could not load profile.');
       });
-  }, [id]);
+  }, [id, retryKey]);
 
-  if (error) return <div className="page narrow"><ErrorState message={error} /></div>;
+  if (error) return <div className="page narrow"><ErrorState message={error} onRetry={() => setRetryKey((value) => value + 1)} /></div>;
   if (!profile) return <div className="page narrow"><LoadingState /></div>;
 
   const activated = profileAccess?.client_state === 'client_activated';
@@ -87,7 +94,6 @@ export function ProfilePage() {
   const visitTypes = profile.visit_types?.length ? profile.visit_types : ['incall', 'hotel'];
   const serviceTags = profile.service_tags?.length ? profile.service_tags : ['dinner-date', 'hotel', 'discreet'];
   const selectedServices = profile.services || [];
-  const similarProfiles = getDemoProfiles(profile.city).filter((item) => item.id !== profile.id).slice(0, 6);
 
   async function submitReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

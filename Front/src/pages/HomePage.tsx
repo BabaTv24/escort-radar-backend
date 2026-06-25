@@ -3,19 +3,39 @@ import type { ReactNode } from 'react';
 import { BadgeCheck, Building2, Cpu, EyeOff, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch } from 'lucide-react';
 import { cities } from '../data/cities';
 import { ProfileCard } from '../components/ProfileCard';
-import { getDemoProfiles } from '../data/demoProfiles';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getCityCenter } from '../lib/geo';
 import { categoryOptions } from '../data/filterOptions';
+import type { Profile } from '../types';
+import { getPublicProfiles } from '../lib/publicProfiles';
+import { ErrorState, LoadingState } from '../components/LoadingState';
 
 export function HomePage() {
-  const featured = getDemoProfiles('berlin').slice(0, 8);
   const { t, option } = useI18n();
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [radius, setRadius] = useState(25);
   const [radarStatus, setRadarStatus] = useState('all');
   const berlinCenter = { ...getCityCenter('berlin'), source: 'city_fallback' as const };
+  const featured = profiles.slice(0, 8);
+
+  const loadProfiles = useCallback(() => {
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams({ city: 'berlin' });
+    getPublicProfiles(params)
+      .then(setProfiles)
+      .catch((reason) => {
+        setProfiles([]);
+        setError(reason instanceof Error ? reason.message : 'Could not load profiles.');
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(loadProfiles, [loadProfiles]);
 
   return (
     <div className="page">
@@ -28,7 +48,7 @@ export function HomePage() {
         </div>
         <div className="hero-strip">
           {featured.slice(0, 4).map((profile) => (
-            <img key={profile.id} src={profile.profile_images?.[0]?.public_url} alt="" />
+            <img key={profile.id} src={profile.profile_images?.[0]?.public_url || '/Logo_Escort_3.png'} alt="" />
           ))}
         </div>
         <div className="hero-floating-profiles" aria-hidden="true">
@@ -51,10 +71,16 @@ export function HomePage() {
             <Link to="/city/berlin" className="button primary"><RadioTower size={18} /> {t('home.openRadar')}</Link>
             <Link to="/dashboard" className="button"><PlusCircle size={18} /> {t('home.create')}</Link>
           </div>
-          <p className="demo-note">{t('home.demo')}</p>
         </div>
       </section>
 
+      {loading && <LoadingState label="Loading profiles..." />}
+      {error && <ErrorState message={error} onRetry={loadProfiles} />}
+      {!loading && !error && profiles.length === 0 && (
+        <div className="state-panel">No public profiles are available yet.</div>
+      )}
+
+      {!loading && !error && profiles.length > 0 && <>
       <section className="home-marketplace-showcase">
         <div className="section-head compact">
           <div>
@@ -99,7 +125,7 @@ export function HomePage() {
       </section>
 
       <RadarPanel
-        profiles={getDemoProfiles('berlin')}
+        profiles={profiles}
         radius={radius}
         status={radarStatus}
         city="berlin"
@@ -119,6 +145,7 @@ export function HomePage() {
           {featured.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
         </div>
       </section>
+      </>}
 
       <section className="quick-grid">
         <Feature icon={<RadioTower />} title={t('home.features.available.title')} text={t('home.features.available.text')} />

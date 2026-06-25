@@ -67,7 +67,7 @@ const emptyStudioForm = {
   description: '',
   verified: true,
   premium_tier: 'gold',
-  is_seed_profile: true,
+  is_seed_profile: false,
   is_published: true,
   admin_priority: 100,
   moderation_status: 'approved',
@@ -797,20 +797,6 @@ export function AdminPage() {
     }
   }
 
-  async function seedBerlinStudioProfiles() {
-    setStudioSaving(true);
-    setMessage('');
-    try {
-      const result = await api.seedBerlinProfiles(token);
-      setMessage(result.created ? `Wygenerowano ${result.created} profili demo dla Berlina.` : 'Berlin seed set juz istnieje - nie zdublowalem profili.');
-      await load();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Nie udalo sie wygenerowac profili Berlina.');
-    } finally {
-      setStudioSaving(false);
-    }
-  }
-
   async function searchAdminPlace() {
     setMessage('');
     const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -1399,9 +1385,6 @@ export function AdminPage() {
                   <input hidden type="file" accept=".csv,.xlsx,.xls" onChange={(event) => setProfileImportFile(event.target.files?.[0] || null)} />
                 </label>
                 <button className="button" disabled={!profileImportFile || studioSaving} onClick={importProfiles}>{profileImportFile?.name || t('admin.accounts.import')}</button>
-                <button className="button primary" disabled={studioSaving} onClick={seedBerlinStudioProfiles}>
-                  <Crown size={16} /> {t('admin.actions.generateBerlinDemo')}
-                </button>
               </div>
             </div>
             {profileImportReport && <section className="admin-card">

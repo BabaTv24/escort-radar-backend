@@ -9,7 +9,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
 
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const response = await fetch(`${API_URL}${path}`, { cache: 'no-store', ...options, headers });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: 'Request failed' }));
     const reason = payload.reason ? ` (${payload.reason})` : '';
@@ -157,10 +157,6 @@ export const api = {
     method: 'POST',
     token,
     body: JSON.stringify(body)
-  }),
-  seedBerlinProfiles: (token: string) => request<{ profiles: Profile[]; created: number }>('/api/admin/profiles/seed/berlin', {
-    method: 'POST',
-    token
   }),
   uploadAdminProfileImage: (token: string, id: string, form: FormData) => request<{ image: unknown }>(`/api/admin/profiles/${id}/images`, {
     method: 'POST',

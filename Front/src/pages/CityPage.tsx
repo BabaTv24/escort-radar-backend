@@ -6,12 +6,12 @@ import type { Profile, Tag } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { cities } from '../data/cities';
-import { getDemoProfiles } from '../data/demoProfiles';
 import { categoryOptions, defaultServiceMenuNames, toggleArrayValue, visitTypeOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
 import { getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange } from '../lib/geo';
+import { getPublicProfiles } from '../lib/publicProfiles';
 
 type SearchFilters = {
   city: string;
@@ -55,6 +55,7 @@ export function CityPage() {
   const [sortMode, setSortMode] = useState<'best' | 'new' | 'near' | 'online'>('best');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [retryKey, setRetryKey] = useState(0);
   const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter(city), source: 'city_fallback' }));
   const [fallbackNotice, setFallbackNotice] = useState(false);
   const { t, option } = useI18n();
@@ -73,6 +74,7 @@ export function CityPage() {
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
+    params.set('city', appliedFilters.city);
     if (appliedFilters.category) params.set('category', appliedFilters.category);
     if (appliedFilters.tag_ids.length) params.set('tags', appliedFilters.tag_ids.join(','));
     return `?${params.toString()}`;
@@ -81,14 +83,16 @@ export function CityPage() {
   useEffect(() => {
     setLoading(true);
     setError('');
-    api.profiles(query)
-      .then((data) => {
-        const sourceProfiles = data.profiles.length ? data.profiles : getDemoProfiles(appliedFilters.city);
-        setProfiles(applyFilters(sourceProfiles, appliedFilters, searcherLocation));
+    getPublicProfiles(query)
+      .then((publicProfiles) => {
+        setProfiles(applyFilters(publicProfiles, appliedFilters, searcherLocation));
       })
-      .catch(() => setProfiles(applyFilters(getDemoProfiles(appliedFilters.city), appliedFilters, searcherLocation)))
+      .catch((reason) => {
+        setProfiles([]);
+        setError(reason instanceof Error ? reason.message : 'Could not load profiles.');
+      })
       .finally(() => setLoading(false));
-  }, [query, appliedFilters, searcherLocation]);
+  }, [query, appliedFilters, searcherLocation, retryKey]);
 
   const sortedProfiles = useMemo(() => sortProfiles(profiles, sortMode), [profiles, sortMode]);
   const topProfiles = sortedProfiles.slice(0, 12);
@@ -284,7 +288,7 @@ export function CityPage() {
           </div>
 
           {loading && <LoadingState />}
-          {error && <ErrorState message={error} />}
+          {error && <ErrorState message={error} onRetry={() => setRetryKey((value) => value + 1)} />}
           {!loading && !error && (
             sortedProfiles.length ? (
               <>

@@ -5,10 +5,12 @@ import { requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/aut
 import { generatePublicUserId, generateReferralCode, normalizePhone } from '../utils/identity.js';
 import { getClientActivationSummary } from '../services/clientActivation.js';
 import { notifyMatchingClientsForProfile } from './clientIntent.js';
+import { isPublicProfile, publicProfileRejectionReason } from '../publicProfiles.js';
 
 export const profilesRouter = Router();
 
 profilesRouter.get('/', asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store, max-age=0');
   let query = supabaseAdmin
     .from('profiles')
     .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
@@ -16,7 +18,6 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .eq('is_published', true)
     .eq('moderation_status', 'approved')
     .eq('shadowbanned', false)
-    .in('subscription_status', ['active', 'trial', 'test'])
     .order('admin_priority', { ascending: false })
     .order('available_now', { ascending: false })
     .order('location_updated_at', { ascending: false, nullsFirst: false })
@@ -54,9 +55,19 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   const profiles = (data || [])
+    .filter((profile) => {
+      const visible = isPublicProfile(profile);
+      if (!visible && process.env.NODE_ENV !== 'production') {
+        console.info('[public-profiles] rejected', { profile_id: profile.id, reason: publicProfileRejectionReason(profile) });
+      }
+      return visible;
+    })
     .map((profile) => sanitizePublicProfile(withImageUrls(profile)))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[public-profiles]', { endpoint: req.originalUrl, api_records: data?.length || 0, public_records: profiles.length });
+  }
   res.json({ profiles });
 }));
 
@@ -154,6 +165,7 @@ profilesRouter.get('/:id/access', verifyUser, asyncHandler(async (req, res) => {
 }));
 
 profilesRouter.get('/:id', asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store, max-age=0');
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
@@ -161,7 +173,7 @@ profilesRouter.get('/:id', asyncHandler(async (req, res) => {
     .single();
 
   if (error || !data) return res.status(404).json({ error: 'Profile not found' });
-  if (data.status !== 'active' || data.is_published === false || data.shadowbanned || data.moderation_status !== 'approved' || !['active', 'trial', 'test'].includes(String(data.subscription_status || ''))) {
+  if (!isPublicProfile(data)) {
     return res.status(404).json({ error: 'Profile not found' });
   }
 

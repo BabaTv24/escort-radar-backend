@@ -31,10 +31,6 @@ const adminImportUpload = multer({
 
 const premiumTiers = ['standard', 'gold', 'elite', 'diamond'];
 const operatorStatuses = ['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'];
-const berlinSeedAreas = ['Mitte', 'Charlottenburg', 'Prenzlauer Berg', 'Kreuzberg', 'Friedrichshain', 'Wilmersdorf', 'Schoneberg', 'Neukolln'];
-const berlinSeedNames = ['Mila', 'Nora', 'Elena', 'Sofia', 'Lina', 'Amara', 'Vera', 'Nika', 'Alina', 'Mara', 'Eva', 'Lea', 'Iris', 'Kira', 'Livia', 'Selin', 'Anya', 'Noemi', 'Lara', 'Mina', 'Rosa', 'Clara', 'Yara', 'Nina'];
-const berlinSeedCategories = ['ladies', 'massage', 'house_hotel', 'live_cam', 'couples', 'trans', 'gay'];
-const berlinSeedServices = ['towarzystwo', 'pocalunki', 'masaz', 'masaz_relaksacyjny', 'dyskrecja', 'wspolne_wyjscia', 'spotkanie_calonocne', 'prywatnie', 'namietne_pocalunki', 'spa'];
 
 adminRouter.post('/login', asyncHandler(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
@@ -408,7 +404,8 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
     user_id: authUser?.id || null,
     slug: `${slugify(String(profileData.data.display_name))}-${Date.now().toString(36)}`,
     verification_status: profileData.data.verified ? 'verified' : 'pending',
-    moderation_status: profileData.data.moderation_status || 'pending',
+    status: profileData.data.is_published ? 'active' : profileData.data.status,
+    moderation_status: profileData.data.is_published ? 'approved' : profileData.data.moderation_status,
     verified_at: profileData.data.verified ? new Date().toISOString() : null,
     location_updated_at: new Date().toISOString()
   };
@@ -493,30 +490,6 @@ adminRouter.post('/profiles/import', adminImportUpload.single('file'), asyncHand
     failed: report.failed
   });
   res.json({ report });
-}));
-
-adminRouter.post('/profiles/seed/berlin', asyncHandler(async (req, res) => {
-  const { data: existingSeeds } = await supabaseAdmin
-    .from('profiles')
-    .select('id')
-    .eq('city', 'berlin')
-    .eq('is_seed_profile', true)
-    .limit(60);
-
-  if ((existingSeeds || []).length >= 24) {
-    const { data } = await supabaseAdmin
-      .from('profiles')
-      .select('*, profile_images(*)')
-      .eq('city', 'berlin')
-      .eq('is_seed_profile', true)
-      .order('admin_priority', { ascending: false })
-      .limit(60);
-    return res.json({ created: 0, profiles: (data || []).map(withAdminImageUrls) });
-  }
-
-  const profiles = await createBerlinSeedProfiles();
-  await logAdminAction(req.user?.email, 'berlin_seed_profiles_generated', 'profile_seed', null, { count: profiles.length });
-  res.status(201).json({ created: profiles.length, profiles });
 }));
 
 adminRouter.get('/business-profiles', asyncHandler(async (_req, res) => {
@@ -2299,8 +2272,8 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       visit_types: Array.isArray(body.visit_types) ? body.visit_types.map((item) => String(item)).slice(0, 8) : ['incall', 'hotel'],
       service_tags: Array.isArray(body.service_tags) ? body.service_tags.map((item) => String(item)).slice(0, 16) : ['discreet', 'private-meeting'],
       verified: body.verified !== false,
-      is_seed_profile: Boolean(body.is_seed_profile),
-      is_test_account: Boolean(body.is_seed_profile) || Boolean(body.is_test_account),
+      is_seed_profile: false,
+      is_test_account: Boolean(body.is_test_account),
       is_published: isPublished,
       premium_tier: premiumTiers.includes(premiumTier) ? premiumTier : 'standard',
       admin_priority: optionalInteger(body.admin_priority, 0, 10000) || 0,
@@ -2325,152 +2298,6 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       ...operatorStatusPatch(operatorStatus)
     }
   };
-}
-
-async function createBerlinSeedProfiles() {
-  const rows = Array.from({ length: 24 }, (_, index) => {
-    const operatorStatus = index < 8 ? 'ONLINE_NOW' : index < 16 ? 'AVAILABLE_TODAY' : index < 20 ? 'BUSY' : 'OFFLINE';
-    const area = berlinSeedAreas[index % berlinSeedAreas.length];
-    const premiumTier = ['diamond', 'elite', 'gold', 'standard'][index % 4];
-    const services = seedServices(index);
-    const category = berlinSeedCategories[index % berlinSeedCategories.length];
-    const displayName = `${berlinSeedNames[index % berlinSeedNames.length]} ${area}`;
-    const age = 22 + (index % 14);
-    const height = 160 + (index % 21);
-    const price = 140 + (index % 9) * 25 + (premiumTier === 'diamond' ? 80 : premiumTier === 'elite' ? 45 : 0);
-
-    return {
-      display_name: displayName,
-      slug: `berlin-preview-${slugify(displayName)}-${index + 1}`,
-      city: 'berlin',
-      area,
-      work_city: 'Berlin',
-      work_area: area,
-      category,
-      description: seedDescription(area, premiumTier),
-      languages: ['DE', 'EN', index % 3 === 0 ? 'PL' : ''],
-      age,
-      height,
-      height_cm: height,
-      nationality: ['German', 'European', 'Polish', 'Spanish', 'International'][index % 5],
-      price_1h: price,
-      currency: 'EUR',
-      services,
-      service_menu: services.map((service) => ({ name: service, enabled: true, included: true, extra_price: null, note: null })),
-      visit_types: index % 2 === 0 ? ['incall', 'hotel'] : ['outcall', 'private'],
-      service_tags: ['discreet', 'private-meeting', index % 2 === 0 ? 'wellness' : 'conversation'],
-      verified: true,
-      verification_status: 'verified',
-      verified_at: new Date().toISOString(),
-      moderation_status: 'approved',
-      is_seed_profile: true,
-      is_test_account: true,
-      is_published: true,
-      premium_tier: premiumTier,
-      admin_priority: 1000 - index,
-      status: 'active',
-      subscription_status: 'test',
-      listing_plan: 'admin_seed',
-      listing_price: 0,
-      listing_currency: 'EUR',
-      max_photos: 6,
-      location_mode: 'approximate',
-      latitude: 52.52 + ((index % 7) - 3) * 0.018,
-      longitude: 13.405 + ((index % 9) - 4) * 0.021,
-      service_radius_km: [10, 15, 20, 25, 50][index % 5],
-      approximate_location_area: area,
-      location_updated_at: new Date().toISOString(),
-      ...operatorStatusPatch(operatorStatus)
-    };
-  }).map((row) => ({ ...row, languages: row.languages.filter(Boolean) }));
-
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .insert(rows)
-    .select('*, profile_images(*)');
-
-  if (error) throw new Error(error.message);
-
-  const seededProfiles = [];
-  for (const [index, profile] of (data || []).entries()) {
-    const image = await createSeedImage(profile.id, profile.display_name, index, true);
-    seededProfiles.push(withAdminImageUrls({ ...profile, profile_images: image ? [image] : [] }));
-  }
-  return seededProfiles;
-}
-
-async function createSeedImage(profileId: string, displayName: string, index: number, isPrimary: boolean) {
-  const buffer = await renderSeedImage(displayName, index);
-  const storagePath = `seed-profiles/berlin/${profileId}/${index + 1}.jpg`;
-  const uploadResult = await supabaseAdmin.storage
-    .from(config.storageBucket)
-    .upload(storagePath, buffer, { contentType: 'image/jpeg', upsert: true });
-
-  if (uploadResult.error) return null;
-
-  const { data, error } = await supabaseAdmin
-    .from('profile_images')
-    .insert({
-      profile_id: profileId,
-      storage_path: storagePath,
-      is_primary: isPrimary,
-      is_blurred: false,
-      moderation_status: 'approved',
-      sort_order: 0
-    })
-    .select()
-    .single();
-
-  if (error) return null;
-  return withPublicImageUrl(data);
-}
-
-async function renderSeedImage(displayName: string, index: number) {
-  const palettes = [
-    ['#080808', '#4A1023', '#E8D8B5'],
-    ['#111111', '#2F1723', '#D6B08C'],
-    ['#0B0B0B', '#1F2937', '#A78BFA'],
-    ['#101010', '#164E63', '#14B8A6']
-  ];
-  const [bg, accent, gold] = palettes[index % palettes.length];
-  const initials = displayName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1500" viewBox="0 0 1200 1500">
-      <defs>
-        <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0" stop-color="${accent}"/>
-          <stop offset=".48" stop-color="${bg}"/>
-          <stop offset="1" stop-color="#171717"/>
-        </linearGradient>
-        <radialGradient id="r" cx="50%" cy="24%" r="58%">
-          <stop offset="0" stop-color="${gold}" stop-opacity=".52"/>
-          <stop offset=".62" stop-color="${accent}" stop-opacity=".18"/>
-          <stop offset="1" stop-color="${bg}" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
-      <rect width="1200" height="1500" fill="url(#g)"/>
-      <rect width="1200" height="1500" fill="url(#r)"/>
-      <circle cx="600" cy="430" r="170" fill="rgba(232,216,181,.14)" stroke="${gold}" stroke-width="10"/>
-      <path d="M265 1280c55-310 615-310 670 0" fill="rgba(232,216,181,.12)" stroke="${gold}" stroke-width="10"/>
-      <path d="M210 160h780M210 1340h780" stroke="${gold}" stroke-opacity=".28" stroke-width="3"/>
-      <text x="600" y="468" text-anchor="middle" fill="${gold}" font-family="Arial" font-size="118" font-weight="800">${initials}</text>
-      <text x="86" y="1400" fill="${gold}" font-family="Arial" font-size="48" font-weight="700">Preview profile</text>
-    </svg>`;
-
-  return sharp(Buffer.from(svg)).jpeg({ quality: 86, mozjpeg: true }).toBuffer();
-}
-
-function seedServices(index: number) {
-  const services = [
-    berlinSeedServices[index % berlinSeedServices.length],
-    berlinSeedServices[(index + 3) % berlinSeedServices.length],
-    berlinSeedServices[(index + 6) % berlinSeedServices.length]
-  ].filter((service) => allowedServiceKeys.has(service));
-  return services.length ? services : ['towarzystwo', 'dyskrecja'];
-}
-
-function seedDescription(area: string, premiumTier: string) {
-  return `Preview profile for Berlin ${area}. This demo listing uses generated assets and original placeholder copy for marketplace QA. Tier: ${premiumTier}. Replace with verified advertiser content before real onboarding.`;
 }
 
 function normalizeAdminOperatorStatus(value: unknown) {
