@@ -20,7 +20,10 @@ export function HomePage() {
   const [radius, setRadius] = useState(25);
   const [radarStatus, setRadarStatus] = useState('all');
   const berlinCenter = { ...getCityCenter('berlin'), source: 'city_fallback' as const };
-  const featured = profiles.slice(0, 8);
+  const sponsoredProfiles = profiles.filter((profile) => profile.is_sponsored || profile.acquisition_source === 'admin_sponsored' || profile.provider === 'manual_admin');
+  const paidProfiles = profiles.filter((profile) => !sponsoredProfiles.some((sponsored) => sponsored.id === profile.id));
+  const topProfiles = paidProfiles.slice(0, 8);
+  const featured = (paidProfiles.length ? paidProfiles : profiles).slice(0, 8);
 
   const loadProfiles = useCallback(() => {
     setLoading(true);
@@ -81,7 +84,22 @@ export function HomePage() {
       )}
 
       {!loading && !error && profiles.length > 0 && <>
-      <section className="home-marketplace-showcase">
+      {sponsoredProfiles.length > 0 && (
+        <section className="home-marketplace-showcase">
+          <div className="section-head compact">
+            <div>
+              <p className="eyebrow">Profile sponsorowane</p>
+              <h2>Profile sponsorowane</h2>
+            </div>
+            <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> Radar öffnen</Link>
+          </div>
+          <div className="cards-grid marketplace-grid premium-profile-grid">
+            {sponsoredProfiles.slice(0, 8).map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
+          </div>
+        </section>
+      )}
+
+      {topProfiles.length > 0 && <section className="home-marketplace-showcase">
         <div className="section-head compact">
           <div>
             <p className="eyebrow">Escort Radar Marketplace</p>
@@ -90,7 +108,7 @@ export function HomePage() {
           <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> Radar öffnen</Link>
         </div>
         <div className="avatar-carousel">
-          {featured.slice(0, 10).map((profile) => {
+          {topProfiles.slice(0, 10).map((profile) => {
             const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
             return (
               <Link to={`/profile/${profile.id}`} className="top-avatar" key={profile.id}>
@@ -105,9 +123,9 @@ export function HomePage() {
           {['Bestplatzierte', 'Neu', 'In der Nähe', 'Online'].map((item, index) => <span className={index === 0 ? 'selected' : ''} key={item}>{item}</span>)}
         </div>
         <div className="cards-grid marketplace-grid premium-profile-grid">
-          {featured.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
+          {topProfiles.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
         </div>
-      </section>
+      </section>}
 
       <section className="market-section">
         <div className="section-head compact">
@@ -142,7 +160,7 @@ export function HomePage() {
           <Link to="/city/berlin" className="text-link">{t('home.viewAllBerlin')}</Link>
         </div>
         <div className="cards-grid marketplace-grid">
-          {featured.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
+          {(topProfiles.length ? topProfiles : sponsoredProfiles).slice(0, 8).map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
         </div>
       </section>
       </>}

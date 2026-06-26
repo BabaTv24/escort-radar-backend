@@ -57,6 +57,10 @@ export type Profile = {
   zodiac_sign?: string | null;
   business_name?: string | null;
   business_type?: string | null;
+  business_id?: string | null;
+  business_phone?: string | null;
+  exact_address?: string | null;
+  max_profiles?: number | null;
   contact_person?: string | null;
   website?: string | null;
   opening_hours?: Record<string, unknown> | string | null;
@@ -105,6 +109,10 @@ export type Profile = {
   radar_score?: number;
   premium_tier?: 'standard' | 'gold' | 'elite' | 'diamond';
   is_seed_profile?: boolean;
+  is_sponsored?: boolean;
+  acquisition_source?: string | null;
+  provider?: string | null;
+  revenue_amount?: number | null;
   is_published?: boolean;
   admin_priority?: number;
   match_score?: number;

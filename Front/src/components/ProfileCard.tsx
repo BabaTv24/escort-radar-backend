@@ -15,6 +15,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
   const rating = (4.6 + (profile.id.length % 4) / 10).toFixed(1);
   const isNew = profile.created_at ? Date.now() - new Date(profile.created_at).getTime() < 1000 * 60 * 60 * 24 * 14 : profile.id.length % 2 === 0;
   const badges = [
+    profile.is_sponsored ? 'SPONSOROWANY' : '',
     profile.is_seed_profile ? 'PREVIEW' : '',
     profile.verified ? 'VERIFIED' : '',
     profile.price_1h ? 'PLUS' : '',

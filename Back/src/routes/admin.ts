@@ -17,6 +17,14 @@ import { writeAdminAuditLog } from '../services/adminAudit.js';
 import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
+import {
+  isBusinessRole,
+  isRealPaidSubscription,
+  isRealRevenueTransaction,
+  revenueAmount,
+  subscriptionTransactionType,
+  sumRealRevenue
+} from '../revenue.js';
 
 export const adminRouter = Router();
 
@@ -140,13 +148,19 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   const profileRows = profiles.data || [];
   const reportRows = reports.data || [];
   const bookingRows = bookings.data || [];
-  const activationPaymentRows = activationPayments.data || [];
+  const activationPaymentRows = (activationPayments.data || []).map((payment) => ({
+    ...payment,
+    transaction_type: 'client_activation',
+    stripe_checkout_session_id: payment.stripe_checkout_session_id || payment.stripe_session_id || null,
+    amount: Number(payment.amount_cents || 0) / 100
+  }));
+  const realActivationPaymentRows = activationPaymentRows.filter(isRealRevenueTransaction);
   const activationRows = activations.data || [];
-  const dailyClientActivationRevenue = sumPaymentCents(activationPaymentRows.filter((row) => new Date(row.created_at) >= dayStart));
-  const monthlyClientActivationRevenue = sumPaymentCents(activationPaymentRows.filter((row) => new Date(row.created_at) >= monthStart));
+  const dailyClientActivationRevenue = sumRealRevenue(realActivationPaymentRows.filter((row) => new Date(row.created_at) >= dayStart));
+  const monthlyClientActivationRevenue = sumRealRevenue(realActivationPaymentRows.filter((row) => new Date(row.created_at) >= monthStart));
   const activatedClientCount = activationRows.filter((activation) => activation.state === 'client_activated').length;
   const registeredClientCount = activationRows.length;
-  const latestActivationPayments = activationPaymentRows.slice(0, 12).map((payment) => ({
+  const latestActivationPayments = realActivationPaymentRows.slice(0, 12).map((payment) => ({
     id: payment.id,
     admin_email: payment.email,
     action: 'client_activation_payment',
@@ -173,8 +187,8 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
       test_accounts: profileRows.filter((profile) => profile.is_test_account).length,
       daily_revenue_eur: dailyClientActivationRevenue,
       monthly_revenue_eur: monthlyClientActivationRevenue,
-      client_activation_revenue_eur: sumPaymentCents(activationPaymentRows),
-      client_activation_transactions: activationPaymentRows.length,
+      client_activation_revenue_eur: sumRealRevenue(realActivationPaymentRows),
+      client_activation_transactions: realActivationPaymentRows.length,
       registered_clients: registeredClientCount,
       activated_clients: activatedClientCount,
       free_clients: Math.max(registeredClientCount - activatedClientCount, 0),
@@ -257,8 +271,7 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
 
   const activationRows = activationPayments.data || [];
   const subscriptionRows = subscriptions.data || [];
-  const paidActivationRows = activationRows.filter((payment) => ['paid', 'succeeded', 'active', 'test'].includes(String(payment.status || '')));
-  const activeSubscriptionRows = subscriptionRows.filter((row) => ['active', 'trial', 'test'].includes(String(row.status || '')));
+  const sponsoredProfileCount = await countSponsoredProfiles();
   const paymentRows = [
     ...activationRows.map((payment) => ({
       id: payment.id,
@@ -268,8 +281,13 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
       currency: String(payment.currency || 'eur').toUpperCase(),
       provider: payment.provider || 'stripe',
       status: payment.status || 'paid',
+      payment_status: payment.payment_status || payment.status || 'paid',
       created_at: payment.created_at,
-      type: 'client_activation'
+      type: 'client_activation',
+      transaction_type: 'client_activation',
+      stripe_checkout_session_id: payment.stripe_checkout_session_id || payment.stripe_session_id || null,
+      stripe_payment_intent_id: payment.stripe_payment_intent_id || null,
+      livemode: payment.livemode
     })),
     ...subscriptionRows.map((subscription) => ({
       id: subscription.id,
@@ -279,29 +297,46 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
       currency: subscription.currency || 'EUR',
       provider: subscription.provider || 'manual_admin',
       status: subscription.status,
+      payment_status: subscription.payment_status || subscription.status,
       created_at: subscription.created_at || subscription.requested_at,
-      type: 'subscription'
+      type: 'subscription',
+      transaction_type: subscription.transaction_type || subscriptionTransactionType(subscription),
+      role: subscription.role,
+      stripe_checkout_session_id: subscription.stripe_checkout_session_id || null,
+      stripe_payment_intent_id: subscription.stripe_payment_intent_id || null,
+      livemode: subscription.livemode,
+      current_period_end: subscription.current_period_end
     }))
   ].sort((left, right) => new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime());
 
+  const realPaymentRows = paymentRows.filter(isRealRevenueTransaction);
+  const realSubscriptionRows = subscriptionRows
+    .map((subscription) => ({
+      ...subscription,
+      transaction_type: subscription.transaction_type || subscriptionTransactionType(subscription),
+      payment_status: subscription.payment_status || subscription.status
+    }))
+    .filter(isRealPaidSubscription);
+  const realActiveSubscriptionRows = realSubscriptionRows.filter((row) => row.status === 'active');
   const dailyRevenue = paymentRows
-    .filter((row) => row.status !== 'failed' && row.created_at && new Date(row.created_at) >= dayStart)
-    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    .filter((row) => isRealRevenueTransaction(row) && row.created_at && new Date(row.created_at) >= dayStart)
+    .reduce((sum, row) => sum + revenueAmount(row), 0);
   const monthlyRevenue = paymentRows
-    .filter((row) => row.status !== 'failed' && row.created_at && new Date(row.created_at) >= monthStart)
-    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    .filter((row) => isRealRevenueTransaction(row) && row.created_at && new Date(row.created_at) >= monthStart)
+    .reduce((sum, row) => sum + revenueAmount(row), 0);
 
   res.json({
     stats: {
       today_revenue: Number(dailyRevenue.toFixed(2)),
       monthly_revenue: Number(monthlyRevenue.toFixed(2)),
-      client_activations: paidActivationRows.length,
-      escort_subscriptions: activeSubscriptionRows.filter((row) => ['escort', 'private_escort', 'private'].includes(String(row.role || ''))).length,
-      business_subscriptions: activeSubscriptionRows.filter((row) => ['business', 'agency', 'club', 'massage_salon', 'live_cam'].includes(String(row.role || ''))).length,
-      expired_subscriptions: subscriptionRows.filter((row) => row.status === 'expired').length,
-      upcoming_renewals: subscriptionRows.filter((row) => row.current_period_end && new Date(row.current_period_end).getTime() > Date.now()).length
+      client_activations: realPaymentRows.filter((row) => row.transaction_type === 'client_activation').length,
+      escort_subscriptions: realActiveSubscriptionRows.filter((row) => !isBusinessRole(row.role)).length,
+      business_subscriptions: realActiveSubscriptionRows.filter((row) => isBusinessRole(row.role)).length,
+      sponsored_profiles: sponsoredProfileCount,
+      expired_subscriptions: realSubscriptionRows.filter((row) => row.status === 'expired').length,
+      upcoming_renewals: realActiveSubscriptionRows.filter((row) => row.current_period_end && new Date(row.current_period_end).getTime() > Date.now()).length
     },
-    payments: paymentRows
+    payments: realPaymentRows
   });
 }));
 
@@ -409,6 +444,8 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
     verified_at: profileData.data.verified ? new Date().toISOString() : null,
     location_updated_at: new Date().toISOString()
   };
+  const limitError = await validateBusinessProfileLimit(payload);
+  if (limitError) return res.status(409).json({ error: limitError });
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
@@ -631,7 +668,7 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
   const [profilesResult, subscriptionsResult, activationPaymentsResult, usersResult] = await Promise.all([
     supabaseAdmin
       .from('profiles')
-      .select('id, user_id, owner_email, display_name, city, account_type, profile_type, category, listing_plan, listing_price, listing_currency, currency, subscription_status, subscription_started_at, subscription_expires_at, subscription_plan, subscription_start, subscription_end, subscription_requested_at, subscription_managed_by, subscription_note, is_test_account, premium_tier, created_at')
+      .select('id, user_id, owner_email, display_name, city, account_type, profile_type, category, listing_plan, listing_price, listing_currency, currency, subscription_status, subscription_started_at, subscription_expires_at, subscription_plan, subscription_start, subscription_end, subscription_requested_at, subscription_managed_by, subscription_note, is_test_account, is_sponsored, acquisition_source, premium_tier, created_at')
       .order('created_at', { ascending: false })
       .limit(800),
     supabaseAdmin
@@ -683,8 +720,15 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
       current_period_end: subscription?.current_period_end || null,
       progress: subscriptionProgress(start, end),
       payment_provider: subscription?.provider || (status === 'test' ? 'manual_admin' : 'manual'),
-      amount_eur: Number(subscription?.amount_eur ?? profile.listing_price ?? 49.99),
+      amount_eur: Number(subscription?.amount_eur ?? (profile.is_sponsored ? 0 : profile.listing_price) ?? 0),
       currency: subscription?.currency || profile.currency || profile.listing_currency || 'EUR',
+      is_sponsored: Boolean(profile.is_sponsored),
+      acquisition_source: profile.acquisition_source || null,
+      transaction_type: subscription?.transaction_type || subscriptionTransactionType(subscription || profile),
+      payment_status: subscription?.payment_status || subscription?.status || status,
+      stripe_checkout_session_id: subscription?.stripe_checkout_session_id || null,
+      stripe_payment_intent_id: subscription?.stripe_payment_intent_id || null,
+      livemode: subscription?.livemode,
       premium_tier: profile.premium_tier || 'standard',
       note: subscription?.admin_note || profile.subscription_note || null
     };
@@ -707,11 +751,19 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
     payment_provider: payment.provider || 'stripe',
     amount_eur: Number(payment.amount_cents || 0) / 100,
     currency: String(payment.currency || 'eur').toUpperCase(),
-    stripe_session_id: payment.stripe_session_id
+    stripe_session_id: payment.stripe_session_id,
+    stripe_checkout_session_id: payment.stripe_checkout_session_id || payment.stripe_session_id || null,
+    stripe_payment_intent_id: payment.stripe_payment_intent_id || null,
+    payment_status: payment.payment_status || payment.status || 'paid',
+    transaction_type: 'client_activation',
+    livemode: payment.livemode
   }));
 
   const subscriptions = [...profileRows, ...clientActivationRows].sort((left, right) => new Date(right.requested_at || 0).getTime() - new Date(left.requested_at || 0).getTime());
   const profileSubscriptions = profileRows;
+  const realProfileSubscriptions = profileSubscriptions.filter(isRealPaidSubscription);
+  const realActiveProfileSubscriptions = realProfileSubscriptions.filter((row) => row.status === 'active' && (!row.end || new Date(row.end).getTime() > now));
+  const realClientActivationRows = clientActivationRows.filter(isRealRevenueTransaction);
 
   res.json({
     subscriptions,
@@ -723,10 +775,11 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
       expired: profileSubscriptions.filter((row) => row.status === 'expired' || Boolean(row.end && new Date(row.end).getTime() <= now)).length,
       suspended: profileSubscriptions.filter((row) => row.status === 'suspended').length,
       incomplete: profileSubscriptions.filter((row) => ['past_due', 'incomplete', 'cancelled'].includes(row.status)).length,
-      monthly_revenue: profileSubscriptions.filter((row) => row.status === 'active').reduce((sum, row) => sum + Number(row.amount_eur || 0), 0),
-      client_activations_099: clientActivationRows.filter((row) => row.status === 'paid').length,
-      escort_subscriptions: profileSubscriptions.filter((row) => ['escort', 'private', 'private_escort'].includes(String(row.role))).length,
-      business_subscriptions: profileSubscriptions.filter((row) => ['business', 'agency', 'club', 'massage_salon', 'live_cam'].includes(String(row.role))).length
+      monthly_revenue: sumRealRevenue(realProfileSubscriptions),
+      client_activations_099: realClientActivationRows.length,
+      escort_subscriptions: realActiveProfileSubscriptions.filter((row) => !isBusinessRole(row.role)).length,
+      business_subscriptions: realActiveProfileSubscriptions.filter((row) => isBusinessRole(row.role)).length,
+      sponsored_profiles: profileSubscriptions.filter((row) => row.is_sponsored || row.acquisition_source === 'admin_sponsored' || row.payment_provider === 'manual_admin').length
     }
   });
 }));
@@ -843,8 +896,11 @@ adminRouter.post('/subscriptions/:id/set-dates', asyncHandler(async (req, res) =
     plan: profile.subscription_plan || profile.listing_plan || existingSubscription?.plan || 'escort_monthly',
     status,
     provider: existingSubscription?.provider || 'manual_admin',
-    amount_eur: Number(existingSubscription?.amount_eur ?? profile.listing_price ?? 49.99),
+    amount_eur: existingSubscription?.provider && existingSubscription.provider !== 'manual_admin' ? Number(existingSubscription?.amount_eur || 0) : 0,
     currency: existingSubscription?.currency || profile.currency || profile.listing_currency || 'EUR',
+    payment_status: existingSubscription?.provider && existingSubscription.provider !== 'manual_admin' ? existingSubscription?.payment_status || null : null,
+    transaction_type: existingSubscription?.transaction_type || subscriptionTransactionType(profile),
+    livemode: existingSubscription?.provider && existingSubscription.provider !== 'manual_admin' ? existingSubscription?.livemode ?? null : false,
     current_period_start: start.toISOString(),
     current_period_end: end.toISOString(),
     managed_by: req.user?.email || req.user?.id || existingSubscription?.managed_by || null,
@@ -1007,6 +1063,8 @@ adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
   }
   if (!Object.prototype.hasOwnProperty.call(req.body, 'status')) delete (patch as Record<string, unknown>).status;
   if (!Object.prototype.hasOwnProperty.call(req.body, 'moderation_status')) delete (patch as Record<string, unknown>).moderation_status;
+  const limitError = await validateBusinessProfileLimit(patch, req.params.id);
+  if (limitError) return res.status(409).json({ error: limitError });
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
@@ -2195,6 +2253,29 @@ async function logAdminAction(adminEmail: string | undefined, action: string, ta
   await writeAdminAuditLog(adminEmail, action, targetType, targetId, details);
 }
 
+async function countSponsoredProfiles() {
+  const { count } = await supabaseAdmin
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .or('is_sponsored.eq.true,acquisition_source.eq.admin_sponsored,provider.eq.manual_admin');
+  return count || 0;
+}
+
+export async function validateBusinessProfileLimit(input: Record<string, any>, excludeProfileId?: string) {
+  const businessId = optionalText(input.business_id, 80);
+  if (!businessId) return null;
+  const maxProfiles = optionalInteger(input.max_profiles, 1, 30) || 30;
+  let query = supabaseAdmin
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', businessId);
+  if (excludeProfileId) query = query.neq('id', excludeProfileId);
+  const { count, error } = await query;
+  if (error) return error.message;
+  if ((count || 0) >= maxProfiles) return `Business profile limit reached (${maxProfiles})`;
+  return null;
+}
+
 function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Record<string, unknown> } | { error: string } {
   const displayName = optionalText(body.display_name, 80);
   if (!displayName) return { error: 'display_name is required' };
@@ -2223,6 +2304,8 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
     : ['DE', 'EN'];
   const currency = optionalText(body.currency, 8) || 'EUR';
   const listingPlan = optionalText(body.listing_plan || body.subscription_plan, 80) || 'admin_profile_studio';
+  const isSponsored = body.is_sponsored !== false && body.acquisition_source !== 'paid_advertiser';
+  const businessType = normalizeBusinessType(body.business_type);
 
   return {
     data: {
@@ -2258,7 +2341,11 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       nationality: optionalText(body.nationality, 80),
       zodiac_sign: optionalText(body.zodiac_sign, 40),
       business_name: optionalText(body.business_name, 160),
-      business_type: optionalText(body.business_type, 120),
+      business_type: businessType,
+      business_phone: optionalText(body.business_phone || body.phone || body.primary_phone, 40),
+      exact_address: optionalText(body.exact_address, 240),
+      business_id: optionalText(body.business_id, 80),
+      max_profiles: optionalInteger(body.max_profiles, 1, 30) || 30,
       contact_person: optionalText(body.contact_person, 120),
       website: optionalText(body.website, 240),
       opening_hours: normalizeOpeningHours(body.opening_hours),
@@ -2274,6 +2361,10 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       verified: body.verified !== false,
       is_seed_profile: false,
       is_test_account: Boolean(body.is_test_account),
+      is_sponsored: isSponsored,
+      acquisition_source: isSponsored ? 'admin_sponsored' : 'paid_advertiser',
+      provider: 'manual_admin',
+      revenue_amount: 0,
       is_published: isPublished,
       premium_tier: premiumTiers.includes(premiumTier) ? premiumTier : 'standard',
       admin_priority: optionalInteger(body.admin_priority, 0, 10000) || 0,
@@ -2285,7 +2376,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       subscription_requested_at: new Date().toISOString(),
       subscription_note: optionalText(body.subscription_note, 2000),
       listing_plan: listingPlan,
-      listing_price: optionalMoney(body.listing_price) ?? optionalMoney(body.price_1h) ?? 0,
+      listing_price: isSponsored ? 0 : optionalMoney(body.listing_price) ?? optionalMoney(body.price_1h) ?? 0,
       listing_currency: currency,
       max_photos: 6,
       latitude: optionalCoordinate(body.latitude, -90, 90),
@@ -2308,6 +2399,12 @@ function normalizeAdminOperatorStatus(value: unknown) {
 function normalizeAdminCategory(value: unknown) {
   const category = String(value || 'ladies');
   return ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'].includes(category) ? category : 'ladies';
+}
+
+function normalizeBusinessType(value: unknown) {
+  const type = String(value || '').trim().toLowerCase();
+  if (['brothel', 'massage_salon', 'agency'].includes(type)) return type;
+  return type || null;
 }
 
 function normalizeAdminAccountType(value: unknown) {
@@ -2501,14 +2598,19 @@ async function upsertManualSubscription(profile: Record<string, any>, managedBy:
     plan: profile.subscription_plan || profile.listing_plan || profile.plan || 'admin_profile_studio',
     status: profile.subscription_status || 'trial',
     provider: 'manual_admin',
-    amount_eur: Number(profile.listing_price || 0),
+    amount_eur: 0,
     currency: profile.currency || profile.listing_currency || 'EUR',
+    payment_status: null,
+    transaction_type: subscriptionTransactionType(profile),
+    livemode: false,
     current_period_start: start,
     current_period_end: end,
     managed_by: managedBy || profile.subscription_managed_by || null,
     admin_note: profile.subscription_note || null,
     metadata: {
       source: 'admin_profile_studio',
+      acquisition_source: profile.acquisition_source || (profile.is_sponsored ? 'admin_sponsored' : null),
+      is_sponsored: Boolean(profile.is_sponsored),
       profile_type: profile.profile_type || null,
       is_seed_profile: Boolean(profile.is_seed_profile)
     }

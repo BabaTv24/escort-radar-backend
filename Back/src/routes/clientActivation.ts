@@ -147,8 +147,12 @@ clientActivationRouter.post('/confirm', asyncHandler(async (req, res) => {
     amount_cents: Number(session.amount_total || config.clientActivationPriceCents),
     currency: String(session.currency || 'eur').toLowerCase(),
     status: 'paid',
+    payment_status: 'paid',
+    transaction_type: 'client_activation',
     provider: 'stripe',
     stripe_session_id: stripeSessionId,
+    stripe_checkout_session_id: stripeSessionId,
+    livemode: session.livemode,
     stripe_payment_intent_id: session.payment_intent ? String(session.payment_intent) : null
   });
   if (paymentError && paymentError.code !== '23505') return res.status(400).json({ error: paymentError.message });

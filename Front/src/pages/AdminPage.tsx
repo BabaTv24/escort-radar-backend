@@ -53,6 +53,10 @@ const emptyStudioForm = {
   languages: ['DE', 'EN'],
   business_name: '',
   business_type: '',
+  business_id: '',
+  business_phone: '',
+  exact_address: '',
+  max_profiles: 30,
   contact_person: '',
   website: '',
   opening_hours: '',
@@ -68,6 +72,8 @@ const emptyStudioForm = {
   verified: true,
   premium_tier: 'gold',
   is_seed_profile: false,
+  is_sponsored: true,
+  acquisition_source: 'admin_sponsored',
   is_published: true,
   admin_priority: 100,
   moderation_status: 'approved',
@@ -502,6 +508,10 @@ export function AdminPage() {
       languages: profile.languages?.length ? profile.languages : ['DE', 'EN'],
       business_name: profile.business_name || '',
       business_type: profile.business_type || '',
+      business_id: profile.business_id || '',
+      business_phone: profile.business_phone || profile.primary_phone || '',
+      exact_address: profile.exact_address || '',
+      max_profiles: Number(profile.max_profiles || 30),
       contact_person: profile.contact_person || '',
       website: profile.website || '',
       opening_hours: typeof profile.opening_hours === 'string' ? profile.opening_hours : String((profile.opening_hours as any)?.note || ''),
@@ -517,6 +527,8 @@ export function AdminPage() {
       verified: profile.verified !== false,
       premium_tier: profile.premium_tier || 'gold',
       is_seed_profile: Boolean(profile.is_seed_profile),
+      is_sponsored: Boolean(profile.is_sponsored || profile.acquisition_source === 'admin_sponsored' || profile.provider === 'manual_admin'),
+      acquisition_source: profile.acquisition_source || (profile.is_sponsored ? 'admin_sponsored' : 'paid_advertiser'),
       is_published: profile.is_published !== false,
       admin_priority: Number(profile.admin_priority || 0),
       moderation_status: profile.moderation_status || 'approved',
@@ -604,6 +616,8 @@ export function AdminPage() {
         height_cm: Number(studioForm.height_cm || 0),
         weight_kg: studioForm.weight_kg === '' ? null : Number(studioForm.weight_kg),
         admin_priority: Number(studioForm.admin_priority || 0),
+        max_profiles: Number(studioForm.max_profiles || 30),
+        acquisition_source: studioForm.is_sponsored ? 'admin_sponsored' : 'paid_advertiser',
         latitude: studioForm.latitude === '' ? null : Number(studioForm.latitude),
         longitude: studioForm.longitude === '' ? null : Number(studioForm.longitude),
         service_radius_km: Number(studioForm.service_radius_km || 25)
@@ -974,7 +988,11 @@ export function AdminPage() {
     if (studioTab === 'business') {
       return <div className="admin-form-grid">
         <AdminField label={t('admin.profileEditor.businessName')}><input placeholder={t('admin.profileEditor.businessNamePlaceholder')} value={studioForm.business_name} onChange={(event) => setStudioForm({ ...studioForm, business_name: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.businessType')}><input placeholder={t('admin.profileEditor.businessTypePlaceholder')} value={studioForm.business_type} onChange={(event) => setStudioForm({ ...studioForm, business_type: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.businessType')}><select value={studioForm.business_type} onChange={(event) => setStudioForm({ ...studioForm, business_type: event.target.value })}>{['', 'brothel', 'massage_salon', 'agency'].map((type) => <option key={type || 'empty'} value={type}>{type || '-'}</option>)}</select></AdminField>
+        <AdminField label="Business ID"><input placeholder="UUID profilu biznesowego" value={studioForm.business_id} onChange={(event) => setStudioForm({ ...studioForm, business_id: event.target.value })} /></AdminField>
+        <AdminField label="Business phone"><input placeholder="+49..." value={studioForm.business_phone} onChange={(event) => setStudioForm({ ...studioForm, business_phone: event.target.value })} /></AdminField>
+        <AdminField label="Exact address"><input placeholder="Street, number, city" value={studioForm.exact_address} onChange={(event) => setStudioForm({ ...studioForm, exact_address: event.target.value })} /></AdminField>
+        <AdminField label="Max profiles"><input type="number" min={1} max={30} value={studioForm.max_profiles} onChange={(event) => setStudioForm({ ...studioForm, max_profiles: Number(event.target.value) })} /></AdminField>
         <AdminField label={t('admin.profileEditor.contactPerson')}><input placeholder={t('admin.profileEditor.contactPersonPlaceholder')} value={studioForm.contact_person} onChange={(event) => setStudioForm({ ...studioForm, contact_person: event.target.value })} /></AdminField>
         <AdminField label={t('admin.profileEditor.website')}><input placeholder="https://example.com" value={studioForm.website} onChange={(event) => setStudioForm({ ...studioForm, website: event.target.value })} /></AdminField>
         <AdminField label={t('admin.profileEditor.openingHours')}><input placeholder={t('admin.profileEditor.openingHoursPlaceholder')} value={studioForm.opening_hours} onChange={(event) => setStudioForm({ ...studioForm, opening_hours: event.target.value })} /></AdminField>
@@ -1003,6 +1021,7 @@ export function AdminPage() {
         <div className="toggle-grid studio-toggle-grid">
           <AdminField label={t('admin.profileEditor.verified')}><label><input type="checkbox" checked={studioForm.verified} onChange={(event) => setStudioForm({ ...studioForm, verified: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
           <AdminField label={t('admin.profileEditor.seedDemo')} help={t('admin.profileEditor.seedDemoHelp')}><label><input type="checkbox" checked={studioForm.is_seed_profile} onChange={(event) => setStudioForm({ ...studioForm, is_seed_profile: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
+          <AdminField label="Profil sponsorowany" help="Domyślnie admin/manual_admin: widoczny publicznie, ale bez realnego przychodu."><label><input type="checkbox" checked={studioForm.is_sponsored} onChange={(event) => setStudioForm({ ...studioForm, is_sponsored: event.target.checked, acquisition_source: event.target.checked ? 'admin_sponsored' : 'paid_advertiser' })} /> SPONSOROWANY</label></AdminField>
           <AdminField label={t('admin.profileEditor.published')} help={t('admin.profileEditor.publishedHelp')}><label><input type="checkbox" checked={studioForm.is_published} onChange={(event) => setStudioForm({ ...studioForm, is_published: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
         </div>
       </>;
@@ -1452,6 +1471,7 @@ export function AdminPage() {
                         <i>{profile.moderation_status || 'pending'}</i>
                         <i>{profile.premium_tier || 'standard'}</i>
                         <i>{profile.subscription_status || 'free'}</i>
+                        {profile.is_sponsored && <i>SPONSOROWANY</i>}
                         <i>{profile.profile_images?.length || 0} photos</i>
                         <i>{profile.services?.length || 0} services</i>
                         {profile.is_published !== false ? <i>published</i> : <i>unpublished</i>}
@@ -1621,6 +1641,7 @@ export function AdminPage() {
         ['Client activations', revenueStats.client_activations || 0],
         ['Escort subscriptions', revenueStats.escort_subscriptions || 0],
         ['Business subscriptions', revenueStats.business_subscriptions || 0],
+        ['Sponsored profiles', revenueStats.sponsored_profiles || 0],
         ['admin.revenue.expiredSubscriptions', revenueStats.expired_subscriptions || 0],
         ['Upcoming renewals', revenueStats.upcoming_renewals || 0]
       ];
