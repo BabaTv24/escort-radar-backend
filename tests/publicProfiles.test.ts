@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { isPublicProfile } from '../Back/src/publicProfiles.ts';
 import { isRealPaidSubscription, isRealRevenueTransaction, sumRealRevenue } from '../Back/src/revenue.ts';
+import { buildAdminClient, filterSortPaginateClients, importantLiveTestClientEmail, isRealClientActivationPayment } from '../Back/src/adminClients.ts';
 import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
@@ -181,4 +182,64 @@ test('business profile limit is enforced for max 30 and 31st profile returns 409
   assert.match(migration, /linked_count >= parent_max/);
   assert.match(adminSource, /validateBusinessProfileLimit/);
   assert.match(adminSource, /status\(409\)/);
+});
+
+test('admin clients list includes client users and supports search/filter', () => {
+  const clients = [
+    buildAdminClient({ user: { id: 'client-1', email: 'one@example.com', app_metadata: { auth_account_type: 'client' }, created_at: '2026-01-01' } }),
+    buildAdminClient({ user: { id: 'escort-1', email: 'escort@example.com', app_metadata: { auth_account_type: 'escort' }, created_at: '2026-01-02' } }),
+    buildAdminClient({
+      user: { id: 'client-2', email: 'paid@example.com', app_metadata: { auth_account_type: 'client' }, created_at: '2026-01-03' },
+      activation: { state: 'client_activated', activated_at: '2026-01-04' },
+      payments: [{ provider: 'stripe', payment_status: 'paid', amount_cents: 99, stripe_checkout_session_id: 'cs_live', livemode: true, created_at: '2026-01-04' }]
+    })
+  ].filter((row) => row.email.includes('client') || row.email.includes('paid') || row.email.includes('one'));
+  const page = filterSortPaginateClients(clients, { search: 'paid', status: 'stripe_activated' });
+  assert.equal(page.total, 1);
+  assert.equal(page.rows[0].email, 'paid@example.com');
+});
+
+test('Stripe activated client is marked as real payment', () => {
+  const client = buildAdminClient({
+    user: { id: 'paid-client', email: 'paid@example.com', app_metadata: { auth_account_type: 'client' }, created_at: '2026-01-01' },
+    activation: { state: 'client_activated', activated_at: '2026-01-02' },
+    payments: [{ provider: 'stripe', payment_status: 'succeeded', amount_cents: 99, stripe_payment_intent_id: 'pi_live', livemode: true, created_at: '2026-01-02' }]
+  });
+  assert.equal(client.account_status, 'stripe_activated');
+  assert.equal(client.has_real_stripe_activation, true);
+  assert.equal(isRealClientActivationPayment(client.payments[0]), true);
+});
+
+test('manual_admin client without Stripe does not increase revenue', () => {
+  const client = buildAdminClient({
+    user: { id: 'manual-client', email: 'manual@example.com', app_metadata: { auth_account_type: 'client' }, created_at: '2026-01-01' },
+    activation: { state: 'client_activated', activated_at: '2026-01-02' },
+    payments: [{ provider: 'manual_admin', payment_status: 'paid', amount_cents: 99, livemode: true, created_at: '2026-01-02' }]
+  });
+  assert.equal(client.account_status, 'admin_activated');
+  assert.equal(client.has_real_stripe_activation, false);
+  assert.equal(sumRealRevenue(client.payments), 0);
+});
+
+test('bigbaba.vip@gmail.com is treated as active only when live Stripe reference is complete', () => {
+  const client = buildAdminClient({
+    user: { id: 'bigbaba', email: importantLiveTestClientEmail, app_metadata: { auth_account_type: 'client' }, created_at: '2026-01-01' },
+    activation: { state: 'client_activated', activated_at: '2026-01-02' },
+    payments: [{ provider: 'stripe', payment_status: 'paid', amount_cents: 99, stripe_checkout_session_id: 'cs_live_bigbaba', livemode: true, created_at: '2026-01-02' }]
+  });
+  assert.equal(client.account_status, 'stripe_activated');
+  assert.equal(client.has_real_stripe_activation, true);
+  assert.equal(sumRealRevenue(client.payments), 0.99);
+});
+
+test('admin client endpoints and coin actions exist', async () => {
+  const adminSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+  const pageSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  assert.match(adminSource, /adminRouter\.get\('\/clients'/);
+  assert.match(adminSource, /adminRouter\.patch\('\/clients\/:id\/coins'/);
+  assert.match(apiSource, /adminClients/);
+  assert.match(apiSource, /adjustAdminClientCoins/);
+  assert.match(pageSource, /\/admin\/clients/);
+  assert.match(pageSource, /client-mobile-cards/);
 });

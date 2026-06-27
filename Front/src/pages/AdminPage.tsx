@@ -11,6 +11,7 @@ import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLe
 
 type AdminUser = Record<string, any>;
 type SubscriptionRow = Record<string, any>;
+type AdminClient = Record<string, any>;
 const adminTokenStorageKey = 'escort-radar-admin-token';
 const serviceCategories = ['all', ...Array.from(new Set(serviceOptions.map((service) => service.category)))];
 const studioTabs = ['account', 'basic', 'location', 'business', 'prices', 'status', 'services', 'subscription', 'moderation', 'photos'] as const;
@@ -91,6 +92,7 @@ const sections = [
     title: 'ADMIN',
     items: [
       ['dashboard', '/admin', BarChart3],
+      ['clients', '/admin/clients', Users],
       ['profiles', '/admin/profiles', Crown],
       ['moderation', '/admin/moderation', Shield],
       ['reports', '/admin/reports', Ban],
@@ -131,6 +133,10 @@ export function AdminPage() {
   const [tokenStats, setTokenStats] = useState<Record<string, number>>({});
   const [subscriptionStats, setSubscriptionStats] = useState<Record<string, number>>({});
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [clients, setClients] = useState<AdminClient[]>([]);
+  const [clientsTotal, setClientsTotal] = useState(0);
+  const [clientFilters, setClientFilters] = useState({ search: '', status: 'all', sort: 'registered_at', direction: 'desc', page: 1, page_size: 25 });
+  const [bigbabaClient, setBigbabaClient] = useState<AdminClient | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
   const [moderationQueues, setModerationQueues] = useState<Record<string, Profile[]>>({});
@@ -369,6 +375,7 @@ export function AdminPage() {
       const [
         statsResult,
         tokenResult,
+        clientsResult,
         usersResult,
         profileResult,
         subscriptionResult,
@@ -389,6 +396,7 @@ export function AdminPage() {
       ] = await Promise.allSettled([
         adminLoadRequest('adminStats', api.adminStats(accessToken)),
         adminLoadRequest('adminTokenStats', api.adminTokenStats(accessToken)),
+        adminLoadRequest('adminClients', api.adminClients(accessToken, clientQueryString(clientFilters))),
         adminLoadRequest('adminUsers', api.adminUsers(accessToken)),
         adminLoadRequest('adminProfiles', api.adminProfiles(accessToken)),
         adminLoadRequest('adminSubscriptions', api.adminSubscriptions(accessToken)),
@@ -410,6 +418,7 @@ export function AdminPage() {
 
       const statsData = settledValue(statsResult, { stats: {}, latest_activity: [], revenue_events: [], top_cities: [], top_categories: [], top_profiles: [] }, 'adminStats');
       const tokenData = settledValue(tokenResult, { stats: {} }, 'adminTokenStats');
+      const clientsData = settledValue(clientsResult, { clients: [], total: 0, page: 1, page_size: 25, bigbaba: null }, 'adminClients');
       const usersData = settledValue(usersResult, { users: [] }, 'adminUsers');
       const profileData = settledValue(profileResult, { stats: {}, profiles: [] }, 'adminProfiles');
       const subscriptionData = settledValue(subscriptionResult, { subscriptions: [] }, 'adminSubscriptions');
@@ -430,6 +439,9 @@ export function AdminPage() {
 
       setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
       setTokenStats(tokenData.stats);
+      setClients((clientsData.clients || []) as AdminClient[]);
+      setClientsTotal(Number(clientsData.total || 0));
+      setBigbabaClient((clientsData.bigbaba || null) as AdminClient | null);
       setSubscriptionStats((subscriptionData as any).stats || {});
       setUsers(usersData.users);
       setProfiles(profileData.profiles);
@@ -458,6 +470,12 @@ export function AdminPage() {
     }
   }
 
+  useEffect(() => {
+    if (!token || view !== 'clients') return;
+    void load(token);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientFilters.search, clientFilters.status, clientFilters.sort, clientFilters.direction, clientFilters.page, clientFilters.page_size, token, view]);
+
   async function action(fn: () => Promise<unknown>) {
     try {
       await fn();
@@ -466,6 +484,17 @@ export function AdminPage() {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
       setLoading(false);
     }
+  }
+
+  async function openClientDetails(client: AdminClient) {
+    await action(async () => {
+      const details = await api.adminClient(token, String(client.id));
+      setModal({ title: String(client.email || client.id), body: JSON.stringify(details, null, 2) });
+    });
+  }
+
+  async function adjustClientCoins(client: AdminClient, amount: number) {
+    await action(() => api.adjustAdminClientCoins(token, String(client.id), amount, amount > 0 ? 'Admin client credit' : 'Admin client debit'));
   }
 
   function editStudioProfile(profile: Profile) {
@@ -1373,6 +1402,77 @@ export function AdminPage() {
       );
     }
 
+    if (view === 'clients') {
+      const totalPages = Math.max(1, Math.ceil(clientsTotal / Number(clientFilters.page_size || 25)));
+      const clientColumns = ['id', 'email', 'account_status', 'activation_status', 'activation_amount', 'payment_provider', 'activated_at', 'registered_at', 'coins', 'referral_code', 'last_login'];
+      return (
+        <>
+          <section className="admin-card">
+            <div className="profile-studio-head">
+              <div>
+                <p className="eyebrow">{t('admin.clients.title')}</p>
+                <h2>{t('admin.clients.title')}</h2>
+              </div>
+              <div className="admin-actions-row">
+                <input placeholder={t('admin.clients.search')} value={clientFilters.search} onChange={(event) => setClientFilters({ ...clientFilters, search: event.target.value, page: 1 })} />
+                <select value={clientFilters.status} onChange={(event) => setClientFilters({ ...clientFilters, status: event.target.value, page: 1 })}>
+                  {['all', 'free', 'activated', 'stripe_activated', 'admin_activated', 'blocked', 'test', 'client_activated', 'client_free'].map((status) => <option key={status} value={status}>{status === 'all' ? t('admin.common.all') : t(`admin.clients.status.${status}`)}</option>)}
+                </select>
+                <select value={clientFilters.sort} onChange={(event) => setClientFilters({ ...clientFilters, sort: event.target.value })}>
+                  <option value="registered_at">{t('admin.clients.registeredAt')}</option>
+                  <option value="activated_at">{t('admin.clients.activatedAt')}</option>
+                </select>
+                <select value={clientFilters.direction} onChange={(event) => setClientFilters({ ...clientFilters, direction: event.target.value })}>
+                  <option value="desc">DESC</option>
+                  <option value="asc">ASC</option>
+                </select>
+              </div>
+            </div>
+            {bigbabaClient && !bigbabaClient.has_real_stripe_activation && <p className="error-text">bigbaba.vip@gmail.com: Brak kompletnego potwierdzenia live Stripe</p>}
+            {loading && <p className="muted">{t('states.loading')}</p>}
+            {!loading && !clients.length && <EmptyAdminState text={t('admin.clients.empty')} />}
+          </section>
+          <AdminTable rows={clients} columns={clientColumns} labels={tableLabels(t, clientColumns)} format={(key, value, row) => {
+            if (key === 'account_status' || key === 'activation_status') return <StatusBadge value={String(value || 'free')} />;
+            if (key === 'activation_amount') return `${Number(value || 0).toFixed(2)} EUR`;
+            if (['activated_at', 'registered_at', 'last_login'].includes(key)) return value ? new Date(String(value)).toLocaleString() : '-';
+            return value;
+          }} actions={(client) => (
+            <>
+              <Action onClick={() => openClientDetails(client)}>{t('admin.actions.view')}</Action>
+              <Action onClick={() => action(() => api.setAdminClientActivation(token, String(client.id), 'client_activated'))}>{t('admin.clients.activate')}</Action>
+              <Action onClick={() => action(() => api.setAdminClientActivation(token, String(client.id), 'client_free'))}>{t('admin.clients.deactivate')}</Action>
+              <Action onClick={() => action(() => api.blockAdminClient(token, String(client.id), !client.is_blocked))}>{client.is_blocked ? t('admin.clients.unblock') : t('admin.clients.block')}</Action>
+              <Action onClick={() => adjustClientCoins(client, 100)}>{t('admin.clients.addCoins')}</Action>
+              <Action danger onClick={() => adjustClientCoins(client, -25)}>{t('admin.clients.subtractCoins')}</Action>
+            </>
+          )} />
+          <section className="admin-card client-mobile-cards">
+            {clients.map((client) => (
+              <article className="admin-card" key={client.id}>
+                <h3>{client.email}</h3>
+                <p><StatusBadge value={String(client.account_status || 'free')} /> <StatusBadge value={String(client.activation_status || 'client_free')} /></p>
+                <p>{Number(client.activation_amount || 0).toFixed(2)} EUR / {client.payment_provider || '-'}</p>
+                <p>Coins: {client.coins || 0} / Referral: {client.referral_code || '-'}</p>
+                {client.stripe_warning && <p className="error-text">{client.stripe_warning}</p>}
+                <div className="admin-actions-row">
+                  <Action onClick={() => openClientDetails(client)}>{t('admin.actions.view')}</Action>
+                  <Action onClick={() => adjustClientCoins(client, 100)}>{t('admin.clients.addCoins')}</Action>
+                </div>
+              </article>
+            ))}
+          </section>
+          <section className="admin-card">
+            <div className="admin-actions-row">
+              <button className="button" disabled={clientFilters.page <= 1} onClick={() => setClientFilters({ ...clientFilters, page: Math.max(1, clientFilters.page - 1) })}>Prev</button>
+              <span>{clientFilters.page} / {totalPages} ({clientsTotal})</span>
+              <button className="button" disabled={clientFilters.page >= totalPages} onClick={() => setClientFilters({ ...clientFilters, page: clientFilters.page + 1 })}>Next</button>
+            </div>
+          </section>
+        </>
+      );
+    }
+
     if (view === 'users') {
       return <AdminTable rows={filteredUsers} columns={['email', 'role', 'account_type', 'client_state', 'client_activated_at', 'avatar_url', 'public_user_id', 'referral_code', 'token_balance', 'profile_count', 'created_at', 'status']} actions={(user) => (
         <>
@@ -1812,6 +1912,15 @@ function adminLoadRequest<T>(label: string, request: Promise<T>, timeoutMs = 100
 function getAdminView(pathname: string) {
   const value = pathname.replace('/admin/', '').replace('/admin', '') || 'dashboard';
   return value || 'dashboard';
+}
+
+function clientQueryString(filters: Record<string, string | number>) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== '' && value !== 'all') params.set(key, String(value));
+  });
+  const query = params.toString();
+  return query ? `?${query}` : '';
 }
 
 function adminLabel(key: string) {

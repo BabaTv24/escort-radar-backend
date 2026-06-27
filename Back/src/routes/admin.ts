@@ -17,6 +17,8 @@ import { writeAdminAuditLog } from '../services/adminAudit.js';
 import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
+import { activateClientAccount, deactivateClientAccount, getOrCreateCoinWallet, grantCoins } from '../services/clientActivation.js';
+import { buildAdminClient, filterSortPaginateClients, isClientUser, importantLiveTestClientEmail } from '../adminClients.js';
 import {
   isBusinessRole,
   isRealPaidSubscription,
@@ -583,6 +585,68 @@ adminRouter.get('/users', asyncHandler(async (_req, res) => {
   });
 
   res.json({ users });
+}));
+
+adminRouter.get('/clients', asyncHandler(async (req, res) => {
+  const { clients, bigbaba } = await loadAdminClients();
+  const page = filterSortPaginateClients(clients, req.query as Record<string, unknown>);
+  res.json({
+    clients: page.rows,
+    total: page.total,
+    page: page.page,
+    page_size: page.page_size,
+    bigbaba
+  });
+}));
+
+adminRouter.get('/clients/:id', asyncHandler(async (req, res) => {
+  const { clients } = await loadAdminClients();
+  const client = clients.find((row) => row.id === req.params.id || String(row.email || '').toLowerCase() === req.params.id.toLowerCase());
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  const [{ data: transactions }, { data: rewards }, { data: referrals }] = await Promise.all([
+    supabaseAdmin.from('coin_transactions').select('*').eq('user_id', client.id).order('created_at', { ascending: false }).limit(200),
+    supabaseAdmin.from('client_rewards').select('*').eq('user_id', client.id).order('created_at', { ascending: false }).limit(200),
+    supabaseAdmin.from('client_referrals').select('*').or(`user_id.eq.${client.id},referred_by_code.eq.${client.referral_code || ''}`).limit(200)
+  ]);
+
+  res.json({
+    client,
+    payments: client.payments || [],
+    coin_transactions: transactions || [],
+    rewards: rewards || [],
+    referrals: referrals || []
+  });
+}));
+
+adminRouter.patch('/clients/:id/activation', asyncHandler(async (req, res) => {
+  const state = String(req.body.state || '');
+  if (state === 'client_activated') await activateClientAccount(req.params.id);
+  else if (state === 'client_free') await deactivateClientAccount(req.params.id);
+  else return res.status(400).json({ error: 'Invalid activation state' });
+  const { clients } = await loadAdminClients();
+  res.json({ client: clients.find((row) => row.id === req.params.id) || null });
+}));
+
+adminRouter.patch('/clients/:id/block', asyncHandler(async (req, res) => {
+  const blocked = req.body.blocked !== false;
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, {
+    ban_duration: blocked ? '876000h' : 'none'
+  });
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, blocked ? 'client_blocked' : 'client_unblocked', 'auth_user', req.params.id, { blocked });
+  res.json({ user: data.user });
+}));
+
+adminRouter.patch('/clients/:id/coins', asyncHandler(async (req, res) => {
+  const amount = Number(req.body.amount);
+  if (!Number.isFinite(amount) || amount === 0) return res.status(400).json({ error: 'amount is required' });
+  const wallet = await getOrCreateCoinWallet(req.params.id);
+  await grantCoins(wallet.id, req.params.id, amount, amount > 0 ? 'admin_credit' : 'admin_debit', {
+    note: optionalText(req.body.note, 1000),
+    source: 'admin_clients'
+  }, req.user?.email);
+  res.json({ wallet: await getOrCreateCoinWallet(req.params.id) });
 }));
 
 adminRouter.get('/users/:id', asyncHandler(async (req, res) => {
@@ -2259,6 +2323,69 @@ async function countSponsoredProfiles() {
     .select('id', { count: 'exact', head: true })
     .or('is_sponsored.eq.true,acquisition_source.eq.admin_sponsored,provider.eq.manual_admin');
   return count || 0;
+}
+
+async function loadAdminClients() {
+  const [
+    usersResult,
+    activationResult,
+    paymentResult,
+    walletResult,
+    referralResult,
+    accessLogResult
+  ] = await Promise.all([
+    supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    supabaseAdmin.from('client_activations').select('*').limit(5000),
+    supabaseAdmin.from('client_activation_payments').select('*').order('created_at', { ascending: false }).limit(5000),
+    supabaseAdmin.from('coin_wallets').select('*').limit(5000),
+    supabaseAdmin.from('client_referrals').select('*').limit(5000),
+    supabaseAdmin.from('account_access_logs').select('*').eq('action', 'login').order('created_at', { ascending: false }).limit(5000)
+  ]);
+
+  if (usersResult.error) throw new Error(usersResult.error.message);
+  if (activationResult.error) throw new Error(activationResult.error.message);
+  if (paymentResult.error) throw new Error(paymentResult.error.message);
+  if (walletResult.error) throw new Error(walletResult.error.message);
+  if (referralResult.error) throw new Error(referralResult.error.message);
+
+  const activationsByUser = new Map<string, any>();
+  (activationResult.data || []).forEach((row) => activationsByUser.set(row.user_id, row));
+  const paymentsByUser = new Map<string, any[]>();
+  const paymentsByEmail = new Map<string, any[]>();
+  (paymentResult.data || []).forEach((row) => {
+    if (row.user_id) paymentsByUser.set(row.user_id, [...(paymentsByUser.get(row.user_id) || []), row]);
+    if (row.email) {
+      const email = String(row.email).toLowerCase();
+      paymentsByEmail.set(email, [...(paymentsByEmail.get(email) || []), row]);
+    }
+  });
+  const walletsByUser = new Map<string, any>();
+  (walletResult.data || []).forEach((row) => walletsByUser.set(row.user_id, row));
+  const referralsByUser = new Map<string, any>();
+  (referralResult.data || []).forEach((row) => referralsByUser.set(row.user_id, row));
+  const lastAccessByUser = new Map<string, any>();
+  (accessLogResult.data || []).forEach((row) => {
+    if (row.user_id && !lastAccessByUser.has(row.user_id)) lastAccessByUser.set(row.user_id, row);
+  });
+
+  const clients = (usersResult.data.users || [])
+    .filter(isClientUser)
+    .map((user) => {
+      const email = String(user.email || '').toLowerCase();
+      return buildAdminClient({
+        user,
+        activation: activationsByUser.get(user.id),
+        payments: [...(paymentsByUser.get(user.id) || []), ...(paymentsByEmail.get(email) || [])],
+        wallet: walletsByUser.get(user.id),
+        referral: referralsByUser.get(user.id),
+        lastAccess: lastAccessByUser.get(user.id)
+      });
+    });
+
+  return {
+    clients,
+    bigbaba: clients.find((client) => String(client.email || '').toLowerCase() === importantLiveTestClientEmail) || null
+  };
 }
 
 export async function validateBusinessProfileLimit(input: Record<string, any>, excludeProfileId?: string) {

@@ -93,6 +93,23 @@ export const api = {
   }>('/api/admin/stats', { token }),
   adminMe: (token: string) => request<{ admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/me', { token }),
   adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number> }>(`/api/admin/profiles${params}`, { token }),
+  adminClients: (token: string, params = '') => request<{ clients: Record<string, unknown>[]; total: number; page: number; page_size: number; bigbaba?: Record<string, unknown> | null }>(`/api/admin/clients${params}`, { token }),
+  adminClient: (token: string, id: string) => request<{ client: Record<string, unknown>; payments: Record<string, unknown>[]; coin_transactions: Record<string, unknown>[]; rewards: Record<string, unknown>[]; referrals: Record<string, unknown>[] }>(`/api/admin/clients/${id}`, { token }),
+  setAdminClientActivation: (token: string, id: string, state: 'client_free' | 'client_activated') => request<{ client: Record<string, unknown> | null }>(`/api/admin/clients/${id}/activation`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ state })
+  }),
+  blockAdminClient: (token: string, id: string, blocked: boolean) => request(`/api/admin/clients/${id}/block`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ blocked })
+  }),
+  adjustAdminClientCoins: (token: string, id: string, amount: number, note = '') => request<{ wallet: CoinWallet }>(`/api/admin/clients/${id}/coins`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ amount, note })
+  }),
   adminModeration: (token: string) => request<{ profiles: Profile[]; queues: Record<string, Profile[]> }>('/api/admin/moderation', { token }),
   adminUsers: (token: string) => request<{ users: Record<string, unknown>[] }>('/api/admin/users', { token }),
   adminSubscriptions: (token: string) => request<{ subscriptions: Record<string, unknown>[]; stats?: Record<string, number> }>('/api/admin/subscriptions', { token }),
