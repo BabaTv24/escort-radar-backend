@@ -3847,3 +3847,89 @@ body {
   }
   .admin-actions-row { flex-wrap: wrap !important; }
 }
+
+/* Premium admin login */
+.admin-login-page {
+  min-height: 100dvh !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 1rem !important;
+  background:
+    radial-gradient(circle at 50% 0, rgba(212,175,55,.16), transparent 24rem),
+    linear-gradient(180deg, #090909, #050505) !important;
+}
+.admin-login-card {
+  width: min(390px, 100%) !important;
+  gap: .72rem !important;
+  padding: 1.15rem !important;
+  border-radius: .6rem !important;
+  border: 1px solid rgba(212,175,55,.28) !important;
+  background: #111 !important;
+  box-shadow: 0 24px 80px rgba(0,0,0,.52), 0 0 42px rgba(212,175,55,.12) !important;
+}
+.admin-login-logo {
+  width: 7.25rem;
+  max-width: 42vw;
+  aspect-ratio: 16 / 10;
+  object-fit: contain;
+  justify-self: center;
+  margin-bottom: .1rem;
+  filter: drop-shadow(0 0 22px rgba(212,175,55,.18));
+}
+.admin-login-card h1 {
+  margin: 0;
+  color: #fff8e6;
+  font-size: clamp(1.8rem, 7vw, 2.45rem);
+  line-height: 1;
+  text-align: center;
+}
+.admin-login-card .eyebrow,
+.admin-login-copy {
+  text-align: center;
+}
+.admin-login-copy {
+  margin: 0 0 .25rem;
+  color: #bdb4a4;
+  font-size: .92rem;
+}
+.admin-login-card input[type="email"],
+.admin-login-card input[type="password"] {
+  width: 100%;
+  border-radius: .48rem;
+  border-color: rgba(212,175,55,.2);
+  background: #080808;
+}
+.admin-remember-email {
+  min-height: 2.4rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .48rem .55rem;
+  border: 1px solid rgba(212,175,55,.14);
+  border-radius: .48rem;
+  color: #d9cfbd;
+  background: rgba(255,255,255,.035);
+  font-weight: 750;
+}
+.admin-remember-email input {
+  width: 1rem;
+  min-width: 1rem;
+  min-height: 1rem;
+}
+.admin-alert {
+  margin: 0;
+  padding: .62rem .72rem;
+  border: 1px solid rgba(255,90,90,.32);
+  border-radius: .48rem;
+  color: #ffb1b1;
+  background: rgba(255,90,90,.09);
+  font-size: .9rem;
+  line-height: 1.35;
+}
+@media (max-width: 480px) {
+  .admin-login-page { padding: .75rem !important; }
+  .admin-login-card { padding: .95rem !important; }
+  .admin-login-logo { width: 6rem; }
+  .admin-login-card input,
+  .admin-login-card .button { width: 100%; }
+}

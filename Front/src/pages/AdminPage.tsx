@@ -13,6 +13,7 @@ type AdminUser = Record<string, any>;
 type SubscriptionRow = Record<string, any>;
 type AdminClient = Record<string, any>;
 const adminTokenStorageKey = 'escort-radar-admin-token';
+const adminEmailStorageKey = 'escortRadarAdminEmail';
 const serviceCategories = ['all', ...Array.from(new Set(serviceOptions.map((service) => service.category)))];
 const studioTabs = ['account', 'basic', 'location', 'business', 'prices', 'status', 'services', 'subscription', 'moderation', 'photos'] as const;
 const emptyStudioForm = {
@@ -136,8 +137,9 @@ type LocationCatalogRow = {
 };
 
 export function AdminPage() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => localStorage.getItem(adminEmailStorageKey) || '');
   const [password, setPassword] = useState('');
+  const [rememberEmail, setRememberEmail] = useState(() => Boolean(localStorage.getItem(adminEmailStorageKey)));
   const [token, setToken] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -266,7 +268,7 @@ export function AdminPage() {
 
       console.log('ADMIN CHECK START');
       const adminCheck = await withTimeout(api.adminMe(storedToken), 5000, 'Admin me').catch((adminError) => {
-        setMessage(adminError instanceof Error ? adminError.message : 'Brak dostepu administratora');
+        setMessage(adminError instanceof Error ? adminError.message : t('admin.login.noAccess'));
         return undefined;
       });
       if (!active) return;
@@ -275,7 +277,7 @@ export function AdminPage() {
         setToken('');
         setUser(null);
         setAdmin(null);
-        setMessage('Brak dostepu administratora');
+        setMessage(t('admin.login.noAccess'));
         setAuthRestoring(false);
         console.log('AUTH RESTORE END');
         return;
@@ -303,7 +305,7 @@ export function AdminPage() {
       setToken('');
       setUser(null);
       setAdmin(null);
-      const message = sessionError instanceof Error ? sessionError.message : 'Brak dostepu administratora';
+      const message = sessionError instanceof Error ? sessionError.message : t('admin.login.noAccess');
       setMessage(message);
       setAuthRestoring(false);
       console.log('AUTH RESTORE END');
@@ -313,7 +315,7 @@ export function AdminPage() {
     return () => {
       active = false;
     };
-  }, [isLoginRoute, navigate]);
+  }, [isLoginRoute, navigate, t]);
 
   async function handleLogin() {
     console.log('ADMIN LOGIN START');
@@ -340,7 +342,7 @@ export function AdminPage() {
       console.log('ADMIN ME RESULT', adminCheck);
       if (!adminCheck?.admin) {
         setAdmin(null);
-        setMessage('Brak dostepu administratora');
+        setMessage(t('admin.login.noAccess'));
         return;
       }
 
@@ -356,6 +358,11 @@ export function AdminPage() {
       setMessage('');
       setToken(accessToken);
       localStorage.setItem(adminTokenStorageKey, accessToken);
+      if (rememberEmail) {
+        localStorage.setItem(adminEmailStorageKey, email.trim());
+      } else {
+        localStorage.removeItem(adminEmailStorageKey);
+      }
       console.log('ADMIN CHECK SUCCESS');
       console.log('ADMIN LOGIN SUCCESS');
       navigate('/admin', { replace: true });
@@ -1278,7 +1285,8 @@ export function AdminPage() {
     return (
       <div className="admin-login-page">
         <div className="admin-login-card">
-          <p className="eyebrow">Escort Radar Admin Console</p>
+          <img className="admin-login-logo" src="/Logo_Escort_3.png" alt="Escort Radar" />
+          <p className="eyebrow">{t('admin.login.subtitle')}</p>
           <h1>Ładowanie panelu administratora...</h1>
         </div>
       </div>
@@ -1289,14 +1297,21 @@ export function AdminPage() {
     return (
       <div className="admin-login-page">
         <div className="admin-login-card">
-          <img className="baba-admin-logo" src="/Sektion_1_4.png" alt="BABA AI" />
-          <p className="eyebrow">Escort Radar Admin Console</p>
-          <h1>Control Center</h1>
-          <p>Tylko dla administratorow i moderatorow.</p>
-          <input type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
-          <input type="password" placeholder="Haslo" value={password} onChange={(event) => setPassword(event.target.value)} />
-          <button className="button primary full" disabled={loginLoading} onClick={handleLogin}>{loginLoading ? t('states.loading') : 'Login'}</button>
-          {message && <p className="error-text">{message}</p>}
+          <img className="admin-login-logo" src="/Logo_Escort_3.png" alt="Escort Radar" />
+          <p className="eyebrow">{t('admin.login.subtitle')}</p>
+          <h1>{t('admin.login.title')}</h1>
+          <p className="admin-login-copy">{t('admin.login.restricted')}</p>
+          {message && <p className="admin-alert">{message}</p>}
+          <input type="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" />
+          <input type="password" placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
+          <label className="admin-remember-email">
+            <input type="checkbox" checked={rememberEmail} onChange={(event) => {
+              setRememberEmail(event.target.checked);
+              if (!event.target.checked) localStorage.removeItem(adminEmailStorageKey);
+            }} />
+            <span>{t('admin.login.rememberEmail')}</span>
+          </label>
+          <button className="button primary full" disabled={loginLoading} onClick={handleLogin}>{loginLoading ? t('states.loading') : t('admin.login.submit')}</button>
         </div>
       </div>
     );
@@ -1306,11 +1321,12 @@ export function AdminPage() {
     return (
       <div className="admin-login-page">
         <div className="admin-login-card">
-          <p className="eyebrow">Escort Radar Admin Console</p>
-          <h1>Brak dostepu administratora</h1>
-          <p>{message || 'Zaloguj sie kontem administratora.'}</p>
-          <Link className="button primary full" to="/admin/login">Przejdz do logowania</Link>
-          <button className="button full" onClick={resetAdminSession}>Resetuj sesje administratora</button>
+          <img className="admin-login-logo" src="/Logo_Escort_3.png" alt="Escort Radar" />
+          <p className="eyebrow">{t('admin.login.subtitle')}</p>
+          <h1>{t('admin.login.title')}</h1>
+          <p className="admin-alert">{message || t('admin.login.noAccess')}</p>
+          <Link className="button primary full" to="/admin/login">{t('admin.login.goToLogin')}</Link>
+          <button className="button full" onClick={resetAdminSession}>{t('admin.login.resetSession')}</button>
         </div>
       </div>
     );
