@@ -3585,9 +3585,20 @@ body {
   color: #d4af37 !important;
   background: rgba(212,175,55,.055) !important;
 }
+.admin-table th:last-child,
+.admin-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  min-width: 13.5rem;
+  background: #111 !important;
+  box-shadow: -12px 0 18px rgba(0,0,0,.28);
+}
+.admin-table th:last-child { z-index: 4; }
 .admin-actions-row {
   min-width: 0 !important;
   align-items: center;
+  flex-wrap: nowrap !important;
 }
 .admin-action-btn.icon {
   width: 2.15rem;
@@ -3651,6 +3662,71 @@ body {
   align-items: center;
   gap: .4rem;
 }
+.admin-profile-thumb,
+.admin-profile-thumb img,
+.admin-cover-placeholder {
+  width: 64px;
+  height: 80px;
+  border-radius: .45rem;
+}
+.admin-profile-thumb {
+  border: 1px solid rgba(212,175,55,.3);
+  background: #080808;
+  box-shadow: 0 0 20px rgba(212,175,55,.1);
+  overflow: hidden;
+}
+.admin-profile-thumb img {
+  display: block;
+  object-fit: cover;
+}
+.admin-cover-placeholder {
+  display: grid;
+  place-items: center;
+  color: #d4af37;
+  font-weight: 900;
+  background:
+    linear-gradient(135deg, rgba(212,175,55,.16), rgba(255,255,255,.04)),
+    #0b0b0b;
+}
+.profile-overview-hero .admin-cover-placeholder {
+  width: 112px;
+  height: 140px;
+}
+.admin-back-link {
+  width: fit-content;
+  min-height: 2.25rem;
+  padding: .4rem .62rem;
+  border: 1px solid rgba(212,175,55,.2);
+  border-radius: .45rem;
+  color: #f4d77f;
+  background: rgba(212,175,55,.07);
+  cursor: pointer;
+  font-weight: 800;
+}
+.subscription-progress {
+  min-width: 11.5rem !important;
+  gap: .28rem !important;
+}
+.subscription-progress span {
+  color: #f4d77f !important;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.subscription-progress div {
+  height: .46rem !important;
+  background: #080808 !important;
+  border-color: rgba(212,175,55,.18) !important;
+}
+.subscription-progress i {
+  background: linear-gradient(90deg, #79f2bd, #d4af37) !important;
+}
+.subscription-progress.expired i {
+  background: linear-gradient(90deg, #ff6b6b, #a83737) !important;
+}
+.subscription-progress.inactive i {
+  background: rgba(255,255,255,.16) !important;
+}
 .client-mobile-cards { display: none; }
 
 @media (max-width: 1100px) {
@@ -3711,4 +3787,11 @@ body {
     text-transform: uppercase;
     letter-spacing: .06em;
   }
+  .admin-table th:last-child,
+  .admin-table td:last-child {
+    position: static;
+    min-width: 0;
+    box-shadow: none;
+  }
+  .admin-actions-row { flex-wrap: wrap !important; }
 }

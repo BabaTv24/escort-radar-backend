@@ -230,6 +230,9 @@ export function AdminPage() {
   });
 
   const view = getAdminView(location.pathname);
+  const adminSearchParams = new URLSearchParams(location.search);
+  const selectedProfileQueryId = adminSearchParams.get('profile') || '';
+  const profileReturnSource = adminSearchParams.get('from') === 'subscriptions' ? 'subscriptions' : 'profiles';
   const isLoginRoute = location.pathname === '/admin/login';
   const filteredProfiles = profiles.filter((profile) => profileMatchesAdminFilters(profile, query, studioFilters));
   const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
@@ -496,6 +499,15 @@ export function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientFilters.search, clientFilters.status, clientFilters.sort, clientFilters.direction, clientFilters.page, clientFilters.page_size, token, view]);
 
+  useEffect(() => {
+    if (!selectedProfileQueryId || !['profiles', 'profile-studio'].includes(view) || !profiles.length) return;
+    const profile = profiles.find((item) => item.id === selectedProfileQueryId);
+    if (!profile || studioForm.id === profile.id) return;
+    editStudioProfile(profile);
+    setProfilePanelMode('overview');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProfileQueryId, view, profiles]);
+
   async function action(fn: () => Promise<unknown>) {
     try {
       await fn();
@@ -596,9 +608,20 @@ export function AdminPage() {
     setAccountActionLoading('');
   }
 
-  function openProfileOverview(profile: Profile) {
+  function openProfileOverview(profile: Profile, from: 'profiles' | 'subscriptions' = 'profiles') {
+    navigate(`/admin/profiles?profile=${encodeURIComponent(profile.id)}${from === 'subscriptions' ? '&from=subscriptions' : ''}`, { replace: false });
     editStudioProfile(profile);
     setProfilePanelMode('overview');
+  }
+
+  function returnFromProfileOverview() {
+    if (profileReturnSource === 'subscriptions') {
+      navigate('/admin/subscriptions');
+      return;
+    }
+    setStudioForm({ ...emptyStudioForm });
+    setProfilePanelMode('overview');
+    navigate('/admin/profiles');
   }
 
   function toggleBulkProfile(id: string) {
@@ -1193,7 +1216,7 @@ export function AdminPage() {
       );
     }
 
-    const image = selectedProfile.profile_images?.find((item) => item.is_primary) || selectedProfile.profile_images?.[0];
+    const imageSrc = adminProfileCoverSrc(selectedProfile);
     const reportCount = reports.filter((report) => report.profile_id === selectedProfile.id).length;
     const fields = [
       ['ownerEmail', selectedProfile.owner_email || t('admin.noEmail')],
@@ -1212,8 +1235,11 @@ export function AdminPage() {
 
     return (
       <div className="profile-overview-panel">
+        <button type="button" className="admin-back-link" onClick={returnFromProfileOverview}>
+          ← {profileReturnSource === 'subscriptions' ? t('admin.backToSubscriptions') : t('admin.backToProfiles')}
+        </button>
         <div className="profile-overview-hero">
-          {image?.public_url ? <img src={image.public_url} alt="" /> : <div className="image-placeholder">{selectedProfile.display_name.slice(0, 1)}</div>}
+          {imageSrc ? <img src={imageSrc} alt="" /> : <AdminCoverPlaceholder label={selectedProfile.display_name} />}
           <div>
             <p className="eyebrow">{t('admin.profileOverview.title')}</p>
             <h2>{selectedProfile.display_name}</h2>
@@ -1576,7 +1602,8 @@ export function AdminPage() {
               <Action onClick={() => runBulkAction('subscription_status', { subscription_status: bulkSubscriptionStatus })}>{t('admin.bulk.setSubscriptionStatus')}</Action>
               <Action danger onClick={() => runBulkAction('delete')}>{t('admin.bulk.delete')}</Action>
             </div>
-            <AdminTable rows={studioProfiles} columns={['id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at']} labels={tableLabels(t, ['id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at'])} format={(key, value, profile) => {
+            <AdminTable rows={studioProfiles} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at']} labels={tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at'])} format={(key, value, profile) => {
+              if (key === 'cover') return <AdminProfileThumb profile={profile} />;
               if (key === 'id') return (
                 <label className="admin-check-cell">
                   <input type="checkbox" checked={selectedProfileIds.includes(profile.id)} onChange={() => toggleBulkProfile(profile.id)} aria-label={t('admin.bulk.toggleProfile')} />
@@ -1694,16 +1721,17 @@ export function AdminPage() {
         { label: t('admin.subscriptions.stats.sponsored'), value: subscriptions.filter(isSponsoredSubscription).length, badge: t('admin.status.sponsored') },
         { label: t('admin.subscriptions.stats.incomplete'), value: subscriptionStats.incomplete || 0, badge: t('admin.status.incomplete') }
       ];
-      const subscriptionLabels = tableLabels(t, ['id', 'email', 'profile', 'plan', 'provider', 'status', 'start', 'end', 'amount']);
+      const subscriptionLabels = tableLabels(t, ['id', 'email', 'profile', 'plan', 'provider', 'status', 'start', 'end', 'progress', 'amount']);
       return (
         <>
           <section className="admin-metric-grid kpi-grid">{cards.map((card) => <AdminStatCard key={card.label} label={card.label} value={card.value} badge={card.badge} />)}</section>
-          <AdminTable rows={subscriptions} columns={['id', 'email', 'profile', 'plan', 'provider', 'status', 'start', 'end', 'amount_eur']} labels={{ ...subscriptionLabels, amount_eur: t('admin.table.amount') }} format={(key, value, row) => {
+          <AdminTable rows={subscriptions} columns={['id', 'email', 'profile', 'plan', 'provider', 'status', 'start', 'end', 'progress', 'amount_eur']} labels={{ ...subscriptionLabels, amount_eur: t('admin.table.amount') }} format={(key, value, row) => {
             if (key === 'id') return formatShortId(value || row.profile_id);
             if (key === 'provider') return row.payment_provider || row.provider || '-';
             if (key === 'status') return <StatusBadge value={isSponsoredSubscription(row) ? 'sponsored' : String(value || row.status || 'requested')} />;
             if (key === 'start') return formatDate(readSubscriptionStart(row));
             if (key === 'end') return formatDate(readSubscriptionEnd(row));
+            if (key === 'progress') return <SubscriptionProgressCell row={row} t={t} />;
             if (key === 'amount_eur') return isSponsoredSubscription(row) ? formatEuro(0) : formatEuro(value);
             return value;
           }} actions={(row) => (
@@ -1714,7 +1742,7 @@ export function AdminPage() {
                   <Action title={t('admin.subscriptionActions.extend30')} onClick={() => action(() => api.extendAdminSubscription(token, String(row.profile_id || row.id), 30).then(() => setMessage(t('admin.messages.subscriptionExtended'))))}><RefreshCw size={15} /></Action>
                   <Action title={t('admin.subscriptionActions.setCustomDates')} onClick={() => openSubscriptionDateEditor(row)}><Pencil size={15} /></Action>
                   <Action title={t('admin.subscriptionActions.expire')} danger onClick={() => action(() => api.expireAdminSubscription(token, String(row.profile_id || row.id)).then(() => setMessage(t('admin.messages.subscriptionExpired'))))}><Ban size={15} /></Action>
-                  {row.profile_id && <Link className="admin-action-btn icon" title={t('admin.table.profile')} aria-label={t('admin.table.profile')} to={`/profile/${row.profile_id}`}><ChevronRight size={15} /></Link>}
+                  {row.profile_id && <Link className="admin-action-btn icon" title={t('admin.table.profile')} aria-label={t('admin.table.profile')} to={`/admin/profiles?profile=${encodeURIComponent(String(row.profile_id))}&from=subscriptions`}><ChevronRight size={15} /></Link>}
                 </>
               ) : (
                 <Action title={t('admin.actions.view')} onClick={() => setModal({ title: String(row.email || row.id), body: JSON.stringify(row, null, 2) })}><Eye size={15} /></Action>
@@ -2010,6 +2038,31 @@ function adminImageSrc(image: NonNullable<Profile['profile_images']>[number]) {
   return image.public_url || image.image_url || image.url || '';
 }
 
+function adminProfileCoverSrc(profile: Profile) {
+  const raw = profile as Profile & Record<string, any>;
+  const direct = raw.cover_url || raw.avatar_url || raw.image_url || raw.public_url;
+  if (direct) return String(direct);
+
+  const imageSets = [raw.profile_images, raw.images, raw.profile_photos, raw.photos].filter(Array.isArray) as Array<Array<Record<string, any>>>;
+  const images = imageSets.flat();
+  const cover = images.find((image) => image.is_cover || image.is_primary || image.is_cover_photo) || images[0];
+  if (!cover) return '';
+  return String(cover.public_url || cover.image_url || cover.url || cover.signed_url || cover.src || '');
+}
+
+function AdminProfileThumb({ profile }: { profile: Profile }) {
+  const src = adminProfileCoverSrc(profile);
+  return (
+    <div className="admin-profile-thumb">
+      {src ? <img src={src} alt="" loading="lazy" /> : <AdminCoverPlaceholder label={profile.display_name} />}
+    </div>
+  );
+}
+
+function AdminCoverPlaceholder({ label }: { label: string }) {
+  return <div className="admin-cover-placeholder"><span>{label?.slice(0, 1) || 'ER'}</span></div>;
+}
+
 let adminGooglePlacesPromise: Promise<any> | null = null;
 
 function loadGooglePlaces(apiKey: string) {
@@ -2089,11 +2142,12 @@ function SubscriptionProgressCell({ row, t }: { row: SubscriptionRow; t: (key: s
 
   return (
     <div className={`subscription-progress ${info.state}`}>
-      <span>{info.daysLeft > 0 ? t('admin.subscriptions.daysLeftValue', { count: info.daysLeft }) : t('admin.status.expired')}</span>
+      <span>{info.state === 'expired' ? t('admin.status.expired') : t('admin.subscriptions.timerActive')}</span>
       <div><i style={{ width: `${info.percent}%` }} /></div>
       <small>
         {t('admin.subscriptions.progressPercent', { percent: info.percent })} / {formatDateInput(start) || '-'} - {formatDateInput(end) || '-'}
       </small>
+      <small>{info.daysLeft > 0 ? t('admin.subscriptions.daysLeftValue', { count: info.daysLeft }) : t('admin.status.expired')}</small>
       <small>{t('admin.subscriptions.timeline', { status: t(`admin.status.${String(row.status || info.state)}`) })}</small>
     </div>
   );
