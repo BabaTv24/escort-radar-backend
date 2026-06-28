@@ -2199,11 +2199,12 @@ adminRouter.patch('/master-wallets/:id', asyncHandler(async (req, res) => {
 adminRouter.get('/photos', asyncHandler(async (_req, res) => {
   const { data, error } = await supabaseAdmin
     .from('profile_images')
-    .select('*, profiles(display_name, city, user_id)')
+    .select('*, profiles(id, display_name, owner_email, city, user_id)')
     .order('created_at', { ascending: false })
     .limit(500);
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ photos: data || [] });
+  const photos = await Promise.all((data || []).map(withAdminPhotoRow));
+  res.json({ photos });
 }));
 
 adminRouter.get('/uploads', asyncHandler(async (_req, res) => {
@@ -2631,6 +2632,26 @@ function withPublicImageUrl(image: any) {
     is_private: Boolean(image.is_private),
     moderation_status: image.moderation_status || 'approved',
     sort_order: Number(image.sort_order || 0)
+  };
+}
+
+async function withAdminPhotoRow(image: any) {
+  const hydrated = withPublicImageUrl(image);
+  const signed = image.storage_path
+    ? await supabaseAdmin.storage.from(config.storageBucket).createSignedUrl(image.storage_path, 60 * 60).catch(() => ({ data: null }))
+    : { data: null };
+  const profile = image.profiles || {};
+  const imageType = image.is_avatar ? 'avatar' : image.is_primary || image.is_cover ? 'cover' : 'gallery';
+  return {
+    ...hydrated,
+    signed_url: signed.data?.signedUrl || null,
+    image_url: signed.data?.signedUrl || hydrated.image_url,
+    url: signed.data?.signedUrl || hydrated.url,
+    profile_id: image.profile_id,
+    profile_display_name: profile.display_name || '',
+    owner_email: profile.owner_email || '',
+    city: profile.city || '',
+    image_type: imageType
   };
 }
 

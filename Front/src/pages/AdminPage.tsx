@@ -169,6 +169,8 @@ export function AdminPage() {
   const [masterWallets, setMasterWallets] = useState<MasterAdminWallet[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [photos, setPhotos] = useState<Record<string, any>[]>([]);
+  const [photoFilters, setPhotoFilters] = useState({ status: 'all', query: '', type: 'all' });
+  const [photoPreview, setPhotoPreview] = useState<Record<string, any> | null>(null);
   const [clientReferrals, setClientReferrals] = useState<Record<string, any>[]>([]);
   const [activity, setActivity] = useState<AdminActivity[]>([]);
   const [revenueEvents, setRevenueEvents] = useState<Record<string, any>[]>([]);
@@ -1369,6 +1371,21 @@ export function AdminPage() {
           </article>
         </div>
       )}
+      {photoPreview && (
+        <div className="admin-modal-backdrop" onClick={() => setPhotoPreview(null)}>
+          <article className="admin-modal photo-preview-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-studio-head compact">
+              <div>
+                <p className="eyebrow">{t('admin.photos.preview')}</p>
+                <h2>{photoPreview.profile_display_name || photoPreview.profile_id || t('admin.photos.noPhoto')}</h2>
+              </div>
+              <StatusBadge value={String(photoPreview.moderation_status || 'pending')} />
+            </div>
+            {adminPhotoSrc(photoPreview) ? <img src={adminPhotoSrc(photoPreview)} alt="" /> : <AdminCoverPlaceholder label={t('admin.photos.noPhoto')} />}
+            <button className="button primary" onClick={() => setPhotoPreview(null)}>{t('admin.buttons.cancel')}</button>
+          </article>
+        </div>
+      )}
       {subscriptionDateEditor && (
         <div className="admin-modal-backdrop" onClick={() => setSubscriptionDateEditor(null)}>
           <article className="admin-modal" onClick={(event) => event.stopPropagation()}>
@@ -1839,13 +1856,52 @@ export function AdminPage() {
     }
 
     if (view === 'photos') {
-      return <AdminTable rows={photos} columns={['id', 'profile_id', 'storage_path', 'moderation_status', 'created_at']} actions={(photo) => (
+      const filteredPhotos = photos.filter((photo) => {
+        const haystack = [photo.profile_display_name, photo.owner_email, photo.city, photo.profile_id].join(' ').toLowerCase();
+        if (photoFilters.status !== 'all' && String(photo.moderation_status || 'pending') !== photoFilters.status) return false;
+        if (photoFilters.type !== 'all' && String(photo.image_type || adminPhotoType(photo)) !== photoFilters.type) return false;
+        if (photoFilters.query && !haystack.includes(photoFilters.query.toLowerCase())) return false;
+        return true;
+      });
+      return (
         <>
-          <Action onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'approved'))}>{t('admin.actions.approve')}</Action>
-          <Action danger onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'rejected'))}>{t('admin.actions.reject')}</Action>
-          <Action danger onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'blocked'))}>Block</Action>
+          <section className="admin-card admin-photo-filters">
+            <div className="profile-studio-head compact">
+              <div>
+                <p className="eyebrow">{t('admin.nav.photos')}</p>
+                <h2>{t('admin.photos.moderationTitle')}</h2>
+              </div>
+              <button className="button secondary" onClick={() => load()}><RefreshCw size={16} /> {t('admin.actions.refresh')}</button>
+            </div>
+            <div className="studio-filter-grid">
+              <select value={photoFilters.status} onChange={(event) => setPhotoFilters({ ...photoFilters, status: event.target.value })}>
+                {['all', 'pending', 'approved', 'rejected', 'blocked'].map((status) => <option key={status} value={status}>{status === 'all' ? t('admin.common.all') : t(`admin.status.${status}`)}</option>)}
+              </select>
+              <input placeholder={t('admin.photos.searchProfileEmail')} value={photoFilters.query} onChange={(event) => setPhotoFilters({ ...photoFilters, query: event.target.value })} />
+              <select value={photoFilters.type} onChange={(event) => setPhotoFilters({ ...photoFilters, type: event.target.value })}>
+                <option value="all">{t('admin.common.all')}</option>
+                <option value="cover">{t('admin.photos.type.cover')}</option>
+                <option value="gallery">{t('admin.photos.type.gallery')}</option>
+              </select>
+            </div>
+          </section>
+          <AdminTable rows={filteredPhotos} columns={['photo', 'profile', 'owner_email', 'city', 'moderation_status', 'image_type', 'created_at']} labels={tableLabels(t, ['photo', 'profile', 'owner_email', 'city', 'moderation_status', 'image_type', 'created_at'])} format={(key, value, photo) => {
+            if (key === 'photo') return <AdminPhotoThumb photo={photo} onClick={() => setPhotoPreview(photo)} />;
+            if (key === 'profile') return photo.profile_display_name || formatShortId(photo.profile_id);
+            if (key === 'moderation_status') return <StatusBadge value={String(value || 'pending')} />;
+            if (key === 'image_type') return t(`admin.photos.type.${String(value || adminPhotoType(photo))}`);
+            if (key === 'created_at') return formatDateTime(value);
+            return value;
+          }} actions={(photo) => (
+            <>
+              <Action title={t('admin.actions.approve')} onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'approved'))}><UserCheck size={15} /></Action>
+              <Action title={t('admin.actions.reject')} danger onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'rejected'))}><UserX size={15} /></Action>
+              <Action title="Block" danger onClick={() => action(() => api.setPhotoStatus(token, photo.id, 'blocked'))}><Ban size={15} /></Action>
+              {photo.profile_id && <Link className="admin-action-btn icon" title={t('admin.photos.openProfile')} aria-label={t('admin.photos.openProfile')} to={`/admin/profiles?profile=${encodeURIComponent(String(photo.profile_id))}`}><ChevronRight size={15} /></Link>}
+            </>
+          )} />
         </>
-      )} />;
+      );
     }
 
     if (view === 'reports') {
@@ -2056,6 +2112,27 @@ function AdminProfileThumb({ profile }: { profile: Profile }) {
     <div className="admin-profile-thumb">
       {src ? <img src={src} alt="" loading="lazy" /> : <AdminCoverPlaceholder label={profile.display_name} />}
     </div>
+  );
+}
+
+function adminPhotoSrc(photo: Record<string, any>) {
+  return String(photo.signed_url || photo.image_url || photo.public_url || photo.url || photo.src || '');
+}
+
+function adminPhotoType(photo: Record<string, any>) {
+  if (photo.image_type) return String(photo.image_type);
+  if (photo.is_avatar) return 'avatar';
+  if (photo.is_primary || photo.is_cover) return 'cover';
+  return 'gallery';
+}
+
+function AdminPhotoThumb({ photo, onClick }: { photo: Record<string, any>; onClick: () => void }) {
+  const [failed, setFailed] = useState(false);
+  const src = failed ? '' : adminPhotoSrc(photo);
+  return (
+    <button type="button" className="admin-photo-thumb" onClick={onClick} title={String(photo.storage_path || '')}>
+      {src ? <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} /> : <AdminCoverPlaceholder label="ER" />}
+    </button>
   );
 }
 
