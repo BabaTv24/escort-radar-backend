@@ -4,6 +4,12 @@ dist/
 .env.*
 !.env.example
 .env.local
+Front/.env
+Front/.env.*
+!Front/.env.example
+Back/.env
+Back/.env.*
+!Back/.env.example
 .DS_Store
 *.log
 coverage/
