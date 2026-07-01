@@ -32,9 +32,10 @@
 }
 
 .radar-start-panel > div {
-  display: flex;
-  gap: .6rem;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr;
+  width: 100%;
+  gap: .65rem;
 }
 
 .radar-start-panel input {
@@ -45,6 +46,7 @@
 }
 
 .radar-start-panel .button {
+  width: 100%;
   min-height: 48px;
   white-space: nowrap;
 }
@@ -62,9 +64,6 @@
 
   .radar-start-panel > div,
   .radar-start-actions {
-    display: grid;
-    grid-template-columns: 1fr;
-    width: 100%;
     gap: .65rem;
   }
 

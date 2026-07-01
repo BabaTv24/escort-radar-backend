@@ -10,7 +10,7 @@ import { categoryOptions, defaultServiceMenuNames, toggleArrayValue, visitTypeOp
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
-import { getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange } from '../lib/geo';
+import { getCityCenter, getDistanceKm, getSearcherLocationWithFallback, isProfileInRadarRange, resolveProfileRadarLocation } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
 
 type SearchFilters = {
@@ -391,12 +391,12 @@ function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocat
 
   return profiles.filter((profile) => {
     if (filters.city && !profileMatchesCity(profile, filters.city)) {
-      const centerRange = isProfileInRadarRange(profile, searcherLocation, filters.radius);
+      const centerRange = getSearchRange(profile, searcherLocation, filters.radius);
       if (!centerRange.inRange) return false;
     }
     if (filters.category && profile.category !== filters.category) return false;
     if (!matchesOperatorStatusFilter(profile, filters.availability_status)) return false;
-    const radarRange = isProfileInRadarRange(profile, searcherLocation, filters.radius);
+    const radarRange = getSearchRange(profile, searcherLocation, filters.radius);
     if (!radarRange.inRange) return false;
     profile.distance_km = radarRange.distance_km;
     if (priceMax && profile.price_1h && profile.price_1h > priceMax) return false;
@@ -406,6 +406,19 @@ function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocat
     if (filters.tag_ids.length && !filters.tag_ids.some((item) => profile.tag_ids?.includes(item))) return false;
     return true;
   });
+}
+
+function getSearchRange(profile: Profile, searcherLocation: GeoPoint, selectedRadius: number) {
+  const radarLocation = (searcherLocation.source === 'browser' || searcherLocation.source === 'manual')
+    ? resolveProfileRadarLocation(profile)
+    : null;
+  if (!radarLocation) return isProfileInRadarRange(profile, searcherLocation, selectedRadius);
+  const distance = getDistanceKm(searcherLocation.lat, searcherLocation.lng, radarLocation.lat, radarLocation.lng);
+
+  return {
+    inRange: distance <= selectedRadius,
+    distance_km: Math.round(distance * 10) / 10
+  };
 }
 
 function sortProfiles(profiles: Profile[], sortMode: 'best' | 'new' | 'near' | 'online') {

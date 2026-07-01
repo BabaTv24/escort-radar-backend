@@ -58,7 +58,7 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     return null;
   }
 
-  const city = text(raw.city ?? raw.work_city ?? raw.workCity) || 'unknown';
+  const city = text(raw.city ?? raw.work_city ?? raw.workCity ?? raw.location_city) || 'unknown';
   const images = mapImages(raw);
   const availability = text(raw.availability_status ?? raw.availabilityStatus ?? raw.status);
 
@@ -68,9 +68,14 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     display_name: displayName,
     slug: text(raw.slug) || id,
     city,
-    work_city: nullableText(raw.work_city ?? raw.workCity),
+    work_city: nullableText(raw.work_city ?? raw.workCity ?? raw.location_city),
     area: nullableText(raw.area ?? raw.district),
     work_area: nullableText(raw.work_area ?? raw.workArea ?? raw.district),
+    postal_code: nullableText(raw.postal_code ?? raw.postalCode ?? raw.zip),
+    work_place_label: nullableText(raw.work_place_label ?? raw.workPlaceLabel),
+    location_mode: normalizeLocationMode(raw.location_mode ?? raw.locationMode),
+    latitude: numberValue(raw.latitude ?? raw.lat),
+    longitude: numberValue(raw.longitude ?? raw.lng),
     languages: stringArray(raw.languages),
     available_now: booleanValue(raw.available_now ?? raw.availableNow),
     mobile_service: booleanValue(raw.mobile_service ?? raw.mobileService),
@@ -175,6 +180,12 @@ function normalizeStatus(value: unknown): Profile['status'] {
 function normalizeAvailability(value: string): Profile['availability_status'] {
   if (value === 'available' || value === 'busy' || value === 'unavailable') return value;
   return 'unavailable';
+}
+
+function normalizeLocationMode(value: unknown): Profile['location_mode'] {
+  const mode = text(value);
+  if (['exact', 'postal_area', 'hidden', 'exact_hidden', 'approximate', 'city_only'].includes(mode)) return mode as Profile['location_mode'];
+  return 'city_only';
 }
 
 function devReject(reason: string) {

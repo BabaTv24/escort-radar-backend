@@ -28,7 +28,9 @@ const manualLocationCenters: Record<string, { lat: number; lng: number; label: s
   mitte: { lat: 52.52, lng: 13.405, label: 'Berlin Mitte' },
   kreuzberg: { lat: 52.5009, lng: 13.4194, label: 'Berlin Kreuzberg' },
   neukolln: { lat: 52.481, lng: 13.435, label: 'Berlin Neukoelln' },
+  neukoelln: { lat: 52.481, lng: 13.435, label: 'Berlin Neukoelln' },
   kurfurstenstrasse: { lat: 52.5026, lng: 13.3595, label: 'Kurfuerstenstrasse' },
+  kurfuerstenstrasse: { lat: 52.5026, lng: 13.3595, label: 'Kurfuerstenstrasse' },
   '10115': { lat: 52.5321, lng: 13.3849, label: '10115 Berlin' },
   '10117': { lat: 52.5155, lng: 13.3899, label: '10117 Berlin' },
   '10119': { lat: 52.5291, lng: 13.4109, label: '10119 Berlin' },
@@ -39,6 +41,7 @@ const manualLocationCenters: Record<string, { lat: number; lng: number; label: s
   '12045': { lat: 52.4859, lng: 13.4294, label: '12045 Berlin' },
   '12047': { lat: 52.4898, lng: 13.4235, label: '12047 Berlin' },
   '12049': { lat: 52.4776, lng: 13.4196, label: '12049 Berlin' },
+  '12353': { lat: 52.424, lng: 13.462, label: '12353 Berlin Buckow / Rudow' },
   '10785': { lat: 52.5068, lng: 13.3671, label: '10785 Berlin' },
   '10787': { lat: 52.5038, lng: 13.3438, label: '10787 Berlin' }
 };
@@ -59,8 +62,9 @@ export function getCityCenter(city: string) {
 }
 
 export function getProfileCoordinates(profile: Profile) {
-  const lat = toCoordinate(profile.latitude);
-  const lng = toCoordinate(profile.longitude);
+  const raw = profile as Profile & Record<string, unknown>;
+  const lat = toCoordinate(raw.latitude ?? raw.lat);
+  const lng = toCoordinate(raw.longitude ?? raw.lng);
   if (isValidCoordinate(lat, lng)) return { lat, lng };
   return getCityCenter(profile.city);
 }
@@ -105,24 +109,26 @@ export function resolveManualSearcherLocation(input: string): GeoPoint | null {
 export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocation | null {
   if (profile.location_mode === 'exact_hidden' || profile.location_mode === 'hidden') return null;
 
-  const lat = toCoordinate(profile.latitude);
-  const lng = toCoordinate(profile.longitude);
+  const raw = profile as Profile & Record<string, unknown>;
+  const lat = toCoordinate(raw.latitude ?? raw.lat);
+  const lng = toCoordinate(raw.longitude ?? raw.lng);
   if (isValidCoordinate(lat, lng)) {
     return {
       lat,
       lng,
-      label: profile.work_place_label || profile.exact_address || profile.postal_code || profile.work_area || profile.work_city || profile.city,
+      label: textValue(raw.work_place_label ?? raw.exact_address ?? raw.postal_code ?? raw.postalCode ?? raw.zip ?? raw.work_area ?? raw.area ?? raw.district ?? raw.work_city ?? raw.location_city ?? raw.city),
       precision: profile.work_place_label || profile.exact_address ? 'exact' : 'approximate'
     };
   }
 
-  const city = profile.work_city || profile.city || '';
-  if (profile.postal_code) {
-    const postal = resolveKnownLocation(`${profile.postal_code} ${city}`);
+  const city = textValue(raw.work_city ?? raw.city ?? raw.location_city);
+  const postalCode = textValue(raw.postal_code ?? raw.postalCode ?? raw.zip);
+  if (postalCode) {
+    const postal = resolveKnownLocation(`${postalCode} ${city}`);
     if (postal) return { lat: postal.lat, lng: postal.lng, label: postal.label, precision: 'postal_area' };
   }
 
-  const area = profile.work_area || profile.area || profile.approximate_location_area || '';
+  const area = textValue(raw.work_area ?? raw.area ?? raw.district ?? raw.approximate_location_area);
   if (area) {
     const areaLocation = resolveKnownLocation(`${area} ${city}`);
     if (areaLocation) return { lat: areaLocation.lat, lng: areaLocation.lng, label: areaLocation.label, precision: 'area' };
@@ -161,6 +167,10 @@ function toCoordinate(value: unknown) {
   if (typeof value === 'number') return value;
   if (typeof value === 'string' && value.trim() !== '') return Number(value);
   return Number.NaN;
+}
+
+function textValue(value: unknown) {
+  return typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
 }
 
 function normalizeLocationQuery(value: string) {

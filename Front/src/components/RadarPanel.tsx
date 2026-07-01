@@ -55,9 +55,26 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
       .slice(0, 12)
     : [];
 
+  if (import.meta.env.DEV) {
+    console.debug('[RadarPanel] state', {
+      manualQuery,
+      searcherLocation,
+      effectiveLocation,
+      hasRadarLocation,
+      profilesTotal: profiles.length,
+      radarProfiles: radarProfiles.map((item) => ({
+        id: item.profile.id,
+        name: item.profile.display_name,
+        distanceKm: item.distanceKm,
+        location: item.radarLocation
+      }))
+    });
+  }
+
   function submitManualLocation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const location = resolveManualSearcherLocation(manualQuery);
+    if (import.meta.env.DEV) console.debug('[RadarPanel] manual input', { manualQuery, resolved: location });
     if (!location) {
       setManualError(t('radar.manualLocationNotFound'));
       return;
@@ -74,7 +91,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         <h2>{t('radar.title')}</h2>
         <p>{t('radar.subtitle')}</p>
         <p className="safety-line">{t('radar.privacy')}</p>
-        {fallbackNotice && <p className="safety-line">{t('radar.fallbackNotice')}</p>}
+        {fallbackNotice && !hasRadarLocation && <p className="safety-line">{t('radar.fallbackNotice')}</p>}
         <div className="radar-control-group">
           <span>{t('radar.radius')}</span>
           <div className="segmented-pills">
@@ -103,7 +120,10 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             <strong>{t('radar.setStartingPoint')}</strong>
             <span>{t('radar.locationInputHelp')}</span>
             <div>
-              <input value={manualQuery} placeholder={t('radar.locationInputPlaceholder')} onChange={(event) => setManualQuery(event.target.value)} />
+              <input value={manualQuery} placeholder={t('radar.locationInputPlaceholder')} onChange={(event) => {
+                setManualQuery(event.target.value);
+                if (manualError) setManualError('');
+              }} />
               <button className="button primary" type="submit">{t('radar.setLocation')}</button>
             </div>
             <div className="radar-start-actions">
@@ -201,6 +221,7 @@ function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: n
     bearingDeg,
     operatorStatus,
     statusClass,
+    radarLocation: profileLocation,
     point: getRadarPoint(radius, distanceKm, bearingDeg)
   };
 }
