@@ -51,7 +51,7 @@ export function HomePage() {
         </div>
         <div className="hero-strip">
           {featured.slice(0, 4).map((profile) => (
-            <img key={profile.id} src={profile.profile_images?.[0]?.public_url || '/Logo_Escort_3.png'} alt="" />
+            <img key={profile.id} src={profile.profile_images?.[0]?.public_url || '/Logo_Escort_5.png'} alt="" />
           ))}
         </div>
         <div className="hero-floating-profiles" aria-hidden="true">
@@ -60,16 +60,16 @@ export function HomePage() {
               {profile.profile_images?.[0]?.public_url ? <img src={profile.profile_images[0].public_url} alt="" /> : null}
               <div>
                 <strong>{profile.display_name}</strong>
-                <span>{profile.availability_status === 'available' ? 'Available now' : 'Live tonight'}</span>
+                <span>{profile.availability_status === 'available' ? t('badges.availableNow') : t('radar.eyebrow')}</span>
               </div>
             </div>
           ))}
         </div>
         <div className="hero-content">
-          <img className="hero-brand-mark" src="/Logo_Escort_3.png" alt="" />
+          <img className="hero-brand-mark" src="/Logo_Escort_5.png" alt="" />
           <p className="eyebrow">{t('home.heroEyebrow')}</p>
-          <h1>Profiles near you</h1>
-          <p className="tagline">Live availability, verified profiles and fast contact in one premium radar feed.</p>
+          <h1>{t('home.heroTitle')}</h1>
+          <p className="tagline">{t('home.heroSubtitle')}</p>
           <div className="hero-actions">
             <Link to="/city/berlin" className="button primary"><RadioTower size={18} /> {t('home.openRadar')}</Link>
             <Link to="/dashboard" className="button"><PlusCircle size={18} /> {t('home.create')}</Link>
@@ -91,7 +91,7 @@ export function HomePage() {
               <p className="eyebrow">Profile sponsorowane</p>
               <h2>Profile sponsorowane</h2>
             </div>
-            <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> Radar öffnen</Link>
+            <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> {t('home.openRadar')}</Link>
           </div>
           <div className="cards-grid marketplace-grid premium-profile-grid">
             {sponsoredProfiles.slice(0, 8).map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
@@ -103,9 +103,9 @@ export function HomePage() {
         <div className="section-head compact">
           <div>
             <p className="eyebrow">Escort Radar Marketplace</p>
-            <h2>Top Escorts in deiner Nähe</h2>
+            <h2>Top Escorts in deiner Naehe</h2>
           </div>
-          <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> Radar öffnen</Link>
+          <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> {t('home.openRadar')}</Link>
         </div>
         <div className="avatar-carousel">
           {topProfiles.slice(0, 10).map((profile) => {
@@ -120,7 +120,7 @@ export function HomePage() {
           })}
         </div>
         <div className="sort-tabs static-tabs" aria-label="Marketplace sorting preview">
-          {['Bestplatzierte', 'Neu', 'In der Nähe', 'Online'].map((item, index) => <span className={index === 0 ? 'selected' : ''} key={item}>{item}</span>)}
+          {['Bestplatzierte', 'Neu', 'In der Naehe', 'Online'].map((item, index) => <span className={index === 0 ? 'selected' : ''} key={item}>{item}</span>)}
         </div>
         <div className="cards-grid marketplace-grid premium-profile-grid">
           {topProfiles.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
@@ -210,7 +210,7 @@ const categoryIconMap: Record<string, string> = {
   house_hotel: '/category-icons/house_hotel.png',
   live_cam: '/category-icons/live_cam.png',
   clubs_parties: '/category-icons/clubs_parties.png',
-  other: '/Logo_Escort_3.png'
+  other: '/Logo_Escort_5.png'
 };
 
 function CategoryIcon({ category }: { category: string }) {

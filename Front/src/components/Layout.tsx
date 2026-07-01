@@ -1,7 +1,19 @@
+import { useEffect, useState } from 'react';
+import type { Session, User } from '@supabase/supabase-js';
 import { Link, Outlet, useLocation, useSearchParams } from 'react-router-dom';
-import { CalendarDays, Coins, Heart, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
+import { CalendarDays, Coins, Heart, LogOut, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
 import { categoryOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
+import { api } from '../lib/api';
+import { supabase } from '../lib/supabase';
+
+type HeaderAccountRole = 'client' | 'advertiser' | 'business' | 'admin' | 'account';
+
+type HeaderAccount = {
+  loading: boolean;
+  email: string;
+  role: HeaderAccountRole;
+};
 
 export function Layout() {
   const { lang, setLang, t, option } = useI18n();
@@ -11,12 +23,39 @@ export function Layout() {
   const activeCategory = searchParams.get('category') || '';
   const cityMatch = location.pathname.match(/^\/city\/([^/]+)/);
   const currentCity = cityMatch?.[1] || 'berlin';
+  const [account, setAccount] = useState<HeaderAccount>({ loading: true, email: '', role: 'account' });
+  const isSignedIn = Boolean(account.email);
+  const dashboardLabel = account.role === 'advertiser' || account.role === 'business' ? t('auth.myListing') : t('auth.dashboard');
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function activateSession(session: Session | null) {
+      const next = await resolveHeaderAccount(session);
+      if (mounted) setAccount(next);
+    }
+
+    supabase.auth.getSession().then(({ data }) => activateSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      void activateSession(session);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  async function logout() {
+    await supabase.auth.signOut();
+    setAccount({ loading: false, email: '', role: 'account' });
+  }
 
   return (
     <div className="app-shell" translate="no">
       <header className="market-header">
         <Link to="/" className="brand" translate="no">
-          <img className="brand-logo-img" src="/Logo_Escort_3.png" alt="" />
+          <img className="brand-logo-img" src="/Logo_Escort_5.png" alt="" />
           <span>Escort Radar</span>
         </Link>
         <nav className="category-nav" aria-label="Categories">
@@ -31,11 +70,19 @@ export function Layout() {
           ))}
         </nav>
         <div className="mobile-auth-actions" aria-label="Mobile account controls">
-          <div className="mobile-account-links">
-            <Link to="/register?type=client">{t('buttons.register')}</Link>
-            <span aria-hidden="true">/</span>
-            <Link to="/login">{t('buttons.login')}</Link>
-          </div>
+          {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
+            <div className="mobile-account-links signed-in">
+              <Link to="/dashboard">{t('auth.loggedInAs')}: {t(`auth.${account.role}`)}</Link>
+              <span aria-hidden="true">/</span>
+              <button type="button" onClick={logout}>{t('auth.logout')}</button>
+            </div>
+          ) : (
+            <div className="mobile-account-links">
+              <Link to="/register?type=client">{t('buttons.register')}</Link>
+              <span aria-hidden="true">/</span>
+              <Link to="/login">{t('buttons.login')}</Link>
+            </div>
+          )}
           <div className="mobile-language-switcher" aria-label="Language" translate="no">
             {(['de', 'pl', 'en'] as const).map((item) => (
               <button key={item} className={lang === item ? 'selected' : ''} onClick={() => setLang(item)}>{item.toUpperCase()}</button>
@@ -45,7 +92,7 @@ export function Layout() {
         <div className="header-actions">
           <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action premium-header-cta">
             <Radar size={17} />
-            <span>Radar öffnen</span>
+            <span>{t('home.openRadar')}</span>
           </Link>
           <Link to="/tokens" className="radar-action">
             <Coins size={17} />
@@ -55,12 +102,30 @@ export function Layout() {
             <Coins size={17} />
             <span>Coins</span>
           </Link>
-          <Link to="/register?type=client" className="radar-action">{t('buttons.register')}</Link>
-          <Link to="/register?type=escort" className="radar-action">{t('buttons.addListing')}</Link>
-          <Link to="/login" className="radar-action">{t('buttons.login')}</Link>
-          <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
-            <UserRound size={20} />
-          </Link>
+          {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
+            <div className="header-account-area">
+              <Link to="/dashboard" className="account-pill">
+                <UserRound size={17} />
+                <span>{t('auth.loggedInAs')}: <strong>{t(`auth.${account.role}`)}</strong></span>
+                {account.email ? <small>{account.email}</small> : null}
+              </Link>
+              <Link to="/dashboard" className="radar-action account-dashboard-link">{dashboardLabel}</Link>
+              {account.role === 'admin' ? <Link to="/admin" className="radar-action">{t('auth.admin')}</Link> : null}
+              <button className="radar-action account-logout" type="button" onClick={logout}>
+                <LogOut size={16} />
+                <span>{t('auth.logout')}</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <Link to="/register?type=client" className="radar-action">{t('buttons.register')}</Link>
+              <Link to="/register?type=escort" className="radar-action">{t('buttons.addListing')}</Link>
+              <Link to="/login" className="radar-action">{t('buttons.login')}</Link>
+              <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
+                <UserRound size={20} />
+              </Link>
+            </>
+          )}
           <div className="language-switcher">
             {(['de', 'pl', 'en'] as const).map((item) => (
               <button key={item} className={lang === item ? 'selected' : ''} onClick={() => setLang(item)}>{item.toUpperCase()}</button>
@@ -72,11 +137,11 @@ export function Layout() {
         <Outlet />
       </main>
       <nav className="luxury-bottom-nav" aria-label="Mobile navigation">
-        <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`}>
+        <Link className={cityMatch ? 'active' : ''} to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`}>
           <Radar size={18} />
-          <span>Radar</span>
+          <span>{t('nav.radar')}</span>
         </Link>
-        <Link to="/dashboard">
+        <Link className={location.pathname === '/dashboard' ? 'active' : ''} to="/dashboard">
           <Heart size={18} />
           <span>Favorites</span>
         </Link>
@@ -120,4 +185,50 @@ export function Layout() {
       </footer>
     </div>
   );
+}
+
+async function resolveHeaderAccount(session: Session | null): Promise<HeaderAccount> {
+  if (!session?.user) return { loading: false, email: '', role: 'account' };
+
+  const fallback = {
+    loading: false,
+    email: session.user.email || '',
+    role: roleFromUser(session.user)
+  };
+
+  if (!session.access_token) return fallback;
+
+  try {
+    const data = await api.authMe(session.access_token);
+    const role = normalizeHeaderRole(data.user.role || data.user.auth_account_type || data.user.app_metadata?.role || data.user.app_metadata?.auth_account_type) || fallback.role;
+    return {
+      loading: false,
+      email: data.user.email || fallback.email,
+      role
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function roleFromUser(user: User): HeaderAccountRole {
+  const appMetadata = user.app_metadata || {};
+  const userMetadata = user.user_metadata || {};
+  return normalizeHeaderRole(
+    appMetadata.role
+    || appMetadata.auth_account_type
+    || appMetadata.account_type
+    || userMetadata.role
+    || userMetadata.auth_account_type
+    || userMetadata.account_type
+  ) || 'account';
+}
+
+function normalizeHeaderRole(value: unknown): HeaderAccountRole | null {
+  const role = String(value || '').toLowerCase();
+  if (role === 'admin' || role === 'moderator') return 'admin';
+  if (role === 'client') return 'client';
+  if (role === 'business' || role === 'agency' || role === 'massage_salon' || role === 'club_party' || role === 'live_cam') return 'business';
+  if (role === 'escort' || role === 'advertiser' || role === 'private') return 'advertiser';
+  return null;
 }
