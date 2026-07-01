@@ -1067,8 +1067,14 @@ export function AdminPage() {
         <datalist id="admin-district-options">{districts.map((district) => <option key={district} value={district} />)}</datalist>
         <AdminField label={t('admin.location.postalCode')}><input maxLength={20} placeholder="12043" value={studioForm.postal_code} onChange={(event) => setStudioForm({ ...studioForm, postal_code: event.target.value })} /></AdminField>
         <AdminField label={t('admin.location.placeLabel')}><input placeholder={t('admin.location.placeLabelPlaceholder')} value={studioForm.work_place_label} onChange={(event) => setStudioForm({ ...studioForm, work_place_label: event.target.value })} /></AdminField>
+        <AdminField label={t('radar.exactAddress')}><input placeholder="Street, number, city" value={studioForm.exact_address} onChange={(event) => setStudioForm({ ...studioForm, exact_address: event.target.value, work_place_label: event.target.value || studioForm.work_place_label })} /></AdminField>
         <AdminField label={t('admin.location.radius')}><select value={studioForm.service_radius_km} onChange={(event) => setStudioForm({ ...studioForm, service_radius_km: Number(event.target.value) })}>{[1, 5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}</select></AdminField>
-        <AdminField label={t('admin.location.mode')}><select value={studioForm.location_mode} onChange={(event) => setStudioForm({ ...studioForm, location_mode: event.target.value })}>{['city_only', 'approximate', 'exact_hidden'].map((mode) => <option key={mode} value={mode}>{t(`admin.locationMode.${mode}`)}</option>)}</select></AdminField>
+        <AdminField label={t('radar.locationVisibility')}><><select value={getAdminLocationChoice(studioForm)} onChange={(event) => setStudioForm(applyAdminLocationChoice(studioForm, event.target.value))}>
+          <option value="exact">{t('radar.exactAddress')}</option>
+          <option value="postal_area">{t('radar.postalArea')}</option>
+          <option value="city_only">{t('radar.cityOnly')}</option>
+          <option value="hidden">{t('radar.hideExactLocation')}</option>
+        </select><small className="muted">{t('radar.locationVisibilityHelp')}</small></></AdminField>
         <AdminField label={t('admin.location.placeSearch')}><><input placeholder={t('admin.location.placeSearchPlaceholder')} value={adminPlaceQuery} onChange={(event) => setAdminPlaceQuery(event.target.value)} /><button type="button" className="button" disabled={adminPlaceLoading} onClick={searchAdminPlace}>{adminPlaceLoading ? t('states.loading') : t('admin.location.searchPlace')}</button>{adminPlaceSuggestions.length ? <div className="place-suggestions">{adminPlaceSuggestions.map((suggestion) => <button key={suggestion.place_id} type="button" onClick={() => selectAdminPlace(suggestion.place_id)}>{suggestion.description}</button>)}</div> : null}</></AdminField>
       </div>;
     }
@@ -2287,6 +2293,22 @@ function AdminField({ label, help, children }: { label: string; help?: string; c
       {help ? <small>{help}</small> : null}
     </label>
   );
+}
+
+function getAdminLocationChoice(form: { location_mode?: string; exact_address?: string; work_place_label?: string }) {
+  if (form.location_mode === 'exact_hidden' || form.location_mode === 'hidden') return 'hidden';
+  if (form.location_mode === 'city_only') return 'city_only';
+  if (form.location_mode === 'approximate' && form.exact_address) return 'exact';
+  if (form.location_mode === 'approximate' || form.location_mode === 'postal_area') return 'postal_area';
+  return form.work_place_label ? 'postal_area' : 'city_only';
+}
+
+function applyAdminLocationChoice<T extends { location_mode?: string; latitude?: unknown; longitude?: unknown; exact_address?: string; work_place_label?: string }>(form: T, choice: string): T {
+  // UI modes exact/postal_area/city_only/hidden are mapped to legacy DB modes approximate/city_only/exact_hidden.
+  if (choice === 'hidden') return { ...form, location_mode: 'exact_hidden' };
+  if (choice === 'city_only') return { ...form, location_mode: 'city_only', latitude: '', longitude: '' };
+  if (choice === 'exact') return { ...form, location_mode: 'approximate', work_place_label: form.exact_address || form.work_place_label || '' };
+  return { ...form, location_mode: 'approximate' };
 }
 
 function EmptyAdminState({ text }: { text: string }) {

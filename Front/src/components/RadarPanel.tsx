@@ -5,8 +5,8 @@ import type { Profile } from '../types';
 import { radiusOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { getDistanceKm, resolveManualSearcherLocation } from '../lib/geo';
-import { getPublicLocationLabel, getPublicLocationMode } from '../lib/locationLabels';
+import { getDistanceKm, resolveManualSearcherLocation, resolveProfileRadarLocation } from '../lib/geo';
+import { getPublicLocationLabel } from '../lib/locationLabels';
 import './RadarPanel.css';
 
 type RadarPanelProps = {
@@ -185,16 +185,13 @@ function matchesOperatorStatusFilter(profile: Profile, status: string) {
 }
 
 function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number) {
-  const mode = getPublicLocationMode(profile);
-  if (mode === 'hidden' || mode === 'city_only') return null;
-  const profileLat = toCoordinate(profile.latitude);
-  const profileLng = toCoordinate(profile.longitude);
-  if (!isValidCoordinate(profileLat, profileLng)) return null;
+  const profileLocation = resolveProfileRadarLocation(profile);
+  if (!profileLocation) return null;
 
-  const distanceKm = getDistanceKm(searcherLocation.lat, searcherLocation.lng, profileLat, profileLng);
+  const distanceKm = getDistanceKm(searcherLocation.lat, searcherLocation.lng, profileLocation.lat, profileLocation.lng);
   if (!Number.isFinite(distanceKm) || distanceKm > radius) return null;
 
-  const bearingDeg = getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLat, profileLng);
+  const bearingDeg = getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLocation.lat, profileLocation.lng);
   const operatorStatus = getOperatorStatus(profile);
   const statusClass = statusClassByOperator[operatorStatus] || 'offline';
 
@@ -236,12 +233,6 @@ function isValidCoordinate(lat: unknown, lng: unknown) {
     && Number.isFinite(lng)
     && Math.abs(lat) <= 90
     && Math.abs(lng) <= 180;
-}
-
-function toCoordinate(value: unknown) {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string' && value.trim() !== '') return Number(value);
-  return Number.NaN;
 }
 
 function getBearingDeg(lat1: number, lng1: number, lat2: number, lng2: number) {

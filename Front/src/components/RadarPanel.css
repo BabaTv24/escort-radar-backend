@@ -8,7 +8,9 @@
 
 .radar-start-panel {
   display: grid;
-  gap: .55rem;
+  width: 100%;
+  max-width: 100%;
+  gap: .7rem;
   padding: .82rem;
   border: 1px solid rgba(247, 215, 123, .24);
   border-radius: .9rem;
@@ -31,15 +33,48 @@
 
 .radar-start-panel > div {
   display: flex;
-  gap: .45rem;
+  gap: .6rem;
   align-items: center;
 }
 
 .radar-start-panel input {
-  min-width: 0;
+  width: 100%;
+  min-width: min(220px, 100%);
+  min-height: 48px;
   flex: 1;
+}
+
+.radar-start-panel .button {
+  min-height: 48px;
+  white-space: nowrap;
 }
 
 .radar-start-actions {
   flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .radar-start-panel {
+    gap: .75rem;
+    padding: .9rem;
+    margin-bottom: .35rem;
+  }
+
+  .radar-start-panel > div,
+  .radar-start-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+    gap: .65rem;
+  }
+
+  .radar-start-panel input,
+  .radar-start-panel .button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .radar-panel {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
 }

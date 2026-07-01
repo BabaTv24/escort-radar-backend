@@ -236,6 +236,8 @@
   "radar.cityOnly": "City only",
   "radar.hideExactLocation": "Hide exact location",
   "radar.locationHidden": "Location hidden",
+  "radar.locationVisibility": "Location visibility",
+  "radar.locationVisibilityHelp": "Choose how precisely the location is shown publicly and used in radar.",
   "radar.inRange": "{{count}} profiles in radar range",
   "radar.distanceUnavailable": "Distance unavailable",
   "radar.radiusLabel": "Radius",

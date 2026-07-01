@@ -395,9 +395,9 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
 function sanitizePublicProfile(profile: any) {
   const { primary_phone, additional_phones, whatsapp, telegram, latitude, longitude, work_place_label, exact_address: _omittedExactAddress, ...publicProfile } = profile;
   const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
-  const postalCode = publicProfile.location_mode === 'approximate' || publicProfile.location_mode === 'exact_hidden'
-    ? publicProfile.postal_code
-    : null;
+  const postalCode = publicProfile.location_mode === 'exact_hidden' ? null : publicProfile.postal_code;
+  // Legacy DB modes: approximate/city_only/exact_hidden. UI modes exact/postal_area/city_only/hidden are mapped before save.
+  // Radar may use postal_code/work_area as a consciously configured public area, but never for hidden profiles.
   const canExposeRadarPoint = publicProfile.location_mode === 'approximate' && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
   return {
     ...publicProfile,
