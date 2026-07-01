@@ -28,6 +28,7 @@ import { ErrorState, LoadingState } from '../components/LoadingState';
 import { useI18n } from '../i18n';
 import { serviceLabel } from '../data/serviceCatalog';
 import { getPublicProfiles, mapApiProfileToPublicProfile } from '../lib/publicProfiles';
+import { getPublicLocationLabel, getPublicLocationMode } from '../lib/locationLabels';
 
 type ProfileTab = 'overview' | 'services' | 'prices' | 'reviews';
 
@@ -79,14 +80,8 @@ export function ProfilePage() {
   const galleryImages = activated && profileAccess?.full_gallery?.length ? profileAccess.full_gallery : profile.profile_images || [];
   const priceFrom = getPriceFrom(profile);
   const contactFallback = 'Kontakt nie zostal jeszcze dodany';
-  const publicCity = profile.work_city || profile.city;
-  const publicArea = profile.work_area || profile.area || profile.approximate_location_area || '';
-  const locationLabel = `${publicCity}${publicArea ? `, ${publicArea}` : ''}`;
-  const locationPrivacyLabel = profile.location_mode === 'approximate'
-    ? 'Approximate location'
-    : profile.location_mode === 'exact_hidden'
-      ? 'Hidden exact location'
-      : 'City only';
+  const locationLabel = getPublicLocationLabel(profile, t);
+  const locationPrivacyLabel = t(`radar.${getPublicLocationMode(profile) === 'exact' ? 'exactAddress' : getPublicLocationMode(profile) === 'postal_area' ? 'postalArea' : getPublicLocationMode(profile) === 'hidden' ? 'hideExactLocation' : 'cityOnly'}`);
   const statusLabel = operatorStatusLabel(profile.operator_status || (profile.availability_status === 'available' ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE'));
   const statusClass = operatorStatusClass(profile.operator_status || (profile.availability_status === 'available' ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE'));
   const travelNotice = getTravelNotice(profile);

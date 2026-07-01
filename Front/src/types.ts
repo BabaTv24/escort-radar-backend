@@ -118,7 +118,7 @@ export type Profile = {
   match_score?: number;
   service_radius_km?: number;
   approximate_location_area?: string | null;
-  location_mode?: 'exact_hidden' | 'approximate' | 'city_only';
+  location_mode?: 'exact' | 'postal_area' | 'hidden' | 'exact_hidden' | 'approximate' | 'city_only';
   latitude?: number | null;
   longitude?: number | null;
   location_updated_at?: string | null;

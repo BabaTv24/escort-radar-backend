@@ -1,0 +1,45 @@
+.radar-visual.awaiting-location .radar-sweep {
+  opacity: .46;
+}
+
+.radar-visual.awaiting-location .radar-core {
+  opacity: .72;
+}
+
+.radar-start-panel {
+  display: grid;
+  gap: .55rem;
+  padding: .82rem;
+  border: 1px solid rgba(247, 215, 123, .24);
+  border-radius: .9rem;
+  background:
+    radial-gradient(circle at 0 0, rgba(255, 43, 214, .12), transparent 8rem),
+    linear-gradient(145deg, rgba(22, 11, 20, .76), rgba(7, 4, 6, .82));
+}
+
+.radar-start-panel strong {
+  color: var(--er-gold);
+  font-size: .95rem;
+}
+
+.radar-start-panel span,
+.radar-start-panel small {
+  color: rgba(255, 244, 214, .72);
+  font-size: .78rem;
+  line-height: 1.35;
+}
+
+.radar-start-panel > div {
+  display: flex;
+  gap: .45rem;
+  align-items: center;
+}
+
+.radar-start-panel input {
+  min-width: 0;
+  flex: 1;
+}
+
+.radar-start-actions {
+  flex-wrap: wrap;
+}

@@ -3,7 +3,8 @@ import type { Profile } from '../types';
 export type GeoPoint = {
   lat: number;
   lng: number;
-  source: 'browser' | 'city_fallback';
+  source: 'browser' | 'manual' | 'city' | 'city_fallback';
+  label?: string;
 };
 
 const cityCenters: Record<string, { lat: number; lng: number }> = {
@@ -13,6 +14,27 @@ const cityCenters: Record<string, { lat: number; lng: number }> = {
   koeln: { lat: 50.9375, lng: 6.9603 },
   muenchen: { lat: 48.1351, lng: 11.582 },
   warszawa: { lat: 52.2297, lng: 21.0122 }
+};
+
+const manualLocationCenters: Record<string, { lat: number; lng: number; label: string }> = {
+  berlin: { lat: 52.52, lng: 13.405, label: 'Berlin' },
+  mitte: { lat: 52.52, lng: 13.405, label: 'Berlin Mitte' },
+  neukolln: { lat: 52.481, lng: 13.435, label: 'Neukoelln' },
+  neukölln: { lat: 52.481, lng: 13.435, label: 'Neukoelln' },
+  kurfurstenstrasse: { lat: 52.5026, lng: 13.3595, label: 'Kurfuerstenstrasse' },
+  kurfürstenstraße: { lat: 52.5026, lng: 13.3595, label: 'Kurfuerstenstrasse' },
+  kurfürstenstrasse: { lat: 52.5026, lng: 13.3595, label: 'Kurfuerstenstrasse' },
+  '10115': { lat: 52.5321, lng: 13.3849, label: '10115 Berlin' },
+  '10117': { lat: 52.5155, lng: 13.3899, label: '10117 Berlin' },
+  '10119': { lat: 52.5291, lng: 13.4109, label: '10119 Berlin' },
+  '10243': { lat: 52.5124, lng: 13.4407, label: '10243 Berlin' },
+  '10999': { lat: 52.4995, lng: 13.4314, label: '10999 Berlin' },
+  '12043': { lat: 52.4808, lng: 13.4384, label: '12043 Berlin' },
+  '12045': { lat: 52.4859, lng: 13.4294, label: '12045 Berlin' },
+  '12047': { lat: 52.4898, lng: 13.4235, label: '12047 Berlin' },
+  '12049': { lat: 52.4776, lng: 13.4196, label: '12049 Berlin' },
+  '10785': { lat: 52.5068, lng: 13.3671, label: '10785 Berlin' },
+  '10787': { lat: 52.5038, lng: 13.3438, label: '10787 Berlin' }
 };
 
 export function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -52,7 +74,7 @@ export function getSearcherLocationWithFallback(city: string): Promise<GeoPoint>
   const fallback = getCityCenter(city);
 
   if (!navigator.geolocation) {
-    return Promise.resolve({ ...fallback, source: 'city_fallback' });
+    return Promise.resolve({ ...fallback, source: 'city', label: getCityLabel(city) });
   }
 
   return new Promise((resolve) => {
@@ -60,14 +82,49 @@ export function getSearcherLocationWithFallback(city: string): Promise<GeoPoint>
       (position) => resolve({
         lat: position.coords.latitude,
         lng: position.coords.longitude,
-        source: 'browser'
+        source: 'browser',
+        label: 'GPS'
       }),
-      () => resolve({ ...fallback, source: 'city_fallback' }),
+      () => resolve({ ...fallback, source: 'city', label: getCityLabel(city) }),
       { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 }
     );
   });
 }
 
+export function resolveManualSearcherLocation(input: string): GeoPoint | null {
+  const normalized = normalizeLocationQuery(input);
+  if (!normalized) return null;
+  const direct = manualLocationCenters[normalized];
+  if (direct) return { ...direct, source: 'manual' };
+
+  const postalMatch = normalized.match(/\b\d{5}\b/);
+  if (postalMatch && manualLocationCenters[postalMatch[0]]) {
+    const location = manualLocationCenters[postalMatch[0]];
+    return { ...location, source: 'manual' };
+  }
+
+  const matchedKey = Object.keys(manualLocationCenters).find((key) => normalized.includes(key));
+  if (!matchedKey) return null;
+  const location = manualLocationCenters[matchedKey];
+  return { ...location, source: 'manual' };
+}
+
 function toRad(value: number) {
   return value * Math.PI / 180;
+}
+
+function normalizeLocationQuery(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9äöü]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function getCityLabel(city: string) {
+  return city.slice(0, 1).toUpperCase() + city.slice(1);
 }

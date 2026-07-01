@@ -1,9 +1,13 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import type { Profile } from '../types';
 import { radiusOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { getDistanceKm } from '../lib/geo';
+import { getDistanceKm, resolveManualSearcherLocation } from '../lib/geo';
+import { getPublicLocationLabel, getPublicLocationMode } from '../lib/locationLabels';
+import './RadarPanel.css';
 
 type RadarPanelProps = {
   profiles: Profile[];
@@ -14,6 +18,7 @@ type RadarPanelProps = {
   onStatusChange: (status: string) => void;
   searcherLocation: GeoPoint;
   onUseLocation?: () => void;
+  onSetManualLocation?: (location: GeoPoint) => void;
   fallbackNotice?: boolean;
   compact?: boolean;
 };
@@ -35,16 +40,32 @@ const radarStatuses = [
   ['OFFLINE', 'offline', 'status.offline']
 ] as const;
 
-export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, fallbackNotice = false, compact = false }: RadarPanelProps) {
+export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, fallbackNotice = false, compact = false }: RadarPanelProps) {
   const { t } = useI18n();
-  const hasBrowserLocation = searcherLocation.source === 'browser' && isValidCoordinate(searcherLocation.lat, searcherLocation.lng);
-  const radarProfiles = hasBrowserLocation
+  const [manualQuery, setManualQuery] = useState('');
+  const [manualError, setManualError] = useState('');
+  const [localManualLocation, setLocalManualLocation] = useState<GeoPoint | null>(null);
+  const effectiveLocation = searcherLocation.source === 'browser' ? searcherLocation : localManualLocation || searcherLocation;
+  const hasRadarLocation = (effectiveLocation.source === 'browser' || effectiveLocation.source === 'manual') && isValidCoordinate(effectiveLocation.lat, effectiveLocation.lng);
+  const radarProfiles = hasRadarLocation
     ? profiles
-      .map((profile) => getRadarProfile(profile, searcherLocation, radius))
+      .map((profile) => getRadarProfile(profile, effectiveLocation, radius))
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
       .filter(({ profile }) => matchesOperatorStatusFilter(profile, status))
       .slice(0, 12)
     : [];
+
+  function submitManualLocation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const location = resolveManualSearcherLocation(manualQuery);
+    if (!location) {
+      setManualError(t('radar.manualLocationNotFound'));
+      return;
+    }
+    setManualError('');
+    setLocalManualLocation(location);
+    onSetManualLocation?.(location);
+  }
 
   return (
     <section className={compact ? 'radar-panel compact' : 'radar-panel'}>
@@ -77,9 +98,29 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             ))}
           </div>
         </div>
-        {onUseLocation && <button className="button" type="button" onClick={onUseLocation}>{t('radar.useMyLocation')}</button>}
+        {!hasRadarLocation && (
+          <form className="radar-start-panel" onSubmit={submitManualLocation}>
+            <strong>{t('radar.setStartingPoint')}</strong>
+            <span>{t('radar.locationInputHelp')}</span>
+            <div>
+              <input value={manualQuery} placeholder={t('radar.locationInputPlaceholder')} onChange={(event) => setManualQuery(event.target.value)} />
+              <button className="button primary" type="submit">{t('radar.setLocation')}</button>
+            </div>
+            <div className="radar-start-actions">
+              {onUseLocation && <button className="button" type="button" onClick={onUseLocation}>{t('radar.useGps')}</button>}
+              {manualError && <small className="error-text">{manualError}</small>}
+              {fallbackNotice && <small>{t('radar.locationDenied')}</small>}
+            </div>
+          </form>
+        )}
+        {hasRadarLocation && (
+          <p className="safety-line">
+            {effectiveLocation.source === 'browser' ? t('radar.locationFromGps') : t('radar.locationFromManual')}
+            {effectiveLocation.label ? `: ${effectiveLocation.label}` : ''}
+          </p>
+        )}
         <p className="safety-line">
-          {hasBrowserLocation ? `${radarProfiles.length} ${t('radar.profilesInRadarRange')}` : t('radar.locationRequired')}
+          {hasRadarLocation ? `${radarProfiles.length} ${t('radar.profilesInRadarRange')}` : t('radar.locationRequired')}
         </p>
         <div className="radar-legend">
           {radarStatuses.map(([value, statusClass, labelKey]) => (
@@ -88,7 +129,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         </div>
         {compact && <Link to={`/city/${city}`} className="button primary">{t('radar.cta')}</Link>}
       </div>
-      <div className={hasBrowserLocation ? 'radar-visual' : 'radar-visual locked'} aria-label={t('radar.title')}>
+      <div className={hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} aria-label={t('radar.title')}>
         <div className="radar-distance-rings" aria-hidden="true">
           <span className="radar-distance-ring selected">
             <em>{radius} km {t('radar.radiusLabel').toLowerCase()}</em>
@@ -96,15 +137,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         </div>
         <div className="radar-sweep" />
         <div className="radar-core" />
-        {!hasBrowserLocation && (
-          <div className="radar-locked-state">
-            <strong>{t('radar.locationRequired')}</strong>
-            <span>{t('radar.enableLocationRadar')}</span>
-            {onUseLocation && <button className="button primary" type="button" onClick={onUseLocation}>{t('radar.useMyLocation')}</button>}
-            {fallbackNotice && <small>{t('radar.locationDenied')}</small>}
-          </div>
-        )}
-        {hasBrowserLocation && radarProfiles.length === 0 && (
+        {hasRadarLocation && radarProfiles.length === 0 && (
           <div className="radar-empty-state">
             <strong>{t('radar.noProfilesInRadius')}</strong>
           </div>
@@ -126,6 +159,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
               <span className="radar-tooltip">
                 <strong>{profile.display_name}</strong>
                 <small>{distanceLabel}</small>
+                <small>{getPublicLocationLabel(profile, t)}</small>
                 <small>{operatorStatus.replaceAll('_', ' ')}</small>
                 <small>{price}</small>
               </span>
@@ -151,6 +185,8 @@ function matchesOperatorStatusFilter(profile: Profile, status: string) {
 }
 
 function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number) {
+  const mode = getPublicLocationMode(profile);
+  if (mode === 'hidden' || mode === 'city_only') return null;
   const profileLat = toCoordinate(profile.latitude);
   const profileLng = toCoordinate(profile.longitude);
   if (!isValidCoordinate(profileLat, profileLng)) return null;

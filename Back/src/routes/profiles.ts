@@ -393,14 +393,18 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
 }
 
 function sanitizePublicProfile(profile: any) {
-  const { primary_phone, additional_phones, whatsapp, telegram, latitude, longitude, work_place_label, ...publicProfile } = profile;
+  const { primary_phone, additional_phones, whatsapp, telegram, latitude, longitude, work_place_label, exact_address: _omittedExactAddress, ...publicProfile } = profile;
   const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
   const postalCode = publicProfile.location_mode === 'approximate' || publicProfile.location_mode === 'exact_hidden'
     ? publicProfile.postal_code
     : null;
+  const canExposeRadarPoint = publicProfile.location_mode === 'approximate' && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
   return {
     ...publicProfile,
     postal_code: postalCode,
+    work_place_label: publicProfile.location_mode === 'approximate' ? work_place_label : null,
+    latitude: canExposeRadarPoint ? Number(latitude) : null,
+    longitude: canExposeRadarPoint ? Number(longitude) : null,
     profile_images: visibleImages,
     images: visibleImages,
     locked_features: ['phone_number', 'whatsapp', 'telegram', 'full_gallery', 'vip_gallery', 'gifts', 'live_cam']
@@ -413,6 +417,7 @@ function hasLocationChange(body: Record<string, unknown>) {
     'work_city',
     'work_area',
     'work_place_label',
+    'exact_address',
     'city',
     'area',
     'latitude',

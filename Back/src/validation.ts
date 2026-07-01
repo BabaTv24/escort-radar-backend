@@ -67,6 +67,7 @@ export function validateProfileInput(body: Record<string, unknown>) {
       work_area: optionalText(body.work_area, 120),
       postal_code: optionalText(body.postal_code, 20),
       work_place_label: optionalText(body.work_place_label, 180),
+      exact_address: optionalText(body.exact_address, 240),
       category: normalizeCategory(body.category),
       description: optionalText(body.description, 2000),
       languages: Array.isArray(body.languages)

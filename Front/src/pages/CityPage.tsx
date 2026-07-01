@@ -56,7 +56,7 @@ export function CityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
-  const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter(city), source: 'city_fallback' }));
+  const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter(city), source: 'city', label: cityLabel }));
   const [fallbackNotice, setFallbackNotice] = useState(false);
   const { t, option } = useI18n();
 
@@ -69,8 +69,8 @@ export function CityPage() {
     if (urlCategory && categoryOptions.includes(urlCategory)) next.category = urlCategory;
     setDraftFilters(next);
     setAppliedFilters(next);
-    setSearcherLocation({ ...getCityCenter(city), source: 'city_fallback' });
-  }, [city, urlCategory]);
+    setSearcherLocation({ ...getCityCenter(city), source: 'city', label: cityLabel });
+  }, [city, cityLabel, urlCategory]);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -122,7 +122,12 @@ export function CityPage() {
   async function useLocation() {
     const location = await getSearcherLocationWithFallback(appliedFilters.city);
     setSearcherLocation(location);
-    setFallbackNotice(location.source === 'city_fallback');
+    setFallbackNotice(location.source === 'city');
+  }
+
+  function setManualLocation(location: GeoPoint) {
+    setSearcherLocation(location);
+    setFallbackNotice(false);
   }
 
   function renderFilters(mode: 'desktop' | 'mobile') {
@@ -259,6 +264,7 @@ export function CityPage() {
           onStatusChange={(value) => updateRadarFilter('availability_status', value)}
           searcherLocation={searcherLocation}
           onUseLocation={useLocation}
+          onSetManualLocation={setManualLocation}
           fallbackNotice={fallbackNotice}
         />
       </section>

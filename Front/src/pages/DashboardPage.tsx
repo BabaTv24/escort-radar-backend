@@ -84,6 +84,7 @@ const emptyProfile: Partial<Profile> = {
   hotspot_type: null,
   service_radius_km: 25,
   approximate_location_area: '',
+  exact_address: '',
   location_mode: 'city_only',
   latitude: null,
   longitude: null,
@@ -1807,6 +1808,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             work_area: parsed.area || profile.work_area || '',
             postal_code: parsed.postal_code || profile.postal_code || '',
             work_place_label: parsed.label || place.formatted_address || place.name || '',
+            exact_address: parsed.label || place.formatted_address || place.name || '',
             city: parsed.legacyCity || profile.city || 'berlin',
             area: parsed.area || profile.area || '',
             latitude: parsed.latitude,
@@ -2040,6 +2042,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <input placeholder={t('dashboard.advertiser.districtArea')} value={profile.work_area || ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })} />
               <input placeholder={t('dashboard.advertiser.postalCode')} value={profile.postal_code || ''} onChange={(event) => onProfileChange({ ...profile, postal_code: event.target.value.slice(0, 20) })} />
               <input placeholder={t('dashboard.advertiser.placeLabel')} value={profile.work_place_label || ''} onChange={(event) => onProfileChange({ ...profile, work_place_label: event.target.value })} />
+              <input placeholder={t('radar.exactAddress')} value={profile.exact_address || ''} onChange={(event) => onProfileChange({ ...profile, exact_address: event.target.value, work_place_label: event.target.value || profile.work_place_label || '' })} />
               <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value, work_city: profile.work_city || normalizeCityName(event.target.value) })}>
                 {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
@@ -2047,10 +2050,11 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <select value={profile.service_radius_km || 25} onChange={(event) => onProfileChange({ ...profile, service_radius_km: Number(event.target.value) })}>
                 {[1, 5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}
               </select>
-              <select value={profile.location_mode || 'city_only'} onChange={(event) => onProfileChange({ ...profile, location_mode: event.target.value as Profile['location_mode'] })}>
-                <option value="city_only">{t('dashboard.advertiser.cityOnly')}</option>
-                <option value="approximate">{t('dashboard.advertiser.approximateMode')}</option>
-                <option value="exact_hidden">{t('dashboard.advertiser.exactHidden')}</option>
+              <select value={getDashboardLocationChoice(profile)} onChange={(event) => onProfileChange(applyDashboardLocationChoice(profile, event.target.value))}>
+                <option value="exact">{t('radar.exactAddress')}</option>
+                <option value="postal_area">{t('radar.postalArea')}</option>
+                <option value="city_only">{t('radar.cityOnly')}</option>
+                <option value="hidden">{t('radar.hideExactLocation')}</option>
               </select>
               <input placeholder={t('dashboard.advertiser.latitude')} value={profile.latitude ?? ''} onChange={(event) => onProfileChange({ ...profile, latitude: event.target.value ? Number(event.target.value) : null })} />
               <input placeholder={t('dashboard.advertiser.longitude')} value={profile.longitude ?? ''} onChange={(event) => onProfileChange({ ...profile, longitude: event.target.value ? Number(event.target.value) : null })} />
@@ -2362,6 +2366,7 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     work_area: profile.work_area || profile.area || 'Central',
     postal_code: profile.postal_code || null,
     work_place_label: profile.work_place_label || '',
+    exact_address: profile.exact_address || null,
     category: profile.category || 'ladies',
     description: profile.description || '',
     languages: Array.isArray(profile.languages) ? profile.languages : ['EN'],
@@ -2438,6 +2443,7 @@ function profileToForm(profile: Profile): Partial<Profile> {
     work_area: profile.work_area || null,
     postal_code: profile.postal_code || null,
     work_place_label: profile.work_place_label || null,
+    exact_address: profile.exact_address || null,
     location_updated_at: profile.location_updated_at || null,
     auto_location_on_login: Boolean(profile.auto_location_on_login),
     auto_location_while_online: Boolean(profile.auto_location_while_online),
@@ -2455,6 +2461,27 @@ function prepareProfilePayload(profile: Partial<Profile>, savedProfile: Profile 
     is_test_account: Boolean(savedProfile?.is_test_account),
     available_now: profile.operator_status ? profile.operator_status === 'ONLINE_NOW' : Boolean(profile.available_now)
   };
+}
+
+function getDashboardLocationChoice(profile: Partial<Profile>) {
+  if (profile.location_mode === 'exact_hidden' || profile.location_mode === 'hidden') return 'hidden';
+  if (profile.location_mode === 'city_only') return 'city_only';
+  if (profile.location_mode === 'approximate' && profile.exact_address) return 'exact';
+  if (profile.location_mode === 'approximate' || profile.location_mode === 'postal_area') return 'postal_area';
+  return 'city_only';
+}
+
+function applyDashboardLocationChoice(profile: Partial<Profile>, choice: string): Partial<Profile> {
+  if (choice === 'hidden') return { ...profile, location_mode: 'exact_hidden' };
+  if (choice === 'city_only') return { ...profile, location_mode: 'city_only', latitude: null, longitude: null };
+  if (choice === 'exact') {
+    return {
+      ...profile,
+      location_mode: 'approximate',
+      work_place_label: profile.exact_address || profile.work_place_label || ''
+    };
+  }
+  return { ...profile, location_mode: 'approximate' };
 }
 
 function operatorToAvailability(status: NonNullable<Profile['operator_status']>): Profile['availability_status'] {

@@ -3,6 +3,7 @@ import { BadgeCheck, HeartHandshake, Home, Hotel, Languages, MapPin, MessageCirc
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import { serviceLabel } from '../data/serviceCatalog';
+import { getPublicLocationLabel } from '../lib/locationLabels';
 
 export function ProfileCard({ profile }: { profile: Profile }) {
   const { t, option } = useI18n();
@@ -13,6 +14,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
   const priceFrom = getPriceFrom(profile);
   const reviewCount = 12 + (profile.id.length % 37);
   const rating = (4.6 + (profile.id.length % 4) / 10).toFixed(1);
+  const locationLabel = getPublicLocationLabel(profile, t);
   const isNew = profile.created_at ? Date.now() - new Date(profile.created_at).getTime() < 1000 * 60 * 60 * 24 * 14 : profile.id.length % 2 === 0;
   const badges = [
     profile.is_sponsored ? 'SPONSOROWANY' : '',
@@ -36,13 +38,13 @@ export function ProfileCard({ profile }: { profile: Profile }) {
             <strong>{profile.display_name}</strong>
             <small>{profile.age ? `${profile.age} · ` : ''}{option(profile.category || 'other')}</small>
           </div>
-          <span>{profile.distance_km ? `~${profile.distance_km} km` : profile.work_city || profile.city}</span>
+          <span>{profile.distance_km ? `~${profile.distance_km} km` : locationLabel}</span>
         </div>
       </div>
       <div className="card-body">
         <div>
           <h3>{profile.display_name}{profile.age ? <span>{profile.age}</span> : null}</h3>
-          <p><MapPin size={15} /> {profile.work_city || profile.city}{profile.work_area || profile.area ? `, ${profile.work_area || profile.area}` : ''}{profile.distance_km ? ` - ~${profile.distance_km} km` : ''}</p>
+          <p><MapPin size={15} /> {locationLabel}{profile.distance_km ? ` - ~${profile.distance_km} km` : ''}</p>
         </div>
         <div className="premium-card-meta">
           <strong>{priceFrom}</strong>
