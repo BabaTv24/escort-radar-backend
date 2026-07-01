@@ -5248,3 +5248,77 @@ textarea::placeholder {
     padding: .64rem .68rem;
   }
 }
+
+/* Radar logic correction: one active radius only and one shared status color map. */
+:root {
+  --radar-status-online: #22f5a1;
+  --radar-status-available: #2de2ff;
+  --radar-status-busy: #ffbf3d;
+  --radar-status-appointment: #ff4fd8;
+  --radar-status-traveling: #9b5cff;
+  --radar-status-offline: #8f8792;
+}
+
+.radar-distance-ring.selected {
+  width: 88%;
+  height: 88%;
+}
+
+.radar-distance-rings .radar-distance-ring:not(.selected) {
+  display: none !important;
+}
+
+.radar-avatar-point.online-now,
+.dot.online-now {
+  --radar-status-color: var(--radar-status-online);
+}
+
+.radar-avatar-point.available-today,
+.dot.available-today {
+  --radar-status-color: var(--radar-status-available);
+}
+
+.radar-avatar-point.busy,
+.dot.busy {
+  --radar-status-color: var(--radar-status-busy);
+}
+
+.radar-avatar-point.appointment-only,
+.dot.appointment-only {
+  --radar-status-color: var(--radar-status-appointment);
+}
+
+.radar-avatar-point.traveling,
+.dot.traveling {
+  --radar-status-color: var(--radar-status-traveling);
+}
+
+.radar-avatar-point.offline,
+.dot.offline {
+  --radar-status-color: var(--radar-status-offline);
+}
+
+.radar-avatar-point.online-now,
+.radar-avatar-point.available-today,
+.radar-avatar-point.busy,
+.radar-avatar-point.appointment-only,
+.radar-avatar-point.traveling,
+.radar-avatar-point.offline {
+  border-color: var(--radar-status-color) !important;
+  background: #080307 !important;
+  box-shadow:
+    0 0 0 4px rgba(5, 3, 5, .72),
+    0 0 20px color-mix(in srgb, var(--radar-status-color) 40%, transparent),
+    0 12px 28px rgba(0, 0, 0, .55) !important;
+}
+
+.dot.online-now,
+.dot.available-today,
+.dot.busy,
+.dot.appointment-only,
+.dot.traveling,
+.dot.offline {
+  border: 1px solid color-mix(in srgb, var(--radar-status-color) 78%, #050305);
+  background: var(--radar-status-color) !important;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--radar-status-color) 42%, transparent) !important;
+}
