@@ -4950,3 +4950,301 @@ textarea::placeholder {
   0% { background-position: 120% 0; }
   100% { background-position: -120% 0; }
 }
+
+/* Clean tactical radar: one violet sweep, logical distance rings, unclipped tooltips. */
+.radar-panel,
+.compact-radar-wrap .radar-panel {
+  isolation: isolate;
+  overflow: visible !important;
+}
+
+.radar-visual,
+.compact-radar-wrap .radar-visual {
+  position: relative;
+  overflow: visible !important;
+  border-radius: 50%;
+  border: 1px solid rgba(247, 215, 123, .32) !important;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 43, 214, .09) 0 2%, transparent 2.4%),
+    radial-gradient(circle at 50% 50%, rgba(247, 215, 123, .08), transparent 46%),
+    linear-gradient(145deg, rgba(18, 8, 18, .96), rgba(5, 3, 5, .98)) !important;
+  box-shadow:
+    inset 0 0 52px rgba(0, 0, 0, .72),
+    inset 0 0 34px rgba(255, 43, 214, .08),
+    0 0 42px rgba(247, 215, 123, .1),
+    0 0 58px rgba(255, 43, 214, .08) !important;
+}
+
+.radar-visual::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  background:
+    linear-gradient(90deg, transparent calc(50% - .5px), rgba(247, 215, 123, .16) 50%, transparent calc(50% + .5px)),
+    linear-gradient(0deg, transparent calc(50% - .5px), rgba(247, 215, 123, .16) 50%, transparent calc(50% + .5px)),
+    radial-gradient(circle, transparent 0 99%, rgba(247, 215, 123, .28) 100%);
+}
+
+.radar-visual::after {
+  content: "";
+  position: absolute;
+  inset: 6%;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, transparent 0 20%, rgba(247, 215, 123, .06) 20.2% 20.6%, transparent 20.8%),
+    radial-gradient(circle, transparent 0 38%, rgba(255, 43, 214, .055) 38.2% 38.6%, transparent 38.8%),
+    radial-gradient(circle, transparent 0 58%, rgba(247, 215, 123, .06) 58.2% 58.6%, transparent 58.8%),
+    radial-gradient(circle, transparent 0 78%, rgba(255, 43, 214, .055) 78.2% 78.6%, transparent 78.8%);
+}
+
+.radar-distance-rings {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.radar-distance-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  border: 1px solid rgba(247, 215, 123, .18);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: inset 0 0 14px rgba(255, 43, 214, .035);
+}
+
+.radar-distance-ring em {
+  position: absolute;
+  right: -.25rem;
+  top: 50%;
+  transform: translate(100%, -50%);
+  padding: .16rem .32rem;
+  border: 1px solid rgba(247, 215, 123, .16);
+  border-radius: 999px;
+  color: rgba(255, 244, 214, .58);
+  background: rgba(5, 3, 5, .72);
+  font-size: .58rem;
+  font-style: normal;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: .72;
+}
+
+.radar-distance-ring.selected {
+  border-color: rgba(247, 215, 123, .82);
+  box-shadow:
+    0 0 22px rgba(247, 215, 123, .24),
+    0 0 34px rgba(255, 43, 214, .16),
+    inset 0 0 22px rgba(247, 215, 123, .08);
+}
+
+.radar-distance-ring.selected em {
+  color: #120806;
+  border-color: rgba(255, 244, 214, .52);
+  background: linear-gradient(135deg, #fff4b8, var(--er-gold-strong));
+  opacity: 1;
+  box-shadow: 0 0 18px rgba(247, 215, 123, .2);
+}
+
+.radar-sweep,
+.compact-radar-wrap .radar-sweep {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(255, 43, 214, .42) 0deg,
+    rgba(123, 28, 255, .24) 15deg,
+    rgba(255, 43, 214, .08) 34deg,
+    transparent 56deg,
+    transparent 360deg
+  ) !important;
+  filter: blur(.35px) drop-shadow(0 0 18px rgba(255, 43, 214, .22));
+  mix-blend-mode: screen;
+  animation: sweep 5.6s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+.radar-core,
+.compact-radar-wrap .radar-core {
+  z-index: 5;
+  width: 12px;
+  height: 12px;
+  left: calc(50% - 6px);
+  top: calc(50% - 6px);
+  background: radial-gradient(circle, #fff4d6, var(--er-magenta) 58%, transparent 70%) !important;
+  box-shadow: 0 0 20px rgba(255, 43, 214, .58), 0 0 32px rgba(247, 215, 123, .28) !important;
+}
+
+.radar-point,
+.radar-avatar-point {
+  z-index: 12;
+}
+
+.radar-avatar-point {
+  width: 38px;
+  height: 38px;
+  border: 2px solid rgba(247, 215, 123, .72) !important;
+  background: #080307 !important;
+  box-shadow:
+    0 0 0 4px rgba(5, 3, 5, .72),
+    0 0 18px rgba(247, 215, 123, .18),
+    0 12px 28px rgba(0, 0, 0, .55) !important;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.radar-avatar-point:hover,
+.radar-avatar-point:focus-visible {
+  z-index: 90;
+  transform: translate(-50%, -50%) scale(1.12);
+  border-color: #fff4d6 !important;
+  box-shadow:
+    0 0 0 5px rgba(255, 43, 214, .16),
+    0 0 28px rgba(247, 215, 123, .32),
+    0 18px 42px rgba(0, 0, 0, .72) !important;
+}
+
+.radar-avatar-point.online-now,
+.radar-avatar-point.available-today,
+.radar-avatar-point.busy,
+.radar-avatar-point.appointment-only,
+.radar-avatar-point.traveling,
+.radar-avatar-point.offline {
+  background: #080307 !important;
+}
+
+.radar-avatar-point.online-now,
+.dot.online-now,
+.radar-avatar-point.available-today,
+.dot.available-today {
+  border-color: rgba(247, 215, 123, .82) !important;
+  box-shadow: 0 0 0 4px rgba(5, 3, 5, .72), 0 0 20px rgba(247, 215, 123, .24) !important;
+}
+
+.radar-tooltip {
+  left: 50%;
+  bottom: calc(100% + .72rem);
+  z-index: 999;
+  width: 12.4rem;
+  display: block;
+  padding: .72rem .78rem;
+  border: 1px solid rgba(247, 215, 123, .34);
+  border-radius: .9rem;
+  color: var(--er-cream);
+  background:
+    radial-gradient(circle at 10% 0, rgba(247, 215, 123, .12), transparent 6rem),
+    linear-gradient(145deg, rgba(34, 18, 27, .96), rgba(5, 3, 5, .98));
+  box-shadow: 0 22px 58px rgba(0, 0, 0, .72), 0 0 24px rgba(247, 215, 123, .12);
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, .35rem);
+  transition: opacity .16s ease, visibility .16s ease, transform .16s ease;
+}
+
+.radar-tooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -.38rem;
+  width: .72rem;
+  height: .72rem;
+  border-right: 1px solid rgba(247, 215, 123, .34);
+  border-bottom: 1px solid rgba(247, 215, 123, .34);
+  background: rgba(10, 5, 9, .98);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.radar-tooltip strong {
+  color: var(--er-gold);
+  font-size: .92rem;
+}
+
+.radar-tooltip small {
+  color: rgba(255, 244, 214, .72);
+  line-height: 1.25;
+}
+
+.radar-avatar-point:hover .radar-tooltip,
+.radar-avatar-point:focus-visible .radar-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.radar-avatar-point.edge-left .radar-tooltip {
+  left: -.25rem;
+  transform: translate(0, .35rem);
+}
+
+.radar-avatar-point.edge-left:hover .radar-tooltip,
+.radar-avatar-point.edge-left:focus-visible .radar-tooltip {
+  transform: translate(0, 0);
+}
+
+.radar-avatar-point.edge-right .radar-tooltip {
+  left: auto;
+  right: -.25rem;
+  transform: translate(0, .35rem);
+}
+
+.radar-avatar-point.edge-right:hover .radar-tooltip,
+.radar-avatar-point.edge-right:focus-visible .radar-tooltip {
+  transform: translate(0, 0);
+}
+
+.radar-avatar-point.edge-left .radar-tooltip::after {
+  left: 1.1rem;
+}
+
+.radar-avatar-point.edge-right .radar-tooltip::after {
+  left: auto;
+  right: 1.1rem;
+}
+
+.radar-avatar-point.edge-top .radar-tooltip {
+  top: calc(100% + .72rem);
+  bottom: auto;
+}
+
+.radar-avatar-point.edge-top .radar-tooltip::after {
+  top: -.38rem;
+  bottom: auto;
+  transform: translateX(-50%) rotate(225deg);
+}
+
+.radar-avatar-point.edge-top.edge-left .radar-tooltip::after,
+.radar-avatar-point.edge-top.edge-right .radar-tooltip::after {
+  transform: rotate(225deg);
+}
+
+@media (max-width: 720px) {
+  .radar-visual,
+  .compact-radar-wrap .radar-visual {
+    width: min(100%, 310px) !important;
+  }
+
+  .radar-distance-ring em {
+    font-size: .5rem;
+    right: -.12rem;
+  }
+
+  .radar-avatar-point {
+    width: 34px;
+    height: 34px;
+  }
+
+  .radar-tooltip {
+    width: min(12rem, 68vw);
+    padding: .64rem .68rem;
+  }
+}

@@ -27,6 +27,8 @@ const statusClassByOperator: Record<string, string> = {
   TRAVELING: 'traveling',
   OFFLINE: 'offline'
 };
+const radarRingOptions = [5, 10, 25, 50, 100];
+const maxRadarRing = 100;
 
 export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, fallbackNotice = false, compact = false }: RadarPanelProps) {
   const { t } = useI18n();
@@ -82,6 +84,17 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         {compact && <Link to={`/city/${city}`} className="button primary">{t('radar.cta')}</Link>}
       </div>
       <div className="radar-visual" aria-label={t('radar.title')}>
+        <div className="radar-distance-rings" aria-hidden="true">
+          {radarRingOptions.map((item) => (
+            <span
+              key={item}
+              className={item === radius ? 'radar-distance-ring selected' : 'radar-distance-ring'}
+              style={{ width: `${ringSize(item)}%`, height: `${ringSize(item)}%` }}
+            >
+              <em>{item} km</em>
+            </span>
+          ))}
+        </div>
         <div className="radar-sweep" />
         <div className="radar-core" />
         {visibleProfiles.slice(0, 12).map(({ profile, radar }, index) => {
@@ -90,12 +103,13 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           const operatorStatus = profile.operator_status || (profile.available_now ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE');
           const statusClass = statusClassByOperator[operatorStatus] || 'offline';
           const price = getPrice(profile);
+          const tooltipClass = getTooltipClass(point);
 
           return (
             <Link
               key={profile.id}
               to={`/profile/${profile.id}`}
-              className={`radar-point radar-avatar-point ${statusClass}`}
+              className={`radar-point radar-avatar-point ${statusClass} ${tooltipClass}`}
               style={{ left: `${point.left}%`, top: `${point.top}%` }}
               title={`${profile.display_name} - ~${radar.distance_km} km - ${operatorStatus.replaceAll('_', ' ')} - ${price}`}
             >
@@ -131,14 +145,25 @@ function getRadarPoint(profile: Profile, index: number, radius: number, distance
   const hasCoordinates = typeof profile.latitude === 'number' && typeof profile.longitude === 'number';
   const seed = hashString(profile.id);
   const angle = (hasCoordinates ? seed % 360 : fallbackAngles[index % fallbackAngles.length]) * (Math.PI / 180);
-  const distanceRatio = Math.min(Math.max(Number(distanceKm || 0) / Math.max(radius, 1), 0.2), 0.92);
-  const fallbackRatio = 0.34 + ((seed % 54) / 100);
+  const distanceRatio = Math.min(Math.max(Number(distanceKm || 0) / Math.max(radius, 1), 0.16), 0.88);
+  const fallbackRatio = 0.24 + ((seed % 58) / 100);
   const visualRadius = hasCoordinates ? distanceRatio : fallbackRatio;
 
   return {
-    left: 50 + Math.cos(angle) * visualRadius * 42,
-    top: 50 + Math.sin(angle) * visualRadius * 42
+    left: 50 + Math.cos(angle) * visualRadius * 39,
+    top: 50 + Math.sin(angle) * visualRadius * 39
   };
+}
+
+function ringSize(radius: number) {
+  return 16 + Math.sqrt(radius / maxRadarRing) * 76;
+}
+
+function getTooltipClass(point: { left: number; top: number }) {
+  return [
+    point.left > 68 ? 'edge-right' : point.left < 32 ? 'edge-left' : '',
+    point.top < 30 ? 'edge-top' : point.top > 72 ? 'edge-bottom' : ''
+  ].filter(Boolean).join(' ');
 }
 
 function hashString(value: string) {
