@@ -6,7 +6,8 @@ import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import { useCallback, useEffect, useState } from 'react';
-import { getCityCenter } from '../lib/geo';
+import type { GeoPoint } from '../lib/geo';
+import { getCityCenter, getSearcherLocationWithFallback } from '../lib/geo';
 import { categoryOptions } from '../data/filterOptions';
 import type { Profile } from '../types';
 import { getPublicProfiles } from '../lib/publicProfiles';
@@ -19,7 +20,8 @@ export function HomePage() {
   const [error, setError] = useState('');
   const [radius, setRadius] = useState(25);
   const [radarStatus, setRadarStatus] = useState('all');
-  const berlinCenter = { ...getCityCenter('berlin'), source: 'city_fallback' as const };
+  const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter('berlin'), source: 'city_fallback' }));
+  const [fallbackNotice, setFallbackNotice] = useState(false);
   const sponsoredProfiles = profiles.filter((profile) => profile.is_sponsored || profile.acquisition_source === 'admin_sponsored' || profile.provider === 'manual_admin');
   const paidProfiles = profiles.filter((profile) => !sponsoredProfiles.some((sponsored) => sponsored.id === profile.id));
   const topProfiles = paidProfiles.slice(0, 8);
@@ -39,6 +41,12 @@ export function HomePage() {
   }, []);
 
   useEffect(loadProfiles, [loadProfiles]);
+
+  async function useLocation() {
+    const location = await getSearcherLocationWithFallback('berlin');
+    setSearcherLocation(location);
+    setFallbackNotice(location.source === 'city_fallback');
+  }
 
   return (
     <div className="page">
@@ -149,7 +157,9 @@ export function HomePage() {
         city="berlin"
         onRadiusChange={setRadius}
         onStatusChange={setRadarStatus}
-        searcherLocation={berlinCenter}
+        searcherLocation={searcherLocation}
+        onUseLocation={useLocation}
+        fallbackNotice={fallbackNotice}
         compact
       />
 

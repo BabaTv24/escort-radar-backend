@@ -5268,6 +5268,55 @@ textarea::placeholder {
   display: none !important;
 }
 
+.radar-visual.locked .radar-sweep {
+  opacity: .46;
+}
+
+.radar-visual.locked .radar-core {
+  opacity: .72;
+}
+
+.radar-locked-state,
+.radar-empty-state {
+  position: absolute;
+  inset: 18%;
+  z-index: 30;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: .55rem;
+  padding: 1rem;
+  border: 1px solid rgba(247, 215, 123, .28);
+  border-radius: 1rem;
+  color: var(--er-cream);
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 43, 214, .16), transparent 7rem),
+    linear-gradient(145deg, rgba(20, 10, 18, .88), rgba(5, 3, 5, .92));
+  box-shadow: 0 18px 54px rgba(0, 0, 0, .62), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+.radar-locked-state strong,
+.radar-empty-state strong {
+  color: var(--er-gold);
+  font-size: .98rem;
+  line-height: 1.1;
+}
+
+.radar-locked-state span,
+.radar-locked-state small {
+  max-width: 15rem;
+  color: rgba(255, 244, 214, .72);
+  font-size: .78rem;
+  line-height: 1.35;
+}
+
+.radar-locked-state .button {
+  min-height: 2.35rem;
+  padding: .58rem .86rem;
+  pointer-events: auto;
+}
+
 .radar-avatar-point.online-now,
 .dot.online-now {
   --radar-status-color: var(--radar-status-online);

@@ -3,7 +3,7 @@ import type { Profile } from '../types';
 import { radiusOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { getDistanceKm, isProfileInRadarRange } from '../lib/geo';
+import { getDistanceKm } from '../lib/geo';
 
 type RadarPanelProps = {
   profiles: Profile[];
@@ -18,7 +18,6 @@ type RadarPanelProps = {
   compact?: boolean;
 };
 
-const fallbackAngles = [286, 34, 214, 118, 326, 174, 64, 252, 18, 148, 304, 96];
 const statusClassByOperator: Record<string, string> = {
   ONLINE_NOW: 'online-now',
   AVAILABLE_TODAY: 'available-today',
@@ -38,9 +37,14 @@ const radarStatuses = [
 
 export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, fallbackNotice = false, compact = false }: RadarPanelProps) {
   const { t } = useI18n();
-  const visibleProfiles = profiles
-    .map((profile) => ({ profile, radar: isProfileInRadarRange(profile, searcherLocation, radius) }))
-    .filter(({ profile, radar }) => radar.inRange && matchesOperatorStatusFilter(profile, status));
+  const hasBrowserLocation = searcherLocation.source === 'browser' && isValidCoordinate(searcherLocation.lat, searcherLocation.lng);
+  const radarProfiles = hasBrowserLocation
+    ? profiles
+      .map((profile) => getRadarProfile(profile, searcherLocation, radius))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .filter(({ profile }) => matchesOperatorStatusFilter(profile, status))
+      .slice(0, 12)
+    : [];
 
   return (
     <section className={compact ? 'radar-panel compact' : 'radar-panel'}>
@@ -73,8 +77,10 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             ))}
           </div>
         </div>
-        {onUseLocation && <button className="button" type="button" onClick={onUseLocation}>{t('radar.useLocation')}</button>}
-        <p className="safety-line">{t('radar.inRange', { count: visibleProfiles.length })}</p>
+        {onUseLocation && <button className="button" type="button" onClick={onUseLocation}>{t('radar.useMyLocation')}</button>}
+        <p className="safety-line">
+          {hasBrowserLocation ? `${radarProfiles.length} ${t('radar.profilesInRadarRange')}` : t('radar.locationRequired')}
+        </p>
         <div className="radar-legend">
           {radarStatuses.map(([value, statusClass, labelKey]) => (
             <span key={value}><i className={`dot ${statusClass}`} /> {t(labelKey)}</span>
@@ -82,7 +88,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         </div>
         {compact && <Link to={`/city/${city}`} className="button primary">{t('radar.cta')}</Link>}
       </div>
-      <div className="radar-visual" aria-label={t('radar.title')}>
+      <div className={hasBrowserLocation ? 'radar-visual' : 'radar-visual locked'} aria-label={t('radar.title')}>
         <div className="radar-distance-rings" aria-hidden="true">
           <span className="radar-distance-ring selected">
             <em>{radius} km {t('radar.radiusLabel').toLowerCase()}</em>
@@ -90,15 +96,24 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         </div>
         <div className="radar-sweep" />
         <div className="radar-core" />
-        {visibleProfiles.slice(0, 12).map(({ profile, radar }, index) => {
+        {!hasBrowserLocation && (
+          <div className="radar-locked-state">
+            <strong>{t('radar.locationRequired')}</strong>
+            <span>{t('radar.enableLocationRadar')}</span>
+            {onUseLocation && <button className="button primary" type="button" onClick={onUseLocation}>{t('radar.useMyLocation')}</button>}
+            {fallbackNotice && <small>{t('radar.locationDenied')}</small>}
+          </div>
+        )}
+        {hasBrowserLocation && radarProfiles.length === 0 && (
+          <div className="radar-empty-state">
+            <strong>{t('radar.noProfilesInRadius')}</strong>
+          </div>
+        )}
+        {radarProfiles.map(({ profile, distanceKm, point, operatorStatus, statusClass }) => {
           const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
-          const realDistance = getRealProfileDistance(profile, searcherLocation);
-          const point = getRadarPoint(profile, index, radius, realDistance?.distanceKm ?? radar.distance_km, realDistance?.bearingDeg);
-          const operatorStatus = profile.operator_status || (profile.available_now ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE');
-          const statusClass = statusClassByOperator[operatorStatus] || 'offline';
           const price = getPrice(profile);
           const tooltipClass = getTooltipClass(point);
-          const distanceLabel = realDistance ? `${searcherLocation.source === 'browser' ? '' : `${t('radar.approximateDistance')} `}${formatDistance(realDistance.distanceKm)}` : t('radar.distanceUnavailable');
+          const distanceLabel = formatDistance(distanceKm);
 
           return (
             <Link
@@ -135,21 +150,39 @@ function matchesOperatorStatusFilter(profile: Profile, status: string) {
   return operatorStatus === status;
 }
 
-function getRadarPoint(profile: Profile, index: number, radius: number, distanceKm?: number | null, bearingDeg?: number | null) {
-  const hasCoordinates = typeof profile.latitude === 'number' && typeof profile.longitude === 'number';
-  const seed = hashString(profile.id);
-  const angle = (typeof bearingDeg === 'number' && Number.isFinite(bearingDeg)
-    ? bearingDeg
-    : hasCoordinates
-      ? seed % 360
-      : fallbackAngles[index % fallbackAngles.length]) * (Math.PI / 180);
-  const distanceRatio = Math.min(Math.max(Number(distanceKm || 0) / Math.max(radius, 1), 0.16), 0.88);
-  const fallbackRatio = 0.24 + ((seed % 58) / 100);
-  const visualRadius = Number.isFinite(Number(distanceKm)) && Number(distanceKm) > 0 ? distanceRatio : fallbackRatio;
+function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number) {
+  const profileLat = toCoordinate(profile.latitude);
+  const profileLng = toCoordinate(profile.longitude);
+  if (!isValidCoordinate(profileLat, profileLng)) return null;
+
+  const distanceKm = getDistanceKm(searcherLocation.lat, searcherLocation.lng, profileLat, profileLng);
+  if (!Number.isFinite(distanceKm) || distanceKm > radius) return null;
+
+  const bearingDeg = getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLat, profileLng);
+  const operatorStatus = getOperatorStatus(profile);
+  const statusClass = statusClassByOperator[operatorStatus] || 'offline';
 
   return {
-    left: 50 + Math.cos(angle) * visualRadius * 39,
-    top: 50 + Math.sin(angle) * visualRadius * 39
+    profile,
+    distanceKm,
+    bearingDeg,
+    operatorStatus,
+    statusClass,
+    point: getRadarPoint(radius, distanceKm, bearingDeg)
+  };
+}
+
+function getRadarPoint(radius: number, distanceKm: number, bearingDeg: number) {
+  const markerPaddingPercent = 11;
+  const maxPixelRadius = 50 - markerPaddingPercent;
+  const radialRatio = Math.min(Math.max(distanceKm / Math.max(radius, 1), 0), 1);
+  const minVisibleRatio = distanceKm > 0 ? 0.08 : 0;
+  const visualRatio = Math.max(radialRatio, minVisibleRatio);
+  const bearingRad = bearingDeg * (Math.PI / 180);
+
+  return {
+    left: 50 + Math.sin(bearingRad) * maxPixelRadius * visualRatio,
+    top: 50 - Math.cos(bearingRad) * maxPixelRadius * visualRatio
   };
 }
 
@@ -160,21 +193,19 @@ function getTooltipClass(point: { left: number; top: number }) {
   ].filter(Boolean).join(' ');
 }
 
-function getRealProfileDistance(profile: Profile, searcherLocation: GeoPoint) {
-  if (searcherLocation.source !== 'browser') return null;
-  if (!isFiniteCoordinate(searcherLocation.lat, searcherLocation.lng) || !isFiniteCoordinate(profile.latitude, profile.longitude)) return null;
-  const profileLat = Number(profile.latitude);
-  const profileLng = Number(profile.longitude);
-  const distanceKm = getDistanceKm(searcherLocation.lat, searcherLocation.lng, profileLat, profileLng);
-  if (!Number.isFinite(distanceKm)) return null;
-  return {
-    distanceKm,
-    bearingDeg: getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLat, profileLng)
-  };
+function isValidCoordinate(lat: unknown, lng: unknown) {
+  return typeof lat === 'number'
+    && typeof lng === 'number'
+    && Number.isFinite(lat)
+    && Number.isFinite(lng)
+    && Math.abs(lat) <= 90
+    && Math.abs(lng) <= 180;
 }
 
-function isFiniteCoordinate(lat: unknown, lng: unknown) {
-  return typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng);
+function toCoordinate(value: unknown) {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim() !== '') return Number(value);
+  return Number.NaN;
 }
 
 function getBearingDeg(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -194,10 +225,6 @@ function formatDistance(distanceKm: number) {
 
 function toRad(value: number) {
   return value * Math.PI / 180;
-}
-
-function hashString(value: string) {
-  return value.split('').reduce((total, char) => total + char.charCodeAt(0), 0);
 }
 
 function getInitials(name: string) {
