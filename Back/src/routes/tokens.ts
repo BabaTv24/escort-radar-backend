@@ -2,17 +2,19 @@ import { Router } from 'express';
 import { verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler } from '../validation.js';
+import { manualPaymentProducts } from '../manualPayments.js';
 
 export const tokensRouter = Router();
 
-const defaultPackages = [
-  { name: 'Starter', token_amount: 120, eur_price: 18, bonus_tokens: 0, featured: false },
-  { name: 'Radar', token_amount: 520, eur_price: 78, bonus_tokens: 20, featured: false },
-  { name: 'Premium', token_amount: 1200, eur_price: 180, bonus_tokens: 80, featured: false },
-  { name: 'Spotlight', token_amount: 2560, eur_price: 384, bonus_tokens: 260, featured: true },
-  { name: 'Elite', token_amount: 5200, eur_price: 780, bonus_tokens: 700, featured: false },
-  { name: 'Black Card', token_amount: 10200, eur_price: 1530, bonus_tokens: 1800, featured: false }
-];
+const defaultPackages = manualPaymentProducts.filter((product) => product.purpose === 'token_package').map((tokenPackage, index) => ({
+  id: tokenPackage.id,
+  name: tokenPackage.label,
+  token_amount: tokenPackage.tokens || 0,
+  eur_price: tokenPackage.amount_cents / 100,
+  bonus_tokens: 0,
+  featured: index === 2 || tokenPackage.id === 'tokens_1200',
+  active: true
+}));
 
 tokensRouter.get('/packages', asyncHandler(async (_req, res) => {
   const { data, error } = await supabaseAdmin

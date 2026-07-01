@@ -1,6 +1,6 @@
 import { isRealRevenueTransaction, revenueAmount } from './revenue.js';
 
-export const importantLiveTestClientEmail = 'bigbaba.vip@gmail.com';
+export const importantLiveTestClientEmail = (process.env.ADMIN_LIVE_TEST_CLIENT_EMAIL || 'client@example.test').toLowerCase();
 
 export type AdminClientInput = {
   user: Record<string, any>;
@@ -19,19 +19,103 @@ export function isClientUser(user: Record<string, any>) {
     || user.email?.toLowerCase() === importantLiveTestClientEmail;
 }
 
-export function normalizeClientPayment(payment: Record<string, any>) {
+export function normalizeClientPayment(payment: Record<string, any>): Record<string, any> {
+  const metadata = payment.metadata && typeof payment.metadata === 'object' ? payment.metadata : {};
+  const stripeSessionId = payment.stripe_checkout_session_id || payment.stripe_session_id || payment.checkout_session_id || null;
   return {
     ...payment,
     transaction_type: payment.transaction_type || 'client_activation',
     payment_status: payment.payment_status || payment.status,
-    stripe_checkout_session_id: payment.stripe_checkout_session_id || payment.stripe_session_id || null,
-    amount: payment.amount ?? (payment.amount_cents == null ? payment.amount_eur : Number(payment.amount_cents) / 100)
+    status: payment.status || payment.payment_status || 'paid',
+    provider: payment.provider || 'stripe',
+    email: payment.email || payment.customer_email || metadata.email || metadata.customer_email || null,
+    stripe_session_id: payment.stripe_session_id || stripeSessionId,
+    stripe_checkout_session_id: stripeSessionId,
+    stripe_payment_intent_id: payment.stripe_payment_intent_id || payment.payment_intent || null,
+    amount: payment.amount ?? payment.amount_eur ?? (payment.amount_cents == null ? null : Number(payment.amount_cents) / 100),
+    amount_eur: payment.amount_eur ?? payment.amount ?? (payment.amount_cents == null ? null : Number(payment.amount_cents) / 100),
+    amount_cents: payment.amount_cents ?? (payment.amount_eur == null && payment.amount == null ? null : Math.round(Number(payment.amount_eur ?? payment.amount) * 100)),
+    currency: String(payment.currency || 'eur').toLowerCase()
   } as Record<string, any>;
 }
 
 export function isRealClientActivationPayment(payment: Record<string, any>) {
   const normalized = normalizeClientPayment(payment);
   return isRealRevenueTransaction(normalized) && revenueAmount(normalized) === 0.99;
+}
+
+export function paymentMatchesClient(payment: Record<string, any>, user: Record<string, any>) {
+  const normalized = normalizeClientPayment(payment);
+  const userEmail = String(user.email || '').toLowerCase();
+  const paymentEmail = String(normalized.email || normalized.customer_email || normalized.metadata?.email || '').toLowerCase();
+  return Boolean((normalized.user_id && normalized.user_id === user.id) || (userEmail && paymentEmail && paymentEmail === userEmail));
+}
+
+export function getEmailByUserId(users: Record<string, any>[] = []) {
+  const emailByUserId = new Map<string, string>();
+  users.forEach((user) => {
+    if (user.id && user.email) emailByUserId.set(String(user.id), String(user.email));
+  });
+  return emailByUserId;
+}
+
+export function enrichClientActivationPayments(payments: Record<string, any>[] = [], users: Record<string, any>[] = []): Record<string, any>[] {
+  const emailByUserId = getEmailByUserId(users);
+  return payments.map((payment) => {
+    const normalized = normalizeClientPayment(payment);
+    const email = normalized.email || (normalized.user_id ? emailByUserId.get(String(normalized.user_id)) : null) || null;
+    const hasStripeRef = Boolean(normalized.stripe_checkout_session_id || normalized.stripe_session_id || normalized.stripe_payment_intent_id);
+    const realStripeActivation = isRealClientActivationPayment({ ...normalized, email });
+    return {
+      ...normalized,
+      email,
+      amount: revenueAmount(normalized),
+      livemode: normalized.livemode,
+      stripe_debug: hasStripeRef ? null : 'Nie znaleziono rekordu Stripe w bazie',
+      has_real_stripe_activation: realStripeActivation
+    };
+  });
+}
+
+export function enrichTokenPurchaseRequests(purchases: Record<string, any>[] = [], wallets: Record<string, any>[] = [], users: Record<string, any>[] = []): Record<string, any>[] {
+  const emailByUserId = getEmailByUserId(users);
+  const walletById = new Map<string, Record<string, any>>();
+  wallets.forEach((wallet) => {
+    if (wallet.id) walletById.set(String(wallet.id), wallet);
+  });
+
+  return purchases.map((purchase) => {
+    const wallet = purchase.wallet_id ? walletById.get(String(purchase.wallet_id)) : null;
+    const userId = purchase.user_id || wallet?.user_id || null;
+    return {
+      ...purchase,
+      user_id: userId,
+      email: purchase.email || (userId ? emailByUserId.get(String(userId)) : null) || null
+    };
+  });
+}
+
+export function enrichTokenTransactionsWithEmails(transactions: Record<string, any>[] = [], wallets: Record<string, any>[] = [], users: Record<string, any>[] = []): Record<string, any>[] {
+  const emailByUserId = getEmailByUserId(users);
+  const walletById = new Map<string, Record<string, any>>();
+  wallets.forEach((wallet) => {
+    if (wallet.id) walletById.set(String(wallet.id), wallet);
+  });
+
+  return transactions.map((transaction) => {
+    const fromWallet = transaction.from_wallet_id ? walletById.get(String(transaction.from_wallet_id)) : null;
+    const toWallet = transaction.to_wallet_id ? walletById.get(String(transaction.to_wallet_id)) : null;
+    const fromUserId = fromWallet?.user_id || null;
+    const toUserId = toWallet?.user_id || null;
+    const primaryUserId = transaction.user_id || toUserId || fromUserId || null;
+    return {
+      ...transaction,
+      user_id: primaryUserId,
+      email: transaction.email || (primaryUserId ? emailByUserId.get(String(primaryUserId)) : null) || null,
+      from_email: fromUserId ? emailByUserId.get(String(fromUserId)) || null : null,
+      to_email: toUserId ? emailByUserId.get(String(toUserId)) || null : null
+    };
+  });
 }
 
 export function pickBestClientPayment(payments: Record<string, any>[] = []) {

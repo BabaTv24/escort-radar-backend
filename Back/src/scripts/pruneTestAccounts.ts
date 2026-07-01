@@ -7,14 +7,13 @@ const ALLOW_TEST_PRUNE = process.env.ALLOW_TEST_PRUNE === 'true';
 const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'profile-images';
 
 const keepEmails = new Set([
-  'mtvx007@gmail.com',
-  'babatv24@proton.me',
-  'mtvx007+test1@gmail.com',
-  'mtvx007+test2@gmail.com',
-  'mtvx007+test3@gmail.com'
+  'admin@example.test',
+  'qa+test1@example.test',
+  'qa+test2@example.test',
+  'qa+test3@example.test'
 ]);
 
-const pruneEmails = Array.from({ length: 22 }, (_, index) => `mtvx007+test${index + 4}@gmail.com`);
+const pruneEmails = Array.from({ length: 22 }, (_, index) => `qa+test${index + 4}@example.test`);
 
 type AuthUser = {
   id: string;
@@ -79,7 +78,7 @@ async function listAllUsers() {
 async function pruneUser(user: AuthUser) {
   const email = user.email?.toLowerCase() || '';
 
-  if (!pruneEmails.includes(email) || keepEmails.has(email) || !email.startsWith('mtvx007+test')) {
+  if (!pruneEmails.includes(email) || keepEmails.has(email) || !email.startsWith('qa+test')) {
     throw new Error(`Refusing to prune protected or non-target email: ${email}`);
   }
 

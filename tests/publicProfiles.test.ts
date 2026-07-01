@@ -3,7 +3,14 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { isPublicProfile } from '../Back/src/publicProfiles.ts';
 import { isRealPaidSubscription, isRealRevenueTransaction, sumRealRevenue } from '../Back/src/revenue.ts';
-import { buildAdminClient, filterSortPaginateClients, importantLiveTestClientEmail, isRealClientActivationPayment } from '../Back/src/adminClients.ts';
+import {
+  buildAdminClient,
+  enrichClientActivationPayments,
+  enrichTokenTransactionsWithEmails,
+  filterSortPaginateClients,
+  importantLiveTestClientEmail,
+  isRealClientActivationPayment
+} from '../Back/src/adminClients.ts';
 import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
@@ -221,15 +228,212 @@ test('manual_admin client without Stripe does not increase revenue', () => {
   assert.equal(sumRealRevenue(client.payments), 0);
 });
 
-test('bigbaba.vip@gmail.com is treated as active only when live Stripe reference is complete', () => {
+test('client@example.test is treated as active only when live Stripe reference is complete', () => {
   const client = buildAdminClient({
-    user: { id: 'bigbaba', email: importantLiveTestClientEmail, app_metadata: { auth_account_type: 'client' }, created_at: '2026-01-01' },
+    user: { id: 'clientFixture', email: importantLiveTestClientEmail, app_metadata: { auth_account_type: 'client' }, created_at: '2026-01-01' },
     activation: { state: 'client_activated', activated_at: '2026-01-02' },
-    payments: [{ provider: 'stripe', payment_status: 'paid', amount_cents: 99, stripe_checkout_session_id: 'cs_live_bigbaba', livemode: true, created_at: '2026-01-02' }]
+    payments: [{ provider: 'stripe', payment_status: 'paid', amount_cents: 99, stripe_checkout_session_id: 'cs_live_clientFixture', livemode: true, created_at: '2026-01-02' }]
   });
   assert.equal(client.account_status, 'stripe_activated');
   assert.equal(client.has_real_stripe_activation, true);
   assert.equal(sumRealRevenue(client.payments), 0.99);
+});
+
+test('client activation payment with email is visible in Admin Transactions', () => {
+  const rows = enrichClientActivationPayments([{
+    id: 'payment-email',
+    email: 'paid@example.com',
+    provider: 'stripe',
+    payment_status: 'paid',
+    amount_cents: 99,
+    stripe_checkout_session_id: 'cs_live_email',
+    livemode: true,
+    created_at: '2026-06-10T07:33:00.000Z'
+  }]);
+  assert.equal(rows[0].email, 'paid@example.com');
+  assert.equal(rows[0].amount, 0.99);
+  assert.equal(rows[0].has_real_stripe_activation, true);
+});
+
+test('client activation payment with user_id joins email for Admin Transactions', () => {
+  const rows = enrichClientActivationPayments([{
+    id: 'payment-user',
+    user_id: 'client-user',
+    provider: 'stripe',
+    payment_status: 'succeeded',
+    amount_cents: 99,
+    stripe_payment_intent_id: 'pi_live_user',
+    livemode: true
+  }], [{ id: 'client-user', email: 'joined@example.com' }]);
+  assert.equal(rows[0].email, 'joined@example.com');
+  assert.equal(rows[0].has_real_stripe_activation, true);
+});
+
+test('client@example.test live Stripe 0.99 is marked paid and warning disappears', () => {
+  const client = buildAdminClient({
+    user: { id: 'clientFixture', email: importantLiveTestClientEmail, app_metadata: { auth_account_type: 'client' }, created_at: '2026-06-10' },
+    activation: { state: 'client_activated', activated_at: '2026-06-10T07:33:00.000Z' },
+    payments: [{
+      user_id: 'clientFixture',
+      email: importantLiveTestClientEmail,
+      provider: 'stripe',
+      payment_status: 'paid',
+      amount_cents: 99,
+      stripe_checkout_session_id: 'cs_live_clientFixture_099',
+      stripe_payment_intent_id: 'pi_live_clientFixture_099',
+      livemode: true
+    }]
+  });
+  assert.equal(client.account_status, 'stripe_activated');
+  assert.equal(client.has_real_stripe_activation, true);
+  assert.equal(client.stripe_warning, null);
+});
+
+test('client activation without Stripe reference keeps warning', () => {
+  const client = buildAdminClient({
+    user: { id: 'warn-client', email: 'warn@example.com', app_metadata: { auth_account_type: 'client' }, created_at: '2026-06-10' },
+    activation: { state: 'client_activated', activated_at: '2026-06-10T07:33:00.000Z' },
+    payments: [{
+      user_id: 'warn-client',
+      email: 'warn@example.com',
+      provider: 'stripe',
+      payment_status: 'paid',
+      amount_cents: 99,
+      livemode: true
+    }]
+  });
+  assert.equal(client.has_real_stripe_activation, false);
+  assert.equal(client.stripe_warning, 'Brak kompletnego potwierdzenia live Stripe');
+});
+
+test('revenue counts only real live Stripe 0.99 client activations', () => {
+  const livePayment = {
+    transaction_type: 'client_activation',
+    provider: 'stripe',
+    payment_status: 'paid',
+    amount_cents: 99,
+    stripe_checkout_session_id: 'cs_live_099',
+    livemode: true
+  };
+  const noReference = {
+    transaction_type: 'client_activation',
+    provider: 'stripe',
+    payment_status: 'paid',
+    amount_cents: 99,
+    livemode: true
+  };
+  const testPayment = {
+    transaction_type: 'client_activation',
+    provider: 'stripe',
+    payment_status: 'paid',
+    amount_cents: 99,
+    stripe_checkout_session_id: 'cs_test_099',
+    livemode: false
+  };
+  assert.equal(sumRealRevenue([livePayment, noReference, testPayment]), 0.99);
+});
+
+test('token transactions show email next to wallet ids', () => {
+  const rows = enrichTokenTransactionsWithEmails([{
+    id: 'token-tx',
+    to_wallet_id: 'wallet-1',
+    amount: 100,
+    transaction_type: 'manual_purchase_approval',
+    status: 'completed'
+  }], [{ id: 'wallet-1', user_id: 'client-user' }], [{ id: 'client-user', email: 'tokens@example.com' }]);
+  assert.equal(rows[0].email, 'tokens@example.com');
+  assert.equal(rows[0].to_email, 'tokens@example.com');
+});
+
+test('Stripe Escort Radar checkout is disabled by default behind explicit flag', async () => {
+  const configSource = await readFile(new URL('../Back/src/config.ts', import.meta.url), 'utf8');
+  const paymentsSource = await readFile(new URL('../Back/src/routes/payments.ts', import.meta.url), 'utf8');
+  const activationSource = await readFile(new URL('../Back/src/routes/clientActivation.ts', import.meta.url), 'utf8');
+  const stripeSource = await readFile(new URL('../Back/src/services/stripePayments.ts', import.meta.url), 'utf8');
+  const envSource = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
+  assert.match(configSource, /stripeEscortRadarEnabled: envBoolean\('STRIPE_ESCORT_RADAR_ENABLED', false\)/);
+  assert.match(envSource, /STRIPE_ESCORT_RADAR_ENABLED=false/);
+  assert.match(paymentsSource, /!config\.stripeEnabled \|\| !config\.stripeEscortRadarEnabled/);
+  assert.match(activationSource, /!config\.stripeEnabled \|\| !config\.stripeEscortRadarEnabled/);
+  assert.match(stripeSource, /Stripe checkout is disabled for Escort Radar/);
+  assert.match(paymentsSource, /status\(410\)/);
+});
+
+test('Escort Radar frontend uses manual orders and does not expose Stripe checkout calls', async () => {
+  const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+  const pricingSource = await readFile(new URL('../Front/src/pages/PricingPage.tsx', import.meta.url), 'utf8');
+  const tokenShopSource = await readFile(new URL('../Front/src/pages/TokenShopPage.tsx', import.meta.url), 'utf8');
+  const dashboardSource = await readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8');
+  const profileSource = await readFile(new URL('../Front/src/pages/ProfilePage.tsx', import.meta.url), 'utf8');
+  assert.match(apiSource, /\/api\/payments\/manual-orders/);
+  assert.match(apiSource, /\/api\/payments\/my-orders/);
+  assert.doesNotMatch(apiSource, /clientActivationCheckout|coinsCheckout|escortSubscriptionCheckout|businessSubscriptionCheckout/);
+  assert.match(pricingSource, /createManualPaymentOrder/);
+  assert.match(tokenShopSource, /createManualPaymentOrder/);
+  assert.match(tokenShopSource, /tokenProductCodes/);
+  assert.match(dashboardSource, /navigate\('\/pricing\?product=client_activation'\)/);
+  assert.match(dashboardSource, /navigate\('\/pricing\?product=advertiser_30d'\)/);
+  assert.match(dashboardSource, /navigate\('\/pricing\?product=agency_30d'\)/);
+  assert.match(profileSource, /navigate\('\/pricing\?product=client_activation'\)/);
+  assert.doesNotMatch(`${pricingSource}\n${tokenShopSource}\n${dashboardSource}\n${profileSource}`, /checkout_url|stripe\.redirect|createCheckout/i);
+});
+
+test('manual payment catalog contains current Escort Radar token packages', async () => {
+  process.env.SUPABASE_URL ||= 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-role';
+  process.env.SUPABASE_ANON_KEY ||= 'anon-key';
+  const { manualPaymentProducts } = await import('../Back/src/manualPayments.ts');
+  assert.deepEqual(manualPaymentProducts.filter((item) => item.purpose === 'token_package').map((item) => [item.id, item.tokens, item.amount_cents]), [
+    ['tokens_120', 120, 1800],
+    ['tokens_520', 520, 7800],
+    ['tokens_1200', 1200, 18000],
+    ['tokens_2560', 2560, 38400],
+    ['tokens_5200', 5200, 78000],
+    ['tokens_10200', 10200, 153000]
+  ]);
+});
+
+test('legacy Stripe webhook route is mounted but gated by Escort Radar flag', async () => {
+  const serverSource = await readFile(new URL('../Back/src/server.ts', import.meta.url), 'utf8');
+  const webhookRouteSource = await readFile(new URL('../Back/src/routes/stripeWebhook.ts', import.meta.url), 'utf8');
+  const webhookSource = await readFile(new URL('../Back/src/services/stripePayments.ts', import.meta.url), 'utf8');
+  assert.match(serverSource, /express\.raw\(\{ type: 'application\/json'/);
+  assert.match(serverSource, /\/api\/stripe/);
+  assert.match(webhookRouteSource, /!config\.stripeEnabled \|\| !config\.stripeEscortRadarEnabled/);
+  assert.match(webhookRouteSource, /status\(410\)/);
+  for (const eventName of [
+    'checkout.session.completed',
+    'payment_intent.succeeded',
+    'invoice.payment_succeeded',
+    'invoice.payment_failed',
+    'customer.subscription.created',
+    'customer.subscription.updated',
+    'customer.subscription.deleted'
+  ]) {
+    assert.match(webhookSource, new RegExp(eventName.replaceAll('.', '\\.')));
+  }
+});
+
+test('Stripe migration stores event ids and prevents duplicate revenue events', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/030_escort_radar_stripe_integration.sql', import.meta.url), 'utf8');
+  assert.match(migration, /create table if not exists public\.stripe_payment_events/);
+  assert.match(migration, /stripe_event_id text unique not null/);
+  assert.match(migration, /stripe_payment_events_checkout_session_uidx/);
+  assert.match(migration, /stripe_payment_events_payment_intent_uidx/);
+});
+
+test('admin revenue can still display legacy historical Stripe revenue', () => {
+  const rows = [
+    { transaction_type: 'client_activation', payment_status: 'paid', amount_cents: 99, provider: 'stripe', stripe_checkout_session_id: 'cs_client', livemode: true },
+    { transaction_type: 'escort_subscription', payment_status: 'paid', amount_cents: 4999, provider: 'stripe', stripe_subscription_id: 'sub_escort', livemode: true },
+    { transaction_type: 'business_subscription', payment_status: 'paid', amount_cents: 49999, provider: 'stripe', stripe_subscription_id: 'sub_business', livemode: true },
+    { transaction_type: 'coins_purchase', payment_status: 'paid', amount_cents: 1999, provider: 'stripe', stripe_payment_intent_id: 'pi_coins', livemode: true },
+    { transaction_type: 'coins_purchase', payment_status: 'paid', amount_cents: 1999, provider: 'stripe', stripe_payment_intent_id: 'pi_test', livemode: false }
+  ];
+  assert.equal(sumRealRevenue(rows.filter((row) => row.transaction_type === 'client_activation')), 0.99);
+  assert.equal(sumRealRevenue(rows.filter((row) => row.transaction_type === 'escort_subscription')), 49.99);
+  assert.equal(sumRealRevenue(rows.filter((row) => row.transaction_type === 'business_subscription')), 499.99);
+  assert.equal(sumRealRevenue(rows.filter((row) => row.transaction_type === 'coins_purchase')), 19.99);
 });
 
 test('admin client endpoints and coin actions exist', async () => {
@@ -242,4 +446,109 @@ test('admin client endpoints and coin actions exist', async () => {
   assert.match(apiSource, /adjustAdminClientCoins/);
   assert.match(pageSource, /\/admin\/clients/);
   assert.match(pageSource, /client-mobile-cards/);
+});
+
+test('merchant review footer exposes required public compliance links', async () => {
+  const layoutSource = await readFile(new URL('../Front/src/components/Layout.tsx', import.meta.url), 'utf8');
+  const legalSource = await readFile(new URL('../Front/src/pages/LegalPage.tsx', import.meta.url), 'utf8');
+  for (const href of ['/terms', '/privacy', '/refund-policy', '/content-rules', '/report-abuse', '/contact', '/pricing', '/legal-notice']) {
+    assert.match(layoutSource, new RegExp(`to="${href.replace('/', '\\/')}"`));
+  }
+  assert.match(layoutSource, /footer\.operatedBy/);
+  assert.match(legalSource, /Escort Radar is operated by/);
+  assert.match(legalSource, /<dt>Product<\/dt><dd>Escort Radar<\/dd>/);
+});
+
+test('pricing page lists required platform products, token packages and compliance text', async () => {
+  const source = await readFile(new URL('../Front/src/pages/PricingPage.tsx', import.meta.url), 'utf8');
+  for (const text of [
+    'Client Activation',
+    '0.99 EUR',
+    'Solo Advertiser Premium Listing',
+    '49.99 EUR',
+    'Agency / Business Plan',
+    '499.00 EUR',
+    '10,200 tokens',
+    '1530 EUR',
+    'The platform does not process payments for physical meetings between users.',
+    'discreet prepaid payment',
+    'manual bank transfer',
+    'CCBill card payments - coming soon',
+    'Paysafecard/Paysafe - coming soon',
+    'Payment reference'
+  ]) {
+    assert.match(source, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.doesNotMatch(source, new RegExp(`anon${'ymous'} payment`, 'i'));
+});
+
+test('manual payment orders migration and admin endpoints are present and idempotent', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/031_manual_payment_orders_and_compliance.sql', import.meta.url), 'utf8');
+  const paymentsSource = await readFile(new URL('../Back/src/routes/payments.ts', import.meta.url), 'utf8');
+  const adminSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  const manualSource = await readFile(new URL('../Back/src/manualPayments.ts', import.meta.url), 'utf8');
+  assert.match(migration, /create table if not exists public\.manual_payment_orders/);
+  assert.match(migration, /provider in \('manual', 'bank_transfer', 'crypto', 'ccbill', 'paysafe'\)/);
+  assert.match(migration, /purpose in \('client_activation', 'advertiser_subscription', 'agency_subscription', 'token_package'\)/);
+  assert.match(migration, /applied_at timestamptz/);
+  assert.match(paymentsSource, /paymentsRouter\.post\('\/manual-orders', verifyUser/);
+  assert.match(paymentsSource, /paymentsRouter\.get\('\/my-orders', verifyUser/);
+  assert.match(paymentsSource, /const email = String\(req\.user\?\.email/);
+  assert.doesNotMatch(paymentsSource, /req\.body\.email|req\.body\.user_id|req\.body\.amount_cents|req\.body\.status/);
+  assert.match(adminSource, /\/manual-payment-orders/);
+  assert.match(adminSource, /payment_reference/);
+  assert.match(adminSource, /if \(!order\.applied_at\) await applyManualPaymentOrder/);
+  assert.match(manualSource, /manual_payment_order_id/);
+});
+
+test('manual payment products and reference instruction match CCBill review readiness', async () => {
+  process.env.SUPABASE_URL ||= 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-role';
+  process.env.SUPABASE_ANON_KEY ||= 'anon-key';
+  const { buildPaymentReference, manualPaymentProducts, paymentReferenceInstruction } = await import('../Back/src/manualPayments.ts');
+  assert.deepEqual(manualPaymentProducts.map((item) => [item.id, item.amount_cents]), [
+    ['client_activation', 99],
+    ['advertiser_30d', 4999],
+    ['agency_30d', 49900],
+    ['tokens_120', 1800],
+    ['tokens_520', 7800],
+    ['tokens_1200', 18000],
+    ['tokens_2560', 38400],
+    ['tokens_5200', 78000],
+    ['tokens_10200', 153000]
+  ]);
+  assert.equal(buildPaymentReference('order-1', 'user@example.com', 'ER-{orderId}-{userEmail}'), 'ER-order-1-user@example.com');
+  assert.match(paymentReferenceInstruction('order-1'), /Please include your account email and order number in the payment reference/);
+});
+
+test('environment example includes legal and manual payment readiness variables', async () => {
+  const source = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
+  for (const key of [
+    'SUPPORT_EMAIL=',
+    'LEGAL_OPERATOR_NAME=',
+    'LEGAL_OPERATOR_ADDRESS=',
+    'LEGAL_RESPONSIBLE_PERSON=',
+    'LEGAL_VAT_ID=',
+    'PAYMENT_DEFAULT_PROVIDER=manual',
+    'CCBILL_ENABLED=false',
+    'PAYSAFE_ENABLED=false',
+    'MANUAL_BANK_TRANSFER_ENABLED=true',
+    'MANUAL_BANK_TRANSFER_RECIPIENT=',
+    'MANUAL_BANK_TRANSFER_IBAN=',
+    'MANUAL_BANK_TRANSFER_BIC=',
+    'MANUAL_BANK_TRANSFER_BANK_NAME=',
+    'MANUAL_BANK_TRANSFER_REFERENCE_TEMPLATE="ER-{orderId}-{userEmail}"',
+    'MANUAL_CRYPTO_ENABLED=true',
+    'STRIPE_ESCORT_RADAR_ENABLED=false',
+    'VITE_SUPPORT_EMAIL=',
+    'VITE_LEGAL_OPERATOR_NAME=BABA AI',
+    'VITE_MANUAL_BANK_TRANSFER_ENABLED=true',
+    'VITE_MANUAL_BANK_TRANSFER_RECIPIENT=',
+    'VITE_MANUAL_BANK_TRANSFER_IBAN=',
+    'VITE_MANUAL_BANK_TRANSFER_BIC=',
+    'VITE_MANUAL_BANK_TRANSFER_BANK_NAME=',
+    'VITE_STRIPE_ESCORT_RADAR_ENABLED=false'
+  ]) {
+    assert.match(source, new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
 });

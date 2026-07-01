@@ -11,6 +11,7 @@ import {
   grantCoins,
   recordClientRegistrationAttribution
 } from '../services/clientActivation.js';
+import { createStripeCheckoutSession, sendStripeError } from '../services/stripePayments.js';
 
 export const clientActivationRouter = Router();
 
@@ -79,37 +80,22 @@ clientActivationRouter.get('/me', asyncHandler(async (req, res) => {
 }));
 
 clientActivationRouter.post('/checkout', asyncHandler(async (req, res) => {
-  if (!config.stripeSecretKey) return res.status(503).json({ error: 'Stripe is not configured' });
-
-  const referredByCode = optionalText(req.body.referred_by_code, 80);
-  const params = new URLSearchParams({
-    mode: 'payment',
-    success_url: `${config.frontendUrl}/dashboard?activation_session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${config.frontendUrl}/dashboard?activation_cancelled=1`,
-    'line_items[0][quantity]': '1',
-    'line_items[0][price_data][currency]': 'eur',
-    'line_items[0][price_data][unit_amount]': String(config.clientActivationPriceCents),
-    'line_items[0][price_data][product_data][name]': 'Escort Radar Client Activation',
-    'metadata[user_id]': req.user!.id,
-    'metadata[purpose]': 'client_activation',
-    'metadata[referred_by_code]': referredByCode || ''
-  });
-
-  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.stripeSecretKey}`,
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: params
-  });
-  const payload = await response.json() as { id?: string; url?: string; error?: { message?: string } };
-  if (!response.ok || !payload.url) return res.status(400).json({ error: payload.error?.message || 'Stripe checkout failed' });
-
-  res.status(201).json({ checkout_session_id: payload.id, checkout_url: payload.url });
+  if (!config.stripeEnabled || !config.stripeEscortRadarEnabled) return res.status(410).json({ error: 'Stripe checkout is disabled for Escort Radar. Use manual payment orders.' });
+  try {
+    const checkout = await createStripeCheckoutSession({
+      userId: req.user!.id,
+      email: req.user!.email,
+      transactionType: 'client_activation',
+      referredByCode: optionalText(req.body.referred_by_code, 80)
+    });
+    res.status(201).json(checkout);
+  } catch (error) {
+    sendStripeError(res, error);
+  }
 }));
 
 clientActivationRouter.post('/confirm', asyncHandler(async (req, res) => {
+  if (!config.stripeEnabled || !config.stripeEscortRadarEnabled) return res.status(410).json({ error: 'Stripe checkout is disabled for Escort Radar. Use manual payment orders.' });
   if (!config.stripeSecretKey) return res.status(503).json({ error: 'Stripe is not configured' });
   const sessionId = optionalText(req.body.checkout_session_id || req.body.session_id, 200);
   if (!sessionId) return res.status(400).json({ error: 'checkout_session_id is required' });

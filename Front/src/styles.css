@@ -277,6 +277,19 @@ textarea { min-height: 8rem; resize: vertical; }
 .subscription-card strong { display: block; color: #f7d46b; font-size: 1.45rem; margin-bottom: .4rem; }
 .subscription-card p { color: #d8d0bd; }
 .subscription-notice { padding: .75rem; border: 1px solid rgba(255,190,80,.24); border-radius: .45rem; background: rgba(255,190,80,.08); }
+.manual-payment-box { display: grid; gap: .85rem; margin-top: 1rem; padding: 1rem; border: 1px solid rgba(247,212,107,.22); border-radius: .5rem; background: linear-gradient(180deg, rgba(17,17,17,.96), rgba(7,7,7,.98)); box-shadow: 0 22px 70px rgba(0,0,0,.32); }
+.manual-payment-box h2 { margin: 0; color: #f7d46b; font-size: 1.1rem; }
+.provider-strip { display: flex; flex-wrap: wrap; gap: .45rem; }
+.provider-strip button { border: 1px solid rgba(247,212,107,.18); border-radius: 999px; padding: .45rem .7rem; color: #eee6d2; background: rgba(255,255,255,.04); cursor: pointer; }
+.provider-strip button.active { border-color: rgba(247,212,107,.52); color: #080808; background: linear-gradient(135deg, #f7d46b, #b9902d); box-shadow: 0 0 22px rgba(247,212,107,.16); }
+.provider-strip button:disabled { cursor: not-allowed; opacity: .48; }
+.manual-payment-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.manual-payment-grid label { display: grid; gap: .35rem; color: #d8d0bd; font-size: .86rem; }
+.manual-payment-grid input, .manual-payment-grid select { width: 100%; }
+.manual-account-summary { display: grid; gap: .35rem; padding: .65rem; border: 1px solid rgba(247,212,107,.14); border-radius: .45rem; background: rgba(255,255,255,.035); color: #d8d0bd; font-size: .86rem; }
+.manual-account-summary strong { color: #fff8e6; word-break: break-word; }
+.manual-order-result { display: grid; gap: .35rem; padding: .8rem; border: 1px solid rgba(8,247,184,.22); border-radius: .45rem; background: rgba(8,247,184,.06); }
+.manual-order-result p { margin: 0; color: #eee6d2; word-break: break-word; }
 .listing-status-panel { display: grid; gap: .9rem; padding: 1rem; margin-bottom: .9rem; border: 1px solid rgba(8,247,184,.2); border-radius: .5rem; background: radial-gradient(circle at 0 0, rgba(8,247,184,.12), transparent 15rem), rgba(8,8,8,.92); }
 .listing-status-panel h2 { margin: 0; color: #fff8e6; }
 .listing-status-panel p { color: #d8d0bd; margin: .35rem 0 0; }
@@ -643,6 +656,7 @@ textarea { min-height: 8rem; resize: vertical; }
   .home-category-grid, .quick-grid, .cards-grid, .baba-tech-grid, .admin-stat-grid, .ops-monitor-grid, .stats, .creator-metric-grid, .token-package-grid, .token-use-grid, .token-control-grid, .admin-metric-grid, .admin-chart-grid, .admin-settings-grid, .photo-preview-grid { grid-template-columns: 1fr; }
   .marketplace-grid { grid-template-columns: 1fr; }
   .primary-filters, .advanced-filters.open, .form-grid, .toggle-grid, .range-grid, .service-menu-columns, .profile-info-grid { grid-template-columns: 1fr; }
+  .manual-payment-grid { grid-template-columns: 1fr; }
   .city-hero, .dashboard-hero, .token-hero, .admin-hero { padding: 1.35rem .85rem; border-radius: .85rem; }
   .filter-panel, .form-panel, .creator-panel, .creator-hero-panel, .admin-card, .admin-table-card { border-radius: .85rem; }
   .profile-media-slider { grid-template-columns: 1fr; }

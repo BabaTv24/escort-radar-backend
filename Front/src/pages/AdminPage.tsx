@@ -97,7 +97,8 @@ const sections = [
       ['profiles', '/admin/profiles', Crown, 'admin.nav.profiles'],
       ['subscriptions', '/admin/subscriptions', Coins, 'admin.nav.subscriptions'],
       ['revenue', '/admin/revenue', BarChart3, 'admin.nav.revenue'],
-      ['payments', '/admin/payments', WalletCards, 'admin.nav.transactions']
+      ['payments', '/admin/payments', WalletCards, 'admin.nav.transactions'],
+      ['manual-payment-orders', '/admin/manual-payment-orders', WalletCards, 'admin.nav.manualPaymentOrders']
     ]
   },
   {
@@ -167,6 +168,8 @@ export function AdminPage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
   const [clientActivationPayments, setClientActivationPayments] = useState<Record<string, any>[]>([]);
+  const [manualPaymentOrders, setManualPaymentOrders] = useState<Record<string, any>[]>([]);
+  const [manualPaymentFilters, setManualPaymentFilters] = useState({ query: '', provider: 'all', status: 'all' });
   const [purchases, setPurchases] = useState<TokenPurchaseRequest[]>([]);
   const [masterWallets, setMasterWallets] = useState<MasterAdminWallet[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -416,6 +419,7 @@ export function AdminPage() {
         walletResult,
         transactionResult,
         clientActivationPaymentResult,
+        manualPaymentOrderResult,
         purchaseResult,
         masterResult,
         tagResult,
@@ -437,6 +441,7 @@ export function AdminPage() {
         adminLoadRequest('adminWallets', api.adminWallets(accessToken)),
         adminLoadRequest('adminTokenTransactions', api.adminTokenTransactions(accessToken)),
         adminLoadRequest('adminClientActivationPayments', api.adminClientActivationPayments(accessToken)),
+        adminLoadRequest('adminManualPaymentOrders', api.adminManualPaymentOrders(accessToken)),
         adminLoadRequest('adminPurchaseRequests', api.adminPurchaseRequests(accessToken)),
         adminLoadRequest('adminMasterWallets', api.adminMasterWallets(accessToken)),
         adminLoadRequest('adminTags', api.adminTags(accessToken)),
@@ -459,6 +464,7 @@ export function AdminPage() {
       const walletData = settledValue(walletResult, { wallets: [] }, 'adminWallets');
       const transactionData = settledValue(transactionResult, { transactions: [] }, 'adminTokenTransactions');
       const clientActivationPaymentData = settledValue(clientActivationPaymentResult, { client_activation_payments: [] }, 'adminClientActivationPayments');
+      const manualPaymentOrderData = settledValue(manualPaymentOrderResult, { orders: [] }, 'adminManualPaymentOrders');
       const purchaseData = settledValue(purchaseResult, { purchase_requests: [] }, 'adminPurchaseRequests');
       const masterData = settledValue(masterResult, { master_wallets: [] }, 'adminMasterWallets');
       const tagData = settledValue(tagResult, { tags: [] }, 'adminTags');
@@ -484,6 +490,7 @@ export function AdminPage() {
       setWallets(walletData.wallets);
       setTransactions(transactionData.transactions);
       setClientActivationPayments(clientActivationPaymentData.client_activation_payments as Record<string, any>[]);
+      setManualPaymentOrders(manualPaymentOrderData.orders as Record<string, any>[]);
       setPurchases(purchaseData.purchase_requests);
       setMasterWallets(masterData.master_wallets);
       setTags(tagData.tags);
@@ -1506,7 +1513,7 @@ export function AdminPage() {
                 <button className="button secondary" onClick={() => load()}><RefreshCw size={16} /> {t('admin.actions.refresh')}</button>
               </div>
             </div>
-            {bigbabaClient && !bigbabaClient.has_real_stripe_activation && <p className="error-text">bigbaba.vip@gmail.com: Brak kompletnego potwierdzenia live Stripe</p>}
+            {bigbabaClient && !bigbabaClient.has_real_stripe_activation && <p className="error-text">{String(bigbabaClient.email || 'Selected client')}: Brak kompletnego potwierdzenia live Stripe</p>}
             {loading && <p className="muted">{t('states.loading')}</p>}
             {!loading && !clients.length && <EmptyAdminState text={t('admin.clients.empty')} />}
           </section>
@@ -1794,6 +1801,7 @@ export function AdminPage() {
         { label: t('admin.revenue.clientActivationRevenue'), value: formatEuro(revenueStats.client_activation_revenue || revenueStats.client_activation_revenue_eur), badge: t('admin.revenue.clientActivation') },
         { label: t('admin.revenue.escortSubscriptionsRevenue'), value: formatEuro(revenueStats.escort_subscriptions_revenue || revenueStats.escort_revenue), badge: t('admin.revenue.escortSubscriptions') },
         { label: t('admin.revenue.businessSubscriptionsRevenue'), value: formatEuro(revenueStats.business_subscriptions_revenue || revenueStats.business_revenue), badge: t('admin.revenue.businessSubscriptions') },
+        { label: t('admin.revenue.coinsRevenue'), value: formatEuro(revenueStats.coins_revenue), badge: 'Coins' },
         { label: t('admin.revenue.sponsoredProfiles'), value: revenueStats.sponsored_profiles || subscriptions.filter(isSponsoredSubscription).length, badge: t('admin.dashboard.notRevenue') }
       ];
       return (
@@ -1802,7 +1810,8 @@ export function AdminPage() {
           <AdminTable rows={realRevenuePayments} columns={['id', 'email', 'type', 'amount', 'provider', 'stripe_ref', 'livemode', 'status', 'created_at']} labels={tableLabels(t, ['id', 'email', 'type', 'amount', 'provider', 'stripe_ref', 'livemode', 'status', 'created_at'])} format={(key, value, row) => {
             if (key === 'id') return formatShortId(value);
             if (key === 'amount') return formatEuro(value);
-            if (key === 'stripe_ref') return row.stripe_payment_intent_id || row.stripe_session_id || row.stripe_ref || '-';
+            if (key === 'type') return row.type || row.transaction_type || row.event_type || '-';
+            if (key === 'stripe_ref') return row.stripe_payment_intent_id || row.stripe_session_id || row.stripe_checkout_session_id || row.stripe_subscription_id || row.stripe_ref || '-';
             if (key === 'livemode') return <StatusBadge value={row.livemode ? 'live' : 'test'} />;
             if (key === 'status') return <StatusBadge value={String(value || 'paid')} />;
             if (key === 'created_at') return formatDateTime(value);
@@ -1812,21 +1821,86 @@ export function AdminPage() {
       );
     }
 
-    if (view === 'token-transactions' || view === 'payments') {
+    if (view === 'token-transactions' || view === 'payments' || view === 'manual-payment-orders') {
+      const stripeTransactionColumns = ['email', 'transaction_type', 'amount', 'provider', 'stripe_ref', 'livemode', 'status', 'created_at'];
+      const activationPaymentColumns = ['email', 'amount', 'currency', 'status', 'provider', 'livemode', 'stripe_session_id', 'stripe_payment_intent_id', 'created_at'];
+      const manualPaymentOrderColumns = ['id', 'email', 'provider', 'purpose', 'product_label', 'amount_eur', 'status', 'payment_reference', 'instructions', 'created_at'];
+      const filteredManualPaymentOrders = manualPaymentOrders.filter((order) => {
+        const query = manualPaymentFilters.query.trim().toLowerCase();
+        const haystack = [order.id, order.email, order.provider, order.status, order.payment_reference, order.metadata?.payment_reference].map((item) => String(item || '').toLowerCase()).join(' ');
+        const providerMatch = manualPaymentFilters.provider === 'all' || String(order.provider || '') === manualPaymentFilters.provider;
+        const statusMatch = manualPaymentFilters.status === 'all' || String(order.status || '') === manualPaymentFilters.status;
+        return (!query || haystack.includes(query)) && providerMatch && statusMatch;
+      });
+      const purchaseColumns = ['email', 'user_id', 'token_amount', 'eur_price', 'bonus_tokens', 'status', 'created_at'];
+      const tokenTransactionColumns = ['email', 'from_email', 'to_email', 'from_wallet_id', 'to_wallet_id', 'transaction_type', 'amount', 'status', 'created_at'];
       return (
         <>
           <section className="admin-card">
             <h2>Client activation payments</h2>
             <p>Jednorazowe platnosci 0.99 EUR z aktywacji klienta.</p>
           </section>
-          <AdminTable rows={clientActivationPayments} columns={['email', 'amount_cents', 'currency', 'status', 'provider', 'stripe_session_id', 'stripe_payment_intent_id', 'created_at']} />
-          <AdminTable rows={purchases} columns={['id', 'user_id', 'token_amount', 'eur_price', 'bonus_tokens', 'status', 'created_at']} actions={(purchase) => (
+          <AdminTable rows={revenuePayments} columns={stripeTransactionColumns} labels={tableLabels(t, stripeTransactionColumns)} format={(key, value, row) => {
+            if (key === 'amount') return formatEuro(value ?? row.amount_eur ?? (row.amount_cents == null ? 0 : Number(row.amount_cents) / 100));
+            if (key === 'stripe_ref') return row.stripe_payment_intent_id || row.stripe_checkout_session_id || row.stripe_subscription_id || '-';
+            if (key === 'livemode') return <StatusBadge value={row.livemode ? 'live' : 'test'} />;
+            if (key === 'status') return <StatusBadge value={String(row.payment_status || value || 'paid')} />;
+            if (key === 'created_at') return formatDateTime(value);
+            return value;
+          }} />
+          <AdminTable rows={clientActivationPayments} columns={activationPaymentColumns} labels={tableLabels(t, activationPaymentColumns)} format={(key, value, row) => {
+            if (key === 'amount') return formatEuro(value ?? row.amount_eur ?? (row.amount_cents == null ? 0 : Number(row.amount_cents) / 100));
+            if (key === 'status') return <StatusBadge value={String(row.payment_status || value || 'paid')} />;
+            if (key === 'livemode') return <StatusBadge value={row.livemode ? 'live' : 'test'} />;
+            if (key === 'stripe_session_id') return row.stripe_session_id || row.stripe_checkout_session_id || row.stripe_debug || '-';
+            if (key === 'stripe_payment_intent_id') return row.stripe_payment_intent_id || row.stripe_debug || '-';
+            if (key === 'created_at') return formatDateTime(value);
+            return value;
+          }} />
+          <section className="admin-card">
+            <h2>{t('admin.payments.manualOrders')}</h2>
+            <p>{t('admin.payments.manualOrdersHelp')}</p>
+            <div className="admin-actions-row">
+              <input placeholder={t('admin.payments.searchOrders')} value={manualPaymentFilters.query} onChange={(event) => setManualPaymentFilters({ ...manualPaymentFilters, query: event.target.value })} />
+              <select value={manualPaymentFilters.provider} onChange={(event) => setManualPaymentFilters({ ...manualPaymentFilters, provider: event.target.value })}>
+                {['all', 'manual', 'bank_transfer', 'crypto', 'ccbill', 'paysafe'].map((item) => <option key={item} value={item}>{item === 'all' ? t('admin.common.all') : item}</option>)}
+              </select>
+              <select value={manualPaymentFilters.status} onChange={(event) => setManualPaymentFilters({ ...manualPaymentFilters, status: event.target.value })}>
+                {['all', 'pending', 'paid', 'rejected', 'cancelled'].map((item) => <option key={item} value={item}>{item === 'all' ? t('admin.common.all') : item}</option>)}
+              </select>
+            </div>
+          </section>
+          <AdminTable rows={filteredManualPaymentOrders} columns={manualPaymentOrderColumns} labels={tableLabels(t, manualPaymentOrderColumns)} format={(key, value, row) => {
+            if (key === 'id') return formatShortId(value);
+            if (key === 'amount_eur') return formatEuro(value);
+            if (key === 'status') return <StatusBadge value={String(value || 'pending')} />;
+            if (key === 'payment_reference') return value || row.metadata?.payment_reference || '-';
+            if (key === 'created_at') return formatDateTime(value);
+            return value;
+          }} actions={(order) => (
+            <>
+              <Action title={t('admin.actions.approve')} disabled={String(order.status || '').toLowerCase() === 'paid'} onClick={() => action(() => api.approveManualPaymentOrder(token, String(order.id)))}><UserCheck size={15} /></Action>
+              <Action title={t('admin.actions.reject')} danger disabled={Boolean(order.applied_at) || String(order.status || '').toLowerCase() === 'rejected'} onClick={() => action(() => api.rejectManualPaymentOrder(token, String(order.id), 'Rejected by admin'))}><Ban size={15} /></Action>
+              <Action title={t('admin.actions.view')} onClick={() => setModal({ title: String(order.id), body: JSON.stringify(order, null, 2) })}><Eye size={15} /></Action>
+            </>
+          )} />
+          <AdminTable rows={purchases} columns={purchaseColumns} labels={tableLabels(t, purchaseColumns)} format={(key, value) => {
+            if (key === 'eur_price') return formatEuro(value);
+            if (key === 'created_at') return formatDateTime(value);
+            if (key === 'status') return <StatusBadge value={String(value || 'pending')} />;
+            return value;
+          }} actions={(purchase) => (
             <>
               <Action onClick={() => action(() => api.setPurchaseRequestStatus(token, purchase.id, 'approved'))}>{t('admin.actions.approve')}</Action>
               <Action danger onClick={() => action(() => api.setPurchaseRequestStatus(token, purchase.id, 'failed'))}>{t('admin.actions.reject')}</Action>
             </>
           )} />
-          <AdminTable rows={transactions} columns={['id', 'from_wallet_id', 'to_wallet_id', 'transaction_type', 'amount', 'status', 'created_at']} />
+          <AdminTable rows={transactions} columns={tokenTransactionColumns} labels={tableLabels(t, tokenTransactionColumns)} format={(key, value) => {
+            if (key === 'amount') return Number(value || 0).toLocaleString();
+            if (key === 'status') return <StatusBadge value={String(value || 'pending')} />;
+            if (key === 'created_at') return formatDateTime(value);
+            return value;
+          }} />
         </>
       );
     }

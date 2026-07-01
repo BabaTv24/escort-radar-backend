@@ -18,7 +18,18 @@ import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
 import { activateClientAccount, deactivateClientAccount, getOrCreateCoinWallet, grantCoins } from '../services/clientActivation.js';
-import { buildAdminClient, filterSortPaginateClients, isClientUser, importantLiveTestClientEmail } from '../adminClients.js';
+import { applyManualPaymentOrder } from '../manualPayments.js';
+import {
+  buildAdminClient,
+  enrichClientActivationPayments,
+  enrichTokenPurchaseRequests,
+  enrichTokenTransactionsWithEmails,
+  filterSortPaginateClients,
+  isClientUser,
+  importantLiveTestClientEmail,
+  normalizeClientPayment,
+  paymentMatchesClient
+} from '../adminClients.js';
 import {
   isBusinessRole,
   isRealPaidSubscription,
@@ -138,7 +149,7 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
     supabaseAdmin.from('reports').select('id, admin_status, status').limit(1000),
     supabaseAdmin.from('booking_requests').select('id, status, created_at').limit(1000),
     supabaseAdmin.from('admin_activity_logs').select('*').order('created_at', { ascending: false }).limit(12),
-    supabaseAdmin.from('client_activation_payments').select('*').eq('status', 'paid').order('created_at', { ascending: false }).limit(1000),
+    supabaseAdmin.from('client_activation_payments').select('*').order('created_at', { ascending: false }).limit(1000),
     supabaseAdmin.from('client_activations').select('id, state').limit(5000)
   ]);
 
@@ -150,11 +161,12 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   const profileRows = profiles.data || [];
   const reportRows = reports.data || [];
   const bookingRows = bookings.data || [];
-  const activationPaymentRows = (activationPayments.data || []).map((payment) => ({
+  const activationPaymentRows: Record<string, any>[] = (activationPayments.data || []).map(normalizeClientPayment).map((payment: Record<string, any>) => ({
     ...payment,
     transaction_type: 'client_activation',
+    payment_status: payment.payment_status || payment.status || 'paid',
     stripe_checkout_session_id: payment.stripe_checkout_session_id || payment.stripe_session_id || null,
-    amount: Number(payment.amount_cents || 0) / 100
+    amount: revenueAmount(payment)
   }));
   const realActivationPaymentRows = activationPaymentRows.filter(isRealRevenueTransaction);
   const activationRows = activations.data || [];
@@ -226,14 +238,87 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
 }));
 
 adminRouter.get('/client-activation-payments', asyncHandler(async (_req, res) => {
+  const [paymentsResult, usersResult] = await Promise.all([
+    supabaseAdmin
+      .from('client_activation_payments')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500),
+    supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  ]);
+
+  if (paymentsResult.error) return res.status(500).json({ error: paymentsResult.error.message });
+  if (usersResult.error) return res.status(500).json({ error: usersResult.error.message });
+  res.json({ client_activation_payments: enrichClientActivationPayments(paymentsResult.data || [], usersResult.data.users || []) });
+}));
+
+adminRouter.get('/manual-payment-orders', asyncHandler(async (_req, res) => {
   const { data, error } = await supabaseAdmin
-    .from('client_activation_payments')
+    .from('manual_payment_orders')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(500);
-
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ client_activation_payments: data || [] });
+  res.json({
+    orders: (data || []).map((order) => ({
+      ...order,
+      payment_reference: order.metadata?.payment_reference || ''
+    }))
+  });
+}));
+
+adminRouter.post('/manual-payment-orders/:id/approve', asyncHandler(async (req, res) => {
+  const { data: order, error } = await supabaseAdmin
+    .from('manual_payment_orders')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
+  if (error || !order) return res.status(404).json({ error: error?.message || 'Manual payment order not found' });
+  if (!['pending', 'paid'].includes(String(order.status || 'pending'))) return res.status(409).json({ error: 'Manual payment order cannot be approved from current status' });
+  if (!order.applied_at) await applyManualPaymentOrder(order, req.user?.email);
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from('manual_payment_orders')
+    .update({
+      status: 'paid',
+      approved_at: new Date().toISOString(),
+      applied_at: order.applied_at || new Date().toISOString(),
+      admin_email: req.user?.email || null,
+      rejection_reason: null
+    })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (updateError) return res.status(400).json({ error: updateError.message });
+  await logAdminAction(req.user?.email, 'manual_payment_order_approved', 'manual_payment_order', req.params.id, { purpose: order.purpose, product_id: order.product_id });
+  res.json({ order: updated });
+}));
+
+adminRouter.post('/manual-payment-orders/:id/reject', asyncHandler(async (req, res) => {
+  const { data: existing, error: readError } = await supabaseAdmin
+    .from('manual_payment_orders')
+    .select('id, status, applied_at')
+    .eq('id', req.params.id)
+    .single();
+  if (readError || !existing) return res.status(404).json({ error: readError?.message || 'Manual payment order not found' });
+  if (existing.applied_at || ['paid', 'rejected', 'refunded'].includes(String(existing.status || '').toLowerCase())) {
+    return res.status(409).json({ error: 'Manual payment order cannot be rejected from current status' });
+  }
+  const { data, error } = await supabaseAdmin
+    .from('manual_payment_orders')
+    .update({
+      status: 'rejected',
+      rejected_at: new Date().toISOString(),
+      admin_email: req.user?.email || null,
+      rejection_reason: optionalText(req.body.reason, 1000)
+    })
+    .eq('id', req.params.id)
+    .eq('status', 'pending')
+    .is('applied_at', null)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'manual_payment_order_rejected', 'manual_payment_order', req.params.id, { reason: optionalText(req.body.reason, 1000) });
+  res.json({ order: data });
 }));
 
 adminRouter.get('/audit-log', asyncHandler(async (_req, res) => {
@@ -263,23 +348,26 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
   dayStart.setHours(0, 0, 0, 0);
   const monthStart = new Date(dayStart.getFullYear(), dayStart.getMonth(), 1);
 
-  const [activationPayments, subscriptions] = await Promise.all([
+  const [activationPayments, subscriptions, stripeEvents] = await Promise.all([
     supabaseAdmin.from('client_activation_payments').select('*').order('created_at', { ascending: false }).limit(1000),
-    supabaseAdmin.from('subscriptions').select('*').order('created_at', { ascending: false }).limit(1000)
+    supabaseAdmin.from('subscriptions').select('*').order('created_at', { ascending: false }).limit(1000),
+    supabaseAdmin.from('stripe_payment_events').select('*').order('created_at', { ascending: false }).limit(2000)
   ]);
 
   if (activationPayments.error) return res.status(500).json({ error: activationPayments.error.message });
   if (subscriptions.error) return res.status(500).json({ error: subscriptions.error.message });
+  if (stripeEvents.error && stripeEvents.error.code !== '42P01') return res.status(500).json({ error: stripeEvents.error.message });
 
-  const activationRows = activationPayments.data || [];
+  const activationRows = (activationPayments.data || []).map(normalizeClientPayment);
   const subscriptionRows = subscriptions.data || [];
+  const stripeEventRows = stripeEvents.data || [];
   const sponsoredProfileCount = await countSponsoredProfiles();
   const paymentRows = [
     ...activationRows.map((payment) => ({
       id: payment.id,
       email: payment.email,
       profile: 'Client activation',
-      amount: Number(payment.amount_cents || 0) / 100,
+      amount: revenueAmount(payment),
       currency: String(payment.currency || 'eur').toUpperCase(),
       provider: payment.provider || 'stripe',
       status: payment.status || 'paid',
@@ -311,7 +399,16 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
     }))
   ].sort((left, right) => new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime());
 
-  const realPaymentRows = paymentRows.filter(isRealRevenueTransaction);
+  const realStripeEventRows = stripeEventRows
+    .map((event) => ({
+      ...event,
+      amount: revenueAmount(event),
+      provider: event.provider || 'stripe',
+      payment_status: event.payment_status || event.status,
+      stripe_ref: event.stripe_payment_intent_id || event.stripe_checkout_session_id || event.stripe_subscription_id
+    }))
+    .filter(isRealRevenueTransaction);
+  const realPaymentRows = realStripeEventRows.length ? realStripeEventRows : paymentRows.filter(isRealRevenueTransaction);
   const realSubscriptionRows = subscriptionRows
     .map((subscription) => ({
       ...subscription,
@@ -320,11 +417,11 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
     }))
     .filter(isRealPaidSubscription);
   const realActiveSubscriptionRows = realSubscriptionRows.filter((row) => row.status === 'active');
-  const dailyRevenue = paymentRows
-    .filter((row) => isRealRevenueTransaction(row) && row.created_at && new Date(row.created_at) >= dayStart)
+  const dailyRevenue = realPaymentRows
+    .filter((row) => row.created_at && new Date(row.created_at) >= dayStart)
     .reduce((sum, row) => sum + revenueAmount(row), 0);
-  const monthlyRevenue = paymentRows
-    .filter((row) => isRealRevenueTransaction(row) && row.created_at && new Date(row.created_at) >= monthStart)
+  const monthlyRevenue = realPaymentRows
+    .filter((row) => row.created_at && new Date(row.created_at) >= monthStart)
     .reduce((sum, row) => sum + revenueAmount(row), 0);
 
   res.json({
@@ -332,6 +429,10 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
       today_revenue: Number(dailyRevenue.toFixed(2)),
       monthly_revenue: Number(monthlyRevenue.toFixed(2)),
       client_activations: realPaymentRows.filter((row) => row.transaction_type === 'client_activation').length,
+      client_activation_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'client_activation')),
+      escort_subscriptions_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'escort_subscription')),
+      business_subscriptions_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'business_subscription')),
+      coins_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'coins_purchase')),
       escort_subscriptions: realActiveSubscriptionRows.filter((row) => !isBusinessRole(row.role)).length,
       business_subscriptions: realActiveSubscriptionRows.filter((row) => isBusinessRole(row.role)).length,
       sponsored_profiles: sponsoredProfileCount,
@@ -798,7 +899,8 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
     };
   });
 
-  const clientActivationRows = (activationPaymentsResult.data || []).map((payment) => ({
+  const activationPaymentRows = enrichClientActivationPayments(activationPaymentsResult.data || [], usersResult.data?.users || []);
+  const clientActivationRows = activationPaymentRows.map((payment) => ({
     id: payment.id,
     type: 'client_activation',
     email: payment.email,
@@ -813,7 +915,7 @@ adminRouter.get('/subscriptions', asyncHandler(async (_req, res) => {
     end: null,
     progress: payment.status === 'paid' ? 100 : 0,
     payment_provider: payment.provider || 'stripe',
-    amount_eur: Number(payment.amount_cents || 0) / 100,
+    amount_eur: revenueAmount(payment),
     currency: String(payment.currency || 'eur').toUpperCase(),
     stripe_session_id: payment.stripe_session_id,
     stripe_checkout_session_id: payment.stripe_checkout_session_id || payment.stripe_session_id || null,
@@ -2098,25 +2200,41 @@ adminRouter.patch('/wallets/:userId', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.get('/token-transactions', asyncHandler(async (_req, res) => {
-  const { data, error } = await supabaseAdmin
-    .from('token_transactions')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(500);
+  const [transactionsResult, walletsResult, usersResult] = await Promise.all([
+    supabaseAdmin
+      .from('token_transactions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500),
+    supabaseAdmin.from('wallets').select('id, user_id').limit(5000),
+    supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  ]);
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ transactions: data || [] });
+  if (transactionsResult.error) return res.status(500).json({ error: transactionsResult.error.message });
+  if (walletsResult.error) return res.status(500).json({ error: walletsResult.error.message });
+  if (usersResult.error) return res.status(500).json({ error: usersResult.error.message });
+  res.json({
+    transactions: enrichTokenTransactionsWithEmails(transactionsResult.data || [], walletsResult.data || [], usersResult.data.users || [])
+  });
 }));
 
 adminRouter.get('/token-purchase-requests', asyncHandler(async (_req, res) => {
-  const { data, error } = await supabaseAdmin
-    .from('token_purchase_requests')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(500);
+  const [purchasesResult, walletsResult, usersResult] = await Promise.all([
+    supabaseAdmin
+      .from('token_purchase_requests')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500),
+    supabaseAdmin.from('wallets').select('id, user_id').limit(5000),
+    supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  ]);
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ purchase_requests: data || [] });
+  if (purchasesResult.error) return res.status(500).json({ error: purchasesResult.error.message });
+  if (walletsResult.error) return res.status(500).json({ error: walletsResult.error.message });
+  if (usersResult.error) return res.status(500).json({ error: usersResult.error.message });
+  res.json({
+    purchase_requests: enrichTokenPurchaseRequests(purchasesResult.data || [], walletsResult.data || [], usersResult.data.users || [])
+  });
 }));
 
 adminRouter.patch('/token-purchase-requests/:id/status', asyncHandler(async (req, res) => {
@@ -2351,15 +2469,7 @@ async function loadAdminClients() {
 
   const activationsByUser = new Map<string, any>();
   (activationResult.data || []).forEach((row) => activationsByUser.set(row.user_id, row));
-  const paymentsByUser = new Map<string, any[]>();
-  const paymentsByEmail = new Map<string, any[]>();
-  (paymentResult.data || []).forEach((row) => {
-    if (row.user_id) paymentsByUser.set(row.user_id, [...(paymentsByUser.get(row.user_id) || []), row]);
-    if (row.email) {
-      const email = String(row.email).toLowerCase();
-      paymentsByEmail.set(email, [...(paymentsByEmail.get(email) || []), row]);
-    }
-  });
+  const paymentRows = (paymentResult.data || []).map(normalizeClientPayment);
   const walletsByUser = new Map<string, any>();
   (walletResult.data || []).forEach((row) => walletsByUser.set(row.user_id, row));
   const referralsByUser = new Map<string, any>();
@@ -2372,11 +2482,10 @@ async function loadAdminClients() {
   const clients = (usersResult.data.users || [])
     .filter(isClientUser)
     .map((user) => {
-      const email = String(user.email || '').toLowerCase();
       return buildAdminClient({
         user,
         activation: activationsByUser.get(user.id),
-        payments: [...(paymentsByUser.get(user.id) || []), ...(paymentsByEmail.get(email) || [])],
+        payments: paymentRows.filter((payment) => paymentMatchesClient(payment, user)),
         wallet: walletsByUser.get(user.id),
         referral: referralsByUser.get(user.id),
         lastAccess: lastAccessByUser.get(user.id)

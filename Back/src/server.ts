@@ -13,6 +13,7 @@ import { tagsRouter } from './routes/tags.js';
 import { clientActivationRouter } from './routes/clientActivation.js';
 import { authRouter } from './routes/auth.js';
 import { clientIntentRouter } from './routes/clientIntent.js';
+import { stripeWebhookRouter } from './routes/stripeWebhook.js';
 
 const serverBuildTime = new Date().toISOString();
 const app = express();
@@ -30,6 +31,7 @@ app.use(cors({
   },
   credentials: true
 }));
+app.use('/api/stripe', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookRouter);
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/health', (_req, res) => {

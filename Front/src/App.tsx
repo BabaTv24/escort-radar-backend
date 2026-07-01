@@ -9,6 +9,8 @@ import { AdminAccessPage } from './pages/AdminAccessPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { LoginPage } from './pages/LoginPage';
 import { LegalPage } from './pages/LegalPage';
+import { PricingPage } from './pages/PricingPage';
+import { ContactPage } from './pages/ContactPage';
 import { TokenShopPage } from './pages/TokenShopPage';
 import { CoinWalletPage } from './pages/CoinWalletPage';
 import { ReferralPage } from './pages/ReferralPage';
@@ -30,6 +32,15 @@ export function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/tokens" element={<TokenShopPage />} />
           <Route path="/coins" element={<CoinWalletPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/terms" element={<LegalPage />} />
+          <Route path="/privacy" element={<LegalPage />} />
+          <Route path="/refund-policy" element={<LegalPage />} />
+          <Route path="/content-rules" element={<LegalPage />} />
+          <Route path="/report-abuse" element={<LegalPage />} />
+          <Route path="/imprint" element={<LegalPage />} />
+          <Route path="/legal-notice" element={<LegalPage />} />
           <Route path="/r/:referralCode" element={<ReferralPage />} />
           <Route path="/legal/:page" element={<LegalPage />} />
         </Route>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, Heart, ImagePlus, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
@@ -147,6 +147,7 @@ export function DashboardPage() {
   const [activationBusy, setActivationBusy] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -247,17 +248,7 @@ export function DashboardPage() {
       setCoinTransactions(clientData.transactions);
       setGiftsSent(clientData.gifts_sent);
       setGiftsReceived(clientData.gifts_received);
-      const checkoutSessionId = searchParams.get('activation_session_id');
-      if (checkoutSessionId && clientData.activation.state !== 'client_activated') {
-        const confirmed = await api.confirmClientActivation(accessToken, checkoutSessionId);
-        setClientActivation(confirmed.activation);
-        const refreshed = await api.clientActivationMe(accessToken);
-        setCoinWallet(refreshed.wallet);
-        setCoinTransactions(refreshed.transactions);
-        setGiftsSent(refreshed.gifts_sent);
-        setGiftsReceived(refreshed.gifts_received);
-        setSearchParams({});
-      }
+      if (searchParams.get('activation_session_id')) setSearchParams({});
       setSavedProfile(null);
       setProfile({ ...emptyProfile });
       setProfileMode('create');
@@ -462,9 +453,7 @@ export function DashboardPage() {
     setActivationBusy(true);
     setMessage('');
     try {
-      const referredByCode = localStorage.getItem('escortRadar.referralCode');
-      const checkout = await api.clientActivationCheckout(token, referredByCode);
-      window.location.href = checkout.checkout_url;
+      navigate('/pricing?product=client_activation');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     } finally {
@@ -513,6 +502,32 @@ export function DashboardPage() {
         </section>
       </div>
     );
+  }
+
+  async function startEscortSubscription() {
+    if (!token) return;
+    setDashboardStatus('saving');
+    setMessage('');
+    try {
+      navigate('/pricing?product=advertiser_30d');
+      setDashboardStatus('idle');
+    } catch (error) {
+      setDashboardStatus('error');
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
+  }
+
+  async function startBusinessSubscription() {
+    if (!token) return;
+    setDashboardStatus('saving');
+    setMessage('');
+    try {
+      navigate('/pricing?product=agency_30d');
+      setDashboardStatus('idle');
+    } catch (error) {
+      setDashboardStatus('error');
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
   }
 
   async function createClientIntent(body: Partial<ClientIntent>) {
@@ -586,6 +601,7 @@ export function DashboardPage() {
       <BusinessDashboard
         userEmail={userEmail}
         message={message}
+        onActivateSubscription={startBusinessSubscription}
         onLogout={logout}
       />
     );
@@ -608,6 +624,7 @@ export function DashboardPage() {
         onSetCoverImage={setCoverImage}
         onDeleteImage={deleteImage}
         onSaveDraft={persistProfile}
+        onActivateSubscription={startEscortSubscription}
         onLogout={logout}
       />
     );
@@ -1095,7 +1112,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <div className="onboarding-points">
               {['Telefon / WhatsApp / Telegram', 'Wszystkie zdjecia', 'Prywatne galerie', 'Prezenty Coins', 'Referral link + QR', '100 Coins bonus'].map((item) => <span key={item}>{item}</span>)}
             </div>
-            <button className="button primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : 'Aktywuj teraz za 0,99€'}</button>
+            <button className="button primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : 'Aktywuj aplikację 0,99 €'}</button>
           </>
         )}
         {activated && <div className="onboarding-points">{unlockChecklist.map((item) => <span key={item}>{item}</span>)}</div>}
@@ -1156,7 +1173,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <span>receive welcome coins</span>
           </div>
           <button className="button primary full" type="button" disabled={activationBusy} onClick={onActivate}>
-            {activationBusy ? t('states.loading') : 'Aktywuj teraz za 0,99€'}
+            {activationBusy ? t('states.loading') : 'Aktywuj aplikację 0,99 €'}
           </button>
         </section>}
 
@@ -1270,9 +1287,10 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   );
 }
 
-function BusinessDashboard({ userEmail, message, onLogout }: {
+function BusinessDashboard({ userEmail, message, onActivateSubscription, onLogout }: {
   userEmail: string;
   message: string;
+  onActivateSubscription: () => void;
   onLogout: () => void;
 }) {
   const { t } = useI18n();
@@ -1291,6 +1309,7 @@ function BusinessDashboard({ userEmail, message, onLogout }: {
           <span className="success">{message || t('dashboard.business.ready')}</span>
         </div>
         <div className="creator-command-actions">
+          <button className="button primary" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> Aktywuj pakiet agencyjny 499,99 €/miesiąc</button>
           <Link className="button primary" to="/tokens"><Gem size={16} /> {t('dashboard.business.premiumCta')}</Link>
           <button className="button danger" type="button" onClick={onLogout}>{t('buttons.logout')}</button>
         </div>
@@ -1548,7 +1567,11 @@ function DevDebugBox({ userEmail, profile, wallet, uploadStatus, lastApiError }:
   uploadStatus: string;
   lastApiError: string;
 }) {
-  const isDev = import.meta.env.DEV || ['mtvx007@gmail.com', 'babatv24@proton.me'].includes(userEmail.toLowerCase());
+  const adminHints = String(import.meta.env.VITE_ADMIN_EMAIL_HINTS || '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+  const isDev = import.meta.env.DEV || adminHints.includes(userEmail.toLowerCase());
   if (!isDev) return null;
   return (
     <details className="dev-debug-box">
@@ -1580,7 +1603,7 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
   );
 }
 
-function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onLogout }: {
+function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onActivateSubscription, onLogout }: {
   profile: Partial<Profile>;
   savedProfile: Profile | null;
   userEmail: string;
@@ -1595,6 +1618,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   onSetCoverImage: (imageId: string) => void;
   onDeleteImage: (imageId: string) => void;
   onSaveDraft: (profile: Partial<Profile>, successMessage?: string) => Promise<void>;
+  onActivateSubscription: () => void;
   onLogout: () => void;
 }) {
   const { t } = useI18n();
@@ -1841,6 +1865,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <h1>{displayName}</h1>
           <p><MapPin size={14} /> {workLocationLabel}</p>
         </div>
+        <button className="button primary" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> Aktywuj ogłoszenie 49,99 €/miesiąc</button>
         <button className="one-hand-logout" type="button" onClick={onLogout}><LogOut size={18} /></button>
       </section>
 

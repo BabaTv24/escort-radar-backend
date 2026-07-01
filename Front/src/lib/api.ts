@@ -260,6 +260,13 @@ export const api = {
     token,
     body: JSON.stringify({ package_id })
   }),
+  manualPaymentProducts: () => request<{ products: Record<string, unknown>[]; providers: Record<string, boolean>; default_provider: string; support_email: string; bank_transfer?: Record<string, unknown> }>('/api/payments/manual-products'),
+  createManualPaymentOrder: (token: string, body: Record<string, unknown>) => request<{ order: Record<string, unknown>; instructions: string; payment_reference: string; bank_transfer: Record<string, unknown>; support_email: string }>('/api/payments/manual-orders', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
+  myManualPaymentOrders: (token: string) => request<{ orders: Record<string, unknown>[] }>('/api/payments/my-orders', { token }),
   adminTokenStats: (token: string) => request<{ stats: Record<string, number> }>('/api/admin/tokens/stats', { token }),
   adminTags: (token: string) => request<{ tags: Tag[] }>('/api/admin/tags', { token }),
   createAdminTag: (token: string, body: Partial<Tag>) => request<{ tag: Tag }>('/api/admin/tags', {
@@ -275,6 +282,16 @@ export const api = {
   adminWallets: (token: string) => request<{ wallets: Wallet[] }>('/api/admin/wallets', { token }),
   adminTokenTransactions: (token: string) => request<{ transactions: TokenTransaction[] }>('/api/admin/token-transactions', { token }),
   adminClientActivationPayments: (token: string) => request<{ client_activation_payments: Record<string, unknown>[] }>('/api/admin/client-activation-payments', { token }),
+  adminManualPaymentOrders: (token: string) => request<{ orders: Record<string, unknown>[] }>('/api/admin/manual-payment-orders', { token }),
+  approveManualPaymentOrder: (token: string, id: string) => request<{ order: Record<string, unknown> }>(`/api/admin/manual-payment-orders/${id}/approve`, {
+    method: 'POST',
+    token
+  }),
+  rejectManualPaymentOrder: (token: string, id: string, reason = '') => request<{ order: Record<string, unknown> }>(`/api/admin/manual-payment-orders/${id}/reject`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ reason })
+  }),
   activateAdminSubscription: (token: string, id: string, body: Record<string, unknown>) => request<{ subscription: Record<string, unknown> }>(`/api/admin/subscriptions/${id}/activate`, {
     method: 'POST',
     token,
@@ -341,16 +358,6 @@ export const api = {
     gifts_sent: Gift[];
     gifts_received: Gift[];
   }>('/api/client-activation/me', { token }),
-  clientActivationCheckout: (token: string, referred_by_code?: string | null) => request<{ checkout_session_id: string; checkout_url: string }>('/api/client-activation/checkout', {
-    method: 'POST',
-    token,
-    body: JSON.stringify({ referred_by_code })
-  }),
-  confirmClientActivation: (token: string, checkout_session_id: string) => request<{ activation: ClientActivation }>('/api/client-activation/confirm', {
-    method: 'POST',
-    token,
-    body: JSON.stringify({ checkout_session_id })
-  }),
   trackReferralClick: (referral_code: string, landing_path = window.location.pathname) => request<{ ok: boolean }>('/api/client-activation/referral-click', {
     method: 'POST',
     body: JSON.stringify({ referral_code, landing_path })

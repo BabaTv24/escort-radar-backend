@@ -516,7 +516,11 @@ async function fetchProfile(id: string) {
 
 function isSafeTestEmail(email: string | undefined) {
   const normalized = email?.toLowerCase() || '';
-  return normalized.includes('+test') && !['mtvx007@gmail.com', 'babatv24@proton.me'].includes(normalized);
+  const protectedEmails = (process.env.ADMIN_EMAILS || 'admin@example.test')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+  return normalized.includes('+test') && !protectedEmails.includes(normalized);
 }
 
 function logProfileDebug(message: string, req: any, extra: Record<string, unknown> = {}) {

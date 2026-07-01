@@ -5,6 +5,7 @@ import { useI18n } from '../i18n';
 
 export function Layout() {
   const { lang, setLang, t, option } = useI18n();
+  const operatorName = import.meta.env.VITE_LEGAL_OPERATOR_NAME || '';
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const activeCategory = searchParams.get('category') || '';
@@ -96,6 +97,7 @@ export function Layout() {
         <div>
           <strong>{t('footer.title')}</strong>
           <span>{t('footer.notice')}</span>
+          {operatorName ? <small>{t('footer.operatedBy', { operator: operatorName })}</small> : null}
         </div>
         <a className="baba-footer-badge baba-image-badge" href="https://www.baba-ai.de" target="_blank" rel="noreferrer">
           <img src="/Sektion_1_4.png" alt="BABA AI" />
@@ -105,10 +107,14 @@ export function Layout() {
           </span>
         </a>
         <div className="footer-links">
-          <Link to="/legal/terms">{t('nav.terms')}</Link>
-          <Link to="/legal/privacy">{t('nav.privacy')}</Link>
-          <Link to="/legal/content-policy">{t('nav.policy')}</Link>
-          <Link to="/legal/report-abuse"><ShieldCheck size={16} /> {t('nav.report')}</Link>
+          <Link to="/terms">{t('nav.terms')}</Link>
+          <Link to="/privacy">{t('nav.privacy')}</Link>
+          <Link to="/refund-policy">{t('nav.refundPolicy')}</Link>
+          <Link to="/content-rules">{t('nav.policy')}</Link>
+          <Link to="/report-abuse"><ShieldCheck size={16} /> {t('nav.report')}</Link>
+          <Link to="/contact">{t('nav.contact')}</Link>
+          <Link to="/pricing">{t('nav.pricing')}</Link>
+          <Link to="/legal-notice">{t('nav.legalNotice')}</Link>
           <Link to="/admin-access">{t('nav.admin')}</Link>
         </div>
       </footer>

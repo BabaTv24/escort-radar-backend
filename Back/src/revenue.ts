@@ -1,6 +1,6 @@
 export const paidStatuses = new Set(['paid', 'succeeded', 'completed']);
 export const excludedRevenueProviders = new Set(['manual_admin', 'free', 'sponsored', 'test', 'migration']);
-export const realRevenueTransactionTypes = new Set(['client_activation', 'escort_subscription', 'business_subscription']);
+export const realRevenueTransactionTypes = new Set(['client_activation', 'escort_subscription', 'business_subscription', 'coins_purchase']);
 
 export type RevenueTransaction = Record<string, any>;
 
@@ -9,6 +9,7 @@ export function hasStripeReference(row: RevenueTransaction) {
     row.stripe_payment_intent_id
       || row.stripe_checkout_session_id
       || row.stripe_session_id
+      || row.stripe_subscription_id
   );
 }
 

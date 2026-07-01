@@ -165,7 +165,7 @@ export async function grantCoins(walletId: string, userId: string, amount: numbe
     .eq('transaction_type', transactionType)
     .contains('metadata', metadata)
     .maybeSingle();
-  if (existing && transactionType === 'welcome_bonus') return;
+  if (existing && ['welcome_bonus', 'manual_payment_tokens'].includes(transactionType)) return;
 
   const { data: wallet, error: walletError } = await supabaseAdmin.from('coin_wallets').select('*').eq('id', walletId).single();
   if (walletError || !wallet) throw walletError || new Error('Coin wallet not found');

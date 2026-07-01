@@ -6,11 +6,20 @@ import type { TokenPackage, Wallet } from '../types';
 import { useI18n } from '../i18n';
 
 const tokenUses = ['listing', 'boost', 'liveCam', 'chat', 'gallery', 'booking', 'tips', 'spotlight'];
+const tokenProductCodes: Record<number, string> = {
+  120: 'tokens_120',
+  520: 'tokens_520',
+  1200: 'tokens_1200',
+  2560: 'tokens_2560',
+  5200: 'tokens_5200',
+  10200: 'tokens_10200'
+};
 
 export function TokenShopPage() {
   const [packages, setPackages] = useState<TokenPackage[]>([]);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [message, setMessage] = useState('');
+  const [orderReference, setOrderReference] = useState('');
   const { t } = useI18n();
 
   useEffect(() => {
@@ -25,8 +34,16 @@ export function TokenShopPage() {
   async function selectPackage(tokenPackage: TokenPackage) {
     const { data } = await supabase.auth.getSession();
     if (!data.session?.access_token) return setMessage(t('tokens.loginRequired'));
-    await api.tokenPurchaseIntent(data.session.access_token, tokenPackage.id);
-    setMessage(t('tokens.checkoutPending'));
+    try {
+      const order = await api.createManualPaymentOrder(data.session.access_token, {
+        productCode: tokenPackage.id?.startsWith('tokens_') ? tokenPackage.id : tokenProductCodes[tokenPackage.token_amount],
+        provider: 'bank_transfer'
+      });
+      setOrderReference(order.payment_reference || '');
+      setMessage(`${tokenPackage.token_amount.toLocaleString()} tokens: ${order.instructions}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('tokens.checkoutPending'));
+    }
   }
 
   return (
@@ -68,7 +85,7 @@ export function TokenShopPage() {
           );
         })}
       </section>
-      {message && <p className="state-panel success">{message}</p>}
+      {message && <p className="state-panel success">{message}{orderReference ? ` Reference: ${orderReference}` : ''}</p>}
     </div>
   );
 }

@@ -78,7 +78,7 @@ VITE_SUPABASE_ANON_KEY
 
 ## Test Account Seed
 
-Use only for MVP QA/test environments. The script deactivates old test profiles (`+test` emails or `is_test_account=true`) and creates 3 fresh test accounts from `mtvx007+test1@gmail.com` to `mtvx007+test3@gmail.com` with password `12345678`.
+Use only for MVP QA/test environments. The script deactivates old test profiles (`+test` emails or `is_test_account=true`) and creates 3 fresh fixture accounts from `qa+test1@example.test` to `qa+test3@example.test` with the local test password configured in the script.
 
 ```bash
 cd Back

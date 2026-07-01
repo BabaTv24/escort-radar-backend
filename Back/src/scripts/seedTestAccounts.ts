@@ -6,8 +6,8 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ALLOW_TEST_SEED = process.env.ALLOW_TEST_SEED === 'true';
 
-const adminEmails = new Set(['mtvx007@gmail.com', 'babatv24@proton.me']);
-const password = '12345678';
+const adminEmails = new Set((process.env.ADMIN_EMAILS || 'admin@example.test').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean));
+const password = process.env.TEST_ACCOUNT_PASSWORD || 'change-me-local-test-password';
 const runId = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
 
 const categories = ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'];
@@ -67,7 +67,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 async function main() {
-  const targetEmails = Array.from({ length: 3 }, (_, index) => `mtvx007+test${index + 1}@gmail.com`);
+  const targetEmails = Array.from({ length: 3 }, (_, index) => `qa+test${index + 1}@example.test`);
   console.log('Escort Radar test account seed');
   console.log(`Environment: NODE_ENV=${NODE_ENV}, ALLOW_TEST_SEED=${ALLOW_TEST_SEED}`);
   console.log(`Will deactivate old test profiles where email contains "+test" or is_test_account=true.`);

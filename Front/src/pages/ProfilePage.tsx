@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   BadgeCheck,
   CalendarDays,
@@ -33,6 +33,7 @@ type ProfileTab = 'overview' | 'services' | 'prices' | 'reviews';
 
 export function ProfilePage() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [similarProfiles, setSimilarProfiles] = useState<Profile[]>([]);
   const [error, setError] = useState('');
@@ -393,8 +394,7 @@ export function ProfilePage() {
 
     setActivationBusy(true);
     try {
-      const checkout = await api.clientActivationCheckout(token);
-      window.location.href = checkout.checkout_url;
+      navigate('/pricing?product=client_activation');
     } catch (err) {
       setAccessMessage(err instanceof Error ? err.message : 'Nie udalo sie uruchomic platnosci.');
     } finally {
