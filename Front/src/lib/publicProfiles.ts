@@ -1,4 +1,5 @@
 import type { Profile, ProfileImage } from '../types';
+import { normalizeProfileEthnicity, normalizeProfileGender, normalizeProfileOrientation, normalizeProfileTravels } from './profileDetails';
 
 const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | boolean> }).env || {};
 const API_URL = String(viteEnv.VITE_API_URL || 'http://localhost:4000');
@@ -77,6 +78,13 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     latitude: numberValue(raw.latitude ?? raw.lat),
     longitude: numberValue(raw.longitude ?? raw.lng),
     languages: stringArray(raw.languages),
+    gender: normalizeProfileGender(raw.gender) || nullableText(raw.gender),
+    orientation: normalizeProfileOrientation(raw.orientation) || nullableText(raw.orientation),
+    ethnicity: normalizeProfileEthnicity(raw.ethnicity ?? raw.origin) || nullableText(raw.ethnicity),
+    travels: normalizeProfileTravels(raw.travels ?? raw.travel),
+    travel: nullableText(raw.travel),
+    penis_length_cm: numberValue(raw.penis_length_cm ?? raw.penisLengthCm),
+    penis_diameter_cm: numberValue(raw.penis_diameter_cm ?? raw.penisDiameterCm),
     available_now: booleanValue(raw.available_now ?? raw.availableNow),
     mobile_service: booleanValue(raw.mobile_service ?? raw.mobileService),
     private_studio: booleanValue(raw.private_studio ?? raw.privateStudio),

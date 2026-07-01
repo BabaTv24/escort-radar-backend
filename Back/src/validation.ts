@@ -48,6 +48,7 @@ export function validateProfileInput(body: Record<string, unknown>) {
   const servicesProvided = Object.prototype.hasOwnProperty.call(body, 'services');
   const services = optionalServices(body.services);
   if ('error' in services) return services;
+  const travels = normalizeProfileTravels(body.travels ?? body.travel);
 
   return {
     data: {
@@ -73,7 +74,7 @@ export function validateProfileInput(body: Record<string, unknown>) {
       languages: Array.isArray(body.languages)
         ? body.languages.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
         : String(body.languages || '').split(',').map((item) => item.trim()).filter(Boolean).slice(0, 8),
-      gender: optionalText(body.gender, 40),
+      gender: normalizeProfileGender(body.gender) || optionalText(body.gender, 40),
       age: optionalNumber(body.age, 18, 99),
       height: optionalNumber(body.height, 120, 230),
       height_cm: optionalNumber(body.height_cm ?? body.height, 120, 230),
@@ -86,9 +87,12 @@ export function validateProfileInput(body: Record<string, unknown>) {
       eyes: optionalText(body.eyes, 40),
       origin: optionalText(body.origin, 80),
       experience_type: optionalText(body.experience_type, 80),
-      orientation: optionalText(body.orientation, 80),
-      travel: optionalText(body.travel, 120),
-      ethnicity: optionalText(body.ethnicity, 80),
+      orientation: normalizeProfileOrientation(body.orientation) || optionalText(body.orientation, 80),
+      travel: optionalText(body.travel, 120) || (travels === null ? null : travels ? 'yes' : 'no'),
+      travels,
+      ethnicity: normalizeProfileEthnicity(body.ethnicity ?? body.origin) || optionalText(body.ethnicity, 80),
+      penis_length_cm: optionalDecimalRange(body.penis_length_cm, 5, 35),
+      penis_diameter_cm: optionalDecimalRange(body.penis_diameter_cm, 1, 10),
       nationality: optionalText(body.nationality, 80),
       zodiac_sign: optionalText(body.zodiac_sign, 40),
       audience: optionalArray(body.audience, 6),
@@ -157,6 +161,81 @@ function optionalMoney(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) return null;
   return Math.round(number * 100) / 100;
+}
+
+export function optionalDecimalRange(value: unknown, min: number, max: number) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) return null;
+  return Math.round(number * 100) / 100;
+}
+
+function normalizeKey(value: unknown) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+export function normalizeProfileGender(value: unknown) {
+  const key = normalizeKey(value);
+  if (!key) return null;
+  if (['female', 'woman', 'kobieta', 'frau', 'f'].includes(key)) return 'female';
+  if (['male', 'man', 'mezczyzna', 'mann', 'm'].includes(key)) return 'male';
+  return ['female', 'male'].includes(key) ? key : null;
+}
+
+export function normalizeProfileOrientation(value: unknown) {
+  const key = normalizeKey(value);
+  if (!key) return null;
+  if (['hetero', 'straight', 'heterosexual'].includes(key)) return 'hetero';
+  if (['homo', 'gay', 'homosexual'].includes(key)) return 'homo';
+  if (['bi', 'bisexual', 'biseksualna', 'biseksualny'].includes(key)) return 'bi';
+  return ['hetero', 'homo', 'bi'].includes(key) ? key : null;
+}
+
+export function normalizeProfileEthnicity(value: unknown) {
+  const key = normalizeKey(value);
+  if (!key) return null;
+  const aliases: Record<string, string> = {
+    europejska: 'european',
+    european: 'european',
+    europaisch: 'european',
+    asian: 'asian',
+    azjatycka: 'asian',
+    azjatka: 'asian',
+    asiatisch: 'asian',
+    latina: 'latina',
+    latynoska: 'latina',
+    black: 'black',
+    czarna: 'black',
+    schwarz: 'black',
+    arabic: 'arabic',
+    arabska: 'arabic',
+    arabisch: 'arabic',
+    slavic: 'slavic',
+    slowianska: 'slavic',
+    slawisch: 'slavic',
+    mixed: 'mixed',
+    mieszana: 'mixed',
+    gemischt: 'mixed',
+    other: 'other',
+    inna: 'other',
+    andere: 'other'
+  };
+  const normalized = aliases[key] || key;
+  return ['european', 'asian', 'latina', 'black', 'arabic', 'slavic', 'mixed', 'other'].includes(normalized) ? normalized : null;
+}
+
+export function normalizeProfileTravels(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  const key = normalizeKey(value);
+  if (!key) return null;
+  if (['true', '1', 'yes', 'tak', 'ja'].includes(key)) return true;
+  if (['false', '0', 'no', 'nie', 'nein'].includes(key)) return false;
+  return null;
 }
 
 function optionalServiceMenu(value: unknown) {

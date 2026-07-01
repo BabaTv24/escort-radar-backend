@@ -8,6 +8,17 @@ import { useI18n } from '../i18n';
 import { categoryOptions } from '../data/filterOptions';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
+import {
+  normalizeProfileEthnicity,
+  normalizeProfileGender,
+  normalizeProfileOrientation,
+  normalizeProfileTravels,
+  profileEthnicityOptions,
+  profileGenderOptions,
+  profileOrientationOptions,
+  profileTravelsLabel,
+  showMaleProfileFields
+} from '../lib/profileDetails';
 
 type AdminUser = Record<string, any>;
 type SubscriptionRow = Record<string, any>;
@@ -42,6 +53,9 @@ const emptyStudioForm = {
   service_radius_km: 25,
   gender: '',
   orientation: '',
+  travels: false,
+  penis_length_cm: '',
+  penis_diameter_cm: '',
   age: 26,
   nationality: 'European',
   height_cm: 170,
@@ -570,8 +584,11 @@ export function AdminPage() {
       longitude: profile.longitude === null || profile.longitude === undefined ? '' : String(profile.longitude),
       location_mode: profile.location_mode || 'city_only',
       service_radius_km: profile.service_radius_km || 25,
-      gender: profile.gender || '',
-      orientation: profile.orientation || '',
+      gender: normalizeProfileGender(profile.gender) || profile.gender || '',
+      orientation: normalizeProfileOrientation(profile.orientation) || profile.orientation || '',
+      travels: normalizeProfileTravels(profile.travels ?? profile.travel) ?? false,
+      penis_length_cm: profile.penis_length_cm === null || profile.penis_length_cm === undefined ? '' : String(profile.penis_length_cm),
+      penis_diameter_cm: profile.penis_diameter_cm === null || profile.penis_diameter_cm === undefined ? '' : String(profile.penis_diameter_cm),
       age: profile.age || 26,
       nationality: profile.nationality || 'European',
       height_cm: profile.height_cm || profile.height || 170,
@@ -580,7 +597,7 @@ export function AdminPage() {
       eyes: profile.eyes || '',
       hair: profile.hair || '',
       travel: profile.travel || '',
-      ethnicity: profile.ethnicity || '',
+      ethnicity: normalizeProfileEthnicity(profile.ethnicity) || profile.ethnicity || '',
       zodiac_sign: profile.zodiac_sign || '',
       languages: profile.languages?.length ? profile.languages : ['DE', 'EN'],
       business_name: profile.business_name || '',
@@ -703,6 +720,10 @@ export function AdminPage() {
         age: Number(studioForm.age || 0),
         height_cm: Number(studioForm.height_cm || 0),
         weight_kg: studioForm.weight_kg === '' ? null : Number(studioForm.weight_kg),
+        travels: Boolean(studioForm.travels),
+        travel: studioForm.travels ? 'yes' : 'no',
+        penis_length_cm: studioForm.penis_length_cm === '' ? null : Number(studioForm.penis_length_cm),
+        penis_diameter_cm: studioForm.penis_diameter_cm === '' ? null : Number(studioForm.penis_diameter_cm),
         admin_priority: Number(studioForm.admin_priority || 0),
         max_profiles: Number(studioForm.max_profiles || 30),
         acquisition_source: studioForm.is_sponsored ? 'admin_sponsored' : 'paid_advertiser',
@@ -1023,12 +1044,17 @@ export function AdminPage() {
     }
 
     if (studioTab === 'basic') {
+      const showMaleFields = showMaleProfileFields({
+        gender: studioForm.gender,
+        penis_length_cm: studioForm.penis_length_cm === '' ? null : Number(studioForm.penis_length_cm),
+        penis_diameter_cm: studioForm.penis_diameter_cm === '' ? null : Number(studioForm.penis_diameter_cm)
+      });
       return <>
         <div className="admin-form-grid">
           <AdminField label={t('admin.profileEditor.displayName')}><input placeholder={t('admin.profileEditor.displayNamePlaceholder')} value={studioForm.display_name} onChange={(event) => setStudioForm({ ...studioForm, display_name: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.category')}><select value={studioForm.category} onChange={(event) => setStudioForm({ ...studioForm, category: event.target.value })}>{categoryOptions.map((category) => <option key={category} value={category}>{option(category)}</option>)}</select></AdminField>
-          <AdminField label={t('profile.moreAbout.gender')}><input value={studioForm.gender} onChange={(event) => setStudioForm({ ...studioForm, gender: event.target.value })} /></AdminField>
-          <AdminField label={t('profile.moreAbout.orientation')}><input value={studioForm.orientation} onChange={(event) => setStudioForm({ ...studioForm, orientation: event.target.value })} /></AdminField>
+          <AdminField label={t('profileDetails.gender')}><select value={studioForm.gender} onChange={(event) => setStudioForm({ ...studioForm, gender: event.target.value })}><option value="">-</option>{profileGenderOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}</select></AdminField>
+          <AdminField label={t('profileDetails.orientation')}><select value={studioForm.orientation} onChange={(event) => setStudioForm({ ...studioForm, orientation: event.target.value })}><option value="">-</option>{profileOrientationOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}</select></AdminField>
           <AdminField label={t('admin.profileEditor.age')}><input type="number" value={studioForm.age} onChange={(event) => setStudioForm({ ...studioForm, age: Number(event.target.value) })} /></AdminField>
           <AdminField label={t('admin.profileEditor.nationality')}><input placeholder={t('admin.profileEditor.nationalityPlaceholder')} value={studioForm.nationality} onChange={(event) => setStudioForm({ ...studioForm, nationality: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.height')}><input type="number" value={studioForm.height_cm} onChange={(event) => setStudioForm({ ...studioForm, height_cm: Number(event.target.value) })} /></AdminField>
@@ -1036,9 +1062,11 @@ export function AdminPage() {
           <AdminField label={t('profile.moreAbout.bust')}><input value={studioForm.bust} onChange={(event) => setStudioForm({ ...studioForm, bust: event.target.value })} /></AdminField>
           <AdminField label={t('profile.moreAbout.eyes')}><input value={studioForm.eyes} onChange={(event) => setStudioForm({ ...studioForm, eyes: event.target.value })} /></AdminField>
           <AdminField label={t('profile.moreAbout.hair')}><input value={studioForm.hair} onChange={(event) => setStudioForm({ ...studioForm, hair: event.target.value })} /></AdminField>
-          <AdminField label={t('profile.moreAbout.travel')}><input value={studioForm.travel} onChange={(event) => setStudioForm({ ...studioForm, travel: event.target.value })} /></AdminField>
+          <AdminField label={t('profileDetails.travels')}><select value={String(studioForm.travels)} onChange={(event) => setStudioForm({ ...studioForm, travels: event.target.value === 'true', travel: event.target.value === 'true' ? 'yes' : 'no' })}><option value="true">{profileTravelsLabel(true, t)}</option><option value="false">{profileTravelsLabel(false, t)}</option></select></AdminField>
           <AdminField label={t('admin.profileEditor.languages')}><input placeholder={t('admin.profileEditor.languagesPlaceholder')} value={studioForm.languages.join(', ')} onChange={(event) => setStudioForm({ ...studioForm, languages: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
-          <AdminField label={t('profile.moreAbout.ethnicity')}><input value={studioForm.ethnicity} onChange={(event) => setStudioForm({ ...studioForm, ethnicity: event.target.value })} /></AdminField>
+          <AdminField label={t('profileDetails.ethnicity')}><select value={studioForm.ethnicity} onChange={(event) => setStudioForm({ ...studioForm, ethnicity: event.target.value })}><option value="">-</option>{profileEthnicityOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}</select></AdminField>
+          {showMaleFields && <AdminField label={t('profileDetails.penisLengthCm')}><input type="number" min="5" max="35" step="0.1" value={studioForm.penis_length_cm} onChange={(event) => setStudioForm({ ...studioForm, penis_length_cm: event.target.value })} /></AdminField>}
+          {showMaleFields && <AdminField label={t('profileDetails.penisDiameterCm')}><input type="number" min="1" max="10" step="0.1" value={studioForm.penis_diameter_cm} onChange={(event) => setStudioForm({ ...studioForm, penis_diameter_cm: event.target.value })} /></AdminField>}
           <AdminField label={t('profile.moreAbout.zodiacSign')}><input value={studioForm.zodiac_sign} onChange={(event) => setStudioForm({ ...studioForm, zodiac_sign: event.target.value })} /></AdminField>
         </div>
         <AdminField label={t('admin.profileEditor.description')}><textarea placeholder={t('admin.profileEditor.descriptionPlaceholder')} value={studioForm.description} onChange={(event) => setStudioForm({ ...studioForm, description: event.target.value })} /></AdminField>

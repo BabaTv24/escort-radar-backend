@@ -44,6 +44,9 @@ export type Profile = {
   referral_count?: number;
   gender?: string | null;
   orientation?: string | null;
+  travels?: boolean | null;
+  penis_length_cm?: number | null;
+  penis_diameter_cm?: number | null;
   age?: number;
   height?: number;
   height_cm?: number | null;

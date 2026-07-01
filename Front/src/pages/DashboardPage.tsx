@@ -16,7 +16,6 @@ import {
   defaultServiceMenuNames,
   experienceTypeOptions,
   hairColorOptions,
-  orientationOptions,
   originOptions,
   paymentMethodOptions,
   radiusOptions,
@@ -28,6 +27,17 @@ import {
 } from '../data/filterOptions';
 import { serviceLabel, serviceOptions } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog } from '../data/locationCatalog';
+import {
+  normalizeProfileEthnicity,
+  normalizeProfileGender,
+  normalizeProfileOrientation,
+  normalizeProfileTravels,
+  profileEthnicityOptions,
+  profileGenderOptions,
+  profileOrientationOptions,
+  profileTravelsLabel,
+  showMaleProfileFields
+} from '../lib/profileDetails';
 
 const emptyProfile: Partial<Profile> = {
   display_name: '',
@@ -46,6 +56,9 @@ const emptyProfile: Partial<Profile> = {
   category: 'ladies',
   description: '',
   gender: '',
+  travels: false,
+  penis_length_cm: null,
+  penis_diameter_cm: null,
   age: 25,
   height: 170,
   height_cm: 170,
@@ -820,16 +833,30 @@ export function DashboardPage() {
             {creatorTab === 'listing' && <section className="form-panel elevated">
               <h2><UserRound size={18} /> {t('dashboard.appearance')}</h2>
               <div className="form-grid">
-                <input placeholder={t('profile.moreAbout.gender')} value={profile.gender || ''} onChange={(event) => setProfile({ ...profile, gender: event.target.value })} />
-                <input placeholder={t('profile.moreAbout.orientation')} value={profile.orientation || ''} onChange={(event) => setProfile({ ...profile, orientation: event.target.value })} />
+                <select value={profile.gender || ''} onChange={(event) => setProfile({ ...profile, gender: event.target.value })}>
+                  <option value="">{t('profileDetails.gender')}</option>
+                  {profileGenderOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}
+                </select>
+                <select value={profile.orientation || ''} onChange={(event) => setProfile({ ...profile, orientation: event.target.value })}>
+                  <option value="">{t('profileDetails.orientation')}</option>
+                  {profileOrientationOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}
+                </select>
                 <input type="number" min="18" placeholder={t('form.age')} value={profile.age || ''} onChange={(event) => setProfile({ ...profile, age: Number(event.target.value) })} />
                 <input type="number" min="120" placeholder={t('form.height')} value={profile.height_cm || profile.height || ''} onChange={(event) => setProfile({ ...profile, height: Number(event.target.value), height_cm: Number(event.target.value) })} />
                 <input type="number" min="35" placeholder={t('profile.moreAbout.weight')} value={profile.weight_kg || ''} onChange={(event) => setProfile({ ...profile, weight_kg: event.target.value ? Number(event.target.value) : null })} />
                 <input placeholder={t('profile.moreAbout.bust')} value={profile.bust || ''} onChange={(event) => setProfile({ ...profile, bust: event.target.value })} />
                 <input placeholder={t('profile.moreAbout.eyes')} value={profile.eyes || ''} onChange={(event) => setProfile({ ...profile, eyes: event.target.value })} />
                 <input placeholder={t('profile.moreAbout.hair')} value={profile.hair || ''} onChange={(event) => setProfile({ ...profile, hair: event.target.value })} />
-                <input placeholder={t('profile.moreAbout.travel')} value={profile.travel || ''} onChange={(event) => setProfile({ ...profile, travel: event.target.value })} />
-                <input placeholder={t('profile.moreAbout.ethnicity')} value={profile.ethnicity || ''} onChange={(event) => setProfile({ ...profile, ethnicity: event.target.value })} />
+                <select value={String(profile.travels ?? false)} onChange={(event) => setProfile({ ...profile, travels: event.target.value === 'true', travel: event.target.value === 'true' ? 'yes' : 'no' })}>
+                  <option value="true">{profileTravelsLabel(true, t)}</option>
+                  <option value="false">{profileTravelsLabel(false, t)}</option>
+                </select>
+                <select value={profile.ethnicity || ''} onChange={(event) => setProfile({ ...profile, ethnicity: event.target.value })}>
+                  <option value="">{t('profileDetails.ethnicity')}</option>
+                  {profileEthnicityOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}
+                </select>
+                {showMaleProfileFields(profile) && <input type="number" min="5" max="35" step="0.1" placeholder={t('profileDetails.penisLengthCm')} value={profile.penis_length_cm ?? ''} onChange={(event) => setProfile({ ...profile, penis_length_cm: event.target.value ? Number(event.target.value) : null })} />}
+                {showMaleProfileFields(profile) && <input type="number" min="1" max="10" step="0.1" placeholder={t('profileDetails.penisDiameterCm')} value={profile.penis_diameter_cm ?? ''} onChange={(event) => setProfile({ ...profile, penis_diameter_cm: event.target.value ? Number(event.target.value) : null })} />}
                 <input placeholder={t('profile.moreAbout.nationality')} value={profile.nationality || ''} onChange={(event) => setProfile({ ...profile, nationality: event.target.value })} />
                 <input placeholder={t('profile.moreAbout.zodiacSign')} value={profile.zodiac_sign || ''} onChange={(event) => setProfile({ ...profile, zodiac_sign: event.target.value })} />
                 <select value={profile.body_type || ''} onChange={(event) => setProfile({ ...profile, body_type: event.target.value })}>
@@ -843,10 +870,6 @@ export function DashboardPage() {
                 <select value={profile.origin || ''} onChange={(event) => setProfile({ ...profile, origin: event.target.value })}>
                   <option value="">{t('filters.origin')}</option>
                   {originOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
-                </select>
-                <select value={profile.orientation || ''} onChange={(event) => setProfile({ ...profile, orientation: event.target.value })}>
-                  <option value="">{t('filters.orientation')}</option>
-                  {orientationOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
                 </select>
                 <input placeholder={t('form.bodyFeatures')} value={String(profile.body_features || '')} onChange={(event) => setProfile({ ...profile, body_features: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} />
               </div>
@@ -2171,17 +2194,31 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               </div>
             </div>
             <div className="form-grid">
-              <input placeholder={t('profile.moreAbout.gender')} value={profile.gender || ''} onChange={(event) => onProfileChange({ ...profile, gender: event.target.value })} />
-              <input placeholder={t('profile.moreAbout.orientation')} value={profile.orientation || ''} onChange={(event) => onProfileChange({ ...profile, orientation: event.target.value })} />
+              <select value={profile.gender || ''} onChange={(event) => onProfileChange({ ...profile, gender: event.target.value })}>
+                <option value="">{t('profileDetails.gender')}</option>
+                {profileGenderOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}
+              </select>
+              <select value={profile.orientation || ''} onChange={(event) => onProfileChange({ ...profile, orientation: event.target.value })}>
+                <option value="">{t('profileDetails.orientation')}</option>
+                {profileOrientationOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}
+              </select>
               <input type="number" min="18" max="99" placeholder={t('profile.moreAbout.age')} value={profile.age || ''} onChange={(event) => onProfileChange({ ...profile, age: event.target.value ? Number(event.target.value) : undefined })} />
               <input type="number" min="120" max="230" placeholder={t('profile.moreAbout.height')} value={profile.height_cm || profile.height || ''} onChange={(event) => onProfileChange({ ...profile, height: event.target.value ? Number(event.target.value) : undefined, height_cm: event.target.value ? Number(event.target.value) : null })} />
               <input type="number" min="35" max="200" placeholder={t('profile.moreAbout.weight')} value={profile.weight_kg || ''} onChange={(event) => onProfileChange({ ...profile, weight_kg: event.target.value ? Number(event.target.value) : null })} />
               <input placeholder={t('profile.moreAbout.bust')} value={profile.bust || ''} onChange={(event) => onProfileChange({ ...profile, bust: event.target.value })} />
               <input placeholder={t('profile.moreAbout.eyes')} value={profile.eyes || ''} onChange={(event) => onProfileChange({ ...profile, eyes: event.target.value })} />
               <input placeholder={t('profile.moreAbout.hair')} value={profile.hair || ''} onChange={(event) => onProfileChange({ ...profile, hair: event.target.value })} />
-              <input placeholder={t('profile.moreAbout.travel')} value={profile.travel || ''} onChange={(event) => onProfileChange({ ...profile, travel: event.target.value })} />
+              <select value={String(profile.travels ?? false)} onChange={(event) => onProfileChange({ ...profile, travels: event.target.value === 'true', travel: event.target.value === 'true' ? 'yes' : 'no' })}>
+                <option value="true">{profileTravelsLabel(true, t)}</option>
+                <option value="false">{profileTravelsLabel(false, t)}</option>
+              </select>
               <input placeholder={t('profile.moreAbout.languages')} value={Array.isArray(profile.languages) ? profile.languages.join(', ') : String(profile.languages || '')} onChange={(event) => onProfileChange({ ...profile, languages: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} />
-              <input placeholder={t('profile.moreAbout.ethnicity')} value={profile.ethnicity || ''} onChange={(event) => onProfileChange({ ...profile, ethnicity: event.target.value })} />
+              <select value={profile.ethnicity || ''} onChange={(event) => onProfileChange({ ...profile, ethnicity: event.target.value })}>
+                <option value="">{t('profileDetails.ethnicity')}</option>
+                {profileEthnicityOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}
+              </select>
+              {showMaleProfileFields(profile) && <input type="number" min="5" max="35" step="0.1" placeholder={t('profileDetails.penisLengthCm')} value={profile.penis_length_cm ?? ''} onChange={(event) => onProfileChange({ ...profile, penis_length_cm: event.target.value ? Number(event.target.value) : null })} />}
+              {showMaleProfileFields(profile) && <input type="number" min="1" max="10" step="0.1" placeholder={t('profileDetails.penisDiameterCm')} value={profile.penis_diameter_cm ?? ''} onChange={(event) => onProfileChange({ ...profile, penis_diameter_cm: event.target.value ? Number(event.target.value) : null })} />}
               <input placeholder={t('profile.moreAbout.nationality')} value={profile.nationality || ''} onChange={(event) => onProfileChange({ ...profile, nationality: event.target.value })} />
               <input placeholder={t('profile.moreAbout.zodiacSign')} value={profile.zodiac_sign || ''} onChange={(event) => onProfileChange({ ...profile, zodiac_sign: event.target.value })} />
             </div>
@@ -2342,6 +2379,9 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     display_name: profile.display_name || 'Preview profile',
     gender: profile.gender || null,
     orientation: profile.orientation || null,
+    travels: profile.travels ?? normalizeProfileTravels(profile.travel),
+    penis_length_cm: profile.penis_length_cm ?? null,
+    penis_diameter_cm: profile.penis_diameter_cm ?? null,
     age: profile.age || 25,
     height: profile.height || 170,
     height_cm: profile.height_cm || profile.height || 170,
@@ -2429,6 +2469,12 @@ function profileToForm(profile: Profile): Partial<Profile> {
   return {
     ...emptyProfile,
     ...profile,
+    gender: normalizeProfileGender(profile.gender) || profile.gender || '',
+    orientation: normalizeProfileOrientation(profile.orientation) || profile.orientation || '',
+    ethnicity: normalizeProfileEthnicity(profile.ethnicity || profile.origin) || profile.ethnicity || '',
+    travels: normalizeProfileTravels(profile.travels ?? profile.travel) ?? false,
+    penis_length_cm: profile.penis_length_cm ?? null,
+    penis_diameter_cm: profile.penis_diameter_cm ?? null,
     languages: Array.isArray(profile.languages) ? profile.languages : [],
     body_features: profile.body_features || [],
     audience: profile.audience || [],
@@ -2453,8 +2499,16 @@ function profileToForm(profile: Profile): Partial<Profile> {
 }
 
 function prepareProfilePayload(profile: Partial<Profile>, savedProfile: Profile | null): Partial<Profile> {
+  const travels = normalizeProfileTravels(profile.travels ?? profile.travel);
   return {
     ...profile,
+    gender: normalizeProfileGender(profile.gender) || profile.gender || null,
+    orientation: normalizeProfileOrientation(profile.orientation) || profile.orientation || null,
+    ethnicity: normalizeProfileEthnicity(profile.ethnicity || profile.origin) || profile.ethnicity || null,
+    travels,
+    travel: travels === null ? profile.travel || null : travels ? 'yes' : 'no',
+    penis_length_cm: profile.penis_length_cm === null || profile.penis_length_cm === undefined ? null : Number(profile.penis_length_cm),
+    penis_diameter_cm: profile.penis_diameter_cm === null || profile.penis_diameter_cm === undefined ? null : Number(profile.penis_diameter_cm),
     languages: Array.isArray(profile.languages)
       ? profile.languages.map((item) => String(item).trim()).filter(Boolean)
       : String(profile.languages || '').split(',').map((item) => item.trim()).filter(Boolean),

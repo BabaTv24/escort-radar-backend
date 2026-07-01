@@ -29,6 +29,7 @@ import { useI18n } from '../i18n';
 import { serviceLabel } from '../data/serviceCatalog';
 import { getPublicProfiles, mapApiProfileToPublicProfile } from '../lib/publicProfiles';
 import { getPublicLocationLabel, getPublicLocationMode } from '../lib/locationLabels';
+import { profileDetailRows } from '../lib/profileDetails';
 
 type ProfileTab = 'overview' | 'services' | 'prices' | 'reviews';
 
@@ -87,6 +88,7 @@ export function ProfilePage() {
   const travelNotice = getTravelNotice(profile);
   const languages = profile.languages?.length ? profile.languages : ['DE', 'EN'];
   const moreAboutRows = getMoreAboutRows(profile, languages, t);
+  const premiumDetailRows = profileDetailRows(profile, t);
   const visitTypes = profile.visit_types?.length ? profile.visit_types : ['incall', 'hotel'];
   const serviceTags = profile.service_tags?.length ? profile.service_tags : ['dinner-date', 'hotel', 'discreet'];
   const selectedServices = profile.services || [];
@@ -196,6 +198,27 @@ export function ProfilePage() {
                   <MarketFact key={row.label} icon={<BadgeCheck size={17} />} label={row.label} value={row.value} />
                 ))}
               </div>
+            </MarketSection>
+          ) : null}
+
+          {premiumDetailRows.length ? (
+            <MarketSection tab="overview" activeTab={activeTab} eyebrow={t('profileDetails.profileDetails')} title={t('profileDetails.profileDetails')}>
+              {activated ? (
+                <div className="market-detail-grid">
+                  {premiumDetailRows.map((row) => (
+                    <MarketFact key={row.label} icon={<BadgeCheck size={17} />} label={row.label} value={row.value} />
+                  ))}
+                </div>
+              ) : (
+                <div className="market-lock-card">
+                  <LockKeyhole size={18} />
+                  <div>
+                    <strong>{t('profileDetails.profileDetails')}</strong>
+                    <p>{t('profileDetails.premiumDetailsLocked')}</p>
+                  </div>
+                  <button className="button primary" type="button" onClick={startClientActivation}>Activate 0.99 EUR</button>
+                </div>
+              )}
             </MarketSection>
           ) : null}
 
@@ -446,17 +469,13 @@ function MarketFact({ icon, label, value }: { icon: ReactNode; label: string; va
 
 function getMoreAboutRows(profile: Profile, languages: string[], t: (key: string, vars?: Record<string, string | number>) => string) {
   const rows = [
-    ['gender', profile.gender],
-    ['orientation', profile.orientation],
     ['age', profile.age ? String(profile.age) : ''],
     ['height', profile.height_cm || profile.height ? `${profile.height_cm || profile.height} cm` : ''],
     ['weight', profile.weight_kg ? `${profile.weight_kg} kg` : ''],
     ['bust', profile.bust],
     ['eyes', profile.eyes],
     ['hair', profile.hair || profile.hair_color],
-    ['travel', profile.travel],
     ['languages', languages.length ? languages.join(', ') : ''],
-    ['ethnicity', profile.ethnicity || profile.origin],
     ['nationality', profile.nationality],
     ['zodiacSign', profile.zodiac_sign]
   ];

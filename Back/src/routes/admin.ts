@@ -9,6 +9,11 @@ import {
   allowedStatuses,
   allowedVerificationStatuses,
   asyncHandler,
+  normalizeProfileEthnicity,
+  normalizeProfileGender,
+  normalizeProfileOrientation,
+  normalizeProfileTravels,
+  optionalDecimalRange,
   optionalText,
   slugify
 } from '../validation.js';
@@ -2543,6 +2548,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
   const listingPlan = optionalText(body.listing_plan || body.subscription_plan, 80) || 'admin_profile_studio';
   const isSponsored = body.is_sponsored !== false && body.acquisition_source !== 'paid_advertiser';
   const businessType = normalizeBusinessType(body.business_type);
+  const travels = normalizeProfileTravels(body.travels ?? body.travel);
 
   return {
     data: {
@@ -2564,8 +2570,8 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       category,
       description: optionalText(body.description, 2000) || 'Preview profile generated for marketplace layout and internal quality checks. Replace with verified advertiser content before real publication.',
       languages,
-      gender: optionalText(body.gender, 40),
-      orientation: optionalText(body.orientation, 80),
+      gender: normalizeProfileGender(body.gender) || optionalText(body.gender, 40),
+      orientation: normalizeProfileOrientation(body.orientation) || optionalText(body.orientation, 80),
       age,
       height,
       height_cm: height,
@@ -2573,8 +2579,11 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       bust: optionalText(body.bust, 40),
       eyes: optionalText(body.eyes, 40),
       hair: optionalText(body.hair, 60),
-      travel: optionalText(body.travel, 120),
-      ethnicity: optionalText(body.ethnicity, 80),
+      travel: optionalText(body.travel, 120) || (travels === null ? null : travels ? 'yes' : 'no'),
+      travels,
+      ethnicity: normalizeProfileEthnicity(body.ethnicity) || optionalText(body.ethnicity, 80),
+      penis_length_cm: optionalDecimalRange(body.penis_length_cm, 5, 35),
+      penis_diameter_cm: optionalDecimalRange(body.penis_diameter_cm, 1, 10),
       nationality: optionalText(body.nationality, 80),
       zodiac_sign: optionalText(body.zodiac_sign, 40),
       business_name: optionalText(body.business_name, 160),
