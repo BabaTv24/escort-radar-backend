@@ -569,6 +569,37 @@ test('category normalization uses canonical mobile category keys', async () => {
   assert.equal(citySlug('Frankfurt am Main'), 'frankfurt-am-main');
 });
 
+test('global location catalog is the single source for city marketplace routing', async () => {
+  const backLocations = await import('../Back/src/locations.ts');
+  const frontLocations = await import('../Front/src/lib/globalLocations.ts');
+  const locationCatalogSource = await readFile(new URL('../Front/src/data/locationCatalog.ts', import.meta.url), 'utf8');
+  const globalSearchSource = await readFile(new URL('../Front/src/components/GlobalLocationSearch.tsx', import.meta.url), 'utf8');
+  const cityPageSource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
+  const adminSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  const dashboardSource = await readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8');
+  const profilesSource = await readFile(new URL('../Back/src/routes/profiles.ts', import.meta.url), 'utf8');
+
+  assert.ok(frontLocations.getCitiesForCountry('DE').includes('Berlin'));
+  assert.ok(frontLocations.getCitiesForCountry('DE').includes('Hamburg'));
+  assert.ok(frontLocations.getCitiesForCountry('PL').includes('Warszawa'));
+  assert.equal(frontLocations.normalizeCountry('Germany'), 'DE');
+  assert.equal(frontLocations.normalizeCountry('DE'), 'DE');
+  assert.equal(frontLocations.normalizeCountry('Niemcy'), 'DE');
+  assert.equal(frontLocations.citySlug('Hamburg'), 'hamburg');
+  assert.ok(frontLocations.globalCountries.some((country) => country.code === 'LU'));
+  assert.ok(backLocations.globalCountries.some((country) => country.code === 'LU'));
+
+  assert.match(locationCatalogSource, /globalCountries\.map/);
+  assert.match(globalSearchSource, /navigateToCity\(item\)/);
+  assert.match(cityPageSource, /params\.set\('city', urlCitySlug\)/);
+  assert.match(cityPageSource, /params\.set\('country', countryCode\)/);
+  assert.match(cityPageSource, /setProfiles\(\[\]\)/);
+  assert.match(adminSource, /locationCatalog\.forEach/);
+  assert.match(dashboardSource, /work_country: nextCountry\.code/);
+  assert.match(profilesSource, /const normalizedValue = normalizeGlobalCity\(value\)/);
+  assert.doesNotMatch(profilesSource, /String\(value \|\| ''\)\.toLowerCase\(\)\.includes\(wanted\)/);
+});
+
 test('client activation token bonus is 7 and favorites are token-gated', async () => {
   const configSource = await readFile(new URL('../Back/src/config.ts', import.meta.url), 'utf8');
   const favoritesSource = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');

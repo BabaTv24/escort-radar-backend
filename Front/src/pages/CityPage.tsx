@@ -5,7 +5,6 @@ import { api } from '../lib/api';
 import type { Profile, Tag } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { ErrorState, LoadingState } from '../components/LoadingState';
-import { cities } from '../data/cities';
 import { categoryOptions, defaultServiceMenuNames, toggleArrayValue, visitTypeOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
@@ -14,7 +13,7 @@ import { getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange, 
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { normalizeCategoryKey } from '../lib/categories';
 import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
-import { getCityLabel } from '../lib/globalLocations';
+import { getCityLabel, normalizeCity, normalizeCountry } from '../lib/globalLocations';
 import { supabase } from '../lib/supabase';
 
 const clientSearchLocationStorageKey = 'escortRadar.clientSearchLocation';
@@ -51,18 +50,20 @@ export function CityPage() {
   const { city = 'berlin' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlCategory = searchParams.get('category');
-  const cityLabel = cities.find((item) => item.slug === city)?.name || getCityLabel(city) || city;
+  const urlCitySlug = normalizeCity(city) || 'berlin';
+  const countryCode = normalizeCountry(searchParams.get('country')) || 'DE';
+  const cityLabel = getCityLabel(urlCitySlug) || urlCitySlug;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [platformTags, setPlatformTags] = useState<Tag[]>([]);
-  const [draftFilters, setDraftFilters] = useState<SearchFilters>(() => defaultFilters(city));
-  const [appliedFilters, setAppliedFilters] = useState<SearchFilters>(() => defaultFilters(city));
+  const [draftFilters, setDraftFilters] = useState<SearchFilters>(() => defaultFilters(urlCitySlug));
+  const [appliedFilters, setAppliedFilters] = useState<SearchFilters>(() => defaultFilters(urlCitySlug));
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortMode, setSortMode] = useState<'best' | 'new' | 'near' | 'online'>('best');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
-  const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter(city), source: 'city', label: cityLabel }));
+  const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel }));
   const [fallbackNotice, setFallbackNotice] = useState(false);
   const { t, option } = useI18n();
 
@@ -71,13 +72,14 @@ export function CityPage() {
   }, []);
 
   useEffect(() => {
-    const next = defaultFilters(city);
+    const next = defaultFilters(urlCitySlug);
     const normalizedCategory = normalizeCategoryKey(urlCategory);
     if (normalizedCategory && categoryOptions.includes(normalizedCategory)) next.category = normalizedCategory;
     setDraftFilters(next);
     setAppliedFilters(next);
-    setSearcherLocation({ ...getCityCenter(city), source: 'city', label: cityLabel });
-  }, [city, cityLabel, urlCategory]);
+    setProfiles([]);
+    setSearcherLocation({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel });
+  }, [urlCitySlug, cityLabel, urlCategory, countryCode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,30 +117,38 @@ export function CityPage() {
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
-    params.set('city', appliedFilters.city);
-    const country = searchParams.get('country');
-    if (country) params.set('country', country);
+    params.set('city', urlCitySlug);
+    params.set('country', countryCode);
     if (appliedFilters.category) params.set('category', appliedFilters.category);
     if (appliedFilters.tag_ids.length) params.set('tags', appliedFilters.tag_ids.join(','));
     return `?${params.toString()}`;
-  }, [appliedFilters.city, appliedFilters.category, appliedFilters.tag_ids, searchParams]);
+  }, [urlCitySlug, countryCode, appliedFilters.category, appliedFilters.tag_ids]);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError('');
+    setProfiles([]);
     getPublicProfiles(query)
       .then((publicProfiles) => {
+        if (cancelled) return;
         if (import.meta.env.DEV) {
           console.debug('[Category]', { raw: urlCategory, normalized: normalizeCategoryKey(urlCategory), urlCategory, selectedCategory: appliedFilters.category, profilesCount: publicProfiles.length });
         }
-        setProfiles(applyFilters(publicProfiles, appliedFilters, searcherLocation));
+        setProfiles(applyFilters(publicProfiles, { ...appliedFilters, city: urlCitySlug }, searcherLocation));
       })
       .catch((reason) => {
+        if (cancelled) return;
         setProfiles([]);
         setError(reason instanceof Error ? reason.message : 'Could not load profiles.');
       })
-      .finally(() => setLoading(false));
-  }, [query, appliedFilters, searcherLocation, retryKey]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query, appliedFilters, searcherLocation, retryKey, urlCitySlug]);
 
   const sortedProfiles = useMemo(() => sortProfiles(profiles, sortMode), [profiles, sortMode]);
   const radarProfiles = useMemo(
@@ -156,8 +166,9 @@ export function CityPage() {
       radarProfiles: radarProfiles.length,
       selectedRadiusKm: draftFilters.radius,
       selectedCategory: appliedFilters.category,
-      selectedCity: appliedFilters.city,
-      selectedCountry: searchParams.get('country')
+      selectedCity: urlCitySlug,
+      selectedCountry: countryCode,
+      apiUrl: query
     });
   }
 
@@ -182,7 +193,7 @@ export function CityPage() {
   }
 
   function resetFilters() {
-    const next = defaultFilters(city);
+    const next = defaultFilters(urlCitySlug);
     setDraftFilters(next);
     setAppliedFilters(next);
     const nextParams = new URLSearchParams(searchParams);
@@ -191,7 +202,7 @@ export function CityPage() {
   }
 
   async function useLocation() {
-    const location = await getSearcherLocationWithFallback(appliedFilters.city);
+    const location = await getSearcherLocationWithFallback(urlCitySlug);
     setSearcherLocation(location);
     setFallbackNotice(location.source === 'city');
   }
@@ -204,7 +215,7 @@ export function CityPage() {
       const accessToken = data.session?.access_token;
       if (!accessToken) return;
       api.updateClientPreferences(accessToken, {
-        client_search_country: searchParams.get('country') || 'DE',
+        client_search_country: countryCode,
         client_search_city: cityLabel,
         client_search_postal_code: location.label?.match(/\b\d{5}\b/)?.[0] || null,
         client_search_area: location.label || null,
@@ -217,7 +228,7 @@ export function CityPage() {
 
   function clearManualLocation() {
     window.localStorage.removeItem(clientSearchLocationStorageKey);
-    setSearcherLocation({ ...getCityCenter(city), source: 'city', label: cityLabel });
+    setSearcherLocation({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel });
     setFallbackNotice(false);
     supabase.auth.getSession().then(({ data }) => {
       const accessToken = data.session?.access_token;
@@ -335,7 +346,7 @@ export function CityPage() {
         </div>
       </section>
 
-      <GlobalLocationSearch initialCountry={searchParams.get('country') || 'DE'} initialCity={cityLabel} initialCategory={appliedFilters.category || 'ladies'} compact />
+      <GlobalLocationSearch initialCountry={countryCode} initialCity={cityLabel} initialCategory={appliedFilters.category || 'ladies'} compact />
 
       <section className="top-escorts-strip marketplace-avatar-strip">
         <div className="section-head compact">
@@ -367,7 +378,7 @@ export function CityPage() {
           profiles={sortedProfiles}
           radius={draftFilters.radius}
           status={draftFilters.availability_status}
-          city={appliedFilters.city}
+          city={urlCitySlug}
           onRadiusChange={(value) => updateRadarFilter('radius', value)}
           onStatusChange={(value) => updateRadarFilter('availability_status', value)}
           searcherLocation={searcherLocation}
@@ -422,7 +433,7 @@ export function CityPage() {
             ) : (
               <div className="premium-empty-state">
                 <RadioTower size={34} />
-                <h2>No profiles found for {cityLabel}.</h2>
+                <h2>{t('search.noProfilesForCity')}</h2>
                 <p>Try changing category, status or service filters.</p>
                 <button className="button primary" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}>Increase radius</button>
               </div>

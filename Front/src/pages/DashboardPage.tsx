@@ -27,7 +27,7 @@ import {
   visitTypeOptions
 } from '../data/filterOptions';
 import { serviceLabel, serviceOptions } from '../data/serviceCatalog';
-import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog } from '../data/locationCatalog';
+import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
 import { berlinDistrictOptions, resolveBerlinPostalDistrict } from '../lib/geo';
 import {
   normalizeProfileEthnicity,
@@ -50,7 +50,7 @@ const emptyProfile: Partial<Profile> = {
   phone_rule_confirmed: false,
   city: 'berlin',
   area: '',
-  work_country: 'Germany',
+  work_country: 'DE',
   work_city: 'Berlin',
   work_area: '',
   postal_code: '',
@@ -1846,7 +1846,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           ...profile,
           work_city: profile.work_city || normalizeCityName(profile.city || 'berlin'),
           work_area: profile.work_area || profile.area || '',
-          work_country: profile.work_country || 'Germany',
+          work_country: profile.work_country || 'DE',
           latitude: Number(position.coords.latitude.toFixed(6)),
           longitude: Number(position.coords.longitude.toFixed(6)),
           location_mode: 'approximate' as const
@@ -1921,7 +1921,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           const district = resolveBerlinPostalDistrict(parsed.postal_code);
           const nextProfile = {
             ...profile,
-            work_country: parsed.country || profile.work_country || 'Germany',
+            work_country: parsed.country || profile.work_country || 'DE',
             work_city: parsed.city || profile.work_city || normalizeCityName(profile.city || 'berlin'),
             work_area: district || parsed.area || profile.work_area || '',
             postal_code: parsed.postal_code || profile.postal_code || '',
@@ -1960,8 +1960,9 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   }, [savedProfile?.id, profile.auto_location_while_online, currentOperatorStatus, profile]);
 
   const selectedServices = profile.services || [];
-  const selectedCountry = getCountryByNameOrCode(profile.work_country || 'Germany');
+  const selectedCountry = getCountryByNameOrCode(profile.work_country || 'DE');
   const locationCities = getCitiesForCountry(selectedCountry.code);
+  const customWorkCity = profile.work_city && !locationCities.some((city) => normalizeLocationValue(city.name) === normalizeLocationValue(profile.work_city || '')) ? profile.work_city : '';
   const isBerlin = String(profile.work_city || profile.city || '').toLowerCase() === 'berlin';
   const locationDistricts = isBerlin ? berlinDistrictOptions : getDistrictsForCity(selectedCountry.code, profile.work_city || '');
   const filteredServices = serviceOptions.filter((service) => {
@@ -2148,12 +2149,12 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
                 const nextCountry = getCountryByNameOrCode(event.target.value);
                 const nextCity = nextCountry.cities[0]?.name || '';
                 const nextArea = nextCountry.cities[0]?.districts[0] || '';
-                onProfileChange({ ...profile, work_country: nextCountry.name, work_city: nextCity, city: getLegacyCitySlug(nextCity), work_area: nextArea, area: nextArea });
+                onProfileChange({ ...profile, work_country: nextCountry.code, work_city: nextCity, city: getLegacyCitySlug(nextCity), work_area: nextArea, area: nextArea });
               }}>{locationCatalog.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select>
               <select value={profile.work_city || ''} onChange={(event) => {
                 const nextArea = getDistrictsForCity(selectedCountry.code, event.target.value)[0] || '';
                 onProfileChange({ ...profile, work_city: event.target.value, city: getLegacyCitySlug(event.target.value), work_area: nextArea, area: nextArea });
-              }}>{locationCities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}</select>
+              }}>{customWorkCity ? <option value={customWorkCity}>{customWorkCity}</option> : null}{locationCities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}</select>
               <input placeholder={t('dashboard.advertiser.manualCity')} value={profile.work_city || ''} onChange={(event) => onProfileChange({ ...profile, work_city: event.target.value, city: normalizeLegacyCity(event.target.value) || getLegacyCitySlug(event.target.value) })} />
               <select value={locationDistricts.includes(profile.work_area || '') ? profile.work_area || '' : ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })}>
                 <option value="">{t('profileDetails.chooseDistrict')}</option>
@@ -2513,7 +2514,7 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     slug: 'preview',
     city: profile.city || 'berlin',
     area: profile.area || 'Central',
-    work_country: profile.work_country || 'Germany',
+    work_country: profile.work_country || 'DE',
     work_city: profile.work_city || normalizeCityName(profile.city || 'berlin'),
     work_area: profile.work_area || profile.area || 'Central',
     postal_code: profile.postal_code || null,

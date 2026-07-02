@@ -1,3 +1,6 @@
+import { berlinDistrictOptions } from '../lib/geo';
+import { citySlug, globalCountries, normalizeCountry } from '../lib/globalLocations';
+
 export type LocationCity = {
   name: string;
   legacySlug?: string;
@@ -10,52 +13,28 @@ export type LocationCountry = {
   cities: LocationCity[];
 };
 
-import { berlinDistrictOptions } from '../lib/geo';
+const cityDistricts: Record<string, string[]> = {
+  berlin: berlinDistrictOptions,
+  hamburg: ['St. Pauli', 'Altona', 'Eimsbuttel', 'Sternschanze', 'HafenCity', 'Wandsbek', 'Harburg', 'Barmbek', 'Winterhude', 'Ottensen'],
+  muenchen: ['Altstadt', 'Maxvorstadt', 'Schwabing', 'Ludwigsvorstadt', 'Isarvorstadt', 'Glockenbachviertel', 'Sendling', 'Bogenhausen', 'Neuhausen', 'Nymphenburg'],
+  koeln: ['Innenstadt', 'Altstadt', 'Neustadt', 'Ehrenfeld', 'Nippes', 'Deutz', 'Kalk', 'Mulheim', 'Lindenthal', 'Rodenkirchen'],
+  hannover: ['Mitte', 'List', 'Linden', 'Nordstadt', 'Sudstadt', 'Vahrenwald', 'Bothfeld', 'Dohren', 'Ricklingen', 'Herrenhausen']
+};
 
-export const locationCatalog: LocationCountry[] = [
-  {
-    code: 'DE',
-    name: 'Germany',
-    cities: [
-      { name: 'Berlin', legacySlug: 'berlin', districts: berlinDistrictOptions },
-      { name: 'Hamburg', legacySlug: 'hamburg', districts: ['St. Pauli', 'Altona', 'Eimsbuttel', 'Sternschanze', 'HafenCity', 'Wandsbek', 'Harburg', 'Barmbek', 'Winterhude', 'Ottensen'] },
-      { name: 'Munchen', legacySlug: 'muenchen', districts: ['Altstadt', 'Maxvorstadt', 'Schwabing', 'Ludwigsvorstadt', 'Isarvorstadt', 'Glockenbachviertel', 'Sendling', 'Bogenhausen', 'Neuhausen', 'Nymphenburg'] },
-      { name: 'Koln', legacySlug: 'koeln', districts: ['Innenstadt', 'Altstadt', 'Neustadt', 'Ehrenfeld', 'Nippes', 'Deutz', 'Kalk', 'Mulheim', 'Lindenthal', 'Rodenkirchen'] },
-      { name: 'Hannover', legacySlug: 'hannover', districts: ['Mitte', 'List', 'Linden', 'Nordstadt', 'Sudstadt', 'Vahrenwald', 'Bothfeld', 'Dohren', 'Ricklingen', 'Herrenhausen'] }
-    ]
-  },
-  {
-    code: 'NL',
-    name: 'Netherlands',
-    cities: [
-      { name: 'Amsterdam', districts: [] },
-      { name: 'Rotterdam', districts: [] },
-      { name: 'Den Haag', districts: [] },
-      { name: 'Utrecht', districts: [] }
-    ]
-  },
-  {
-    code: 'BE',
-    name: 'Belgium',
-    cities: [
-      { name: 'Brussels', districts: [] },
-      { name: 'Antwerp', districts: [] },
-      { name: 'Gent', districts: [] },
-      { name: 'Liege', districts: [] }
-    ]
-  },
-  {
-    code: 'LU',
-    name: 'Luxembourg',
-    cities: [
-      { name: 'Luxembourg City', districts: [] }
-    ]
-  }
-];
+export const locationCatalog: LocationCountry[] = globalCountries.map((country) => ({
+  code: country.code,
+  name: country.labels.en,
+  cities: country.cities.map((name) => ({
+    name,
+    legacySlug: citySlug(name),
+    districts: cityDistricts[citySlug(name)] || []
+  }))
+}));
 
 export function getCountryByNameOrCode(value: string | null | undefined) {
   const normalized = normalizeLocationValue(value || '');
-  return locationCatalog.find((country) => normalizeLocationValue(country.code) === normalized || normalizeLocationValue(country.name) === normalized) || locationCatalog[0];
+  const countryCode = normalizeCountry(value);
+  return locationCatalog.find((country) => country.code === countryCode || normalizeLocationValue(country.code) === normalized || normalizeLocationValue(country.name) === normalized) || locationCatalog[0];
 }
 
 export function getCitiesForCountry(value: string | null | undefined) {

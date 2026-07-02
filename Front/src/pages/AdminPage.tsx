@@ -2526,8 +2526,14 @@ function readSubscriptionEnd(row: Record<string, unknown>) {
 }
 
 function getAdminLocationCountries(rows: LocationCatalogRow[]) {
-  if (!rows.length) return locationCatalog;
   const countries = new Map<string, { code: string; name: string; cities: { name: string; districts: string[] }[] }>();
+  locationCatalog.forEach((country) => {
+    countries.set(country.code, {
+      code: country.code,
+      name: country.name,
+      cities: country.cities.map((city) => ({ name: city.name, districts: [...city.districts] }))
+    });
+  });
   rows
     .filter((row) => row.is_active !== false)
     .sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0))
@@ -2547,8 +2553,7 @@ function getAdminLocationCountries(rows: LocationCatalogRow[]) {
       }
       countries.set(code, country);
     });
-  const values = Array.from(countries.values());
-  return values.length ? values : locationCatalog;
+  return Array.from(countries.values());
 }
 
 function getAdminLocationCountry(countries: ReturnType<typeof getAdminLocationCountries>, value: string | null | undefined) {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { categoryOptions, normalizeCategoryKey } from '../lib/categories';
@@ -46,12 +46,26 @@ export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Ber
   const serviceNode = useRef<HTMLDivElement | null>(null);
   const cities = useMemo(() => getCitiesForCountry(country), [country]);
 
-  function submit() {
-    const slug = citySlug(city || cities[0] || 'Berlin');
+  useEffect(() => {
+    const nextCountry = normalizeCountry(initialCountry) || 'DE';
+    setCountry(nextCountry);
+    setCity(initialCity || getCitiesForCountry(nextCountry)[0] || 'Berlin');
+  }, [initialCountry, initialCity]);
+
+  useEffect(() => {
+    setCategory(normalizeCategoryKey(initialCategory) || 'ladies');
+  }, [initialCategory]);
+
+  function navigateToCity(nextCity = city, nextCountry = country, nextCategory = category) {
+    const slug = citySlug(nextCity || getCitiesForCountry(nextCountry)[0] || 'Berlin');
     const params = new URLSearchParams();
-    params.set('country', country);
-    if (category) params.set('category', category);
+    params.set('country', nextCountry);
+    if (nextCategory) params.set('category', nextCategory);
     navigate(`/city/${slug}?${params.toString()}`);
+  }
+
+  function submit() {
+    navigateToCity();
   }
 
   async function searchPlace() {
@@ -121,7 +135,10 @@ export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Ber
       </div>
       <div className="popular-city-row">
         <span>{t('search.popularCities')}</span>
-        {cities.slice(0, 8).map((item) => <button type="button" key={item} onClick={() => setCity(item)}>{item}</button>)}
+        {cities.slice(0, 8).map((item) => <button type="button" key={item} onClick={() => {
+          setCity(item);
+          navigateToCity(item);
+        }}>{item}</button>)}
       </div>
     </section>
   );

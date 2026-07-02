@@ -9,6 +9,7 @@ export const globalCountries: GlobalCountry[] = [
   { code: 'PL', labels: { en: 'Poland', pl: 'Polska', de: 'Polen' }, cities: ['Warszawa', 'Krakow', 'Wroclaw', 'Poznan', 'Gdansk', 'Lodz', 'Szczecin', 'Katowice', 'Lublin', 'Bydgoszcz'] },
   { code: 'NL', labels: { en: 'Netherlands', pl: 'Holandia', de: 'Niederlande' }, cities: ['Amsterdam', 'Rotterdam', 'Den Haag', 'Utrecht', 'Eindhoven'] },
   { code: 'BE', labels: { en: 'Belgium', pl: 'Belgia', de: 'Belgien' }, cities: ['Brussels', 'Antwerp', 'Gent', 'Liege'] },
+  { code: 'LU', labels: { en: 'Luxembourg', pl: 'Luksemburg', de: 'Luxemburg' }, cities: ['Luxembourg'] },
   { code: 'AT', labels: { en: 'Austria', pl: 'Austria', de: 'Oesterreich' }, cities: ['Wien', 'Graz', 'Linz', 'Salzburg'] },
   { code: 'CH', labels: { en: 'Switzerland', pl: 'Szwajcaria', de: 'Schweiz' }, cities: ['Zuerich', 'Basel', 'Bern', 'Geneve', 'Lausanne'] },
   { code: 'CZ', labels: { en: 'Czech Republic', pl: 'Czechy', de: 'Tschechien' }, cities: ['Praha', 'Brno', 'Ostrava'] },

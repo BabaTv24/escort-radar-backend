@@ -479,7 +479,10 @@ function profileMatchesCountry(profile: any, country: string) {
 function profileMatchesCity(profile: any, city: string) {
   const wanted = normalizeGlobalCity(city);
   return [profile.city, profile.work_city, profile.travel_city, profile.area, profile.work_area]
-    .some((value) => normalizeGlobalCity(value) === wanted || String(value || '').toLowerCase().includes(wanted));
+    .some((value) => {
+      const normalizedValue = normalizeGlobalCity(value);
+      return normalizedValue === wanted || normalizedValue.includes(wanted);
+    });
 }
 
 function calculateRadarScore(profile: any) {

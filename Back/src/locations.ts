@@ -3,6 +3,7 @@ export const globalCountries = [
   { code: 'PL', labels: ['Poland', 'Polska', 'Polen'], cities: ['Warszawa', 'Krakow', 'Wroclaw', 'Poznan', 'Gdansk', 'Lodz', 'Szczecin', 'Katowice', 'Lublin', 'Bydgoszcz'] },
   { code: 'NL', labels: ['Netherlands', 'Holandia', 'Niederlande'], cities: ['Amsterdam', 'Rotterdam', 'Den Haag', 'Utrecht', 'Eindhoven'] },
   { code: 'BE', labels: ['Belgium', 'Belgia', 'Belgien'], cities: ['Brussels', 'Antwerp', 'Gent', 'Liege'] },
+  { code: 'LU', labels: ['Luxembourg', 'Luksemburg', 'Luxemburg'], cities: ['Luxembourg'] },
   { code: 'AT', labels: ['Austria', 'Oesterreich'], cities: ['Wien', 'Graz', 'Linz', 'Salzburg'] },
   { code: 'CH', labels: ['Switzerland', 'Szwajcaria', 'Schweiz'], cities: ['Zuerich', 'Basel', 'Bern', 'Geneve', 'Lausanne'] },
   { code: 'CZ', labels: ['Czech Republic', 'Czechy', 'Tschechien'], cities: ['Praha', 'Brno', 'Ostrava'] },

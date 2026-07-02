@@ -870,6 +870,7 @@
   "search.allCities": "All cities",
   "search.noProfilesForCategory": "No profiles in this category.",
   "search.noProfilesForCity": "No profiles in this city.",
+  "search.showingCity": "Showing city",
   "serviceCategory.accessibility": "Accessibility",
   "serviceCategory.appearance": "Appearance",
   "serviceCategory.classic": "Classic",
