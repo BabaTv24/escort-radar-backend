@@ -17,6 +17,8 @@ import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
 import { getCityLabel } from '../lib/globalLocations';
 import { supabase } from '../lib/supabase';
 
+const clientSearchLocationStorageKey = 'escortRadar.clientSearchLocation';
+
 type SearchFilters = {
   city: string;
   category: string;
@@ -81,7 +83,14 @@ export function CityPage() {
     let cancelled = false;
     supabase.auth.getSession().then(async ({ data }) => {
       const accessToken = data.session?.access_token;
-      if (!accessToken) return;
+      if (!accessToken) {
+        const saved = readSavedSearchLocation();
+        if (!cancelled && saved) {
+          setSearcherLocation(saved);
+          setFallbackNotice(false);
+        }
+        return;
+      }
       try {
         const { preferences } = await api.clientPreferences(accessToken);
         const lat = Number(preferences.client_search_lat);
@@ -190,6 +199,7 @@ export function CityPage() {
   function setManualLocation(location: GeoPoint) {
     setSearcherLocation(location);
     setFallbackNotice(false);
+    saveSearchLocationToStorage(location);
     supabase.auth.getSession().then(({ data }) => {
       const accessToken = data.session?.access_token;
       if (!accessToken) return;
@@ -202,6 +212,27 @@ export function CityPage() {
         client_search_lng: location.lng,
         client_search_label: location.label || cityLabel
       }).catch(() => undefined);
+    });
+  }
+
+  function clearManualLocation() {
+    window.localStorage.removeItem(clientSearchLocationStorageKey);
+    setSearcherLocation({ ...getCityCenter(city), source: 'city', label: cityLabel });
+    setFallbackNotice(false);
+    supabase.auth.getSession().then(({ data }) => {
+      const accessToken = data.session?.access_token;
+      if (!accessToken) return;
+      api.clearClientSearchLocation(accessToken).catch(() => {
+        api.updateClientPreferences(accessToken, {
+          client_search_country: null,
+          client_search_city: null,
+          client_search_postal_code: null,
+          client_search_area: null,
+          client_search_lat: null,
+          client_search_lng: null,
+          client_search_label: null
+        }).catch(() => undefined);
+      });
     });
   }
 
@@ -342,6 +373,7 @@ export function CityPage() {
           searcherLocation={searcherLocation}
           onUseLocation={useLocation}
           onSetManualLocation={setManualLocation}
+          onClearManualLocation={clearManualLocation}
           fallbackNotice={fallbackNotice}
         />
       </section>
@@ -531,6 +563,19 @@ function normalizeCityValue(value: unknown) {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '');
+}
+
+function readSavedSearchLocation(): GeoPoint | null {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(clientSearchLocationStorageKey) || 'null') as GeoPoint | null;
+    return saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lng) ? { ...saved, source: 'manual_saved' } : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSearchLocationToStorage(location: GeoPoint) {
+  window.localStorage.setItem(clientSearchLocationStorageKey, JSON.stringify({ ...location, source: 'manual_saved' }));
 }
 
 function cityName(slug: string) {

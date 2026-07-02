@@ -5472,3 +5472,50 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+/* Mobile auth and saved radar location hotfix */
+@media (max-width: 720px) {
+  .mobile-account-links a,
+  .mobile-account-links button,
+  .mobile-account-role {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.72rem;
+    padding: .28rem .48rem;
+    border: 1px solid rgba(212,175,55,.22);
+    border-radius: 999px;
+    background: rgba(5,5,5,.5);
+    color: #f7d46b;
+    text-decoration: none;
+    font: inherit;
+    cursor: pointer;
+  }
+  .mobile-account-links button {
+    color: #f6f2e8;
+    background: rgba(255,255,255,.045);
+  }
+  .mobile-account-links a:first-child {
+    color: #100c05;
+    background: linear-gradient(135deg, #fff0a6, #d4af37);
+  }
+  .mobile-account-role {
+    max-width: 5.6rem;
+    overflow: hidden;
+    color: #f6f2e8;
+    text-overflow: ellipsis;
+  }
+}
+
+.radar-saved-location {
+  display: grid;
+  gap: .45rem;
+  margin: .75rem 0;
+  padding: .65rem;
+  border: 1px solid rgba(247,212,107,.16);
+  border-radius: .65rem;
+  background: rgba(255,255,255,.035);
+}
+.radar-saved-location strong { color: #fff8e6; font-size: .88rem; }
+.radar-saved-location div { display: flex; flex-wrap: wrap; gap: .4rem; }
+.radar-saved-location small { color: #9ff8df; }

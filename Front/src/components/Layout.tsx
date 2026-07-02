@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { Link, Outlet, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CalendarDays, Coins, Heart, LogOut, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
 import { categoryOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
@@ -20,6 +20,7 @@ export function Layout() {
   const { lang, setLang, t, option } = useI18n();
   const operatorName = import.meta.env.VITE_LEGAL_OPERATOR_NAME || '';
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const activeCategory = normalizeCategoryKey(searchParams.get('category'));
   const cityMatch = location.pathname.match(/^\/city\/([^/]+)/);
@@ -51,6 +52,7 @@ export function Layout() {
   async function logout() {
     await supabase.auth.signOut();
     setAccount({ loading: false, email: '', role: 'account' });
+    navigate('/', { replace: true });
   }
 
   return (
@@ -74,15 +76,14 @@ export function Layout() {
         <div className="mobile-auth-actions" aria-label="Mobile account controls">
           {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
             <div className="mobile-account-links signed-in">
-              <Link to="/dashboard">{t('auth.loggedInAs')}: {t(`auth.${account.role}`)}</Link>
-              <span aria-hidden="true">/</span>
+              <span className="mobile-account-role">{t(`auth.${account.role}`)}</span>
+              <Link to="/dashboard">{t('auth.dashboard')}</Link>
               <button type="button" onClick={logout}>{t('auth.logout')}</button>
             </div>
           ) : (
             <div className="mobile-account-links">
-              <Link to="/register?type=client">{t('buttons.register')}</Link>
-              <span aria-hidden="true">/</span>
               <Link to="/login">{t('buttons.login')}</Link>
+              <Link to="/register?type=client">{t('buttons.register')}</Link>
             </div>
           )}
           <div className="mobile-language-switcher" aria-label="Language" translate="no">

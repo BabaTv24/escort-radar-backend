@@ -35,6 +35,10 @@ export const api = {
     token,
     body: JSON.stringify(body)
   }),
+  clearClientSearchLocation: (token: string) => request<{ preferences: ClientSearchPreferences }>('/api/client/preferences/location', {
+    method: 'DELETE',
+    token
+  }),
   register: (body: { email: string; password: string; username?: string; auth_account_type: 'client' | 'escort' | 'business'; identity?: string; referred_by_code?: string }) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business' } }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(body)

@@ -719,3 +719,41 @@ test('public profile maps online aliases and visit mode labels are visible to cl
   assert.match(plLocale, /Wyjazdy: Tak/);
   assert.match(plLocale, /Tryb wizyty/);
 });
+
+test('mobile auth bar exposes login register panel and logout actions', async () => {
+  const layoutSource = await readFile(new URL('../Front/src/components/Layout.tsx', import.meta.url), 'utf8');
+  const stylesSource = await readFile(new URL('../Front/src/styles.css', import.meta.url), 'utf8');
+  const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
+
+  assert.match(layoutSource, /supabase\.auth\.getSession/);
+  assert.match(layoutSource, /onAuthStateChange/);
+  assert.match(layoutSource, /supabase\.auth\.signOut/);
+  assert.match(layoutSource, /navigate\('\/', \{ replace: true \}\)/);
+  assert.match(layoutSource, /mobile-account-role/);
+  assert.match(layoutSource, /t\('auth\.dashboard'\)/);
+  assert.match(layoutSource, /t\('auth\.logout'\)/);
+  assert.match(stylesSource, /Mobile auth and saved radar location hotfix/);
+  assert.match(stylesSource, /\.mobile-account-links a,/);
+  assert.match(plLocale, /"auth\.logout": "Wyloguj"/);
+});
+
+test('client search location can be updated cleared and edited from radar', async () => {
+  const routeSource = await readFile(new URL('../Back/src/routes/clientPreferences.ts', import.meta.url), 'utf8');
+  const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+  const cityPageSource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
+  const radarPanelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
+  const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
+
+  assert.match(routeSource, /clientPreferencesRouter\.delete\('\/location'/);
+  assert.match(routeSource, /if \(value === null \|\| value === undefined \|\| value === ''\) return null/);
+  assert.match(apiSource, /clearClientSearchLocation/);
+  assert.match(cityPageSource, /clientSearchLocationStorageKey/);
+  assert.match(cityPageSource, /onClearManualLocation=\{clearManualLocation\}/);
+  assert.match(cityPageSource, /client_search_postal_code: null/);
+  assert.match(radarPanelSource, /isEditingLocation/);
+  assert.match(radarPanelSource, /radar\.savedLocation/);
+  assert.match(radarPanelSource, /radar\.changeLocation/);
+  assert.match(radarPanelSource, /radar\.clearLocation/);
+  assert.match(plLocale, /Lokalizacja zapisana/);
+  assert.match(plLocale, /Lokalizacja została wyczyszczona/);
+});

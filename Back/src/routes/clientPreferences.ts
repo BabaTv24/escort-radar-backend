@@ -35,6 +35,27 @@ clientPreferencesRouter.patch('/', asyncHandler(async (req, res) => {
   res.json({ preferences: toPreferences(data) });
 }));
 
+clientPreferencesRouter.delete('/location', asyncHandler(async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('client_profiles')
+    .upsert({
+      user_id: req.user!.id,
+      client_search_country: null,
+      client_search_city: null,
+      client_search_postal_code: null,
+      client_search_area: null,
+      client_search_lat: null,
+      client_search_lng: null,
+      client_search_label: null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' })
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ preferences: toPreferences(data) });
+}));
+
 async function getOrCreateClientProfile(userId: string) {
   const { data } = await supabaseAdmin
     .from('client_profiles')
@@ -65,6 +86,7 @@ function toPreferences(row: Record<string, unknown>) {
 }
 
 function optionalNumber(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
   const nextValue = Number(value);
   return Number.isFinite(nextValue) ? nextValue : null;
 }

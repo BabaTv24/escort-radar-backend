@@ -19,6 +19,7 @@ type RadarPanelProps = {
   searcherLocation: GeoPoint;
   onUseLocation?: () => void;
   onSetManualLocation?: (location: GeoPoint) => void;
+  onClearManualLocation?: () => void;
   fallbackNotice?: boolean;
   compact?: boolean;
 };
@@ -40,13 +41,16 @@ const radarStatuses = [
   ['OFFLINE', 'offline', 'status.offline']
 ] as const;
 
-export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, fallbackNotice = false, compact = false }: RadarPanelProps) {
+export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false }: RadarPanelProps) {
   const { t } = useI18n();
   const [manualQuery, setManualQuery] = useState('');
   const [manualError, setManualError] = useState('');
+  const [manualMessage, setManualMessage] = useState('');
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [localManualLocation, setLocalManualLocation] = useState<GeoPoint | null>(null);
   const effectiveLocation = searcherLocation.source === 'browser' ? searcherLocation : localManualLocation || searcherLocation;
   const hasRadarLocation = (effectiveLocation.source === 'browser' || effectiveLocation.source === 'manual' || effectiveLocation.source === 'manual_saved') && isValidLatLng(effectiveLocation.lat, effectiveLocation.lng);
+  const showManualForm = !hasRadarLocation || isEditingLocation;
   const radarProfiles = hasRadarLocation
     ? profiles
       .map((profile) => getRadarProfile(profile, effectiveLocation, radius))
@@ -95,8 +99,26 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
       return;
     }
     setManualError('');
+    setManualMessage(t('radar.locationUpdated'));
+    setIsEditingLocation(false);
     setLocalManualLocation(location);
     onSetManualLocation?.(location);
+  }
+
+  function editManualLocation() {
+    setManualQuery(effectiveLocation.label || '');
+    setManualError('');
+    setManualMessage('');
+    setIsEditingLocation(true);
+  }
+
+  function clearManualLocation() {
+    setManualQuery('');
+    setManualError('');
+    setManualMessage(t('radar.locationCleared'));
+    setIsEditingLocation(true);
+    setLocalManualLocation(null);
+    onClearManualLocation?.();
   }
 
   return (
@@ -130,9 +152,19 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             ))}
           </div>
         </div>
-        {!hasRadarLocation && (
+        {hasRadarLocation && !isEditingLocation && (
+          <div className="radar-saved-location">
+            <strong>{t('radar.savedLocation')}: {effectiveLocation.label || t('radar.locationFromManual')}</strong>
+            <div>
+              <button className="button" type="button" onClick={editManualLocation}>{t('radar.changeLocation')}</button>
+              <button className="button ghost" type="button" onClick={clearManualLocation}>{t('radar.clearLocation')}</button>
+            </div>
+            {manualMessage && <small>{manualMessage}</small>}
+          </div>
+        )}
+        {showManualForm && (
           <form className="radar-start-panel" onSubmit={submitManualLocation}>
-            <strong>{t('radar.setStartingPoint')}</strong>
+            <strong>{hasRadarLocation ? t('radar.editPostalCode') : t('radar.setStartingPoint')}</strong>
             <span>{t('radar.locationInputHelp')}</span>
             <div>
               <input value={manualQuery} placeholder={t('radar.locationInputPlaceholder')} onChange={(event) => {
@@ -143,7 +175,9 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             </div>
             <div className="radar-start-actions">
               {onUseLocation && <button className="button" type="button" onClick={onUseLocation}>{t('radar.useGps')}</button>}
+              {hasRadarLocation && <button className="button ghost" type="button" onClick={() => setIsEditingLocation(false)}>{t('buttons.cancel')}</button>}
               {manualError && <small className="error-text">{manualError}</small>}
+              {manualMessage && <small>{manualMessage}</small>}
               {fallbackNotice && <small>{t('radar.locationDenied')}</small>}
             </div>
           </form>
