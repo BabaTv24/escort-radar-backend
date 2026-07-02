@@ -6,7 +6,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
-import type { BookingRequest, ClientActivation, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Gift as GiftRow, Profile, ProfileImage, RadarNotification, Tag } from '../types';
+import type { BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Gift as GiftRow, Profile, ProfileImage, RadarNotification, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
@@ -159,6 +159,7 @@ export function DashboardPage() {
   const [giftsReceived, setGiftsReceived] = useState<GiftRow[]>([]);
   const [marketProfiles, setMarketProfiles] = useState<Profile[]>([]);
   const [clientIntent, setClientIntent] = useState<ClientIntent | null>(null);
+  const [clientFavorites, setClientFavorites] = useState<ClientFavorite[]>([]);
   const [clientMatches, setClientMatches] = useState<Profile[]>([]);
   const [clientNotifications, setClientNotifications] = useState<RadarNotification[]>([]);
   const [nearbyClients, setNearbyClients] = useState<ClientIntent[]>([]);
@@ -251,6 +252,10 @@ export function DashboardPage() {
     setDashboardStatus('loading');
     try {
       await api.myWallet(accessToken).then((data) => setWallet(data.wallet)).catch(() => setWallet(null));
+      await api.myFavorites(accessToken).then((data) => {
+        setClientFavorites(data.favorites);
+        setWallet(data.wallet);
+      }).catch(() => setClientFavorites([]));
       await api.profiles('?city=berlin').then((data) => setMarketProfiles(data.profiles)).catch(() => setMarketProfiles([]));
       const clientData = await api.clientActivationMe(accessToken);
       await api.clientIntentMe(accessToken).then((data) => {
@@ -611,6 +616,8 @@ export function DashboardPage() {
         matches={clientMatches}
         notifications={clientNotifications}
         onCreateIntent={(body) => createClientIntent(body)}
+        favorites={clientFavorites}
+        onRemoveFavorite={removeClientFavorite}
       />
     );
   }
@@ -624,6 +631,18 @@ export function DashboardPage() {
         onLogout={logout}
       />
     );
+  }
+
+  async function removeClientFavorite(profileId: string) {
+    if (!token) return;
+    try {
+      const data = await api.removeFavorite(token, profileId);
+      setWallet(data.wallet);
+      setClientFavorites((current) => current.filter((favorite) => favorite.profile_id !== profileId));
+      setMessage(t('favorites.favoriteRemoved'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
   }
 
   if (authAccountType === 'escort') {
@@ -1062,7 +1081,7 @@ function getPublicReferralLink(activation: ClientActivation | null) {
   return `${origin}/r/${encodeURIComponent(activation.referral_code)}`;
 }
 
-function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, giftsSent, giftsReceived, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent }: {
+function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, giftsSent, giftsReceived, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent, favorites, onRemoveFavorite }: {
   userEmail: string;
   wallet: Wallet | null;
   coinWallet: CoinWallet | null;
@@ -1082,6 +1101,8 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   matches: Profile[];
   notifications: RadarNotification[];
   onCreateIntent: (body: Partial<ClientIntent>) => void;
+  favorites: ClientFavorite[];
+  onRemoveFavorite: (profileId: string) => void;
 }) {
   const { t } = useI18n();
   const activated = activation?.state === 'client_activated';
@@ -1128,7 +1149,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     'Pelne galerie odblokowane',
     'Prezenty Coins aktywne',
     'Referral link aktywny',
-    '100 Coins dodane'
+    t('activation.activationTokenBonus')
   ];
   void featureCards;
 
@@ -1141,7 +1162,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
         {!activated && (
           <>
             <div className="onboarding-points">
-              {['Telefon / WhatsApp / Telegram', 'Wszystkie zdjecia', 'Prywatne galerie', 'Prezenty Coins', 'Referral link + QR', '100 Coins bonus'].map((item) => <span key={item}>{item}</span>)}
+              {['Telefon / WhatsApp / Telegram', 'Wszystkie zdjecia', 'Prywatne galerie', 'Prezenty Coins', 'Referral link + QR', t('activation.activationTokenBonus')].map((item) => <span key={item}>{item}</span>)}
             </div>
             <button className="button primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : 'Aktywuj aplikację 0,99 €'}</button>
           </>
@@ -1239,7 +1260,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             </select>
             <input placeholder="Area" value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
             <select value={intentDraft.category || 'ladies'} onChange={(event) => setIntentDraft({ ...intentDraft, category: event.target.value })}>
-              {['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'].map((item) => <option key={item} value={item}>{item}</option>)}
+              {['ladies', 'gay', 'couples', 'trans', 'massage', 'home_hotel', 'live_cam', 'clubs_parties', 'other'].map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
               {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}
@@ -1264,6 +1285,32 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             ))}
             {!matches.length && <p className="muted">No live matches yet.</p>}
           </div>
+        </section>
+
+        <section className="creator-panel full-span" id="favorites">
+          <div className="section-head compact">
+            <div>
+              <p className="eyebrow">{t('favorites.myFavorites')}</p>
+              <h2>{t('favorites.myFavorites')}</h2>
+            </div>
+            <strong>{Math.round(Number(wallet?.escort_token_balance || 0))} {t('tokens.short')}</strong>
+          </div>
+          {favorites.length ? (
+            <div className="cards-grid marketplace-grid premium-profile-grid">
+              {favorites.map((favorite) => favorite.profile ? (
+                <article key={favorite.id} className="favorite-card-shell">
+                  <ProfileCard profile={favorite.profile} />
+                  <button className="button" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}>{t('favorites.removeFromFavorites')}</button>
+                </article>
+              ) : null)}
+            </div>
+          ) : (
+            <div className="market-empty-state">
+              <Heart size={18} />
+              <p>{t('favorites.noFavoritesYet')}</p>
+              <Link className="button primary" to="/city/berlin">{t('home.openRadar')}</Link>
+            </div>
+          )}
         </section>
 
         <section className="creator-panel">

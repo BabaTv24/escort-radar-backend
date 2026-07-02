@@ -70,6 +70,8 @@ function envBoolean(key: string, fallback: boolean) {
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+export const CLIENT_ACTIVATION_TOKEN_BONUS = envNumber('CLIENT_ACTIVATION_TOKEN_BONUS', 7);
+
 export const config: Config = {
   port: Number(process.env.PORT || 4000),
   supabaseUrl: process.env.SUPABASE_URL!,
@@ -100,7 +102,7 @@ export const config: Config = {
   },
   appUrl: process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173',
   clientActivationPriceCents: envNumber('CLIENT_ACTIVATION_PRICE_CENTS', 99),
-  clientActivationWelcomeCoins: envNumber('CLIENT_ACTIVATION_WELCOME_COINS', 100),
+  clientActivationWelcomeCoins: CLIENT_ACTIVATION_TOKEN_BONUS,
   clientReferralRewardCoins: envNumber('CLIENT_REFERRAL_REWARD_COINS', 25),
   supportEmail: process.env.SUPPORT_EMAIL || 'support@escort-radar.fun',
   legalOperatorName: process.env.LEGAL_OPERATOR_NAME || '',

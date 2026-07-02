@@ -34,7 +34,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     if (parsed !== undefined) query = query.eq(key, parsed);
   }
 
-  if (req.query.category) query = query.in('category', categoryQueryAliases(req.query.category));
+  const categoryFilter = normalizeProfileCategory(req.query.category);
 
   const tagIds = String(req.query.tags || '')
     .split(',')
@@ -62,6 +62,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
       }
       return visible;
     })
+    .filter((profile) => !categoryFilter || normalizeProfileCategory(profile.category) === categoryFilter)
     .map((profile) => sanitizePublicProfile(withImageUrls(profile)))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
 
@@ -402,6 +403,7 @@ function sanitizePublicProfile(profile: any) {
   const canExposeRadarPoint = (visibility === 'exact' || visibility === 'postal_area') && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
   return {
     ...publicProfile,
+    category: normalizeProfileCategory(publicProfile.category) || publicProfile.category,
     location_visibility: visibility,
     postal_code: postalCode,
     work_place_label: visibility === 'exact' ? work_place_label : null,
@@ -459,18 +461,6 @@ function cityLabel(slug: string) {
     warszawa: 'Warszawa'
   };
   return labels[slug] || slug;
-}
-
-function categoryQueryAliases(value: unknown) {
-  const normalized = normalizeProfileCategory(value);
-  const aliasMap: Record<string, string[]> = {
-    gay: ['gay', 'Gay', 'gays', 'Gays', 'male', 'Male', 'men', 'Men'],
-    ladies: ['ladies', 'Ladies', 'female', 'Female', 'women', 'Women', 'panie', 'Panie'],
-    couples: ['couples', 'Couples', 'couple', 'Couple', 'pary', 'Pary'],
-    trans: ['trans', 'Trans'],
-    house_hotel: ['house_hotel', 'home_hotel', 'Dom/Hotel', 'dom_hotel']
-  };
-  return aliasMap[normalized] || [normalized, normalized.slice(0, 1).toUpperCase() + normalized.slice(1)];
 }
 
 function calculateRadarScore(profile: any) {

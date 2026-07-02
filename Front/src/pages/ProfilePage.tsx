@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   BadgeCheck,
   CalendarDays,
@@ -379,11 +379,12 @@ export function ProfilePage() {
             <button className="button primary" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={16} /> Message</button>
             <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={16} /> Call</button>
             <a href="#booking" className="button"><CalendarDays size={16} /> Book</a>
-            <button className="button" type="button"><Heart size={16} /> Favorite</button>
+            <button className="button" type="button" onClick={toggleFavorite}><Heart size={16} /> {t('favorites.addToFavorites')}</button>
             <button className="button" type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={16} /> Gift</button>
             <button className="button" type="button" onClick={() => setAccessMessage(activated ? 'Live Cam is available for Premium clients.' : 'Activate for 0.99 EUR to unlock Live Cam.')}><Video size={16} /> Live</button>
           </div>
-          {accessMessage && <p className={activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
+          {accessMessage && <p className={accessMessage === t('favorites.notEnoughTokens') ? 'error-text' : activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
+          {accessMessage === t('favorites.notEnoughTokens') && <Link className="button" to="/tokens">{t('tokens.openShop')}</Link>}
           <div className="market-contact-facts">
             <MarketFact icon={<BadgeCheck size={16} />} label="Verified" value={profile.verified ? 'Yes' : 'Pending'} />
             <MarketFact icon={<Languages size={16} />} label="Languages" value={languages.join(', ')} />
@@ -439,6 +440,23 @@ export function ProfilePage() {
     if (!token) return setAccessMessage('Login required.');
     await api.sendGift(token, { profile_id: profile!.id, gift_type: 'rose', coin_cost: 10 });
     setAccessMessage('Gift sent.');
+  }
+
+  async function toggleFavorite() {
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+    if (!token) {
+      setAccessMessage(t('favorites.favoriteCostsToken'));
+      navigate('/login');
+      return;
+    }
+    try {
+      const result = await api.addFavorite(token, profile!.id);
+      setAccessMessage(result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      setAccessMessage(message.toLowerCase().includes('token') ? t('favorites.notEnoughTokens') : message || t('states.requestFailed'));
+    }
   }
 
   async function unlockVipGallery() {

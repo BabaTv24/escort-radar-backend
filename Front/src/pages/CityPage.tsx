@@ -10,8 +10,9 @@ import { categoryOptions, defaultServiceMenuNames, toggleArrayValue, visitTypeOp
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
-import { getCityCenter, getDistanceKm, getSearcherLocationWithFallback, isProfileInRadarRange, normalizeProfileCategory, resolveProfileRadarLocation } from '../lib/geo';
+import { getCityCenter, getDistanceKm, getSearcherLocationWithFallback, isProfileInRadarRange, resolveProfileRadarLocation } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
+import { normalizeCategoryKey } from '../lib/categories';
 
 type SearchFilters = {
   city: string;
@@ -43,7 +44,7 @@ function defaultFilters(city: string): SearchFilters {
 
 export function CityPage() {
   const { city = 'berlin' } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlCategory = searchParams.get('category');
   const cityLabel = cities.find((item) => item.slug === city)?.name || city;
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -66,7 +67,7 @@ export function CityPage() {
 
   useEffect(() => {
     const next = defaultFilters(city);
-    const normalizedCategory = normalizeProfileCategory(urlCategory);
+    const normalizedCategory = normalizeCategoryKey(urlCategory);
     if (normalizedCategory && categoryOptions.includes(normalizedCategory)) next.category = normalizedCategory;
     setDraftFilters(next);
     setAppliedFilters(next);
@@ -86,8 +87,8 @@ export function CityPage() {
     setError('');
     getPublicProfiles(query)
       .then((publicProfiles) => {
-        if (import.meta.env.DEV && appliedFilters.category === 'gay') {
-          console.debug('[CityPage] category', appliedFilters.category, 'profiles', publicProfiles.map((profile) => ({ id: profile.id, name: profile.display_name, category: profile.category, city: profile.city, work_city: profile.work_city, postal_code: profile.postal_code, work_area: profile.work_area, location_mode: profile.location_mode })));
+        if (import.meta.env.DEV) {
+          console.debug('[Category]', { raw: urlCategory, normalized: normalizeCategoryKey(urlCategory), urlCategory, selectedCategory: appliedFilters.category, profilesCount: publicProfiles.length });
         }
         setProfiles(applyFilters(publicProfiles, appliedFilters, searcherLocation));
       })
@@ -113,7 +114,13 @@ export function CityPage() {
   }
 
   function applyDraftFilters() {
-    setAppliedFilters(draftFilters);
+    const canonicalCategory = normalizeCategoryKey(draftFilters.category);
+    const next = { ...draftFilters, category: canonicalCategory };
+    setAppliedFilters(next);
+    const nextParams = new URLSearchParams(searchParams);
+    if (canonicalCategory) nextParams.set('category', canonicalCategory);
+    else nextParams.delete('category');
+    setSearchParams(nextParams, { replace: false });
     setFiltersOpen(false);
   }
 
@@ -121,6 +128,9 @@ export function CityPage() {
     const next = defaultFilters(city);
     setDraftFilters(next);
     setAppliedFilters(next);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('category');
+    setSearchParams(nextParams, { replace: false });
   }
 
   async function useLocation() {
@@ -398,7 +408,7 @@ function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocat
       const centerRange = getSearchRange(profile, searcherLocation, filters.radius);
       if (!centerRange.inRange) return false;
     }
-    if (filters.category && normalizeProfileCategory(profile.category) !== filters.category) return false;
+    if (filters.category && normalizeCategoryKey(profile.category) !== filters.category) return false;
     if (!matchesOperatorStatusFilter(profile, filters.availability_status)) return false;
     const radarRange = getSearchRange(profile, searcherLocation, filters.radius);
     if (!radarRange.inRange) return false;

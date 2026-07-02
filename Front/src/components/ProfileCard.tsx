@@ -1,12 +1,17 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import { BadgeCheck, HeartHandshake, Home, Hotel, Languages, MapPin, MessageCircle, Radio, Star, Video, LockKeyhole } from 'lucide-react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import { serviceLabel } from '../data/serviceCatalog';
 import { getPublicLocationLabel } from '../lib/locationLabels';
+import { api } from '../lib/api';
+import { supabase } from '../lib/supabase';
 
 export function ProfileCard({ profile }: { profile: Profile }) {
   const { t, option } = useI18n();
+  const [favoriteState, setFavoriteState] = useState<'idle' | 'saved'>('idle');
+  const [favoriteMessage, setFavoriteMessage] = useState('');
   const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
   const status = profile.availability_status || (profile.available_now ? 'available' : 'unavailable');
   const operatorStatus = profile.operator_status || (status === 'available' ? 'ONLINE_NOW' : status === 'busy' ? 'BUSY' : 'OFFLINE');
@@ -68,10 +73,38 @@ export function ProfileCard({ profile }: { profile: Profile }) {
         {profile.services?.length ? <p className="muted line-clamp">{profile.services.slice(0, 4).map(serviceLabel).join(' · ')}</p> : null}
         {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
+        <button className="button full" type="button" onClick={toggleFavorite}>
+          <HeartHandshake size={15} /> {favoriteState === 'saved' ? t('favorites.removeFromFavorites') : t('favorites.addToFavorites')}
+        </button>
+        {favoriteMessage && <p className={favoriteMessage === t('favorites.notEnoughTokens') ? 'error-text' : 'success'}>{favoriteMessage}</p>}
+        {favoriteMessage === t('favorites.notEnoughTokens') && <Link className="button full" to="/tokens">{t('tokens.openShop')}</Link>}
         <Link to={`/profile/${profile.id}`} className="button primary full">{t('buttons.viewProfile')}</Link>
       </div>
     </article>
   );
+
+  async function toggleFavorite() {
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+    if (!token) {
+      setFavoriteMessage(t('auth.loginFailed', { message: t('buttons.login') }));
+      return;
+    }
+    try {
+      if (favoriteState === 'saved') {
+        await api.removeFavorite(token, profile.id);
+        setFavoriteState('idle');
+        setFavoriteMessage(t('favorites.favoriteRemoved'));
+        return;
+      }
+      const result = await api.addFavorite(token, profile.id);
+      setFavoriteState('saved');
+      setFavoriteMessage(result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      setFavoriteMessage(message.toLowerCase().includes('token') ? t('favorites.notEnoughTokens') : message || t('states.requestFailed'));
+    }
+  }
 }
 
 function operatorStatusClass(status: string) {
