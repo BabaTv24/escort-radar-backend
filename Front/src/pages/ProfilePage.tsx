@@ -90,6 +90,7 @@ export function ProfilePage() {
   const moreAboutRows = getMoreAboutRows(profile, languages, t);
   const premiumDetailRows = profileDetailRows(profile, t);
   const visitTypes = profile.visit_types?.length ? profile.visit_types : ['incall', 'hotel'];
+  const clientVisitMode = getClientVisitMode(profile, t);
   const serviceTags = profile.service_tags?.length ? profile.service_tags : ['dinner-date', 'hotel', 'discreet'];
   const selectedServices = profile.services || [];
   const servicePricingRows = getServicePricingRows(profile);
@@ -185,6 +186,7 @@ export function ProfilePage() {
               <MarketFact icon={<ShieldCheck size={17} />} label="Verification" value={profile.verified ? 'Verified profile' : 'Verification pending'} />
               <MarketFact icon={<Languages size={17} />} label="Languages" value={languages.join(', ')} />
               <MarketFact icon={<MapPin size={17} />} label="Visit type" value={visitTypes.map(option).join(', ')} />
+              {clientVisitMode && <MarketFact icon={<MapPin size={17} />} label={t('profileDetails.visitMode')} value={clientVisitMode} />}
               <MarketFact icon={<MapPin size={17} />} label="Location privacy" value={locationPrivacyLabel} />
               <MarketFact icon={<MapPin size={17} />} label="Service radius" value={`${profile.service_radius_km || 25} km`} />
               <MarketFact icon={<MapPin size={17} />} label="Hotspot" value={profile.hotspot_type || 'Not set'} />
@@ -553,6 +555,15 @@ function getTravelNotice(profile: Profile) {
   const departure = profile.travel_departure_date ? formatTravelDate(profile.travel_departure_date) : '';
   if (arrival && departure) return `Visiting ${profile.travel_city} from ${arrival} to ${departure}`;
   return `Visiting ${profile.travel_city}`;
+}
+
+function getClientVisitMode(profile: Profile, t: (key: string) => string) {
+  const hasOutcall = profile.visit_types?.includes('outcall') || profile.travels === true;
+  const hasIncall = profile.visit_types?.includes('incall') || profile.travels === false;
+  if (hasOutcall && hasIncall) return `${t('profileDetails.travelsClientYes')} / ${t('profileDetails.incallBadge')}`;
+  if (hasOutcall) return t('profileDetails.travelsClientYes');
+  if (hasIncall) return t('profileDetails.travelsClientNo');
+  return '';
 }
 
 function formatTravelDate(value: string) {

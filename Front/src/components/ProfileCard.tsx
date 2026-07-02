@@ -22,6 +22,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
   const rating = (4.6 + (profile.id.length % 4) / 10).toFixed(1);
   const locationLabel = getPublicLocationLabel(profile, t);
   const distanceLabel = formatDistanceKm(profile.distance_km);
+  const visitBadge = getVisitBadge(profile, t);
   const isNew = profile.created_at ? Date.now() - new Date(profile.created_at).getTime() < 1000 * 60 * 60 * 24 * 14 : profile.id.length % 2 === 0;
   const badges = [
     profile.is_sponsored ? 'SPONSOROWANY' : '',
@@ -67,6 +68,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
         </div>
         <div className="badges">
           {profile.private_studio && <span><LockKeyhole size={14} /> Private</span>}
+          {visitBadge && <span>{visitBadge}</span>}
           {profile.languages?.length ? <span><Languages size={14} /> {profile.languages.slice(0, 3).join('/')}</span> : null}
           {profile.category && <span><Radio size={14} /> {option(profile.category)}</span>}
           {profile.hotspot_type && <span>{profile.hotspot_type}</span>}
@@ -107,6 +109,12 @@ export function ProfileCard({ profile }: { profile: Profile }) {
       setFavoriteMessage(message.toLowerCase().includes('token') ? t('favorites.notEnoughTokens') : message || t('states.requestFailed'));
     }
   }
+}
+
+function getVisitBadge(profile: Profile, t: (key: string) => string) {
+  if (profile.visit_types?.includes('outcall') || profile.travels === true) return t('profileDetails.outcallBadge');
+  if (profile.visit_types?.includes('incall') || profile.travels === false) return t('profileDetails.incallBadge');
+  return '';
 }
 
 function operatorStatusClass(status: string) {

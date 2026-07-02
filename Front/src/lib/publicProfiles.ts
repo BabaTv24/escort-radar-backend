@@ -98,6 +98,7 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     status: normalizeStatus(raw.status),
     subscription_status: text(raw.subscription_status ?? raw.subscriptionStatus) || '',
     availability_status: normalizeAvailability(availability),
+    operator_status: normalizeOperatorStatus(raw.operator_status ?? raw.operatorStatus),
     price_30min: numberValue(raw.price_30min),
     price_1h: numberValue(raw.price_1h ?? raw.hourly_rate ?? raw.price_per_hour),
     price_2h: numberValue(raw.price_2h),
@@ -196,6 +197,26 @@ function normalizeStatus(value: unknown): Profile['status'] {
 function normalizeAvailability(value: string): Profile['availability_status'] {
   if (value === 'available' || value === 'busy' || value === 'unavailable') return value;
   return 'unavailable';
+}
+
+function normalizeOperatorStatus(value: unknown): Profile['operator_status'] {
+  const key = text(value)
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+  const aliases: Record<string, Profile['operator_status']> = {
+    onlinenow: 'ONLINE_NOW',
+    online: 'ONLINE_NOW',
+    availabletoday: 'AVAILABLE_TODAY',
+    available: 'AVAILABLE_TODAY',
+    busy: 'BUSY',
+    appointment: 'APPOINTMENT_ONLY',
+    appointmentonly: 'APPOINTMENT_ONLY',
+    traveling: 'TRAVELING',
+    offline: 'OFFLINE'
+  };
+  return aliases[key] || 'OFFLINE';
 }
 
 function normalizeLocationMode(value: unknown): Profile['location_mode'] {

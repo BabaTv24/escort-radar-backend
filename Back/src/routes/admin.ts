@@ -14,6 +14,7 @@ import {
   normalizeProfileOrientation,
   normalizeProfileCategory,
   normalizeProfileTravels,
+  normalizeOperatorStatus,
   optionalDecimalRange,
   optionalText,
   slugify
@@ -2642,7 +2643,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
 }
 
 function normalizeAdminOperatorStatus(value: unknown) {
-  const status = String(value || 'OFFLINE').toUpperCase();
+  const status = normalizeOperatorStatus(value);
   return operatorStatuses.includes(status) ? status : 'OFFLINE';
 }
 

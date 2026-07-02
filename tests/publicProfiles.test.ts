@@ -13,6 +13,7 @@ import {
 } from '../Back/src/adminClients.ts';
 import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts';
 import { isValidLatLng, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
+import { normalizeOperatorStatus, normalizeProfileCategory, validateProfileInput } from '../Back/src/validation.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
   assert.equal(isPublicProfile({
@@ -661,4 +662,60 @@ test('city page keeps listing profiles as radar input and does not pre-empty the
   assert.match(radarPanelSource, /\[RadarLocationResolve\]/);
   assert.match(geoSource, /safeDistanceKm/);
   assert.match(geoSource, /sort\(\(left, right\) => right\.length - left\.length\)/);
+});
+
+test('category and status normalization accept production admin payload aliases', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/036_fix_profiles_category_status_constraints.sql', import.meta.url), 'utf8');
+  assert.equal(normalizeProfileCategory('Dom / Hotel'), 'home_hotel');
+  assert.equal(normalizeProfileCategory('home_hotel'), 'home_hotel');
+  assert.equal(normalizeProfileCategory('Gay'), 'gay');
+  assert.equal(normalizeOperatorStatus('ONLINE_NOW'), 'ONLINE_NOW');
+  assert.equal(normalizeOperatorStatus('online_now'), 'ONLINE_NOW');
+  assert.equal(normalizeOperatorStatus('online'), 'ONLINE_NOW');
+  assert.equal(normalizeOperatorStatus('OFFLINE'), 'OFFLINE');
+  assert.match(migration, /drop constraint if exists profiles_category_check/);
+  assert.match(migration, /'home_hotel'/);
+  assert.match(migration, /'Dom \/ Hotel'/);
+  assert.match(migration, /profiles_operator_status_check/);
+});
+
+test('profile validation stores canonical category and online status fields', () => {
+  const result = validateProfileInput({
+    display_name: 'Sexy Ewa',
+    city: 'berlin',
+    category: 'Dom / Hotel',
+    operator_status: 'online_now',
+    availability_status: 'available',
+    travels: true
+  });
+  assert.ok(!('error' in result));
+  if ('error' in result) return;
+  assert.equal(result.data.category, 'home_hotel');
+  assert.equal(result.data.operator_status, 'ONLINE_NOW');
+  assert.equal(result.data.availability_status, 'available');
+  assert.equal(result.data.travels, true);
+});
+
+test('public profile maps online aliases and visit mode labels are visible to clients', async () => {
+  const cardSource = await readFile(new URL('../Front/src/components/ProfileCard.tsx', import.meta.url), 'utf8');
+  const profilePageSource = await readFile(new URL('../Front/src/pages/ProfilePage.tsx', import.meta.url), 'utf8');
+  const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
+  const profile = mapApiProfileToPublicProfile({
+    id: 'sexy-ewa',
+    display_name: 'Sexy Ewa',
+    city: 'berlin',
+    status: 'active',
+    category: 'Gay',
+    operator_status: 'online_now',
+    availability_status: 'available',
+    travels: true
+  });
+  assert.equal(profile?.category, 'gay');
+  assert.equal(profile?.operator_status, 'ONLINE_NOW');
+  assert.equal(profile?.travels, true);
+  assert.match(cardSource, /profileDetails\.outcallBadge/);
+  assert.match(cardSource, /profileDetails\.incallBadge/);
+  assert.match(profilePageSource, /getClientVisitMode/);
+  assert.match(plLocale, /Wyjazdy: Tak/);
+  assert.match(plLocale, /Tryb wizyty/);
 });

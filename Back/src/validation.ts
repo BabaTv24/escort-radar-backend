@@ -284,8 +284,27 @@ function normalizeAvailabilityStatus(value: unknown) {
   return ['available', 'busy', 'unavailable'].includes(status) ? status : 'unavailable';
 }
 
-function normalizeOperatorStatus(value: unknown) {
-  const status = String(value || 'OFFLINE').toUpperCase();
+export function normalizeOperatorStatus(value: unknown) {
+  const key = normalizeKey(value);
+  const aliases: Record<string, string> = {
+    onlinenow: 'ONLINE_NOW',
+    online: 'ONLINE_NOW',
+    onlineteraz: 'ONLINE_NOW',
+    availabletoday: 'AVAILABLE_TODAY',
+    available: 'AVAILABLE_TODAY',
+    dostepnydzis: 'AVAILABLE_TODAY',
+    busy: 'BUSY',
+    zajety: 'BUSY',
+    appointment: 'APPOINTMENT_ONLY',
+    appointmentonly: 'APPOINTMENT_ONLY',
+    umowione: 'APPOINTMENT_ONLY',
+    traveling: 'TRAVELING',
+    travel: 'TRAVELING',
+    wpodrozy: 'TRAVELING',
+    offline: 'OFFLINE',
+    off: 'OFFLINE'
+  };
+  const status = aliases[key] || String(value || 'OFFLINE').toUpperCase();
   return ['ONLINE_NOW', 'BUSY', 'TRAVELING', 'AVAILABLE_TODAY', 'APPOINTMENT_ONLY', 'OFFLINE'].includes(status) ? status : 'OFFLINE';
 }
 

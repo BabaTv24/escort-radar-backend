@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../supabase.js';
-import { allowedCities, asyncHandler, normalizeProfileCategory, parseBoolean, slugify, validateProfileInput } from '../validation.js';
+import { allowedCities, asyncHandler, normalizeOperatorStatus, normalizeProfileCategory, parseBoolean, slugify, validateProfileInput } from '../validation.js';
 import { requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
 import { generatePublicUserId, generateReferralCode, normalizePhone } from '../utils/identity.js';
 import { getClientActivationSummary } from '../services/clientActivation.js';
@@ -448,7 +448,7 @@ function hasLocationChange(body: Record<string, unknown>) {
 }
 
 function operatorStatusPatch(status: unknown) {
-  const operatorStatus = String(status || 'OFFLINE').toUpperCase();
+  const operatorStatus = normalizeOperatorStatus(status);
   if (operatorStatus === 'ONLINE_NOW') return { availability_status: 'available', available_now: true };
   if (operatorStatus === 'AVAILABLE_TODAY' || operatorStatus === 'APPOINTMENT_ONLY') return { availability_status: 'available', available_now: false };
   if (operatorStatus === 'BUSY' || operatorStatus === 'TRAVELING') return { availability_status: 'busy', available_now: false };

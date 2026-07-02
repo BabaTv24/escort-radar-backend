@@ -1,4 +1,4 @@
-export const categoryOptions = ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'];
+export { categoryOptions } from '../lib/categories';
 export const orientationOptions = ['straight', 'bisexual', 'queer-friendly'];
 export const audienceOptions = ['men', 'women', 'couples'];
 export const visitTypeOptions = ['incall', 'outcall', 'hotel', 'private'];
