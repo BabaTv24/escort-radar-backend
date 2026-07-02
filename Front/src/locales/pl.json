@@ -222,6 +222,7 @@
   "radar.enableLocationRadar": "Włącz lokalizację, aby zobaczyć profile w promieniu.",
   "radar.locationDenied": "Dostęp do lokalizacji został zablokowany.",
   "radar.noProfilesInRadius": "Brak profili w wybranym promieniu.",
+  "radar.profilesWithoutRadarLocation": "Profile bez dokładniejszej lokalizacji są widoczne w liście, ale nie na radarze.",
   "radar.profilesInRadarRange": "profili w zasięgu radaru",
   "radar.setStartingPoint": "Podaj punkt startowy",
   "radar.locationInputHelp": "Użyj GPS albo wpisz kod pocztowy, miasto lub dzielnicę.",

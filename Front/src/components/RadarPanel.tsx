@@ -5,7 +5,7 @@ import type { Profile } from '../types';
 import { radiusOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { getDistanceKm, resolveManualSearcherLocation, resolveProfileRadarLocation } from '../lib/geo';
+import { formatDistanceKm, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm } from '../lib/geo';
 import { getPublicLocationLabel } from '../lib/locationLabels';
 import './RadarPanel.css';
 
@@ -46,7 +46,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
   const [manualError, setManualError] = useState('');
   const [localManualLocation, setLocalManualLocation] = useState<GeoPoint | null>(null);
   const effectiveLocation = searcherLocation.source === 'browser' ? searcherLocation : localManualLocation || searcherLocation;
-  const hasRadarLocation = (effectiveLocation.source === 'browser' || effectiveLocation.source === 'manual') && isValidCoordinate(effectiveLocation.lat, effectiveLocation.lng);
+  const hasRadarLocation = (effectiveLocation.source === 'browser' || effectiveLocation.source === 'manual' || effectiveLocation.source === 'manual_saved') && isValidLatLng(effectiveLocation.lat, effectiveLocation.lng);
   const radarProfiles = hasRadarLocation
     ? profiles
       .map((profile) => getRadarProfile(profile, effectiveLocation, radius))
@@ -56,13 +56,18 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
     : [];
 
   if (import.meta.env.DEV) {
-    console.debug('[RadarPanel] resolved profile locations', profiles.map((profile) => ({
+    console.debug('[RadarLocationResolve]', profiles.map((profile) => ({
       id: profile.id,
       name: profile.display_name,
       category: profile.category,
+      city: profile.city,
+      work_city: profile.work_city,
       postal_code: profile.postal_code,
       work_area: profile.work_area,
+      location_visibility: profile.location_visibility,
       location_mode: profile.location_mode,
+      rawLat: profile.latitude,
+      rawLng: profile.longitude,
       resolved: resolveProfileRadarLocation(profile)
     })));
     console.debug('[RadarPanel] radarProfiles count', radarProfiles.length);
@@ -170,13 +175,14 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         {hasRadarLocation && radarProfiles.length === 0 && (
           <div className="radar-empty-state">
             <strong>{t('radar.noProfilesInRadius')}</strong>
+            <small>{t('radar.profilesWithoutRadarLocation')}</small>
           </div>
         )}
         {radarProfiles.map(({ profile, distanceKm, point, operatorStatus, statusClass }) => {
           const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
           const price = getPrice(profile);
           const tooltipClass = getTooltipClass(point);
-          const distanceLabel = formatDistance(distanceKm);
+          const distanceLabel = formatDistanceKm(distanceKm, t('radar.distanceUnavailable'));
 
           return (
             <Link
@@ -218,8 +224,8 @@ function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: n
   const profileLocation = resolveProfileRadarLocation(profile);
   if (!profileLocation) return null;
 
-  const distanceKm = getDistanceKm(searcherLocation.lat, searcherLocation.lng, profileLocation.lat, profileLocation.lng);
-  if (!Number.isFinite(distanceKm) || distanceKm > radius) return null;
+  const distanceKm = safeDistanceKm(searcherLocation, profileLocation);
+  if (distanceKm === null || distanceKm > radius) return null;
 
   const bearingDeg = getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLocation.lat, profileLocation.lng);
   const operatorStatus = getOperatorStatus(profile);
@@ -257,15 +263,6 @@ function getTooltipClass(point: { left: number; top: number }) {
   ].filter(Boolean).join(' ');
 }
 
-function isValidCoordinate(lat: unknown, lng: unknown) {
-  return typeof lat === 'number'
-    && typeof lng === 'number'
-    && Number.isFinite(lat)
-    && Number.isFinite(lng)
-    && Math.abs(lat) <= 90
-    && Math.abs(lng) <= 180;
-}
-
 function getBearingDeg(lat1: number, lng1: number, lat2: number, lng2: number) {
   const startLat = toRad(lat1);
   const endLat = toRad(lat2);
@@ -273,12 +270,6 @@ function getBearingDeg(lat1: number, lng1: number, lat2: number, lng2: number) {
   const y = Math.sin(deltaLng) * Math.cos(endLat);
   const x = Math.cos(startLat) * Math.sin(endLat) - Math.sin(startLat) * Math.cos(endLat) * Math.cos(deltaLng);
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-}
-
-function formatDistance(distanceKm: number) {
-  if (distanceKm < 0.1) return '< 100 m';
-  if (distanceKm < 10) return `${distanceKm.toFixed(1)} km`;
-  return `${Math.round(distanceKm)} km`;
 }
 
 function toRad(value: number) {

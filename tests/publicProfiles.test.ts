@@ -12,6 +12,7 @@ import {
   isRealClientActivationPayment
 } from '../Back/src/adminClients.ts';
 import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts';
+import { isValidLatLng, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
   assert.equal(isPublicProfile({
@@ -599,4 +600,65 @@ test('production regression contracts for Berlin profiles dashboard and client p
   assert.match(serverSource, /app\.use\('\/api\/client\/preferences', clientPreferencesRouter\)/);
   assert.match(preferenceRoute, /client_search_postal_code/);
   assert.match(preferenceMigration, /add column if not exists client_search_lat numeric/);
+});
+
+test('radar distance helpers reject invalid coordinates and never return negative distances', () => {
+  const buckow = { lat: 52.424, lng: 13.462 };
+  const friedrichshain = { lat: 52.5144, lng: 13.46 };
+  const distance = safeDistanceKm(buckow, friedrichshain);
+
+  assert.equal(isValidLatLng(0, 0), false);
+  assert.equal(safeDistanceKm(buckow, { lat: 0, lng: 0 }), null);
+  assert.equal(safeDistanceKm(buckow, { lat: 999, lng: 13.46 }), null);
+  assert.ok(distance !== null && distance > 0);
+  assert.ok(distance !== null && distance < 25);
+});
+
+test('radar location resolver falls back from bad coords to Berlin postal and area data', () => {
+  const friedrichshain = resolveProfileRadarLocation({
+    id: 'profile-10247',
+    display_name: 'Friedrichshain',
+    city: 'berlin',
+    work_city: 'Berlin',
+    postal_code: '10247',
+    location_visibility: 'postal_area',
+    location_mode: 'city_only',
+    latitude: 0,
+    longitude: 0
+  } as any);
+  const kreuzberg = resolveProfileRadarLocation({
+    id: 'profile-10997',
+    display_name: 'Kreuzberg',
+    city: 'berlin',
+    work_area: 'Kreuzberg',
+    location_visibility: 'postal_area',
+    latitude: 999,
+    longitude: 'garbage'
+  } as any);
+  const hidden = resolveProfileRadarLocation({
+    id: 'hidden-profile',
+    display_name: 'Hidden',
+    city: 'berlin',
+    postal_code: '10997',
+    location_visibility: 'hidden'
+  } as any);
+
+  assert.equal(friedrichshain?.precision, 'postal_area');
+  assert.match(friedrichshain?.label || '', /10247 Berlin Friedrichshain/);
+  assert.equal(kreuzberg?.precision, 'area');
+  assert.match(kreuzberg?.label || '', /Kreuzberg/);
+  assert.equal(hidden, null);
+});
+
+test('city page keeps listing profiles as radar input and does not pre-empty the radar', async () => {
+  const cityPageSource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
+  const radarPanelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
+  const geoSource = await readFile(new URL('../Front/src/lib/geo.ts', import.meta.url), 'utf8');
+
+  assert.match(cityPageSource, /profiles=\{sortedProfiles\}/);
+  assert.match(cityPageSource, /radarInputProfiles: sortedProfiles\.length/);
+  assert.match(radarPanelSource, /source === 'manual_saved'/);
+  assert.match(radarPanelSource, /\[RadarLocationResolve\]/);
+  assert.match(geoSource, /safeDistanceKm/);
+  assert.match(geoSource, /sort\(\(left, right\) => right\.length - left\.length\)/);
 });

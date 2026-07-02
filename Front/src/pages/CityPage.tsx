@@ -10,7 +10,7 @@ import { categoryOptions, defaultServiceMenuNames, toggleArrayValue, visitTypeOp
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
-import { getCityCenter, getDistanceKm, getSearcherLocationWithFallback, isProfileInRadarRange, resolveProfileRadarLocation } from '../lib/geo';
+import { getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange, resolveProfileRadarLocation, safeDistanceKm } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { normalizeCategoryKey } from '../lib/categories';
 import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
@@ -133,12 +133,24 @@ export function CityPage() {
 
   const sortedProfiles = useMemo(() => sortProfiles(profiles, sortMode), [profiles, sortMode]);
   const radarProfiles = useMemo(
-    () => sortedProfiles.filter((profile) => getSearchRange(profile, searcherLocation, draftFilters.radius).inRange),
-    [sortedProfiles, searcherLocation, draftFilters.radius]
+    () => sortedProfiles.filter((profile) => getSearchRange(profile, searcherLocation, draftFilters.radius).inRange && matchesOperatorStatusFilter(profile, draftFilters.availability_status)),
+    [sortedProfiles, searcherLocation, draftFilters.radius, draftFilters.availability_status]
   );
   const topProfiles = sortedProfiles.slice(0, 12);
   const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
   const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
+  if (import.meta.env.DEV) {
+    console.debug('[CityPageProfiles]', {
+      apiProfiles: profiles.length,
+      listingProfiles: sortedProfiles.length,
+      radarInputProfiles: sortedProfiles.length,
+      radarProfiles: radarProfiles.length,
+      selectedRadiusKm: draftFilters.radius,
+      selectedCategory: appliedFilters.category,
+      selectedCity: appliedFilters.city,
+      selectedCountry: searchParams.get('country')
+    });
+  }
 
   function updateFilter<K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) {
     setDraftFilters((current) => ({ ...current, [key]: value }));
@@ -321,7 +333,7 @@ export function CityPage() {
 
       <section id="city-radar" className="compact-radar-wrap">
         <RadarPanel
-          profiles={radarProfiles}
+          profiles={sortedProfiles}
           radius={draftFilters.radius}
           status={draftFilters.availability_status}
           city={appliedFilters.city}
@@ -475,7 +487,8 @@ function getSearchRange(profile: Profile, searcherLocation: GeoPoint, selectedRa
     ? resolveProfileRadarLocation(profile)
     : null;
   if (!radarLocation) return isProfileInRadarRange(profile, searcherLocation, selectedRadius);
-  const distance = getDistanceKm(searcherLocation.lat, searcherLocation.lng, radarLocation.lat, radarLocation.lng);
+  const distance = safeDistanceKm(searcherLocation, radarLocation);
+  if (distance === null) return { inRange: false, distance_km: null };
 
   return {
     inRange: distance <= selectedRadius,

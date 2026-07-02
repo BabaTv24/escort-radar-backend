@@ -12,7 +12,7 @@ export type ProfileRadarLocation = {
   lat: number;
   lng: number;
   label: string;
-  precision: 'exact' | 'postal_area' | 'area' | 'approximate';
+  precision: 'exact' | 'postal_area' | 'area' | 'city_fallback' | 'approximate';
 };
 
 const cityCenters: Record<string, { lat: number; lng: number }> = {
@@ -206,6 +206,17 @@ export function normalizeProfileCategory(value: unknown) {
 }
 
 export function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const distance = safeDistanceKm({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
+  return distance;
+}
+
+export function safeDistanceKm(origin: { lat: unknown; lng: unknown }, target: { lat: unknown; lng: unknown }) {
+  const lat1 = toCoordinate(origin.lat);
+  const lng1 = toCoordinate(origin.lng);
+  const lat2 = toCoordinate(target.lat);
+  const lng2 = toCoordinate(target.lng);
+  if (!isValidLatLng(lat1, lng1) || !isValidLatLng(lat2, lng2)) return null;
+
   const radius = 6371;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
@@ -213,7 +224,8 @@ export function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: nu
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
     Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = radius * 2 * Math.atan2(Math.sqrt(Math.max(a, 0)), Math.sqrt(Math.max(1 - a, 0)));
+  return Number.isFinite(distance) ? Math.max(0, distance) : null;
 }
 
 export function getCityCenter(city: string) {
@@ -224,13 +236,15 @@ export function getProfileCoordinates(profile: Profile) {
   const raw = profile as Profile & Record<string, unknown>;
   const lat = toCoordinate(raw.latitude ?? raw.lat);
   const lng = toCoordinate(raw.longitude ?? raw.lng);
-  if (isValidCoordinate(lat, lng)) return { lat, lng };
+  if (isValidLatLng(lat, lng)) return { lat, lng };
   return getCityCenter(profile.city);
 }
 
 export function isProfileInRadarRange(profile: Profile, searcherLocation: GeoPoint, selectedRadius = 25) {
-  const coordinates = getProfileCoordinates(profile);
-  const distance = getDistanceKm(searcherLocation.lat, searcherLocation.lng, coordinates.lat, coordinates.lng);
+  const profileLocation = resolveProfileRadarLocation(profile);
+  if (!profileLocation) return { inRange: false, distance_km: null };
+  const distance = safeDistanceKm(searcherLocation, profileLocation);
+  if (distance === null) return { inRange: false, distance_km: null };
   const serviceRadius = profile.service_radius_km || 25;
 
   return {
@@ -266,18 +280,18 @@ export function resolveManualSearcherLocation(input: string): GeoPoint | null {
 }
 
 export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocation | null {
-  if (profile.location_visibility === 'hidden' || profile.location_visibility === 'city_only') return null;
+  if (profile.location_visibility === 'hidden') return null;
   if (profile.location_mode === 'exact_hidden' || profile.location_mode === 'hidden') return null;
 
   const raw = profile as Profile & Record<string, unknown>;
   const lat = toCoordinate(raw.latitude ?? raw.lat);
   const lng = toCoordinate(raw.longitude ?? raw.lng);
-  if (isValidCoordinate(lat, lng)) {
+  if (isValidLatLng(lat, lng)) {
     return {
       lat,
       lng,
       label: textValue(raw.work_place_label ?? raw.exact_address ?? raw.postal_code ?? raw.postalCode ?? raw.zip ?? raw.work_area ?? raw.area ?? raw.district ?? raw.work_city ?? raw.location_city ?? raw.city),
-      precision: profile.work_place_label || profile.exact_address ? 'exact' : 'approximate'
+      precision: profile.work_place_label || profile.exact_address ? 'exact' : profile.location_visibility === 'postal_area' ? 'postal_area' : 'approximate'
     };
   }
 
@@ -294,16 +308,32 @@ export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocat
     if (areaLocation) return { lat: areaLocation.lat, lng: areaLocation.lng, label: areaLocation.label, precision: 'area' };
   }
 
+  if (profile.location_visibility !== 'city_only' && normalizeLocationQuery(city) === 'berlin') {
+    const center = getCityCenter(city);
+    return { ...center, label: 'Berlin', precision: 'city_fallback' };
+  }
+
   return null;
 }
 
-export function isValidCoordinate(lat: unknown, lng: unknown) {
+export function isValidLatLng(lat: unknown, lng: unknown) {
   return typeof lat === 'number'
     && typeof lng === 'number'
     && Number.isFinite(lat)
     && Number.isFinite(lng)
+    && !(lat === 0 && lng === 0)
     && Math.abs(lat) <= 90
     && Math.abs(lng) <= 180;
+}
+
+export const isValidCoordinate = isValidLatLng;
+
+export function formatDistanceKm(distanceKm: unknown, unavailableLabel = '') {
+  const distance = Number(distanceKm);
+  if (!Number.isFinite(distance) || distance < 0) return unavailableLabel;
+  if (distance < 0.1) return '< 100 m';
+  if (distance < 10) return `${distance.toFixed(1)} km`;
+  return `${Math.round(distance)} km`;
 }
 
 function resolveKnownLocation(input: string) {
@@ -315,7 +345,9 @@ function resolveKnownLocation(input: string) {
   const postalMatch = normalized.match(/\b\d{5}\b/);
   if (postalMatch && manualLocationCenters[postalMatch[0]]) return manualLocationCenters[postalMatch[0]];
 
-  const matchedKey = Object.keys(manualLocationCenters).find((key) => normalized.includes(key));
+  const matchedKey = Object.keys(manualLocationCenters)
+    .sort((left, right) => right.length - left.length)
+    .find((key) => normalized.includes(key));
   return matchedKey ? manualLocationCenters[matchedKey] : null;
 }
 
