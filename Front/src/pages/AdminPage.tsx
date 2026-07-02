@@ -29,6 +29,10 @@ const adminTokenStorageKey = 'escort-radar-admin-token';
 const adminEmailStorageKey = 'escortRadarAdminEmail';
 const serviceCategories = ['all', ...Array.from(new Set(serviceOptions.map((service) => service.category)))];
 const studioTabs = ['account', 'basic', 'location', 'business', 'prices', 'status', 'services', 'subscription', 'moderation', 'photos'] as const;
+const adminAccountTypeOptions = ['client', 'advertiser', 'business', 'admin'];
+const adminProfileTypeOptions = ['independent', 'agency', 'massage_salon', 'club', 'live_cam', 'couple', 'trans', 'gay', 'male_escort', 'other'];
+const exposurePackageOptions = ['standard', 'gold', 'elite', 'diamond'];
+const adminAvailabilityStatusOptions = ['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'];
 const emptyStudioForm = {
   id: '',
   owner_email: '',
@@ -38,8 +42,8 @@ const emptyStudioForm = {
   phone: '',
   whatsapp: '',
   telegram: '',
-  account_type: 'escort',
-  profile_type: 'private_escort',
+  account_type: 'advertiser',
+  profile_type: 'independent',
   display_name: '',
   category: 'ladies',
   city: 'berlin',
@@ -574,8 +578,8 @@ export function AdminPage() {
       phone: profile.phone || profile.primary_phone || '',
       whatsapp: profile.whatsapp || '',
       telegram: profile.telegram || '',
-      account_type: profile.account_type || 'escort',
-      profile_type: profile.profile_type || 'private_escort',
+      account_type: adminAccountTypeToUi(profile.account_type),
+      profile_type: adminProfileTypeToUi(profile.profile_type),
       display_name: profile.display_name || '',
       category: profile.category || 'ladies',
       city: profile.city || 'berlin',
@@ -718,6 +722,8 @@ export function AdminPage() {
       const body = {
         ...studioProfileFields,
         ...(!studioForm.id ? { password, confirm_password } : {}),
+        account_type: adminAccountTypeToBackend(studioForm.account_type),
+        profile_type: adminProfileTypeToBackend(studioForm.profile_type),
         height: studioForm.height_cm,
         languages: Array.isArray(studioForm.languages) ? studioForm.languages : String(studioForm.languages || '').split(',').map((item) => item.trim()).filter(Boolean),
         opening_hours: studioForm.opening_hours ? { note: studioForm.opening_hours } : {},
@@ -1020,8 +1026,7 @@ export function AdminPage() {
           <AdminField label={t('admin.profileEditor.phone')}><input placeholder={t('admin.profileEditor.phonePlaceholder')} value={studioForm.phone} onChange={(event) => setStudioForm({ ...studioForm, phone: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.whatsapp')}><input placeholder={t('admin.profileEditor.whatsappPlaceholder')} value={studioForm.whatsapp} onChange={(event) => setStudioForm({ ...studioForm, whatsapp: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.telegram')}><input placeholder={t('admin.profileEditor.telegramPlaceholder')} value={studioForm.telegram} onChange={(event) => setStudioForm({ ...studioForm, telegram: event.target.value })} /></AdminField>
-          <AdminField label={t('admin.profileEditor.accountType')}><select value={studioForm.account_type} onChange={(event) => setStudioForm({ ...studioForm, account_type: event.target.value })}>{['escort', 'business'].map((type) => <option key={type} value={type}>{t(`admin.status.${type}`)}</option>)}</select></AdminField>
-          <AdminField label={t('admin.profileEditor.profileType')}><select value={studioForm.profile_type} onChange={(event) => setStudioForm({ ...studioForm, profile_type: event.target.value })}>{['private_escort', 'agency', 'massage_salon', 'club', 'live_cam', 'couple', 'trans', 'gay', 'male_escort', 'other'].map((type) => <option key={type} value={type}>{t(`admin.status.${type}`)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.profileEditor.accountType')}><select value={studioForm.account_type} onChange={(event) => setStudioForm({ ...studioForm, account_type: event.target.value })}>{adminAccountTypeOptions.map((type) => <option key={type} value={type}>{t(`admin.accountType.${type}`)}</option>)}</select></AdminField>
           <AdminField label={t('admin.accounts.starterPackage')}><select value={studioForm.starter_package} onChange={(event) => setStudioForm({ ...studioForm, starter_package: event.target.value })}>{['free', 'trial_7', 'trial_30', 'premium_30', 'vip_30', 'lifetime'].map((item) => <option key={item} value={item}>{t(`admin.accounts.package.${item}`)}</option>)}</select></AdminField>
         </div>
         {studioForm.id && <section className="admin-card">
@@ -1063,7 +1068,8 @@ export function AdminPage() {
       return <>
         <div className="admin-form-grid">
           <AdminField label={t('admin.profileEditor.displayName')}><input placeholder={t('admin.profileEditor.displayNamePlaceholder')} value={studioForm.display_name} onChange={(event) => setStudioForm({ ...studioForm, display_name: event.target.value })} /></AdminField>
-          <AdminField label={t('admin.profileEditor.category')}><select value={studioForm.category} onChange={(event) => setStudioForm({ ...studioForm, category: event.target.value })}>{categoryOptions.map((category) => <option key={category} value={category}>{option(category)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.profileEditor.publicProfileType')} help={t('admin.profileEditor.profileTypeHelp')}><select value={studioForm.profile_type} onChange={(event) => setStudioForm({ ...studioForm, profile_type: event.target.value })}>{adminProfileTypeOptions.map((type) => <option key={type} value={type}>{t(`admin.profileType.${type}`)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.profileEditor.marketplaceCategory')} help={t('admin.profileEditor.categoryHelp')}><select value={studioForm.category} onChange={(event) => setStudioForm({ ...studioForm, category: event.target.value })}>{categoryOptions.map((category) => <option key={category} value={category}>{option(category)}</option>)}</select></AdminField>
           <AdminField label={t('profileDetails.gender')}><select value={studioForm.gender} onChange={(event) => setStudioForm({ ...studioForm, gender: event.target.value })}><option value="">-</option>{profileGenderOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}</select></AdminField>
           <AdminField label={t('profileDetails.orientation')}><select value={studioForm.orientation} onChange={(event) => setStudioForm({ ...studioForm, orientation: event.target.value })}><option value="">-</option>{profileOrientationOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}</select></AdminField>
           <AdminField label={t('admin.profileEditor.age')}><input type="number" value={studioForm.age} onChange={(event) => setStudioForm({ ...studioForm, age: Number(event.target.value) })} /></AdminField>
@@ -1163,19 +1169,25 @@ export function AdminPage() {
 
     if (studioTab === 'status') {
       return <>
-        <div className="admin-form-grid">
-          <AdminField label={t('admin.profileEditor.operatorStatus')}><select value={studioForm.operator_status} onChange={(event) => setStudioForm({ ...studioForm, operator_status: event.target.value })}>{['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'].map((status) => <option key={status} value={status}>{status}</option>)}</select></AdminField>
-          <AdminField label={t('admin.profileEditor.availability')}><select value={studioForm.availability_status} onChange={(event) => setStudioForm({ ...studioForm, availability_status: event.target.value })}>{['available', 'busy', 'unavailable'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}</select></AdminField>
-          <AdminField label={t('admin.profileEditor.premiumTier')} help={t('admin.profileEditor.premiumTierHelp')}><select value={studioForm.premium_tier} onChange={(event) => setStudioForm({ ...studioForm, premium_tier: event.target.value })}>{['standard', 'gold', 'elite', 'diamond'].map((tier) => <option key={tier} value={tier}>{t(`admin.status.${tier}`)}</option>)}</select></AdminField>
-          <AdminField label={t('admin.profileEditor.adminPriority')}><input type="number" value={studioForm.admin_priority} onChange={(event) => setStudioForm({ ...studioForm, admin_priority: Number(event.target.value) })} /></AdminField>
-          <AdminField label={t('admin.profileEditor.moderationStatus')} help={t('admin.profileEditor.moderationStatusHelp')}><select value={studioForm.moderation_status} onChange={(event) => setStudioForm({ ...studioForm, moderation_status: event.target.value })}>{['pending', 'approved', 'rejected', 'suspended'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}</select></AdminField>
-        </div>
-        <div className="toggle-grid studio-toggle-grid">
-          <AdminField label={t('admin.profileEditor.verified')}><label><input type="checkbox" checked={studioForm.verified} onChange={(event) => setStudioForm({ ...studioForm, verified: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
-          <AdminField label={t('admin.profileEditor.seedDemo')} help={t('admin.profileEditor.seedDemoHelp')}><label><input type="checkbox" checked={studioForm.is_seed_profile} onChange={(event) => setStudioForm({ ...studioForm, is_seed_profile: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
-          <AdminField label="Profil sponsorowany" help="Domyślnie admin/manual_admin: widoczny publicznie, ale bez realnego przychodu."><label><input type="checkbox" checked={studioForm.is_sponsored} onChange={(event) => setStudioForm({ ...studioForm, is_sponsored: event.target.checked, acquisition_source: event.target.checked ? 'admin_sponsored' : 'paid_advertiser' })} /> SPONSOROWANY</label></AdminField>
-          <AdminField label={t('admin.profileEditor.published')} help={t('admin.profileEditor.publishedHelp')}><label><input type="checkbox" checked={studioForm.is_published} onChange={(event) => setStudioForm({ ...studioForm, is_published: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
-        </div>
+        <section className="admin-card">
+          <h3>{t('admin.profileEditor.publicProfileStatus')}</h3>
+          <div className="admin-form-grid">
+            <AdminField label={t('admin.profileEditor.operatorStatus')}><select value={studioForm.operator_status} onChange={(event) => setStudioForm({ ...studioForm, operator_status: event.target.value })}>{adminAvailabilityStatusOptions.map((status) => <option key={status} value={status}>{t(`admin.operatorStatus.${status}`)}</option>)}</select></AdminField>
+            <AdminField label={t('admin.profileEditor.published')} help={t('admin.profileEditor.publishedHelp')}><label><input type="checkbox" checked={studioForm.is_published} onChange={(event) => setStudioForm({ ...studioForm, is_published: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
+            <AdminField label={t('admin.profileEditor.verified')}><label><input type="checkbox" checked={studioForm.verified} onChange={(event) => setStudioForm({ ...studioForm, verified: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
+            <AdminField label={t('admin.profileEditor.moderationStatus')} help={t('admin.profileEditor.moderationStatusHelp')}><select value={studioForm.moderation_status} onChange={(event) => setStudioForm({ ...studioForm, moderation_status: event.target.value })}>{['pending', 'approved', 'rejected', 'suspended'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}</select></AdminField>
+          </div>
+        </section>
+        <section className="admin-card">
+          <h3>{t('admin.profileEditor.promotionModeration')}</h3>
+          <div className="admin-form-grid">
+            <AdminField label={t('admin.profileEditor.sponsoredProfile')} help={t('admin.profileEditor.sponsoredHelp')}><label><input type="checkbox" checked={studioForm.is_sponsored} onChange={(event) => setStudioForm({ ...studioForm, is_sponsored: event.target.checked, acquisition_source: event.target.checked ? 'admin_sponsored' : 'paid_advertiser' })} /> {t('admin.common.enabled')}</label></AdminField>
+            <AdminField label={t('admin.profileEditor.seedDemo')} help={t('admin.profileEditor.seedDemoHelp')}><label><input type="checkbox" checked={studioForm.is_seed_profile} onChange={(event) => setStudioForm({ ...studioForm, is_seed_profile: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
+            <AdminField label={t('admin.profileEditor.activeSubscription')}><StatusBadge value={['active', 'trial', 'test'].includes(String(studioForm.subscription_status)) ? 'active' : String(studioForm.subscription_status || 'free')} /></AdminField>
+            <AdminField label={t('admin.profileEditor.exposurePackage')} help={t('admin.profileEditor.exposureHelp')}><select value={studioForm.premium_tier} onChange={(event) => setStudioForm({ ...studioForm, premium_tier: event.target.value })}>{exposurePackageOptions.map((tier) => <option key={tier} value={tier}>{t(`admin.status.${tier}`)}</option>)}</select></AdminField>
+            <AdminField label={t('admin.profileEditor.manualSortingPriority')} help={t('admin.profileEditor.priorityHelp')}><input type="number" value={studioForm.admin_priority} onChange={(event) => setStudioForm({ ...studioForm, admin_priority: Number(event.target.value) })} /></AdminField>
+          </div>
+        </section>
       </>;
     }
 
@@ -1231,6 +1243,13 @@ export function AdminPage() {
 
     if (studioTab === 'moderation') {
       return <>
+        <section className="admin-card">
+          <h3>{t('admin.profileEditor.advancedModeration')}</h3>
+          <div className="admin-form-grid">
+            <AdminField label={t('admin.profileEditor.exposurePackage')} help={t('admin.profileEditor.exposureHelp')}><select value={studioForm.premium_tier} onChange={(event) => setStudioForm({ ...studioForm, premium_tier: event.target.value })}>{exposurePackageOptions.map((tier) => <option key={tier} value={tier}>{t(`admin.status.${tier}`)}</option>)}</select></AdminField>
+            <AdminField label={t('admin.profileEditor.manualSortingPriority')} help={t('admin.profileEditor.priorityHelp')}><input type="number" value={studioForm.admin_priority} onChange={(event) => setStudioForm({ ...studioForm, admin_priority: Number(event.target.value) })} /></AdminField>
+          </div>
+        </section>
         <AdminField label={t('admin.moderation.note')}><textarea placeholder={t('admin.moderation.notePlaceholder')} value={studioForm.moderation_note} onChange={(event) => setStudioForm({ ...studioForm, moderation_note: event.target.value })} /></AdminField>
         <AdminField label={t('admin.moderation.suspensionReason')}><input placeholder={t('admin.moderation.suspensionReasonPlaceholder')} value={studioForm.suspended_reason} onChange={(event) => setStudioForm({ ...studioForm, suspended_reason: event.target.value })} /></AdminField>
       </>;
@@ -2614,6 +2633,35 @@ function CellValue({ value }: { value: unknown }) {
   if (value === null || value === undefined || value === '') return <>-</>;
   if (typeof value === 'object') return <>{JSON.stringify(value).slice(0, 80)}</>;
   return <>{String(value).slice(0, 120)}</>;
+}
+
+function adminAccountTypeToUi(value: unknown) {
+  const next = String(value || '').toLowerCase();
+  if (next === 'business') return 'business';
+  if (next === 'admin') return 'admin';
+  if (next === 'client') return 'client';
+  return 'advertiser';
+}
+
+function adminAccountTypeToBackend(value: unknown) {
+  const next = String(value || '').toLowerCase();
+  if (next === 'business') return 'business';
+  if (next === 'client') return 'private';
+  if (next === 'admin') return 'private';
+  return 'escort';
+}
+
+function adminProfileTypeToUi(value: unknown) {
+  const next = String(value || '').toLowerCase();
+  if (next === 'private_escort') return 'independent';
+  if (next === 'club_party') return 'club';
+  return adminProfileTypeOptions.includes(next) ? next : 'independent';
+}
+
+function adminProfileTypeToBackend(value: unknown) {
+  const next = String(value || '').toLowerCase();
+  if (next === 'independent') return 'private_escort';
+  return adminProfileTypeOptions.includes(next) ? next : 'private_escort';
 }
 
 function StatusBadge({ value }: { value: string }) {

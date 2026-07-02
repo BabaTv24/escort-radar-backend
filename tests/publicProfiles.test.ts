@@ -600,6 +600,33 @@ test('global location catalog is the single source for city marketplace routing'
   assert.doesNotMatch(profilesSource, /String\(value \|\| ''\)\.toLowerCase\(\)\.includes\(wanted\)/);
 });
 
+test('admin profile studio separates account profile category and advanced promotion controls', async () => {
+  const adminSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  const enLocale = await readFile(new URL('../Front/src/locales/en.json', import.meta.url), 'utf8');
+  const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
+  const deLocale = await readFile(new URL('../Front/src/locales/de.json', import.meta.url), 'utf8');
+
+  assert.match(adminSource, /adminAccountTypeOptions = \['client', 'advertiser', 'business', 'admin'\]/);
+  assert.match(adminSource, /adminProfileTypeOptions = \['independent', 'agency', 'massage_salon', 'club', 'live_cam', 'couple', 'trans', 'gay', 'male_escort', 'other'\]/);
+  assert.match(adminSource, /adminAccountTypeToBackend/);
+  assert.match(adminSource, /adminProfileTypeToBackend/);
+  assert.match(adminSource, /publicProfileType/);
+  assert.match(adminSource, /marketplaceCategory/);
+  assert.match(adminSource, /publicProfileStatus/);
+  assert.match(adminSource, /promotionModeration/);
+  assert.match(adminSource, /exposurePackage/);
+  assert.match(adminSource, /manualSortingPriority/);
+  assert.match(adminSource, /activeSubscription/);
+  assert.doesNotMatch(adminSource, /label="Profil sponsorowany"/);
+  assert.doesNotMatch(adminSource, /SPONSOROWANY/);
+  assert.match(enLocale, /"admin\.profileEditor\.exposurePackage": "Exposure package"/);
+  assert.match(plLocale, /"admin\.profileEditor\.exposurePackage": "Pakiet ekspozycji"/);
+  assert.match(deLocale, /"admin\.profileEditor\.exposurePackage": "Sichtbarkeitspaket"/);
+  assert.match(enLocale, /"admin\.accountType\.advertiser": "Advertiser"/);
+  assert.match(plLocale, /"admin\.profileEditor\.marketplaceCategory": "Glowna kategoria marketplace"/);
+  assert.match(deLocale, /"admin\.profileEditor\.advancedModeration": "Moderation \/ Erweitert"/);
+});
+
 test('client activation token bonus is 7 and favorites are token-gated', async () => {
   const configSource = await readFile(new URL('../Back/src/config.ts', import.meta.url), 'utf8');
   const favoritesSource = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');
