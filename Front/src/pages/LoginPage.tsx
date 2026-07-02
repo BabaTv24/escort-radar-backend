@@ -20,6 +20,8 @@ export function LoginPage() {
     const result = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setLoading(false);
     if (result.error) return setMessage(result.error.message);
+    await supabase.auth.getSession();
+    if (import.meta.env.DEV) console.debug('[Auth]', { hasSession: Boolean(result.data.session), userId: result.data.user?.id || null, role: result.data.user?.app_metadata?.auth_account_type || null, route: '/login' });
     navigate('/dashboard');
   }
 

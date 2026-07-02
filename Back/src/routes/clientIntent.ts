@@ -3,6 +3,7 @@ import { getAuthAccountType, requireAccountType, requireAdvertiserOnboardingAcce
 import { supabaseAdmin } from '../supabase.js';
 import { allowedCities, asyncHandler } from '../validation.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
+import { normalizeCategoryKey } from '../categories.js';
 
 export const clientIntentRouter = Router();
 
@@ -173,7 +174,7 @@ function calculateMatchScore(profile: any, intent: any) {
   else if (status === 'BUSY') score += 5;
 
   if (normalizeCity(profile.travel_city || profile.work_city || profile.city) === normalizeCity(intent.city)) score += 20;
-  if (!intent.category || intent.category === profile.category) score += 10;
+  if (!intent.category || normalizeCategoryKey(intent.category) === normalizeCategoryKey(profile.category)) score += 10;
 
   const profileServices = Array.isArray(profile.services) ? profile.services : [];
   const intentServices = Array.isArray(intent.services) ? intent.services : [];
@@ -205,7 +206,7 @@ function validateIntent(body: Record<string, unknown>, userId: string) {
       city,
       area: optionalText(body.area, 120),
       radius_km: optionalNumber(body.radius_km, 1, 100) || 25,
-      category: optionalText(body.category, 80),
+      category: normalizeCategoryKey(body.category) || null,
       services: services.slice(0, 30),
       budget_min: budgetMin,
       budget_max: budgetMax,

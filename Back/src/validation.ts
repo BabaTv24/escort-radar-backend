@@ -1,8 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
+import { categoryOptions, normalizeCategoryKey } from './categories.js';
 import { allowedServiceKeys } from './serviceCatalog.js';
 
 export const allowedCities = ['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'];
-export const allowedCategories = ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'];
+export const allowedCategories = [...categoryOptions];
 export const allowedAccountTypes = ['private', 'agency', 'massage_salon', 'club_party', 'live_cam'];
 export const allowedStatuses = ['pending', 'active', 'rejected', 'suspended'];
 export const allowedReportStatuses = ['open', 'reviewing', 'resolved', 'dismissed'];
@@ -322,38 +323,7 @@ function normalizeCategory(value: unknown) {
 }
 
 export function normalizeProfileCategory(value: unknown) {
-  const key = String(value || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  const aliases: Record<string, string> = {
-    gay: 'gay',
-    gays: 'gay',
-    male: 'gay',
-    men: 'gay',
-    man: 'gay',
-    ladies: 'ladies',
-    lady: 'ladies',
-    female: 'ladies',
-    women: 'ladies',
-    woman: 'ladies',
-    panie: 'ladies',
-    couples: 'couples',
-    couple: 'couples',
-    pary: 'couples',
-    trans: 'trans',
-    massage: 'massage',
-    house_hotel: 'house_hotel',
-    home_hotel: 'house_hotel',
-    dom_hotel: 'house_hotel',
-    live_cam: 'live_cam',
-    clubs_parties: 'clubs_parties',
-    other: 'other'
-  };
-  return aliases[key] || key;
+  return normalizeCategoryKey(value);
 }
 
 function normalizeAccountType(value: unknown) {

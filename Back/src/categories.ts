@@ -1,4 +1,4 @@
-export const categoryOptions = ['ladies', 'gay', 'couples', 'trans', 'massage', 'home_hotel', 'live_cam', 'clubs_parties', 'other'] as const;
+export const categoryOptions = ['ladies', 'men', 'gay', 'couples', 'trans', 'massage', 'home_hotel', 'live_cam', 'clubs_parties', 'bdsm', 'onlyfans', 'sex_phone', 'films', 'offers', 'other'] as const;
 
 export type CategoryKey = typeof categoryOptions[number];
 
@@ -11,11 +11,14 @@ const categoryAliasMap: Record<string, CategoryKey> = {
   female: 'ladies',
   girl: 'ladies',
   girls: 'ladies',
+  men: 'men',
+  man: 'men',
+  male: 'men',
+  panowie: 'men',
   gay: 'gay',
   gays: 'gay',
-  male: 'gay',
-  men: 'gay',
-  man: 'gay',
+  gej_les: 'gay',
+  gay_les: 'gay',
   homo: 'gay',
   couples: 'couples',
   couple: 'couples',
@@ -32,6 +35,17 @@ const categoryAliasMap: Record<string, CategoryKey> = {
   kamera_live: 'live_cam',
   clubs_parties: 'clubs_parties',
   kluby_imprezy: 'clubs_parties',
+  bdsm: 'bdsm',
+  onlyfans: 'onlyfans',
+  only_fans: 'onlyfans',
+  sex_phone: 'sex_phone',
+  phone_show: 'sex_phone',
+  pokazy_sex_telefon: 'sex_phone',
+  films: 'films',
+  filmy: 'films',
+  videos: 'films',
+  offers: 'offers',
+  oferty: 'offers',
   other: 'other',
   inne: 'other'
 };

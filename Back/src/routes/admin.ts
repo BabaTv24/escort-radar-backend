@@ -2648,7 +2648,7 @@ function normalizeAdminOperatorStatus(value: unknown) {
 
 function normalizeAdminCategory(value: unknown) {
   const category = normalizeProfileCategory(value || 'ladies');
-  return ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'].includes(category) ? category : 'ladies';
+  return ['ladies', 'men', 'gay', 'couples', 'trans', 'massage', 'home_hotel', 'live_cam', 'clubs_parties', 'bdsm', 'onlyfans', 'sex_phone', 'films', 'offers', 'other'].includes(category) ? category : 'ladies';
 }
 
 function normalizeBusinessType(value: unknown) {

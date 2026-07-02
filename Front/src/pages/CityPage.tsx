@@ -13,6 +13,8 @@ import type { GeoPoint } from '../lib/geo';
 import { getCityCenter, getDistanceKm, getSearcherLocationWithFallback, isProfileInRadarRange, resolveProfileRadarLocation } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { normalizeCategoryKey } from '../lib/categories';
+import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
+import { getCityLabel } from '../lib/globalLocations';
 
 type SearchFilters = {
   city: string;
@@ -46,7 +48,7 @@ export function CityPage() {
   const { city = 'berlin' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlCategory = searchParams.get('category');
-  const cityLabel = cities.find((item) => item.slug === city)?.name || city;
+  const cityLabel = cities.find((item) => item.slug === city)?.name || getCityLabel(city) || city;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [platformTags, setPlatformTags] = useState<Tag[]>([]);
   const [draftFilters, setDraftFilters] = useState<SearchFilters>(() => defaultFilters(city));
@@ -77,10 +79,12 @@ export function CityPage() {
   const query = useMemo(() => {
     const params = new URLSearchParams();
     params.set('city', appliedFilters.city);
+    const country = searchParams.get('country');
+    if (country) params.set('country', country);
     if (appliedFilters.category) params.set('category', appliedFilters.category);
     if (appliedFilters.tag_ids.length) params.set('tags', appliedFilters.tag_ids.join(','));
     return `?${params.toString()}`;
-  }, [appliedFilters.city, appliedFilters.category, appliedFilters.tag_ids]);
+  }, [appliedFilters.city, appliedFilters.category, appliedFilters.tag_ids, searchParams]);
 
   useEffect(() => {
     setLoading(true);
@@ -242,6 +246,8 @@ export function CityPage() {
           <Link to="/dashboard" className="button">{t('buttons.addListing')}</Link>
         </div>
       </section>
+
+      <GlobalLocationSearch initialCountry={searchParams.get('country') || 'DE'} initialCity={cityLabel} initialCategory={appliedFilters.category || 'ladies'} compact />
 
       <section className="top-escorts-strip marketplace-avatar-strip">
         <div className="section-head compact">

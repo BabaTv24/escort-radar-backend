@@ -6,6 +6,7 @@ import { generatePublicUserId, generateReferralCode, normalizePhone } from '../u
 import { getClientActivationSummary } from '../services/clientActivation.js';
 import { notifyMatchingClientsForProfile } from './clientIntent.js';
 import { isPublicProfile, publicProfileRejectionReason } from '../publicProfiles.js';
+import { getCityLabel as getGlobalCityLabel, getCountryAliases, normalizeCity as normalizeGlobalCity, normalizeCountry } from '../locations.js';
 
 export const profilesRouter = Router();
 
@@ -23,10 +24,11 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .order('location_updated_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
 
-  const city = String(req.query.city || '').toLowerCase();
-  if (city && allowedCities.includes(city)) {
-    const label = cityLabel(city);
-    query = query.or(`city.eq.${city},work_city.ilike.*${label}*,travel_city.ilike.*${label}*`);
+  const city = normalizeGlobalCity(req.query.city);
+  const country = normalizeCountry(req.query.country);
+  if (city) {
+    const label = getGlobalCityLabel(city);
+    query = query.or(`city.eq.${city},city.ilike.*${city}*,work_city.ilike.*${label}*,work_city.ilike.*${city}*,travel_city.ilike.*${label}*,travel_city.ilike.*${city}*`);
   }
 
   for (const key of ['available_now', 'mobile_service', 'private_studio', 'verified']) {
@@ -62,6 +64,8 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
       }
       return visible;
     })
+    .filter((profile) => !country || profileMatchesCountry(profile, country))
+    .filter((profile) => !city || profileMatchesCity(profile, city))
     .filter((profile) => !categoryFilter || normalizeProfileCategory(profile.category) === categoryFilter)
     .map((profile) => sanitizePublicProfile(withImageUrls(profile)))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
@@ -461,6 +465,21 @@ function cityLabel(slug: string) {
     warszawa: 'Warszawa'
   };
   return labels[slug] || slug;
+}
+
+function profileMatchesCountry(profile: any, country: string) {
+  const aliases = getCountryAliases(country).map((item) => item.toLowerCase());
+  const values = [profile.work_country, profile.country, profile.country_code]
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean);
+  if (!values.length && country === 'DE') return true;
+  return values.some((value) => aliases.some((alias) => value === alias || value.includes(alias)));
+}
+
+function profileMatchesCity(profile: any, city: string) {
+  const wanted = normalizeGlobalCity(city);
+  return [profile.city, profile.work_city, profile.travel_city, profile.area, profile.work_area]
+    .some((value) => normalizeGlobalCity(value) === wanted || String(value || '').toLowerCase().includes(wanted));
 }
 
 function calculateRadarScore(profile: any) {

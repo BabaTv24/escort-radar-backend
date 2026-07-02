@@ -5,6 +5,7 @@ import { CalendarDays, Coins, Heart, LogOut, MessageCircle, Radar, ShieldCheck, 
 import { categoryOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { api } from '../lib/api';
+import { normalizeCategoryKey } from '../lib/categories';
 import { supabase } from '../lib/supabase';
 
 type HeaderAccountRole = 'client' | 'advertiser' | 'business' | 'admin' | 'account';
@@ -20,7 +21,7 @@ export function Layout() {
   const operatorName = import.meta.env.VITE_LEGAL_OPERATOR_NAME || '';
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const activeCategory = searchParams.get('category') || '';
+  const activeCategory = normalizeCategoryKey(searchParams.get('category'));
   const cityMatch = location.pathname.match(/^\/city\/([^/]+)/);
   const currentCity = cityMatch?.[1] || 'berlin';
   const [account, setAccount] = useState<HeaderAccount>({ loading: true, email: '', role: 'account' });
@@ -32,6 +33,7 @@ export function Layout() {
 
     async function activateSession(session: Session | null) {
       const next = await resolveHeaderAccount(session);
+      if (import.meta.env.DEV) console.debug('[Auth]', { hasSession: Boolean(session), userId: session?.user?.id || null, role: next.role, route: location.pathname });
       if (mounted) setAccount(next);
     }
 
@@ -141,7 +143,7 @@ export function Layout() {
           <Radar size={18} />
           <span>{t('nav.radar')}</span>
         </Link>
-        <Link className={location.pathname === '/dashboard' ? 'active' : ''} to="/dashboard">
+        <Link className={location.pathname === '/dashboard' && location.hash === '#favorites' ? 'active' : ''} to="/dashboard#favorites">
           <Heart size={18} />
           <span>Favorites</span>
         </Link>

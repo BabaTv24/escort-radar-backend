@@ -1260,7 +1260,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             </select>
             <input placeholder="Area" value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
             <select value={intentDraft.category || 'ladies'} onChange={(event) => setIntentDraft({ ...intentDraft, category: event.target.value })}>
-              {['ladies', 'gay', 'couples', 'trans', 'massage', 'home_hotel', 'live_cam', 'clubs_parties', 'other'].map((item) => <option key={item} value={item}>{item}</option>)}
+              {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
               {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}

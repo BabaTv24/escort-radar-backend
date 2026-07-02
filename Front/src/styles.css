@@ -5418,3 +5418,57 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+.global-search {
+  display: grid;
+  gap: .85rem;
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid rgba(247, 212, 107, .18);
+  border-radius: 16px;
+  background: rgba(8, 8, 10, .72);
+}
+
+.global-search.compact {
+  margin-top: 1rem;
+}
+
+.global-search-grid,
+.global-search-place {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .7rem;
+  align-items: end;
+}
+
+.global-search-place {
+  grid-template-columns: minmax(0, 1fr) auto;
+  position: relative;
+}
+
+.popular-city-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  align-items: center;
+  color: rgba(255, 244, 214, .72);
+}
+
+.popular-city-row button {
+  width: auto;
+  min-height: 2rem;
+  padding: .35rem .65rem;
+  border-radius: 999px;
+}
+
+.favorite-card-shell {
+  display: grid;
+  gap: .6rem;
+}
+
+@media (max-width: 760px) {
+  .global-search-grid,
+  .global-search-place {
+    grid-template-columns: 1fr;
+  }
+}
