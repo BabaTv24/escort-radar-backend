@@ -130,7 +130,7 @@ const authIntentStorageKey = 'escortRadar.authIntent';
 const allowedAuthAccountTypes = ['client', 'escort', 'business'] as const;
 const allowedIdentities = ['male', 'female', 'trans'];
 type AuthAccountType = typeof allowedAuthAccountTypes[number];
-type DashboardAccountType = AuthAccountType | 'unknown';
+type DashboardAccountType = AuthAccountType | 'admin' | 'unknown';
 
 export function DashboardPage() {
   const [token, setToken] = useState('');
@@ -186,6 +186,7 @@ export function DashboardPage() {
   async function activateSession(session: Session | null) {
     setToken(session?.access_token || '');
     setUserEmail(session?.user.email || '');
+    setAuthResolved(false);
 
     if (!session?.access_token) {
       setAuthAccountType('unknown');
@@ -196,6 +197,11 @@ export function DashboardPage() {
     const role = await resolveBackendAuthAccountType(session.access_token);
     setAuthAccountType(role);
     setAuthResolved(true);
+
+    if (role === 'admin') {
+      navigate('/admin');
+      return;
+    }
 
     if (role === 'client') {
       await loadClientDashboard(session.access_token);
@@ -238,12 +244,33 @@ export function DashboardPage() {
   }
 
   async function resolveBackendAuthAccountType(accessToken: string): Promise<DashboardAccountType> {
+    let authMe: Awaited<ReturnType<typeof api.authMe>> | null = null;
+    let profileData: Profile | null = null;
     try {
-      const data = await api.authMe(accessToken);
-      setClientProfile(data.client_profile);
-      return resolveAuthAccountType(data.user.app_metadata || { auth_account_type: data.user.auth_account_type });
+      authMe = await api.authMe(accessToken);
+      setClientProfile(authMe.client_profile);
+      let accountMode = resolveAccountMode(authMe.user, authMe.client_profile);
+      const hasMetadataType = Boolean(authMe.user.app_metadata?.auth_account_type);
+      if (accountMode === 'unknown' || (accountMode === 'client' && !hasMetadataType)) {
+        const profileResponse = await api.myProfile(accessToken).catch(() => ({ profile: null }));
+        profileData = profileResponse.profile;
+        accountMode = resolveAccountMode(authMe.user, authMe.client_profile, profileData);
+      }
+      if (import.meta.env.DEV) {
+        console.debug('[DashboardAuth]', {
+          hasSession: true,
+          userId: authMe.user.id,
+          authMe,
+          accountMode,
+          profilesCount: profileData ? 1 : 0
+        });
+      }
+      return accountMode;
     } catch {
       setClientProfile(null);
+      if (import.meta.env.DEV) {
+        console.debug('[DashboardAuth]', { hasSession: true, userId: null, authMe, accountMode: 'unknown', profilesCount: 0 });
+      }
       return 'unknown';
     }
   }
@@ -1029,9 +1056,22 @@ export function DashboardPage() {
 */
 }
 
-function resolveAuthAccountType(metadata?: Record<string, unknown> | null): DashboardAccountType {
-  const value = String(metadata?.auth_account_type || '');
-  return allowedAuthAccountTypes.includes(value as AuthAccountType) ? value as AuthAccountType : 'unknown';
+function resolveAccountMode(
+  user?: { auth_account_type?: string; role?: string; app_metadata?: Record<string, unknown> },
+  clientProfile?: ClientProfile | null,
+  profile?: Profile | null
+): DashboardAccountType {
+  const role = String(user?.role || user?.app_metadata?.role || '').toLowerCase();
+  if (role === 'admin' || user?.app_metadata?.admin === true) return 'admin';
+  if (profile?.account_type) {
+    return ['business', 'agency', 'massage_salon', 'club_party', 'live_cam'].includes(String(profile.account_type))
+      ? 'business'
+      : 'escort';
+  }
+  const value = String(user?.app_metadata?.auth_account_type || user?.auth_account_type || '');
+  if (allowedAuthAccountTypes.includes(value as AuthAccountType)) return value as AuthAccountType;
+  if (clientProfile) return 'client';
+  return 'client';
 }
 
 function isAdvertiserAccount(accountType: DashboardAccountType) {

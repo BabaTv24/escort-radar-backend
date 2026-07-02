@@ -552,3 +552,51 @@ test('environment example includes legal and manual payment readiness variables'
     assert.match(source, new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
 });
+
+test('category normalization uses canonical mobile category keys', async () => {
+  const { getCategoryAliases, normalizeCategoryKey, categoryOptions } = await import('../Back/src/categories.ts');
+  const { citySlug, normalizeCountry } = await import('../Back/src/locations.ts');
+  assert.deepEqual(categoryOptions, ['ladies', 'men', 'gay', 'couples', 'trans', 'massage', 'home_hotel', 'live_cam', 'clubs_parties', 'bdsm', 'onlyfans', 'sex_phone', 'films', 'offers', 'other']);
+  assert.equal(normalizeCategoryKey('Gay'), 'gay');
+  assert.equal(normalizeCategoryKey('Panie'), 'ladies');
+  assert.equal(normalizeCategoryKey('Panowie'), 'men');
+  assert.equal(normalizeCategoryKey('Dom / Hotel'), 'home_hotel');
+  assert.equal(normalizeCategoryKey('house_hotel'), 'home_hotel');
+  assert.ok(getCategoryAliases('sex_phone').includes('phone_show'));
+  assert.equal(normalizeCountry('Deutschland'), 'DE');
+  assert.equal(citySlug('Frankfurt am Main'), 'frankfurt-am-main');
+});
+
+test('client activation token bonus is 7 and favorites are token-gated', async () => {
+  const configSource = await readFile(new URL('../Back/src/config.ts', import.meta.url), 'utf8');
+  const favoritesSource = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/034_client_favorites_token_cost.sql', import.meta.url), 'utf8');
+  assert.match(configSource, /CLIENT_ACTIVATION_TOKEN_BONUS', 7/);
+  assert.doesNotMatch(configSource, /CLIENT_ACTIVATION_WELCOME_COINS', 100/);
+  assert.match(favoritesSource, /FAVORITE_TOKEN_COST = 1/);
+  assert.match(favoritesSource, /add_client_favorite_with_token/);
+  assert.match(favoritesSource, /code: 'NOT_ENOUGH_TOKENS'/);
+  assert.match(migration, /create table if not exists public\.client_favorites/);
+  assert.match(migration, /'favorite_profile'/);
+});
+
+test('production regression contracts for Berlin profiles dashboard and client preferences stay wired', async () => {
+  const profilesSource = await readFile(new URL('../Back/src/routes/profiles.ts', import.meta.url), 'utf8');
+  const cityPageSource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
+  const dashboardSource = await readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8');
+  const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+  const serverSource = await readFile(new URL('../Back/src/server.ts', import.meta.url), 'utf8');
+  const preferenceRoute = await readFile(new URL('../Back/src/routes/clientPreferences.ts', import.meta.url), 'utf8');
+  const preferenceMigration = await readFile(new URL('../supabase/migrations/035_client_search_location_preferences.sql', import.meta.url), 'utf8');
+
+  assert.match(profilesSource, /profileMatchesCountry\(profile, country\) \|\| \(city && profileMatchesCity\(profile, city\)\)/);
+  assert.match(cityPageSource, /const radarProfiles = useMemo/);
+  assert.doesNotMatch(cityPageSource, /if \(!radarRange\.inRange\) return false/);
+  assert.match(dashboardSource, /function resolveAccountMode/);
+  assert.match(dashboardSource, /\[DashboardAuth\]/);
+  assert.match(apiSource, /clientPreferences: \(token: string\)/);
+  assert.match(apiSource, /updateClientPreferences/);
+  assert.match(serverSource, /app\.use\('\/api\/client\/preferences', clientPreferencesRouter\)/);
+  assert.match(preferenceRoute, /client_search_postal_code/);
+  assert.match(preferenceMigration, /add column if not exists client_search_lat numeric/);
+});

@@ -64,7 +64,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
       }
       return visible;
     })
-    .filter((profile) => !country || profileMatchesCountry(profile, country))
+    .filter((profile) => !country || profileMatchesCountry(profile, country) || (city && profileMatchesCity(profile, city)))
     .filter((profile) => !city || profileMatchesCity(profile, city))
     .filter((profile) => !categoryFilter || normalizeProfileCategory(profile.category) === categoryFilter)
     .map((profile) => sanitizePublicProfile(withImageUrls(profile)))

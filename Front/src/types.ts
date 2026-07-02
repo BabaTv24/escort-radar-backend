@@ -271,6 +271,13 @@ export type TokenPurchaseRequest = {
   created_at: string;
 };
 
+export type ClientFavorite = {
+  id: string;
+  profile_id: string;
+  created_at: string;
+  profile?: Profile | null;
+};
+
 export type MasterAdminWallet = {
   id: string;
   name: string;
@@ -313,9 +320,27 @@ export type ClientProfile = {
   display_name?: string | null;
   city?: string | null;
   avatar_url?: string | null;
+  client_search_country?: string | null;
+  client_search_city?: string | null;
+  client_search_postal_code?: string | null;
+  client_search_area?: string | null;
+  client_search_lat?: number | null;
+  client_search_lng?: number | null;
+  client_search_label?: string | null;
   created_at?: string;
   updated_at?: string;
 };
+
+export type ClientSearchPreferences = Pick<
+  ClientProfile,
+  | 'client_search_country'
+  | 'client_search_city'
+  | 'client_search_postal_code'
+  | 'client_search_area'
+  | 'client_search_lat'
+  | 'client_search_lng'
+  | 'client_search_label'
+>;
 
 export type ClientIntent = {
   id: string;

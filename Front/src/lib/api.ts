@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -25,6 +25,12 @@ export const api = {
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
   authMe: (token: string) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business'; role?: string; app_metadata?: Record<string, unknown> }; client_profile: ClientProfile | null }>('/api/auth/me', { token }),
   updateClientProfile: (token: string, body: Partial<ClientProfile>) => request<{ client_profile: ClientProfile }>('/api/auth/client-profile', {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
+  clientPreferences: (token: string) => request<{ preferences: ClientSearchPreferences }>('/api/client/preferences', { token }),
+  updateClientPreferences: (token: string, body: Partial<ClientSearchPreferences>) => request<{ preferences: ClientSearchPreferences }>('/api/client/preferences', {
     method: 'PATCH',
     token,
     body: JSON.stringify(body)
@@ -255,6 +261,15 @@ export const api = {
   }),
   tokenPackages: () => request<{ packages: TokenPackage[] }>('/api/tokens/packages'),
   myWallet: (token: string) => request<{ wallet: Wallet }>('/api/tokens/wallet/me', { token }),
+  myFavorites: (token: string) => request<{ favorites: ClientFavorite[]; wallet: Wallet }>('/api/favorites', { token }),
+  addFavorite: (token: string, profileId: string) => request<{ favorite: ClientFavorite; wallet: Wallet; already_favorited: boolean; charged: number }>(`/api/favorites/${profileId}`, {
+    method: 'POST',
+    token
+  }),
+  removeFavorite: (token: string, profileId: string) => request<{ ok: boolean; wallet: Wallet }>(`/api/favorites/${profileId}`, {
+    method: 'DELETE',
+    token
+  }),
   tokenPurchaseIntent: (token: string, package_id?: string) => request('/api/tokens/purchase-intent', {
     method: 'POST',
     token,

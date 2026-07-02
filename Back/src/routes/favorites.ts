@@ -63,7 +63,7 @@ favoritesRouter.post('/:profileId', asyncHandler(async (req, res) => {
   });
   if (error) {
     if (String(error.message || '').includes('NOT_ENOUGH_TOKENS')) {
-      return res.status(402).json({ error: 'Not enough tokens', code: 'not_enough_tokens' });
+      return res.status(402).json({ error: 'Not enough tokens', code: 'NOT_ENOUGH_TOKENS' });
     }
     return res.status(400).json({ error: error.message });
   }

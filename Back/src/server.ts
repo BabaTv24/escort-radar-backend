@@ -15,6 +15,7 @@ import { clientActivationRouter } from './routes/clientActivation.js';
 import { authRouter } from './routes/auth.js';
 import { clientIntentRouter } from './routes/clientIntent.js';
 import { stripeWebhookRouter } from './routes/stripeWebhook.js';
+import { clientPreferencesRouter } from './routes/clientPreferences.js';
 
 const serverBuildTime = new Date().toISOString();
 const app = express();
@@ -45,6 +46,9 @@ app.get('/api/version', (_req, res) => {
     commit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || 'local',
     buildTime: serverBuildTime,
     routes: {
+      profiles: true,
+      favorites: true,
+      clientPreferences: true,
       clientIntent: true,
       adminProfiles: true,
       adminSubscriptions: true,
@@ -64,6 +68,7 @@ app.use('/api/favorites', favoritesRouter);
 app.use('/api/tags', tagsRouter);
 app.use('/api/client-activation', clientActivationRouter);
 app.use('/api/client-intent', clientIntentRouter);
+app.use('/api/client/preferences', clientPreferencesRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });

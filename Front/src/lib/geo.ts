@@ -1,9 +1,10 @@
 import type { Profile } from '../types';
+import { normalizeCategoryKey } from './categories';
 
 export type GeoPoint = {
   lat: number;
   lng: number;
-  source: 'browser' | 'manual' | 'city' | 'city_fallback';
+  source: 'browser' | 'manual' | 'manual_saved' | 'city' | 'city_fallback';
   label?: string;
 };
 
@@ -201,32 +202,7 @@ export function resolveBerlinPostalDistrict(value: string | null | undefined) {
 }
 
 export function normalizeProfileCategory(value: unknown) {
-  const category = normalizeLocationQuery(String(value || '')).replace(/\s+/g, '_');
-  const aliases: Record<string, string> = {
-    gay: 'gay',
-    gays: 'gay',
-    male: 'gay',
-    men: 'gay',
-    man: 'gay',
-    ladies: 'ladies',
-    lady: 'ladies',
-    female: 'ladies',
-    women: 'ladies',
-    woman: 'ladies',
-    panie: 'ladies',
-    couples: 'couples',
-    couple: 'couples',
-    pary: 'couples',
-    trans: 'trans',
-    massage: 'massage',
-    house_hotel: 'house_hotel',
-    home_hotel: 'house_hotel',
-    dom_hotel: 'house_hotel',
-    live_cam: 'live_cam',
-    clubs_parties: 'clubs_parties',
-    other: 'other'
-  };
-  return aliases[category] || category || '';
+  return normalizeCategoryKey(value);
 }
 
 export function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {

@@ -15,6 +15,7 @@ import { getPublicProfiles } from '../lib/publicProfiles';
 import { normalizeCategoryKey } from '../lib/categories';
 import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
 import { getCityLabel } from '../lib/globalLocations';
+import { supabase } from '../lib/supabase';
 
 type SearchFilters = {
   city: string;
@@ -76,6 +77,33 @@ export function CityPage() {
     setSearcherLocation({ ...getCityCenter(city), source: 'city', label: cityLabel });
   }, [city, cityLabel, urlCategory]);
 
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(async ({ data }) => {
+      const accessToken = data.session?.access_token;
+      if (!accessToken) return;
+      try {
+        const { preferences } = await api.clientPreferences(accessToken);
+        const lat = Number(preferences.client_search_lat);
+        const lng = Number(preferences.client_search_lng);
+        if (!cancelled && Number.isFinite(lat) && Number.isFinite(lng)) {
+          setSearcherLocation({
+            lat,
+            lng,
+            source: 'manual_saved',
+            label: preferences.client_search_label || preferences.client_search_postal_code || cityLabel
+          });
+          setFallbackNotice(false);
+        }
+      } catch {
+        // Saved search location is optional; keep the city fallback when it is unavailable.
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cityLabel]);
+
   const query = useMemo(() => {
     const params = new URLSearchParams();
     params.set('city', appliedFilters.city);
@@ -104,6 +132,10 @@ export function CityPage() {
   }, [query, appliedFilters, searcherLocation, retryKey]);
 
   const sortedProfiles = useMemo(() => sortProfiles(profiles, sortMode), [profiles, sortMode]);
+  const radarProfiles = useMemo(
+    () => sortedProfiles.filter((profile) => getSearchRange(profile, searcherLocation, draftFilters.radius).inRange),
+    [sortedProfiles, searcherLocation, draftFilters.radius]
+  );
   const topProfiles = sortedProfiles.slice(0, 12);
   const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
   const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
@@ -146,6 +178,19 @@ export function CityPage() {
   function setManualLocation(location: GeoPoint) {
     setSearcherLocation(location);
     setFallbackNotice(false);
+    supabase.auth.getSession().then(({ data }) => {
+      const accessToken = data.session?.access_token;
+      if (!accessToken) return;
+      api.updateClientPreferences(accessToken, {
+        client_search_country: searchParams.get('country') || 'DE',
+        client_search_city: cityLabel,
+        client_search_postal_code: location.label?.match(/\b\d{5}\b/)?.[0] || null,
+        client_search_area: location.label || null,
+        client_search_lat: location.lat,
+        client_search_lng: location.lng,
+        client_search_label: location.label || cityLabel
+      }).catch(() => undefined);
+    });
   }
 
   function renderFilters(mode: 'desktop' | 'mobile') {
@@ -222,7 +267,7 @@ export function CityPage() {
         <div className="filter-actions">
           <button className="button primary" type="button" onClick={applyDraftFilters}>{t('buttons.apply')}</button>
           <button className="button" type="button" onClick={resetFilters}>{t('buttons.reset')}</button>
-          <span>{sortedProfiles.length} in range</span>
+          <span>{radarProfiles.length} in range</span>
         </div>
       </section>
     );
@@ -276,7 +321,7 @@ export function CityPage() {
 
       <section id="city-radar" className="compact-radar-wrap">
         <RadarPanel
-          profiles={sortedProfiles}
+          profiles={radarProfiles}
           radius={draftFilters.radius}
           status={draftFilters.availability_status}
           city={appliedFilters.city}
@@ -333,8 +378,8 @@ export function CityPage() {
             ) : (
               <div className="premium-empty-state">
                 <RadioTower size={34} />
-                <h2>No profiles found in this area.</h2>
-                <p>Try expanding your radius or changing availability filters.</p>
+                <h2>No profiles found for {cityLabel}.</h2>
+                <p>Try changing category, status or service filters.</p>
                 <button className="button primary" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}>Increase radius</button>
               </div>
             )
@@ -409,16 +454,13 @@ function TagSelect({ title, values, tags, onToggle }: { title: string; values: s
 function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocation: GeoPoint) {
   const priceMax = Number(filters.price_max) || 0;
 
-  return profiles.filter((profile) => {
-    if (filters.city && !profileMatchesCity(profile, filters.city)) {
-      const centerRange = getSearchRange(profile, searcherLocation, filters.radius);
-      if (!centerRange.inRange) return false;
-    }
+  return profiles.map((profile) => {
+    const radarRange = getSearchRange(profile, searcherLocation, filters.radius);
+    return { ...profile, distance_km: radarRange.distance_km };
+  }).filter((profile) => {
+    if (filters.city && !profileMatchesCity(profile, filters.city)) return false;
     if (filters.category && normalizeCategoryKey(profile.category) !== filters.category) return false;
     if (!matchesOperatorStatusFilter(profile, filters.availability_status)) return false;
-    const radarRange = getSearchRange(profile, searcherLocation, filters.radius);
-    if (!radarRange.inRange) return false;
-    profile.distance_km = radarRange.distance_km;
     if (priceMax && profile.price_1h && profile.price_1h > priceMax) return false;
     if (filters.visit_types.length && !filters.visit_types.some((item) => profile.visit_types?.includes(item))) return false;
     if (filters.services.length && !filters.services.some((item) => profile.service_menu?.some((service) => service.enabled && service.name === item))) return false;
@@ -429,7 +471,7 @@ function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocat
 }
 
 function getSearchRange(profile: Profile, searcherLocation: GeoPoint, selectedRadius: number) {
-  const radarLocation = (searcherLocation.source === 'browser' || searcherLocation.source === 'manual')
+  const radarLocation = (searcherLocation.source === 'browser' || searcherLocation.source === 'manual' || searcherLocation.source === 'manual_saved')
     ? resolveProfileRadarLocation(profile)
     : null;
   if (!radarLocation) return isProfileInRadarRange(profile, searcherLocation, selectedRadius);
@@ -460,10 +502,22 @@ function sortProfiles(profiles: Profile[], sortMode: 'best' | 'new' | 'near' | '
 }
 
 function profileMatchesCity(profile: Profile, city: string) {
-  const label = cityName(city).toLowerCase();
-  return profile.city === city
-    || String(profile.work_city || '').toLowerCase() === label
-    || String(profile.travel_city || '').toLowerCase() === label;
+  const wanted = normalizeCityValue(city);
+  const label = normalizeCityValue(cityName(city));
+  return [profile.city, profile.work_city, profile.travel_city, profile.area, profile.work_area]
+    .some((value) => {
+      const nextValue = normalizeCityValue(value);
+      return nextValue === wanted || nextValue === label || nextValue.includes(wanted) || nextValue.includes(label);
+    });
+}
+
+function normalizeCityValue(value: unknown) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
 }
 
 function cityName(slug: string) {
