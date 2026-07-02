@@ -291,7 +291,7 @@ function getInitials(name: string) {
 }
 
 function getPrice(profile: Profile) {
-  const prices = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_night]
+  const prices = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_3h, profile.price_night]
     .map((value) => Number(value || 0))
     .filter((value) => value > 0);
   if (!prices.length) return 'Price on request';

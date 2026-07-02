@@ -77,6 +77,7 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     postal_code: nullableText(raw.postal_code ?? raw.postalCode ?? raw.zip),
     work_place_label: nullableText(raw.work_place_label ?? raw.workPlaceLabel),
     location_mode: normalizeLocationMode(raw.location_mode ?? raw.locationMode),
+    location_visibility: normalizeLocationVisibility(raw.location_visibility ?? raw.locationVisibility ?? raw.location_mode ?? raw.locationMode),
     latitude: numberValue(raw.latitude ?? raw.lat),
     longitude: numberValue(raw.longitude ?? raw.lng),
     languages: stringArray(raw.languages),
@@ -97,7 +98,12 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     status: normalizeStatus(raw.status),
     subscription_status: text(raw.subscription_status ?? raw.subscriptionStatus) || '',
     availability_status: normalizeAvailability(availability),
+    price_30min: numberValue(raw.price_30min),
     price_1h: numberValue(raw.price_1h ?? raw.hourly_rate ?? raw.price_per_hour),
+    price_2h: numberValue(raw.price_2h),
+    price_3h: numberValue(raw.price_3h),
+    price_night: numberValue(raw.price_night),
+    outcall_fee: numberValue(raw.outcall_fee),
     profile_images: images,
     images
   };
@@ -196,6 +202,14 @@ function normalizeLocationMode(value: unknown): Profile['location_mode'] {
   const mode = text(value);
   if (['exact', 'postal_area', 'hidden', 'exact_hidden', 'approximate', 'city_only'].includes(mode)) return mode as Profile['location_mode'];
   return 'city_only';
+}
+
+function normalizeLocationVisibility(value: unknown): Profile['location_visibility'] {
+  const mode = text(value);
+  if (['exact', 'postal_area', 'city_only', 'hidden'].includes(mode)) return mode as Profile['location_visibility'];
+  if (mode === 'exact_hidden') return 'hidden';
+  if (mode === 'approximate') return 'postal_area';
+  return 'postal_area';
 }
 
 function devReject(reason: string) {

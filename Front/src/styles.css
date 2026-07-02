@@ -5385,3 +5385,36 @@ textarea::placeholder {
   text-align: left;
   vertical-align: top;
 }
+
+.full-span {
+  grid-column: 1 / -1;
+}
+
+.work-point-map,
+.service-pricing-editor,
+.service-pricing-public {
+  display: grid;
+  gap: .7rem;
+}
+
+.work-point-map-canvas {
+  width: 100%;
+  min-height: 280px;
+  border: 1px solid rgba(247, 212, 107, .2);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .04);
+}
+
+.service-pricing-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(130px, .55fr) minmax(120px, .5fr);
+  gap: .6rem;
+  align-items: center;
+}
+
+@media (max-width: 720px) {
+  .service-pricing-row {
+    grid-template-columns: 1fr;
+  }
+}

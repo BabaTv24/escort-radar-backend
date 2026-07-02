@@ -5,6 +5,7 @@ import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, He
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
+import { WorkPointMap } from '../components/WorkPointMap';
 import type { BookingRequest, ClientActivation, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Gift as GiftRow, Profile, ProfileImage, RadarNotification, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
@@ -100,6 +101,7 @@ const emptyProfile: Partial<Profile> = {
   approximate_location_area: '',
   exact_address: '',
   location_mode: 'city_only',
+  location_visibility: 'postal_area',
   latitude: null,
   longitude: null,
   auto_location_on_login: false,
@@ -107,6 +109,7 @@ const emptyProfile: Partial<Profile> = {
   price_30min: 120,
   price_1h: 200,
   price_2h: 360,
+  price_3h: 500,
   price_night: 900,
   outcall_fee: 50,
   currency: 'EUR',
@@ -117,6 +120,7 @@ const emptyProfile: Partial<Profile> = {
     extra_price: index < 2 ? null : 50,
     note: ''
   })),
+  service_pricing: {},
   available_now: false,
   mobile_service: false,
   private_studio: false
@@ -904,6 +908,7 @@ export function DashboardPage() {
                 <Field label={t('form.price30')} helper={t('pricing.helper30')}><input type="number" placeholder="120" value={profile.price_30min || ''} onChange={(event) => setProfile({ ...profile, price_30min: Number(event.target.value) })} /></Field>
                 <Field label={t('form.price1h')} helper={t('pricing.helper1h')}><input type="number" placeholder="200" value={profile.price_1h || ''} onChange={(event) => setProfile({ ...profile, price_1h: Number(event.target.value) })} /></Field>
                 <Field label={t('form.price2h')} helper={t('pricing.helper2h')}><input type="number" placeholder="360" value={profile.price_2h || ''} onChange={(event) => setProfile({ ...profile, price_2h: Number(event.target.value) })} /></Field>
+                <Field label={t('form.price3h')} helper={t('pricing.helper3h')}><input type="number" placeholder="500" value={profile.price_3h || ''} onChange={(event) => setProfile({ ...profile, price_3h: Number(event.target.value) })} /></Field>
                 <Field label={t('form.priceNight')} helper={t('pricing.helperNight')}><input type="number" placeholder="900" value={profile.price_night || ''} onChange={(event) => setProfile({ ...profile, price_night: Number(event.target.value) })} /></Field>
                 <Field label={t('form.outcallFee')} helper={t('pricing.helperOutcall')}><input type="number" placeholder="50" value={profile.outcall_fee || ''} onChange={(event) => setProfile({ ...profile, outcall_fee: Number(event.target.value) })} /></Field>
                 <Field label={t('form.currency')} helper={t('pricing.helperCurrency')}><select value={profile.currency || 'EUR'} onChange={(event) => setProfile({ ...profile, currency: event.target.value })}>
@@ -912,6 +917,7 @@ export function DashboardPage() {
                     <option value="CHF">CHF</option>
                   </select></Field>
               </div>
+              <ServicePricingEditor selectedServices={profile.services || []} servicePricing={profile.service_pricing || {}} currency={profile.currency || 'EUR'} onChange={(service_pricing) => setProfile({ ...profile, service_pricing })} />
             </section>}
 
             {creatorTab === 'services' && <section className="form-panel elevated">
@@ -1683,7 +1689,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
     });
   }
 
-  function updatePrice(key: keyof Pick<Profile, 'price_30min' | 'price_1h' | 'price_2h' | 'price_night'>, value: string) {
+  function updatePrice(key: keyof Pick<Profile, 'price_30min' | 'price_1h' | 'price_2h' | 'price_3h' | 'price_night'>, value: string) {
     onProfileChange({ ...profile, [key]: value ? Number(value) : null });
   }
 
@@ -2078,6 +2084,10 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               }} />
               <input placeholder={t('dashboard.advertiser.placeLabel')} value={profile.work_place_label || ''} onChange={(event) => onProfileChange({ ...profile, work_place_label: event.target.value })} />
               <input placeholder={t('radar.exactAddress')} value={profile.exact_address || ''} onChange={(event) => onProfileChange({ ...profile, exact_address: event.target.value, work_place_label: event.target.value || profile.work_place_label || '' })} />
+              <WorkPointMap apiKey={googleMapsKey} latitude={profile.latitude} longitude={profile.longitude} onChange={(point) => {
+                onProfileChange({ ...profile, latitude: point.latitude, longitude: point.longitude, location_mode: 'approximate', location_visibility: profile.location_visibility || 'postal_area' });
+                setGeoMessage(t('location.workPointSet'));
+              }} />
               <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value, work_city: profile.work_city || normalizeCityName(event.target.value) })}>
                 {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
@@ -2085,7 +2095,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <select value={profile.service_radius_km || 25} onChange={(event) => onProfileChange({ ...profile, service_radius_km: Number(event.target.value) })}>
                 {[1, 5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}
               </select>
-              <select value={getDashboardLocationChoice(profile)} onChange={(event) => onProfileChange(applyDashboardLocationChoice(profile, event.target.value))}>
+              <select value={profile.location_visibility || getDashboardLocationChoice(profile)} onChange={(event) => onProfileChange(applyDashboardLocationChoice(profile, event.target.value))}>
                 <option value="exact">{t('radar.exactAddress')}</option>
                 <option value="postal_area">{t('radar.postalArea')}</option>
                 <option value="city_only">{t('radar.cityOnly')}</option>
@@ -2139,7 +2149,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             <div className="service-checklist">
               {Object.entries(groupedServices).map(([category, services]) => (
                 <div key={category} className="service-checklist-group">
-                  <strong>{category.replace(/_/g, ' ')}</strong>
+                  <strong>{serviceCategoryLabel(category, t)}</strong>
                   <div>
                     {services.map((service) => (
                       <button
@@ -2173,6 +2183,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <PriceEditor label={t('form.price30')} value={profile.price_30min} onChange={(value) => updatePrice('price_30min', value)} />
               <PriceEditor label={t('form.price1h')} value={profile.price_1h} onChange={(value) => updatePrice('price_1h', value)} />
               <PriceEditor label={t('form.price2h')} value={profile.price_2h} onChange={(value) => updatePrice('price_2h', value)} />
+              <PriceEditor label={t('form.price3h')} value={profile.price_3h} onChange={(value) => updatePrice('price_3h', value)} />
               <PriceEditor label={t('form.priceNight')} value={profile.price_night} onChange={(value) => updatePrice('price_night', value)} />
             </div>
             <label className="admin-field">
@@ -2181,6 +2192,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
                 {['EUR', 'PLN', 'CHF', 'GBP', 'USD'].map((currency) => <option key={currency} value={currency}>{currency}</option>)}
               </select>
             </label>
+            <ServicePricingEditor selectedServices={profile.services || []} servicePricing={profile.service_pricing || {}} currency={profile.currency || 'EUR'} onChange={(service_pricing) => onProfileChange({ ...profile, service_pricing })} />
           </section>
         )}
 
@@ -2454,10 +2466,12 @@ function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null)
     price_30min: profile.price_30min,
     price_1h: profile.price_1h,
     price_2h: profile.price_2h,
+    price_3h: profile.price_3h,
     price_night: profile.price_night,
     outcall_fee: profile.outcall_fee,
     currency: profile.currency || 'EUR',
     service_menu: profile.service_menu || [],
+    service_pricing: profile.service_pricing || {},
     available_now: Boolean(profile.available_now),
     mobile_service: Boolean(profile.mobile_service),
     private_studio: Boolean(profile.private_studio),
@@ -2507,6 +2521,7 @@ function profileToForm(profile: Profile): Partial<Profile> {
     auto_location_on_login: Boolean(profile.auto_location_on_login),
     auto_location_while_online: Boolean(profile.auto_location_while_online),
     service_menu: profile.service_menu?.length ? profile.service_menu : emptyProfile.service_menu,
+    service_pricing: profile.service_pricing || {},
     profile_images: profile.profile_images || []
   };
 }
@@ -2522,6 +2537,7 @@ function prepareProfilePayload(profile: Partial<Profile>, savedProfile: Profile 
     travel: travels === null ? profile.travel || null : travels ? 'yes' : 'no',
     penis_length_cm: profile.penis_length_cm === null || profile.penis_length_cm === undefined ? null : Number(profile.penis_length_cm),
     penis_diameter_cm: profile.penis_diameter_cm === null || profile.penis_diameter_cm === undefined ? null : Number(profile.penis_diameter_cm),
+    service_pricing: filterServicePricing(profile.service_pricing || {}, profile.services || []),
     languages: Array.isArray(profile.languages)
       ? profile.languages.map((item) => String(item).trim()).filter(Boolean)
       : String(profile.languages || '').split(',').map((item) => item.trim()).filter(Boolean),
@@ -2531,6 +2547,7 @@ function prepareProfilePayload(profile: Partial<Profile>, savedProfile: Profile 
 }
 
 function getDashboardLocationChoice(profile: Partial<Profile>) {
+  if (profile.location_visibility) return profile.location_visibility;
   if (profile.location_mode === 'exact_hidden' || profile.location_mode === 'hidden') return 'hidden';
   if (profile.location_mode === 'city_only') return 'city_only';
   if (profile.location_mode === 'approximate' && profile.exact_address) return 'exact';
@@ -2539,16 +2556,52 @@ function getDashboardLocationChoice(profile: Partial<Profile>) {
 }
 
 function applyDashboardLocationChoice(profile: Partial<Profile>, choice: string): Partial<Profile> {
-  if (choice === 'hidden') return { ...profile, location_mode: 'exact_hidden' };
-  if (choice === 'city_only') return { ...profile, location_mode: 'city_only', latitude: null, longitude: null };
+  if (choice === 'hidden') return { ...profile, location_visibility: 'hidden', location_mode: 'exact_hidden' };
+  if (choice === 'city_only') return { ...profile, location_visibility: 'city_only', location_mode: 'city_only', latitude: null, longitude: null };
   if (choice === 'exact') {
     return {
       ...profile,
+      location_visibility: 'exact',
       location_mode: 'approximate',
       work_place_label: profile.exact_address || profile.work_place_label || ''
     };
   }
-  return { ...profile, location_mode: 'approximate' };
+  return { ...profile, location_visibility: 'postal_area', location_mode: 'approximate' };
+}
+
+function serviceCategoryLabel(category: string, t: (key: string) => string) {
+  return t(`serviceCategory.${category}`);
+}
+
+function filterServicePricing(value: Record<string, any>, selectedServices: string[]) {
+  const selected = new Set(selectedServices);
+  return Object.fromEntries(Object.entries(value || {}).filter(([key]) => selected.has(key)));
+}
+
+function ServicePricingEditor({ selectedServices, servicePricing, currency, onChange }: { selectedServices: string[]; servicePricing: Record<string, any>; currency: string; onChange: (value: Record<string, any>) => void }) {
+  const { t } = useI18n();
+  const services = selectedServices.map((key) => ({ key, label: serviceLabel(key) }));
+  function update(key: string, patch: Record<string, unknown>) {
+    const current = servicePricing?.[key] || { mode: 'included', extra_price: null };
+    onChange({ ...servicePricing, [key]: { ...current, ...patch } });
+  }
+  return (
+    <div className="service-pricing-editor">
+      <h3>{t('pricing.servicePricing')}</h3>
+      <p className="muted">{t('pricing.selectedServicesPricingHelp')}</p>
+      {services.length ? services.map((service) => {
+        const item = servicePricing?.[service.key] || { mode: 'included', extra_price: null };
+        return <div className="service-pricing-row" key={service.key}>
+          <strong>{service.label}</strong>
+          <select value={item.mode || 'included'} onChange={(event) => update(service.key, { mode: event.target.value, extra_price: event.target.value === 'included' ? null : item.extra_price || 0 })}>
+            <option value="included">{t('pricing.includedInPrice')}</option>
+            <option value="extra">{t('pricing.extraPaid')}</option>
+          </select>
+          {item.mode === 'extra' && <input type="number" min="0" placeholder={`${t('pricing.extraPrice')} (${currency})`} value={item.extra_price ?? ''} onChange={(event) => update(service.key, { extra_price: event.target.value ? Number(event.target.value) : null })} />}
+        </div>;
+      }) : <p className="muted">{t('admin.services.noneSelected')}</p>}
+    </div>
+  );
 }
 
 function operatorToAvailability(status: NonNullable<Profile['operator_status']>): Profile['availability_status'] {

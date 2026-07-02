@@ -24,6 +24,11 @@ export type ServiceMenuItem = {
   note?: string | null;
 };
 
+export type ServicePricingItem = {
+  mode: 'included' | 'extra';
+  extra_price?: number | null;
+};
+
 export type Profile = {
   id: string;
   user_id?: string;
@@ -94,10 +99,12 @@ export type Profile = {
   price_30min?: number | null;
   price_1h?: number | null;
   price_2h?: number | null;
+  price_3h?: number | null;
   price_night?: number | null;
   outcall_fee?: number | null;
   currency?: string;
   service_menu?: ServiceMenuItem[];
+  service_pricing?: Record<string, ServicePricingItem>;
   availability_status?: 'available' | 'busy' | 'unavailable';
   operator_status?: 'ONLINE_NOW' | 'BUSY' | 'TRAVELING' | 'AVAILABLE_TODAY' | 'APPOINTMENT_ONLY' | 'OFFLINE';
   working_today_start?: string | null;
@@ -122,6 +129,7 @@ export type Profile = {
   service_radius_km?: number;
   approximate_location_area?: string | null;
   location_mode?: 'exact' | 'postal_area' | 'hidden' | 'exact_hidden' | 'approximate' | 'city_only';
+  location_visibility?: 'exact' | 'postal_area' | 'city_only' | 'hidden';
   latitude?: number | null;
   longitude?: number | null;
   location_updated_at?: string | null;

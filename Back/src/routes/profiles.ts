@@ -395,20 +395,32 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
 function sanitizePublicProfile(profile: any) {
   const { primary_phone, additional_phones, whatsapp, telegram, latitude, longitude, work_place_label, exact_address: _omittedExactAddress, ...publicProfile } = profile;
   const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
-  const postalCode = publicProfile.location_mode === 'exact_hidden' ? null : publicProfile.postal_code;
+  const visibility = normalizePublicLocationVisibility(publicProfile.location_visibility || publicProfile.location_mode);
+  const postalCode = visibility === 'hidden' ? null : publicProfile.postal_code;
   // Legacy DB modes: approximate/city_only/exact_hidden. UI modes exact/postal_area/city_only/hidden are mapped before save.
   // Radar may use postal_code/work_area as a consciously configured public area, but never for hidden profiles.
-  const canExposeRadarPoint = publicProfile.location_mode === 'approximate' && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
+  const canExposeRadarPoint = (visibility === 'exact' || visibility === 'postal_area') && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
   return {
     ...publicProfile,
+    location_visibility: visibility,
     postal_code: postalCode,
-    work_place_label: publicProfile.location_mode === 'approximate' ? work_place_label : null,
+    work_place_label: visibility === 'exact' ? work_place_label : null,
+    exact_address: visibility === 'exact' ? _omittedExactAddress : null,
     latitude: canExposeRadarPoint ? Number(latitude) : null,
     longitude: canExposeRadarPoint ? Number(longitude) : null,
     profile_images: visibleImages,
     images: visibleImages,
     locked_features: ['phone_number', 'whatsapp', 'telegram', 'full_gallery', 'vip_gallery', 'gifts', 'live_cam']
   };
+}
+
+function normalizePublicLocationVisibility(value: unknown) {
+  const mode = String(value || 'postal_area');
+  if (['exact', 'postal_area', 'city_only', 'hidden'].includes(mode)) return mode;
+  if (mode === 'exact_hidden') return 'hidden';
+  if (mode === 'city_only') return 'city_only';
+  if (mode === 'approximate') return 'postal_area';
+  return 'postal_area';
 }
 
 function hasLocationChange(body: Record<string, unknown>) {

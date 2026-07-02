@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { api } from '../lib/api';
+import { WorkPointMap } from '../components/WorkPointMap';
 import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
 import { categoryOptions } from '../data/filterOptions';
@@ -51,6 +52,7 @@ const emptyStudioForm = {
   latitude: '',
   longitude: '',
   location_mode: 'city_only',
+  location_visibility: 'postal_area',
   service_radius_km: 25,
   gender: '',
   orientation: '',
@@ -80,11 +82,13 @@ const emptyStudioForm = {
   price_30min: 120,
   price_1h: 180,
   price_2h: 320,
+  price_3h: 450,
   price_night: 900,
   currency: 'EUR',
   operator_status: 'AVAILABLE_TODAY',
   availability_status: 'available',
   services: ['towarzystwo', 'dyskrecja'],
+  service_pricing: {},
   description: '',
   verified: true,
   premium_tier: 'gold',
@@ -584,6 +588,7 @@ export function AdminPage() {
       latitude: profile.latitude === null || profile.latitude === undefined ? '' : String(profile.latitude),
       longitude: profile.longitude === null || profile.longitude === undefined ? '' : String(profile.longitude),
       location_mode: profile.location_mode || 'city_only',
+      location_visibility: profile.location_visibility || getAdminLocationChoice(profile),
       service_radius_km: profile.service_radius_km || 25,
       gender: normalizeProfileGender(profile.gender) || profile.gender || '',
       orientation: normalizeProfileOrientation(profile.orientation) || profile.orientation || '',
@@ -613,11 +618,13 @@ export function AdminPage() {
       price_30min: Number(profile.price_30min || 0),
       price_1h: Number(profile.price_1h || 180),
       price_2h: Number(profile.price_2h || 0),
+      price_3h: Number(profile.price_3h || 0),
       price_night: Number(profile.price_night || 0),
       currency: profile.currency || profile.listing_currency || 'EUR',
       operator_status: profile.operator_status || 'AVAILABLE_TODAY',
       availability_status: profile.availability_status || 'available',
       services: profile.services?.length ? profile.services : ['towarzystwo', 'dyskrecja'],
+      service_pricing: profile.service_pricing || {},
       description: profile.description || '',
       verified: profile.verified !== false,
       premium_tier: profile.premium_tier || 'gold',
@@ -717,7 +724,9 @@ export function AdminPage() {
         price_1h: Number(studioForm.price_1h || 0),
         price_30min: Number(studioForm.price_30min || 0),
         price_2h: Number(studioForm.price_2h || 0),
+        price_3h: Number(studioForm.price_3h || 0),
         price_night: Number(studioForm.price_night || 0),
+        service_pricing: filterServicePricing(studioForm.service_pricing, studioForm.services),
         age: Number(studioForm.age || 0),
         height_cm: Number(studioForm.height_cm || 0),
         weight_kg: studioForm.weight_kg === '' ? null : Number(studioForm.weight_kg),
@@ -1110,13 +1119,19 @@ export function AdminPage() {
         <AdminField label={t('admin.location.placeLabel')}><input placeholder={t('admin.location.placeLabelPlaceholder')} value={studioForm.work_place_label} onChange={(event) => setStudioForm({ ...studioForm, work_place_label: event.target.value })} /></AdminField>
         <AdminField label={t('radar.exactAddress')}><input placeholder="Street, number, city" value={studioForm.exact_address} onChange={(event) => setStudioForm({ ...studioForm, exact_address: event.target.value, work_place_label: event.target.value || studioForm.work_place_label })} /></AdminField>
         <AdminField label={t('admin.location.radius')}><select value={studioForm.service_radius_km} onChange={(event) => setStudioForm({ ...studioForm, service_radius_km: Number(event.target.value) })}>{[1, 5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}</select></AdminField>
-        <AdminField label={t('radar.locationVisibility')}><><select value={getAdminLocationChoice(studioForm)} onChange={(event) => setStudioForm(applyAdminLocationChoice(studioForm, event.target.value))}>
+        <AdminField label={t('radar.locationVisibility')}><><select value={studioForm.location_visibility || getAdminLocationChoice(studioForm)} onChange={(event) => setStudioForm(applyAdminLocationChoice(studioForm, event.target.value))}>
           <option value="exact">{t('radar.exactAddress')}</option>
           <option value="postal_area">{t('radar.postalArea')}</option>
           <option value="city_only">{t('radar.cityOnly')}</option>
           <option value="hidden">{t('radar.hideExactLocation')}</option>
         </select><small className="muted">{t('radar.locationVisibilityHelp')}</small></></AdminField>
         <AdminField label={t('admin.location.placeSearch')}><><input placeholder={t('admin.location.placeSearchPlaceholder')} value={adminPlaceQuery} onChange={(event) => setAdminPlaceQuery(event.target.value)} /><button type="button" className="button" disabled={adminPlaceLoading} onClick={searchAdminPlace}>{adminPlaceLoading ? t('states.loading') : t('admin.location.searchPlace')}</button>{adminPlaceSuggestions.length ? <div className="place-suggestions">{adminPlaceSuggestions.map((suggestion) => <button key={suggestion.place_id} type="button" onClick={() => selectAdminPlace(suggestion.place_id)}>{suggestion.description}</button>)}</div> : null}</></AdminField>
+        <div className="full-span">
+          <WorkPointMap apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''} latitude={studioForm.latitude} longitude={studioForm.longitude} onChange={(point) => {
+            setStudioForm({ ...studioForm, latitude: String(point.latitude), longitude: String(point.longitude), location_mode: 'approximate', location_visibility: studioForm.location_visibility || 'postal_area' });
+            setMessage(t('location.workPointSet'));
+          }} />
+        </div>
       </div>;
     }
 
@@ -1139,8 +1154,10 @@ export function AdminPage() {
         <AdminField label={t('admin.profileEditor.price30')}><input type="number" value={studioForm.price_30min} onChange={(event) => setStudioForm({ ...studioForm, price_30min: Number(event.target.value) })} /></AdminField>
         <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={studioForm.price_1h} onChange={(event) => setStudioForm({ ...studioForm, price_1h: Number(event.target.value) })} /></AdminField>
         <AdminField label={t('admin.profileEditor.price2h')}><input type="number" value={studioForm.price_2h} onChange={(event) => setStudioForm({ ...studioForm, price_2h: Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('form.price3h')}><input type="number" value={studioForm.price_3h} onChange={(event) => setStudioForm({ ...studioForm, price_3h: Number(event.target.value) })} /></AdminField>
         <AdminField label={t('admin.profileEditor.priceNight')}><input type="number" value={studioForm.price_night} onChange={(event) => setStudioForm({ ...studioForm, price_night: Number(event.target.value) })} /></AdminField>
         <AdminField label={t('admin.profileEditor.currency')}><input value={studioForm.currency} onChange={(event) => setStudioForm({ ...studioForm, currency: event.target.value })} /></AdminField>
+        <div className="admin-card full-span"><ServicePricingEditor selectedServices={studioForm.services} servicePricing={studioForm.service_pricing} currency={studioForm.currency} onChange={(service_pricing) => setStudioForm({ ...studioForm, service_pricing })} /></div>
       </div>;
     }
 
@@ -1180,14 +1197,14 @@ export function AdminPage() {
         </div>
         <div className="admin-form-grid">
           <AdminField label={t('admin.services.search')}><input placeholder={t('admin.services.searchPlaceholder')} value={studioServiceSearch} onChange={(event) => setStudioServiceSearch(event.target.value)} /></AdminField>
-          <AdminField label={t('admin.services.categoryFilter')}><select value={studioServiceCategory} onChange={(event) => setStudioServiceCategory(event.target.value)}>{serviceCategories.map((category) => <option key={category} value={category}>{category === 'all' ? t('admin.common.all') : category}</option>)}</select></AdminField>
+          <AdminField label={t('admin.services.categoryFilter')}><select value={studioServiceCategory} onChange={(event) => setStudioServiceCategory(event.target.value)}>{serviceCategories.map((category) => <option key={category} value={category}>{category === 'all' ? t('admin.common.all') : serviceCategoryLabel(category, t)}</option>)}</select></AdminField>
         </div>
         {Object.entries(groupedServices).map(([category, services]) => {
           const expanded = expandedServiceCategories[category] ?? false;
           return <div className="admin-service-group" key={category}>
             <div className="profile-studio-head compact">
               <button type="button" className="admin-action-btn" onClick={() => setExpandedServiceCategories({ ...expandedServiceCategories, [category]: !expanded })}>{expanded ? t('admin.actions.collapse') : t('admin.actions.expand')}</button>
-              <strong>{category}</strong>
+              <strong>{serviceCategoryLabel(category, t)}</strong>
               <Action onClick={() => setStudioForm({ ...studioForm, services: mergeServices(studioForm.services, services.map((service) => service.key)) })}>{t('admin.services.selectCategory')}</Action>
             </div>
             {expanded && <div className="service-checklist admin-service-checklist">
@@ -2336,7 +2353,8 @@ function AdminField({ label, help, children }: { label: string; help?: string; c
   );
 }
 
-function getAdminLocationChoice(form: { location_mode?: string; exact_address?: string; work_place_label?: string }) {
+function getAdminLocationChoice(form: { location_mode?: string; location_visibility?: string; exact_address?: string | null; work_place_label?: string | null }) {
+  if (form.location_visibility) return form.location_visibility;
   if (form.location_mode === 'exact_hidden' || form.location_mode === 'hidden') return 'hidden';
   if (form.location_mode === 'city_only') return 'city_only';
   if (form.location_mode === 'approximate' && form.exact_address) return 'exact';
@@ -2344,12 +2362,47 @@ function getAdminLocationChoice(form: { location_mode?: string; exact_address?: 
   return form.work_place_label ? 'postal_area' : 'city_only';
 }
 
-function applyAdminLocationChoice<T extends { location_mode?: string; latitude?: unknown; longitude?: unknown; exact_address?: string; work_place_label?: string }>(form: T, choice: string): T {
+function applyAdminLocationChoice<T extends { location_mode?: string; location_visibility?: string; latitude?: unknown; longitude?: unknown; exact_address?: string; work_place_label?: string }>(form: T, choice: string): T {
   // UI modes exact/postal_area/city_only/hidden are mapped to legacy DB modes approximate/city_only/exact_hidden.
-  if (choice === 'hidden') return { ...form, location_mode: 'exact_hidden' };
-  if (choice === 'city_only') return { ...form, location_mode: 'city_only', latitude: '', longitude: '' };
-  if (choice === 'exact') return { ...form, location_mode: 'approximate', work_place_label: form.exact_address || form.work_place_label || '' };
-  return { ...form, location_mode: 'approximate' };
+  if (choice === 'hidden') return { ...form, location_visibility: 'hidden', location_mode: 'exact_hidden' };
+  if (choice === 'city_only') return { ...form, location_visibility: 'city_only', location_mode: 'city_only', latitude: '', longitude: '' };
+  if (choice === 'exact') return { ...form, location_visibility: 'exact', location_mode: 'approximate', work_place_label: form.exact_address || form.work_place_label || '' };
+  return { ...form, location_visibility: 'postal_area', location_mode: 'approximate' };
+}
+
+function serviceCategoryLabel(category: string, t: (key: string) => string) {
+  return t(`serviceCategory.${category}`);
+}
+
+function filterServicePricing(value: Record<string, any>, selectedServices: string[]) {
+  const selected = new Set(selectedServices);
+  return Object.fromEntries(Object.entries(value || {}).filter(([key]) => selected.has(key)));
+}
+
+function ServicePricingEditor({ selectedServices, servicePricing, currency, onChange }: { selectedServices: string[]; servicePricing: Record<string, any>; currency: string; onChange: (value: Record<string, any>) => void }) {
+  const { t } = useI18n();
+  const services = selectedServices.map((key) => ({ key, label: serviceLabel(key) }));
+  function update(key: string, patch: Record<string, unknown>) {
+    const current = servicePricing?.[key] || { mode: 'included', extra_price: null };
+    onChange({ ...servicePricing, [key]: { ...current, ...patch } });
+  }
+  return (
+    <div className="service-pricing-editor">
+      <h3>{t('pricing.servicePricing')}</h3>
+      <p className="muted">{t('pricing.selectedServicesPricingHelp')}</p>
+      {services.length ? services.map((service) => {
+        const item = servicePricing?.[service.key] || { mode: 'included', extra_price: null };
+        return <div className="service-pricing-row" key={service.key}>
+          <strong>{service.label}</strong>
+          <select value={item.mode || 'included'} onChange={(event) => update(service.key, { mode: event.target.value, extra_price: event.target.value === 'included' ? null : item.extra_price || 0 })}>
+            <option value="included">{t('pricing.includedInPrice')}</option>
+            <option value="extra">{t('pricing.extraPaid')}</option>
+          </select>
+          {item.mode === 'extra' && <input type="number" min="0" placeholder={`${t('pricing.extraPrice')} (${currency})`} value={item.extra_price ?? ''} onChange={(event) => update(service.key, { extra_price: event.target.value ? Number(event.target.value) : null })} />}
+        </div>;
+      }) : <p className="muted">{t('admin.services.noneSelected')}</p>}
+    </div>
+  );
 }
 
 function EmptyAdminState({ text }: { text: string }) {

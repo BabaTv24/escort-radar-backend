@@ -290,6 +290,7 @@ export function resolveManualSearcherLocation(input: string): GeoPoint | null {
 }
 
 export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocation | null {
+  if (profile.location_visibility === 'hidden' || profile.location_visibility === 'city_only') return null;
   if (profile.location_mode === 'exact_hidden' || profile.location_mode === 'hidden') return null;
 
   const raw = profile as Profile & Record<string, unknown>;

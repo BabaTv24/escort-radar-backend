@@ -92,6 +92,7 @@ export function ProfilePage() {
   const visitTypes = profile.visit_types?.length ? profile.visit_types : ['incall', 'hotel'];
   const serviceTags = profile.service_tags?.length ? profile.service_tags : ['dinner-date', 'hotel', 'discreet'];
   const selectedServices = profile.services || [];
+  const servicePricingRows = getServicePricingRows(profile);
 
   async function submitReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -247,6 +248,18 @@ export function ProfilePage() {
               <ServiceMenuList title={t('profile.included')} services={(profile.service_menu || []).filter((service) => service.enabled && service.included)} currency={profile.currency || 'EUR'} />
               <ServiceMenuList title={t('profile.extra')} services={(profile.service_menu || []).filter((service) => service.enabled && !service.included)} currency={profile.currency || 'EUR'} />
             </div>
+            {servicePricingRows.length ? activated ? (
+              <ServicePricingList rows={servicePricingRows} currency={profile.currency || 'EUR'} />
+            ) : (
+              <div className="market-lock-card">
+                <LockKeyhole size={18} />
+                <div>
+                  <strong>{t('pricing.servicePricing')}</strong>
+                  <p>{t('profileDetails.premiumDetailsLocked')}</p>
+                </div>
+                <button className="button primary" type="button" onClick={startClientActivation}>Activate 0.99 EUR</button>
+              </div>
+            ) : null}
           </MarketSection>
 
           <MarketSection tab="prices" activeTab={activeTab} eyebrow="Prices" title="Transparent rates">
@@ -485,7 +498,7 @@ function getMoreAboutRows(profile: Profile, languages: string[], t: (key: string
 }
 
 function getPriceFrom(profile: Profile) {
-  const values = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_night]
+  const values = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_3h, profile.price_night]
     .map((value) => Number(value || 0))
     .filter((value) => value > 0);
   if (!values.length) return 'Cena na zapytanie';
@@ -611,6 +624,7 @@ function PriceList({ profile }: { profile: Profile }) {
     ['30 min', profile.price_30min],
     ['1h', profile.price_1h],
     ['2h', profile.price_2h],
+    ['3h', profile.price_3h],
     ['Overnight', profile.price_night],
     ['Outcall fee', profile.outcall_fee]
   ];
@@ -637,6 +651,36 @@ function ServiceMenuList({ title, services, currency }: { title: string; service
           <span>{service.included ? t('profile.includedLabel') : `${service.extra_price || 0} ${currency}`}</span>
         </div>
       )) : <p>{t('profile.detailsPending')}</p>}
+    </div>
+  );
+}
+
+function getServicePricingRows(profile: Profile) {
+  const pricing = profile.service_pricing || {};
+  return (profile.services || [])
+    .map((key) => {
+      const item = pricing[key] || { mode: 'included', extra_price: null };
+      return {
+        key,
+        label: serviceLabel(key),
+        mode: item.mode === 'extra' ? 'extra' : 'included',
+        extra_price: Number(item.extra_price || 0)
+      };
+    })
+    .filter((row) => row.mode === 'included' || row.extra_price >= 0);
+}
+
+function ServicePricingList({ rows, currency }: { rows: ReturnType<typeof getServicePricingRows>; currency: string }) {
+  const { t } = useI18n();
+  return (
+    <div className="service-pricing-public">
+      <h3>{t('pricing.servicePricing')}</h3>
+      {rows.map((row) => (
+        <div className="service-menu-item" key={row.key}>
+          <strong>{row.label}</strong>
+          <span>{row.mode === 'extra' ? `+${row.extra_price} ${currency}` : t('pricing.includedInPrice')}</span>
+        </div>
+      ))}
     </div>
   );
 }

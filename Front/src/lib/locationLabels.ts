@@ -3,7 +3,8 @@ import type { Profile } from '../types';
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 type PublicLocationMode = 'exact' | 'postal_area' | 'city_only' | 'hidden';
 
-export function getPublicLocationMode(profile: Pick<Profile, 'location_mode' | 'work_place_label' | 'exact_address'>): PublicLocationMode {
+export function getPublicLocationMode(profile: Pick<Profile, 'location_mode' | 'location_visibility' | 'work_place_label' | 'exact_address'>): PublicLocationMode {
+  if (profile.location_visibility) return profile.location_visibility;
   if (profile.location_mode === 'exact_hidden' || profile.location_mode === 'hidden') return 'hidden';
   if (profile.location_mode === 'city_only') return 'city_only';
   if (profile.location_mode === 'exact') return 'exact';

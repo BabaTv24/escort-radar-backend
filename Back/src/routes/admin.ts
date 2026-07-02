@@ -2599,9 +2599,11 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       price_30min: optionalMoney(body.price_30min),
       price_1h: optionalMoney(body.price_1h) || 180,
       price_2h: optionalMoney(body.price_2h),
+      price_3h: optionalMoney(body.price_3h),
       price_night: optionalMoney(body.price_night),
       currency,
       services: services.data,
+      service_pricing: normalizeAdminServicePricing(body.service_pricing, services.data),
       service_menu: services.data.map((service) => ({ name: service, enabled: true, included: true, extra_price: null, note: null })),
       visit_types: Array.isArray(body.visit_types) ? body.visit_types.map((item) => String(item)).slice(0, 8) : ['incall', 'hotel'],
       service_tags: Array.isArray(body.service_tags) ? body.service_tags.map((item) => String(item)).slice(0, 16) : ['discreet', 'private-meeting'],
@@ -2629,6 +2631,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       latitude: optionalCoordinate(body.latitude, -90, 90),
       longitude: optionalCoordinate(body.longitude, -180, 180),
       location_mode: ['exact_hidden', 'approximate', 'city_only'].includes(String(body.location_mode || 'city_only')) ? String(body.location_mode || 'city_only') : 'city_only',
+      location_visibility: normalizeAdminLocationVisibility(body.location_visibility || body.location_mode),
       service_radius_km: optionalInteger(body.service_radius_km, 1, 100) || 25,
       moderation_status: allowedModerationStatuses.includes(String(body.moderation_status || 'approved')) ? String(body.moderation_status || 'approved') : 'approved',
       moderation_note: optionalText(body.moderation_note, 2000),
@@ -2711,6 +2714,26 @@ function optionalMoney(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) return null;
   return Math.round(number * 100) / 100;
+}
+
+function normalizeAdminServicePricing(value: unknown, selectedServices: string[]) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const selected = new Set(selectedServices);
+  return Object.fromEntries(Object.entries(value as Record<string, any>)
+    .filter(([key]) => selected.has(key))
+    .map(([key, raw]) => {
+      const item = raw && typeof raw === 'object' ? raw : {};
+      const mode = item.mode === 'extra' ? 'extra' : 'included';
+      return [key, { mode, extra_price: mode === 'extra' ? optionalMoney(item.extra_price) : null }];
+    }));
+}
+
+function normalizeAdminLocationVisibility(value: unknown) {
+  const mode = String(value || 'postal_area');
+  if (['exact', 'postal_area', 'city_only', 'hidden'].includes(mode)) return mode;
+  if (mode === 'exact_hidden') return 'hidden';
+  if (mode === 'approximate') return 'postal_area';
+  return 'postal_area';
 }
 
 function optionalCoordinate(value: unknown, min: number, max: number) {

@@ -99,7 +99,7 @@ function operatorStatusLabel(status: string) {
 }
 
 function getPriceFrom(profile: Profile) {
-  const prices = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_night]
+  const prices = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_3h, profile.price_night]
     .map((value) => Number(value || 0))
     .filter((value) => value > 0);
   if (!prices.length) return 'Preis auf Anfrage';

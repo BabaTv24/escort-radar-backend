@@ -105,10 +105,12 @@ export function validateProfileInput(body: Record<string, unknown>) {
       price_30min: optionalMoney(body.price_30min),
       price_1h: optionalMoney(body.price_1h),
       price_2h: optionalMoney(body.price_2h),
+      price_3h: optionalMoney(body.price_3h),
       price_night: optionalMoney(body.price_night),
       outcall_fee: optionalMoney(body.outcall_fee),
       currency: optionalText(body.currency, 8) || 'EUR',
       service_menu: optionalServiceMenu(body.service_menu),
+      service_pricing: optionalServicePricing(body.service_pricing, services.data),
       listing_plan: optionalText(body.listing_plan, 80) || 'premium_monthly',
       listing_price: optionalMoney(body.listing_price) || 49.99,
       listing_currency: optionalText(body.listing_currency, 8) || 'EUR',
@@ -127,6 +129,7 @@ export function validateProfileInput(body: Record<string, unknown>) {
       service_radius_km: optionalNumber(body.service_radius_km, 1, 100) || 25,
       approximate_location_area: optionalText(body.approximate_location_area, 120),
       location_mode: normalizeLocationMode(body.location_mode),
+      location_visibility: normalizeLocationVisibility(body.location_visibility ?? body.location_mode),
       latitude: optionalCoordinate(body.latitude, -90, 90),
       longitude: optionalCoordinate(body.longitude, -180, 180),
       auto_location_on_login: Boolean(body.auto_location_on_login),
@@ -252,6 +255,21 @@ function optionalServiceMenu(value: unknown) {
   }).filter((service) => service.name);
 }
 
+function optionalServicePricing(value: unknown, selectedServices: string[]) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const selected = new Set(selectedServices);
+  return Object.fromEntries(Object.entries(value as Record<string, any>)
+    .filter(([key]) => selected.has(key))
+    .map(([key, raw]) => {
+      const item = raw && typeof raw === 'object' ? raw : {};
+      const mode = item.mode === 'extra' ? 'extra' : 'included';
+      return [key, {
+        mode,
+        extra_price: mode === 'extra' ? optionalMoney(item.extra_price) : null
+      }];
+    }));
+}
+
 function optionalServices(value: unknown): { data: string[] } | { error: string } {
   if (!Array.isArray(value)) return { data: [] };
   const unique = [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
@@ -288,6 +306,14 @@ function optionalDate(value: unknown) {
 function normalizeLocationMode(value: unknown) {
   const mode = String(value || 'city_only');
   return ['exact_hidden', 'approximate', 'city_only'].includes(mode) ? mode : 'city_only';
+}
+
+function normalizeLocationVisibility(value: unknown) {
+  const mode = String(value || 'postal_area');
+  if (['exact', 'postal_area', 'city_only', 'hidden'].includes(mode)) return mode;
+  if (mode === 'exact_hidden') return 'hidden';
+  if (mode === 'approximate') return 'postal_area';
+  return 'postal_area';
 }
 
 function normalizeCategory(value: unknown) {
