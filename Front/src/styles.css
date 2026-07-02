@@ -5371,3 +5371,17 @@ textarea::placeholder {
   background: var(--radar-status-color) !important;
   box-shadow: 0 0 14px color-mix(in srgb, var(--radar-status-color) 42%, transparent) !important;
 }
+
+.admin-profile-textarea,
+.profile-description-textarea,
+.admin-field textarea,
+.form-panel textarea,
+.one-hand-card textarea {
+  min-height: 140px;
+  padding: 15px 16px;
+  border-radius: 16px !important;
+  line-height: 1.45;
+  resize: vertical;
+  text-align: left;
+  vertical-align: top;
+}

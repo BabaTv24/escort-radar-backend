@@ -291,8 +291,43 @@ function normalizeLocationMode(value: unknown) {
 }
 
 function normalizeCategory(value: unknown) {
-  const category = String(value || 'other');
+  const category = normalizeProfileCategory(value) || 'other';
   return allowedCategories.includes(category) ? category : 'other';
+}
+
+export function normalizeProfileCategory(value: unknown) {
+  const key = String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const aliases: Record<string, string> = {
+    gay: 'gay',
+    gays: 'gay',
+    male: 'gay',
+    men: 'gay',
+    man: 'gay',
+    ladies: 'ladies',
+    lady: 'ladies',
+    female: 'ladies',
+    women: 'ladies',
+    woman: 'ladies',
+    panie: 'ladies',
+    couples: 'couples',
+    couple: 'couples',
+    pary: 'couples',
+    trans: 'trans',
+    massage: 'massage',
+    house_hotel: 'house_hotel',
+    home_hotel: 'house_hotel',
+    dom_hotel: 'house_hotel',
+    live_cam: 'live_cam',
+    clubs_parties: 'clubs_parties',
+    other: 'other'
+  };
+  return aliases[key] || key;
 }
 
 function normalizeAccountType(value: unknown) {

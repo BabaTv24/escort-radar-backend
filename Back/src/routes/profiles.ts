@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../supabase.js';
-import { allowedCities, asyncHandler, parseBoolean, slugify, validateProfileInput } from '../validation.js';
+import { allowedCities, asyncHandler, normalizeProfileCategory, parseBoolean, slugify, validateProfileInput } from '../validation.js';
 import { requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
 import { generatePublicUserId, generateReferralCode, normalizePhone } from '../utils/identity.js';
 import { getClientActivationSummary } from '../services/clientActivation.js';
@@ -34,7 +34,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     if (parsed !== undefined) query = query.eq(key, parsed);
   }
 
-  if (req.query.category) query = query.eq('category', String(req.query.category));
+  if (req.query.category) query = query.in('category', categoryQueryAliases(req.query.category));
 
   const tagIds = String(req.query.tags || '')
     .split(',')
@@ -447,6 +447,18 @@ function cityLabel(slug: string) {
     warszawa: 'Warszawa'
   };
   return labels[slug] || slug;
+}
+
+function categoryQueryAliases(value: unknown) {
+  const normalized = normalizeProfileCategory(value);
+  const aliasMap: Record<string, string[]> = {
+    gay: ['gay', 'Gay', 'gays', 'Gays', 'male', 'Male', 'men', 'Men'],
+    ladies: ['ladies', 'Ladies', 'female', 'Female', 'women', 'Women', 'panie', 'Panie'],
+    couples: ['couples', 'Couples', 'couple', 'Couple', 'pary', 'Pary'],
+    trans: ['trans', 'Trans'],
+    house_hotel: ['house_hotel', 'home_hotel', 'Dom/Hotel', 'dom_hotel']
+  };
+  return aliasMap[normalized] || [normalized, normalized.slice(0, 1).toUpperCase() + normalized.slice(1)];
 }
 
 function calculateRadarScore(profile: any) {

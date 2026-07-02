@@ -10,12 +10,14 @@ export type LocationCountry = {
   cities: LocationCity[];
 };
 
+import { berlinDistrictOptions } from '../lib/geo';
+
 export const locationCatalog: LocationCountry[] = [
   {
     code: 'DE',
     name: 'Germany',
     cities: [
-      { name: 'Berlin', legacySlug: 'berlin', districts: ['Mitte', 'Friedrichshain', 'Kreuzberg', 'Neukolln', 'Charlottenburg', 'Wilmersdorf', 'Schoneberg', 'Tempelhof', 'Wedding', 'Moabit', 'Prenzlauer Berg', 'Pankow', 'Lichtenberg', 'Marzahn', 'Spandau', 'Steglitz', 'Zehlendorf', 'Treptow', 'Kopenick', 'Reinickendorf'] },
+      { name: 'Berlin', legacySlug: 'berlin', districts: berlinDistrictOptions },
       { name: 'Hamburg', legacySlug: 'hamburg', districts: ['St. Pauli', 'Altona', 'Eimsbuttel', 'Sternschanze', 'HafenCity', 'Wandsbek', 'Harburg', 'Barmbek', 'Winterhude', 'Ottensen'] },
       { name: 'Munchen', legacySlug: 'muenchen', districts: ['Altstadt', 'Maxvorstadt', 'Schwabing', 'Ludwigsvorstadt', 'Isarvorstadt', 'Glockenbachviertel', 'Sendling', 'Bogenhausen', 'Neuhausen', 'Nymphenburg'] },
       { name: 'Koln', legacySlug: 'koeln', districts: ['Innenstadt', 'Altstadt', 'Neustadt', 'Ehrenfeld', 'Nippes', 'Deutz', 'Kalk', 'Mulheim', 'Lindenthal', 'Rodenkirchen'] },

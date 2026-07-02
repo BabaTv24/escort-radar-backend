@@ -1,5 +1,6 @@
 import type { Profile, ProfileImage } from '../types';
 import { normalizeProfileEthnicity, normalizeProfileGender, normalizeProfileOrientation, normalizeProfileTravels } from './profileDetails';
+import { normalizeProfileCategory } from './geo';
 
 const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | boolean> }).env || {};
 const API_URL = String(viteEnv.VITE_API_URL || 'http://localhost:4000');
@@ -69,6 +70,7 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     display_name: displayName,
     slug: text(raw.slug) || id,
     city,
+    category: normalizeProfileCategory(raw.category) || nullableText(raw.category),
     work_city: nullableText(raw.work_city ?? raw.workCity ?? raw.location_city),
     area: nullableText(raw.area ?? raw.district),
     work_area: nullableText(raw.work_area ?? raw.workArea ?? raw.district),

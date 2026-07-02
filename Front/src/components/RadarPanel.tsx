@@ -56,6 +56,16 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
     : [];
 
   if (import.meta.env.DEV) {
+    console.debug('[RadarPanel] resolved profile locations', profiles.map((profile) => ({
+      id: profile.id,
+      name: profile.display_name,
+      category: profile.category,
+      postal_code: profile.postal_code,
+      work_area: profile.work_area,
+      location_mode: profile.location_mode,
+      resolved: resolveProfileRadarLocation(profile)
+    })));
+    console.debug('[RadarPanel] radarProfiles count', radarProfiles.length);
     console.debug('[RadarPanel] state', {
       manualQuery,
       searcherLocation,
@@ -140,7 +150,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           </p>
         )}
         <p className="safety-line">
-          {hasRadarLocation ? `${radarProfiles.length} ${t('radar.profilesInRadarRange')}` : t('radar.locationRequired')}
+          {hasRadarLocation ? (radarProfiles.length ? `${radarProfiles.length} ${t('radar.profilesInRadarRange')}` : t('radar.noProfilesInRadius')) : t('radar.locationRequired')}
         </p>
         <div className="radar-legend">
           {radarStatuses.map(([value, statusClass, labelKey]) => (

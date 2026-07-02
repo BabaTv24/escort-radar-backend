@@ -10,7 +10,7 @@ import { categoryOptions, defaultServiceMenuNames, toggleArrayValue, visitTypeOp
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
-import { getCityCenter, getDistanceKm, getSearcherLocationWithFallback, isProfileInRadarRange, resolveProfileRadarLocation } from '../lib/geo';
+import { getCityCenter, getDistanceKm, getSearcherLocationWithFallback, isProfileInRadarRange, normalizeProfileCategory, resolveProfileRadarLocation } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
 
 type SearchFilters = {
@@ -66,7 +66,8 @@ export function CityPage() {
 
   useEffect(() => {
     const next = defaultFilters(city);
-    if (urlCategory && categoryOptions.includes(urlCategory)) next.category = urlCategory;
+    const normalizedCategory = normalizeProfileCategory(urlCategory);
+    if (normalizedCategory && categoryOptions.includes(normalizedCategory)) next.category = normalizedCategory;
     setDraftFilters(next);
     setAppliedFilters(next);
     setSearcherLocation({ ...getCityCenter(city), source: 'city', label: cityLabel });
@@ -78,13 +79,16 @@ export function CityPage() {
     if (appliedFilters.category) params.set('category', appliedFilters.category);
     if (appliedFilters.tag_ids.length) params.set('tags', appliedFilters.tag_ids.join(','));
     return `?${params.toString()}`;
-  }, [appliedFilters.category, appliedFilters.tag_ids]);
+  }, [appliedFilters.city, appliedFilters.category, appliedFilters.tag_ids]);
 
   useEffect(() => {
     setLoading(true);
     setError('');
     getPublicProfiles(query)
       .then((publicProfiles) => {
+        if (import.meta.env.DEV && appliedFilters.category === 'gay') {
+          console.debug('[CityPage] category', appliedFilters.category, 'profiles', publicProfiles.map((profile) => ({ id: profile.id, name: profile.display_name, category: profile.category, city: profile.city, work_city: profile.work_city, postal_code: profile.postal_code, work_area: profile.work_area, location_mode: profile.location_mode })));
+        }
         setProfiles(applyFilters(publicProfiles, appliedFilters, searcherLocation));
       })
       .catch((reason) => {
@@ -394,7 +398,7 @@ function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocat
       const centerRange = getSearchRange(profile, searcherLocation, filters.radius);
       if (!centerRange.inRange) return false;
     }
-    if (filters.category && profile.category !== filters.category) return false;
+    if (filters.category && normalizeProfileCategory(profile.category) !== filters.category) return false;
     if (!matchesOperatorStatusFilter(profile, filters.availability_status)) return false;
     const radarRange = getSearchRange(profile, searcherLocation, filters.radius);
     if (!radarRange.inRange) return false;

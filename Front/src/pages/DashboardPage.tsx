@@ -27,6 +27,7 @@ import {
 } from '../data/filterOptions';
 import { serviceLabel, serviceOptions } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog } from '../data/locationCatalog';
+import { berlinDistrictOptions, resolveBerlinPostalDistrict } from '../lib/geo';
 import {
   normalizeProfileEthnicity,
   normalizeProfileGender,
@@ -826,7 +827,7 @@ export function DashboardPage() {
                   {experienceTypeOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
                 </select>
               </div>
-              <textarea placeholder={t('form.description')} value={profile.description || ''} onChange={(event) => setProfile({ ...profile, description: event.target.value })} />
+              <textarea className="profile-description-textarea" placeholder={t('form.description')} value={profile.description || ''} onChange={(event) => setProfile({ ...profile, description: event.target.value })} />
               <div className="readonly">{t('dashboard.verifiedStatus', { status: savedProfile?.verified ? t('badges.verified') : t('dashboard.readOnlyPending') })}</div>
             </section>}
 
@@ -1824,16 +1825,17 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             return;
           }
           const parsed = parseGooglePlace(place);
+          const district = resolveBerlinPostalDistrict(parsed.postal_code);
           const nextProfile = {
             ...profile,
             work_country: parsed.country || profile.work_country || 'Germany',
             work_city: parsed.city || profile.work_city || normalizeCityName(profile.city || 'berlin'),
-            work_area: parsed.area || profile.work_area || '',
+            work_area: district || parsed.area || profile.work_area || '',
             postal_code: parsed.postal_code || profile.postal_code || '',
             work_place_label: parsed.label || place.formatted_address || place.name || '',
             exact_address: parsed.label || place.formatted_address || place.name || '',
             city: parsed.legacyCity || profile.city || 'berlin',
-            area: parsed.area || profile.area || '',
+            area: district || parsed.area || profile.area || '',
             latitude: parsed.latitude,
             longitude: parsed.longitude,
             location_mode: 'approximate' as const
@@ -1867,7 +1869,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   const selectedServices = profile.services || [];
   const selectedCountry = getCountryByNameOrCode(profile.work_country || 'Germany');
   const locationCities = getCitiesForCountry(selectedCountry.code);
-  const locationDistricts = getDistrictsForCity(selectedCountry.code, profile.work_city || '');
+  const isBerlin = String(profile.work_city || profile.city || '').toLowerCase() === 'berlin';
+  const locationDistricts = isBerlin ? berlinDistrictOptions : getDistrictsForCity(selectedCountry.code, profile.work_city || '');
   const filteredServices = serviceOptions.filter((service) => {
     const query = serviceSearch.trim().toLowerCase();
     if (!query) return true;
@@ -1950,6 +1953,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <input inputMode="numeric" type="number" placeholder={t('form.price1h')} value={profile.price_1h || ''} onChange={(event) => onProfileChange({ ...profile, price_1h: event.target.value ? Number(event.target.value) : null })} />
             </div>
             <textarea
+              className="profile-description-textarea"
               rows={4}
               placeholder={t('dashboard.advertiser.shortPublicText')}
               value={profile.description || ''}
@@ -2059,11 +2063,19 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               }}>{locationCities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}</select>
               <input placeholder={t('dashboard.advertiser.manualCity')} value={profile.work_city || ''} onChange={(event) => onProfileChange({ ...profile, work_city: event.target.value, city: normalizeLegacyCity(event.target.value) || getLegacyCitySlug(event.target.value) })} />
               <select value={locationDistricts.includes(profile.work_area || '') ? profile.work_area || '' : ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })}>
-                <option value="">{t('dashboard.advertiser.manualDistrict')}</option>
+                <option value="">{t('profileDetails.chooseDistrict')}</option>
                 {locationDistricts.map((district) => <option key={district} value={district}>{district}</option>)}
               </select>
               <input placeholder={t('dashboard.advertiser.districtArea')} value={profile.work_area || ''} onChange={(event) => onProfileChange({ ...profile, work_area: event.target.value, area: event.target.value })} />
-              <input placeholder={t('dashboard.advertiser.postalCode')} value={profile.postal_code || ''} onChange={(event) => onProfileChange({ ...profile, postal_code: event.target.value.slice(0, 20) })} />
+              <input placeholder={t('dashboard.advertiser.postalCode')} value={profile.postal_code || ''} onChange={(event) => {
+                const postalCode = event.target.value.slice(0, 20);
+                const district = resolveBerlinPostalDistrict(postalCode);
+                onProfileChange({
+                  ...profile,
+                  postal_code: postalCode,
+                  ...(district ? { work_city: profile.work_city || 'Berlin', city: 'berlin', work_area: district, area: district } : {})
+                });
+              }} />
               <input placeholder={t('dashboard.advertiser.placeLabel')} value={profile.work_place_label || ''} onChange={(event) => onProfileChange({ ...profile, work_place_label: event.target.value })} />
               <input placeholder={t('radar.exactAddress')} value={profile.exact_address || ''} onChange={(event) => onProfileChange({ ...profile, exact_address: event.target.value, work_place_label: event.target.value || profile.work_place_label || '' })} />
               <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value, work_city: profile.work_city || normalizeCityName(event.target.value) })}>
@@ -2182,6 +2194,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             </div>
             <input placeholder={t('form.displayName')} value={profile.display_name || ''} onChange={(event) => onProfileChange({ ...profile, display_name: event.target.value })} />
             <textarea
+              className="profile-description-textarea"
               rows={6}
               placeholder={t('dashboard.advertiser.descriptionPlaceholder')}
               value={profile.description || ''}

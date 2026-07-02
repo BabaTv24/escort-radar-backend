@@ -12,6 +12,7 @@ import {
   normalizeProfileEthnicity,
   normalizeProfileGender,
   normalizeProfileOrientation,
+  normalizeProfileCategory,
   normalizeProfileTravels,
   optionalDecimalRange,
   optionalText,
@@ -2643,7 +2644,7 @@ function normalizeAdminOperatorStatus(value: unknown) {
 }
 
 function normalizeAdminCategory(value: unknown) {
-  const category = String(value || 'ladies');
+  const category = normalizeProfileCategory(value || 'ladies');
   return ['ladies', 'gay', 'couples', 'trans', 'massage', 'house_hotel', 'live_cam', 'clubs_parties', 'other'].includes(category) ? category : 'ladies';
 }
 

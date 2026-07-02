@@ -8,6 +8,7 @@ import { useI18n } from '../i18n';
 import { categoryOptions } from '../data/filterOptions';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
+import { berlinDistrictOptions, resolveBerlinPostalDistrict } from '../lib/geo';
 import {
   normalizeProfileEthnicity,
   normalizeProfileGender,
@@ -966,12 +967,13 @@ export function AdminPage() {
           return;
         }
         const parsed = parseGooglePlace(place);
+        const district = resolveBerlinPostalDistrict(parsed.postal_code);
         setStudioForm({
           ...studioForm,
           work_country: parsed.country || studioForm.work_country,
           work_city: parsed.city || studioForm.work_city,
-          work_area: parsed.area || studioForm.work_area,
-          area: parsed.area || studioForm.area,
+          work_area: district || parsed.area || studioForm.work_area,
+          area: district || parsed.area || studioForm.area,
           city: getLegacyCitySlug(parsed.city || studioForm.work_city),
           postal_code: parsed.postal_code || studioForm.postal_code,
           work_place_label: parsed.label || studioForm.work_place_label,
@@ -1069,7 +1071,7 @@ export function AdminPage() {
           {showMaleFields && <AdminField label={t('profileDetails.penisDiameterCm')}><input type="number" min="1" max="10" step="0.1" value={studioForm.penis_diameter_cm} onChange={(event) => setStudioForm({ ...studioForm, penis_diameter_cm: event.target.value })} /></AdminField>}
           <AdminField label={t('profile.moreAbout.zodiacSign')}><input value={studioForm.zodiac_sign} onChange={(event) => setStudioForm({ ...studioForm, zodiac_sign: event.target.value })} /></AdminField>
         </div>
-        <AdminField label={t('admin.profileEditor.description')}><textarea placeholder={t('admin.profileEditor.descriptionPlaceholder')} value={studioForm.description} onChange={(event) => setStudioForm({ ...studioForm, description: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.description')}><textarea className="admin-profile-textarea" placeholder={t('admin.profileEditor.descriptionPlaceholder')} value={studioForm.description} onChange={(event) => setStudioForm({ ...studioForm, description: event.target.value })} /></AdminField>
       </>;
     }
 
@@ -1078,7 +1080,8 @@ export function AdminPage() {
       const country = getAdminLocationCountry(countries, studioForm.work_country);
       const cities = country.cities;
       const cityConfig = getAdminLocationCity(country, studioForm.work_city);
-      const districts = cityConfig?.districts || [];
+      const isBerlin = normalizeLocationValue(cityConfig?.name || studioForm.work_city || '') === 'berlin';
+      const districts = isBerlin ? berlinDistrictOptions : cityConfig?.districts || [];
       return <div className="admin-form-grid">
         <AdminField label={t('admin.profileEditor.workCountry')}><select value={country.code} onChange={(event) => {
           const nextCountry = getAdminLocationCountry(countries, event.target.value);
@@ -1091,9 +1094,19 @@ export function AdminPage() {
           setStudioForm({ ...studioForm, work_city: event.target.value, city: getLegacyCitySlug(event.target.value), work_area: nextArea, area: nextArea });
         }} /></AdminField>
         <datalist id="admin-city-options">{cities.map((city) => <option key={city.name} value={city.name} />)}</datalist>
-        <AdminField label={t('admin.profileEditor.workArea')}><input list="admin-district-options" placeholder={t('admin.profileEditor.areaPlaceholder')} value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value })} /></AdminField>
+        <AdminField label={t('profileDetails.berlinDistrict')}><select value={districts.includes(studioForm.work_area) ? studioForm.work_area : ''} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value })}><option value="">{t('profileDetails.chooseDistrict')}</option>{districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></AdminField>
+        <AdminField label={t('dashboard.advertiser.districtArea')}><input list="admin-district-options" placeholder={t('admin.profileEditor.areaPlaceholder')} value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value })} /></AdminField>
         <datalist id="admin-district-options">{districts.map((district) => <option key={district} value={district} />)}</datalist>
-        <AdminField label={t('admin.location.postalCode')}><input maxLength={20} placeholder="12043" value={studioForm.postal_code} onChange={(event) => setStudioForm({ ...studioForm, postal_code: event.target.value })} /></AdminField>
+        <AdminField label={t('admin.location.postalCode')}><input maxLength={20} placeholder="12043" value={studioForm.postal_code} onChange={(event) => {
+          const postalCode = event.target.value.slice(0, 20);
+          const district = resolveBerlinPostalDistrict(postalCode);
+          setStudioForm({
+            ...studioForm,
+            postal_code: postalCode,
+            ...(district ? { work_city: studioForm.work_city || 'Berlin', city: 'berlin', work_area: district, area: district } : {})
+          });
+          if (district) setMessage(t('profileDetails.postalCodeAutoArea'));
+        }} /></AdminField>
         <AdminField label={t('admin.location.placeLabel')}><input placeholder={t('admin.location.placeLabelPlaceholder')} value={studioForm.work_place_label} onChange={(event) => setStudioForm({ ...studioForm, work_place_label: event.target.value })} /></AdminField>
         <AdminField label={t('radar.exactAddress')}><input placeholder="Street, number, city" value={studioForm.exact_address} onChange={(event) => setStudioForm({ ...studioForm, exact_address: event.target.value, work_place_label: event.target.value || studioForm.work_place_label })} /></AdminField>
         <AdminField label={t('admin.location.radius')}><select value={studioForm.service_radius_km} onChange={(event) => setStudioForm({ ...studioForm, service_radius_km: Number(event.target.value) })}>{[1, 5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}</select></AdminField>
