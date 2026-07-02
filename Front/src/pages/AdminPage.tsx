@@ -1357,6 +1357,10 @@ export function AdminPage() {
             </div>
           ))}
         </div>
+        <section className="admin-card">
+          <h3>{t('admin.visibility.publicVisibility')}</h3>
+          <ProfileVisibilityAudit audit={selectedProfile.visibility_audit} />
+        </section>
         <div className="admin-actions-row overview-actions">
           <Action onClick={() => setProfilePanelMode('edit')}>{t('admin.profileOverview.editData')}</Action>
           <Action onClick={() => { setStudioTab('photos'); setProfilePanelMode('photos'); }}>{t('admin.profileOverview.managePhotos')}</Action>
@@ -1725,7 +1729,7 @@ export function AdminPage() {
               <Action onClick={() => runBulkAction('subscription_status', { subscription_status: bulkSubscriptionStatus })}>{t('admin.bulk.setSubscriptionStatus')}</Action>
               <Action danger onClick={() => runBulkAction('delete')}>{t('admin.bulk.delete')}</Action>
             </div>
-            <AdminTable rows={studioProfiles} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at']} labels={tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at'])} format={(key, value, profile) => {
+            <AdminTable rows={studioProfiles} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'visibility_audit', 'status', 'paid_status', 'photos', 'created_at']} labels={{ ...tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at']), visibility_audit: t('admin.visibility.publicVisibility') }} format={(key, value, profile) => {
               if (key === 'cover') return <AdminProfileThumb profile={profile} />;
               if (key === 'id') return (
                 <label className="admin-check-cell">
@@ -1734,6 +1738,7 @@ export function AdminPage() {
                 </label>
               );
               if (key === 'category') return option(String(value || 'other'));
+              if (key === 'visibility_audit') return <ProfileVisibilityAudit audit={profile.visibility_audit} compact />;
               if (key === 'status') return <ProfileStatusBadges profile={profile} />;
               if (key === 'paid_status') return <ProfilePaidBadges profile={profile} />;
               if (key === 'photos') return profile.profile_images?.length || 0;
@@ -2503,6 +2508,30 @@ function ProfileStatusBadges({ profile }: { profile: Profile }) {
       <StatusBadge value={online ? 'online' : 'offline'} />
       {profile.is_published === false ? <StatusBadge value="hidden" /> : null}
       <StatusBadge value={profile.moderation_status || profile.verification_status || profile.status || 'pending'} />
+    </span>
+  );
+}
+
+function ProfileVisibilityAudit({ audit, compact = false }: { audit?: Profile['visibility_audit']; compact?: boolean }) {
+  const { t } = useI18n();
+  if (!audit) return <span className="admin-badge-stack"><StatusBadge value="unknown" /></span>;
+  const reason = audit.reasons?.[0] || 'visible';
+  const checks: Array<[string, boolean]> = [
+    ['city', audit.checks.cityMatches],
+    ['category', audit.checks.categoryMatches],
+    ['moderation', audit.checks.moderationApproved],
+    ['publication', audit.checks.published],
+    ['subscription', audit.checks.subscriptionActiveOrTrialOrSeed],
+    ['radar', audit.checks.hasRadarLocation]
+  ];
+  return (
+    <span className="admin-badge-stack">
+      <StatusBadge value={audit.isPublicVisible ? 'visible' : 'hidden'} />
+      <small>{audit.isPublicVisible ? t('admin.visibility.visible') : t('admin.visibility.hidden')}</small>
+      <small>{t('admin.visibility.reason')}: {t(`admin.visibility.reason.${reason}`)}</small>
+      {!compact && checks.map(([key, value]) => (
+        <small key={key}>{t(`admin.visibility.${key}`)}: {value ? t('admin.common.yes') : t('admin.common.no')}</small>
+      ))}
     </span>
   );
 }

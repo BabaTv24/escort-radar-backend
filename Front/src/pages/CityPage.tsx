@@ -158,6 +158,7 @@ export function CityPage() {
   const topProfiles = sortedProfiles.slice(0, 12);
   const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
   const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
+  const categoryLabel = appliedFilters.category ? option(appliedFilters.category) : t('filters.allCategories');
   if (import.meta.env.DEV) {
     console.debug('[CityPageProfiles]', {
       apiProfiles: profiles.length,
@@ -334,6 +335,7 @@ export function CityPage() {
           <p className="eyebrow">{t('city.eyebrow')}</p>
           <h1>{cityLabel}</h1>
           {appliedFilters.category && <div className="active-category-badge">{option(appliedFilters.category)}</div>}
+          <p className="muted">{t('search.showingSummary', { city: cityLabel, category: categoryLabel, count: sortedProfiles.length })}</p>
         </div>
         <div className="city-hero-stats">
           <span><strong>{sortedProfiles.length}</strong> Active profiles</span>
@@ -346,7 +348,7 @@ export function CityPage() {
         </div>
       </section>
 
-      <GlobalLocationSearch initialCountry={countryCode} initialCity={cityLabel} initialCategory={appliedFilters.category || 'ladies'} compact />
+      <GlobalLocationSearch initialCountry={countryCode} initialCity={cityLabel} initialCategory={appliedFilters.category || 'all'} compact />
 
       <section className="top-escorts-strip marketplace-avatar-strip">
         <div className="section-head compact">

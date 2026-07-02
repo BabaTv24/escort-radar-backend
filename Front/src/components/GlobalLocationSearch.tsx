@@ -33,13 +33,13 @@ function loadPlaces(apiKey: string) {
   return placesPromise;
 }
 
-export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Berlin', initialCategory = 'ladies', compact = false }: GlobalLocationSearchProps) {
+export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Berlin', initialCategory = 'all', compact = false }: GlobalLocationSearchProps) {
   const navigate = useNavigate();
   const { lang, t, option } = useI18n();
   const googleKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const [country, setCountry] = useState(normalizeCountry(initialCountry) || 'DE');
   const [city, setCity] = useState(initialCity || getCitiesForCountry(country)[0] || 'Berlin');
-  const [category, setCategory] = useState(normalizeCategoryKey(initialCategory) || 'ladies');
+  const [category, setCategory] = useState(normalizeCategoryKey(initialCategory) || '');
   const [placeQuery, setPlaceQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Array<{ place_id: string; description: string }>>([]);
   const [busy, setBusy] = useState(false);
@@ -53,7 +53,7 @@ export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Ber
   }, [initialCountry, initialCity]);
 
   useEffect(() => {
-    setCategory(normalizeCategoryKey(initialCategory) || 'ladies');
+    setCategory(normalizeCategoryKey(initialCategory) || '');
   }, [initialCategory]);
 
   function navigateToCity(nextCity = city, nextCountry = country, nextCategory = category) {
@@ -130,7 +130,7 @@ export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Ber
           setCity(getCitiesForCountry(nextCountry)[0] || '');
         }}>{globalCountries.map((item) => <option key={item.code} value={item.code}>{getCountryLabel(item.code, lang)}</option>)}</select></label>
         <label><span>{t('search.city')}</span><select value={city} onChange={(event) => setCity(event.target.value)}>{cities.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <label><span>{t('form.category')}</span><select value={category} onChange={(event) => setCategory(normalizeCategoryKey(event.target.value) || 'ladies')}>{categoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}</select></label>
+        <label><span>{t('form.category')}</span><select value={category} onChange={(event) => setCategory(normalizeCategoryKey(event.target.value) || '')}><option value="">{t('filters.allCategories')}</option>{categoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}</select></label>
         <button className="button primary" type="button" onClick={submit}><Search size={16} /> {t('search.search')}</button>
       </div>
       <div className="popular-city-row">

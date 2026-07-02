@@ -145,6 +145,17 @@ export type Profile = {
   moderation_status?: 'pending' | 'approved' | 'rejected' | 'suspended';
   is_test_account?: boolean;
   admin_note?: string | null;
+  visibility_audit?: {
+    isPublicVisible: boolean;
+    isVisibleInCurrentSearch: boolean;
+    reasons: string[];
+    checks: Record<string, boolean>;
+    normalized: {
+      country: string | null;
+      city: string | null;
+      category: string | null;
+    };
+  };
   verified_at?: string | null;
   suspended_at?: string | null;
   suspended_reason?: string | null;

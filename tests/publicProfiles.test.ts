@@ -627,6 +627,46 @@ test('admin profile studio separates account profile category and advanced promo
   assert.match(deLocale, /"admin\.profileEditor\.advancedModeration": "Moderation \/ Erweitert"/);
 });
 
+test('visibility audit explains Berlin Hamburg marketplace matrix and category all', async () => {
+  const { explainProfileVisibility, profileMatchesSearch } = await import('../Back/src/profileVisibility.ts');
+  const adminSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  const profilesSource = await readFile(new URL('../Back/src/routes/profiles.ts', import.meta.url), 'utf8');
+  const cityPageSource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
+  const globalSearchSource = await readFile(new URL('../Front/src/components/GlobalLocationSearch.tsx', import.meta.url), 'utf8');
+  const base = {
+    status: 'active',
+    is_published: true,
+    moderation_status: 'approved',
+    shadowbanned: false,
+    subscription_status: 'active',
+    work_country: 'DE',
+    postal_code: '10115'
+  };
+  const berlinLadies = { ...base, id: 'berlin-ladies', display_name: 'Berlin Panie', city: 'berlin', work_city: 'Berlin', category: 'Panie' };
+  const berlinGay = { ...base, id: 'berlin-gay', display_name: 'Berlin Gay', city: 'berlin', work_city: 'Berlin', category: 'Gay' };
+  const berlinHomeHotel = { ...base, id: 'berlin-home-hotel', display_name: 'Berlin Dom/Hotel', city: 'berlin', work_city: 'Berlin', category: 'Dom / Hotel' };
+  const hamburgLadies = { ...base, id: 'hamburg-ladies', display_name: 'Hamburg Panie', city: 'hamburg', work_city: 'Hamburg', category: 'Panie' };
+  const rows = [berlinLadies, berlinGay, berlinHomeHotel, hamburgLadies];
+
+  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'all' })).map((profile) => profile.id), ['berlin-ladies', 'berlin-gay', 'berlin-home-hotel']);
+  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'ladies' })).map((profile) => profile.id), ['berlin-ladies']);
+  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'gay' })).map((profile) => profile.id), ['berlin-gay']);
+  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'hamburg', category: 'all' })).map((profile) => profile.id), ['hamburg-ladies']);
+
+  const gayInLadies = explainProfileVisibility(berlinGay, { country: 'DE', city: 'berlin', category: 'ladies' });
+  assert.equal(gayInLadies.isPublicVisible, true);
+  assert.equal(gayInLadies.isVisibleInCurrentSearch, false);
+  assert.ok(gayInLadies.reasons.includes('category_mismatch'));
+
+  const homeHotelAll = explainProfileVisibility(berlinHomeHotel, { country: 'DE', city: 'berlin', category: 'all' });
+  assert.equal(homeHotelAll.isVisibleInCurrentSearch, true);
+  assert.match(adminSource, /profiles\/visibility-audit/);
+  assert.match(adminSource, /visibility_audit: explainProfileVisibility/);
+  assert.match(profilesSource, /const categoryFilter = normalizeProfileCategory\(req\.query\.category\)/);
+  assert.match(cityPageSource, /search\.showingSummary/);
+  assert.match(globalSearchSource, /<option value="">\{t\('filters\.allCategories'\)\}<\/option>/);
+});
+
 test('client activation token bonus is 7 and favorites are token-gated', async () => {
   const configSource = await readFile(new URL('../Back/src/config.ts', import.meta.url), 'utf8');
   const favoritesSource = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');

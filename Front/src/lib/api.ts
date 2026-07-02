@@ -124,6 +124,7 @@ export const api = {
   adminUsers: (token: string) => request<{ users: Record<string, unknown>[] }>('/api/admin/users', { token }),
   adminSubscriptions: (token: string) => request<{ subscriptions: Record<string, unknown>[]; stats?: Record<string, number> }>('/api/admin/subscriptions', { token }),
   adminProfile: (token: string, id: string) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, { token }),
+  adminProfileVisibilityAudit: (token: string, query = '') => request<{ context: Record<string, unknown>; profiles: Array<Record<string, unknown>> }>(`/api/admin/profiles/visibility-audit${query}`, { token }),
   createAdminProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile; account_created?: boolean; user_linked?: boolean }>('/api/admin/profiles', {
     method: 'POST',
     token,

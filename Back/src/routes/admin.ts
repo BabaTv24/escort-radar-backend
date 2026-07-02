@@ -45,6 +45,7 @@ import {
   subscriptionTransactionType,
   sumRealRevenue
 } from '../revenue.js';
+import { explainProfileVisibility } from '../profileVisibility.js';
 
 export const adminRouter = Router();
 
@@ -476,9 +477,11 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
     });
   }
 
+  const visibilityContext = { country: req.query.country, city: req.query.city, category: req.query.category };
   const rows = (data || []).map((profile) => withAdminImageUrls({
     ...profile,
-    owner_email: profile.owner_email || (profile.user_id ? ownerEmailById.get(profile.user_id) || null : null)
+    owner_email: profile.owner_email || (profile.user_id ? ownerEmailById.get(profile.user_id) || null : null),
+    visibility_audit: explainProfileVisibility(profile, visibilityContext)
   }));
   res.json({
     profiles: rows,
@@ -489,6 +492,32 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
       suspended_profiles: rows.filter((profile) => profile.status === 'suspended' || profile.moderation_status === 'suspended').length,
       test_accounts: rows.filter((profile) => profile.is_test_account).length
     }
+  });
+}));
+
+adminRouter.get('/profiles/visibility-audit', asyncHandler(async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, display_name, owner_email, city, work_city, work_country, area, work_area, postal_code, latitude, longitude, category, status, moderation_status, is_published, shadowbanned, subscription_status, is_seed_profile, is_sponsored, acquisition_source, admin_priority, created_at')
+    .order('admin_priority', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const context = { country: req.query.country, city: req.query.city, category: req.query.category };
+  res.json({
+    context,
+    profiles: (data || []).map((profile) => ({
+      id: profile.id,
+      display_name: profile.display_name,
+      owner_email: profile.owner_email,
+      city: profile.city,
+      work_city: profile.work_city,
+      work_country: profile.work_country,
+      category: profile.category,
+      visibility: explainProfileVisibility(profile, context)
+    }))
   });
 }));
 
