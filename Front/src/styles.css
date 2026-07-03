@@ -5817,6 +5817,109 @@ body {
   }
 }
 
+.client-office {
+  width: min(1240px, calc(100% - 2rem));
+  padding-bottom: calc(9rem + env(safe-area-inset-bottom));
+}
+
+.client-office .client-office-hero {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  border-radius: .5rem;
+  background: linear-gradient(145deg, rgba(20,15,8,.98), rgba(4,4,5,.98) 68%);
+}
+
+.client-office .client-office-hero h1 {
+  font-size: clamp(2.25rem, 5vw, 4.4rem);
+}
+
+.client-office .creator-command-bar {
+  border-radius: .5rem;
+  border: 1px solid rgba(244,215,127,.16);
+  background: rgba(10,10,12,.9);
+}
+
+.client-office .dashboard-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, .85fr);
+}
+
+.client-office .creator-panel {
+  border-radius: .5rem;
+  border: 1px solid rgba(244,215,127,.12);
+}
+
+.client-office .metric,
+.client-office .metrics-grid > *,
+.client-office .creator-dashboard-grid .admin-action-btn {
+  border-radius: .5rem;
+}
+
+.client-office .one-hand-status-toggle {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.client-referral-progress {
+  display: grid;
+  gap: .55rem;
+  padding: .85rem;
+  border-radius: .5rem;
+  background: rgba(244,215,127,.08);
+}
+
+.client-favorite-card {
+  overflow: hidden;
+  max-width: 320px;
+  border: 1px solid rgba(244,215,127,.14);
+  border-radius: .5rem;
+  background: rgba(255,255,255,.045);
+}
+
+.client-favorite-image {
+  aspect-ratio: 4 / 5;
+  background: #080808;
+}
+
+.client-favorite-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.client-favorite-body {
+  display: grid;
+  gap: .75rem;
+  padding: .9rem;
+}
+
+.client-favorite-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .55rem;
+}
+
+@media (max-width: 900px) {
+  .client-office {
+    width: min(100% - 1rem, 720px);
+  }
+
+  .client-office .dashboard-grid,
+  .client-office .client-office-hero,
+  .client-office .metrics-grid,
+  .client-office .one-hand-inline-fields,
+  .client-office .creator-command-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .client-office .premium-profile-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .client-favorite-card {
+    max-width: none;
+  }
+}
+
 /* Fixed app chrome hotfix */
 .market-header {
   position: fixed !important;

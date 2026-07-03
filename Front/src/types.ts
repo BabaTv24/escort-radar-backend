@@ -182,6 +182,11 @@ export type Profile = {
   updated_at?: string;
   profile_images?: ProfileImage[];
   images?: ProfileImage[];
+  avatar_url?: string | null;
+  main_photo_url?: string | null;
+  photo_url?: string | null;
+  photos?: string[];
+  media?: Array<{ public_url?: string; url?: string }>;
   visibility_reason?: 'visible' | 'missing_payment' | 'pending_verification' | 'suspended' | 'blocked' | 'missing_required_fields' | 'no_images';
   locked_features?: string[];
   wallet_summary?: {

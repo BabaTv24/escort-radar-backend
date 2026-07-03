@@ -1071,6 +1071,39 @@ test('city radar status supports favorites filter and login next flow', async ()
   assert.match(deLocale, /"favorites\.favoritesFilter": "Favoriten"/);
 });
 
+test('premium client office removes gift stats and uses real wallet fallback', async () => {
+  const dashboardSource = await readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(dashboardSource, /clientOffice\.giftsSent/);
+  assert.doesNotMatch(dashboardSource, /clientOffice\.giftsReceived/);
+  assert.doesNotMatch(dashboardSource, /coinWallet\?\.balance \|\| 100/);
+  assert.doesNotMatch(dashboardSource, /defaultCoins\s*=\s*100/);
+  assert.match(dashboardSource, /Number\(coinWallet\?\.balance \?\? 0\)/);
+});
+
+test('premium client referral reward and live request contract stay client-only', async () => {
+  const dashboardSource = await readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8');
+  const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
+  assert.match(dashboardSource, /CLIENT_REFERRAL_REWARD_COINS = 5/);
+  assert.match(dashboardSource, /referralActivations \* CLIENT_REFERRAL_REWARD_COINS/);
+  assert.match(dashboardSource, /earnedReferralCoins/);
+  assert.match(dashboardSource, /onCreateIntent\(\{ \.\.\.intentDraft, status: 'LOOKING_NOW' \}\)/);
+  assert.doesNotMatch(dashboardSource, /\['LOOKING_NOW', 'LOOKING_TODAY', 'TRAVELING', 'BROWSING', 'OFFLINE'\]/);
+  assert.match(plLocale, /"clientOffice\.nextReward": "Następna nagroda: \{\{count\}\} Coins"/);
+  assert.match(plLocale, /"clientOffice\.createRequest": "Wyślij request"/);
+});
+
+test('premium client favorites render photos and favorite-only actions', async () => {
+  const dashboardSource = await readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8');
+  assert.match(dashboardSource, /function ClientFavoriteCard/);
+  assert.match(dashboardSource, /getProfileImageUrl\(profile\)/);
+  assert.match(dashboardSource, /profile\.profile_images/);
+  assert.match(dashboardSource, /profile\.images/);
+  assert.match(dashboardSource, /alternate\.photos\?\.\[0\]/);
+  assert.match(dashboardSource, /<Link className="button primary" to=\{`\/profile\/\$\{profile\.id\}`\}/);
+  assert.match(dashboardSource, /favorites\.removeFromFavorites/);
+  assert.doesNotMatch(dashboardSource, /<ProfileCard profile=\{favorite\.profile\}/);
+});
+
 test('client search location can be updated cleared and edited from radar', async () => {
   const routeSource = await readFile(new URL('../Back/src/routes/clientPreferences.ts', import.meta.url), 'utf8');
   const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');

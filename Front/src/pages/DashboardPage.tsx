@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, Heart, ImagePlus, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
+import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Heart, ImagePlus, Link as LinkIcon, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { waitForSupabaseSession } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
-import type { BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Gift as GiftRow, Profile, ProfileImage, RadarNotification, Tag } from '../types';
+import type { BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
@@ -156,8 +156,6 @@ export function DashboardPage() {
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
   const [coinWallet, setCoinWallet] = useState<CoinWallet | null>(null);
   const [coinTransactions, setCoinTransactions] = useState<CoinTransaction[]>([]);
-  const [giftsSent, setGiftsSent] = useState<GiftRow[]>([]);
-  const [giftsReceived, setGiftsReceived] = useState<GiftRow[]>([]);
   const [marketProfiles, setMarketProfiles] = useState<Profile[]>([]);
   const [clientIntent, setClientIntent] = useState<ClientIntent | null>(null);
   const [clientFavorites, setClientFavorites] = useState<ClientFavorite[]>([]);
@@ -319,8 +317,6 @@ export function DashboardPage() {
       setClientActivation(clientData.activation);
       setCoinWallet(clientData.wallet);
       setCoinTransactions(clientData.transactions);
-      setGiftsSent(clientData.gifts_sent);
-      setGiftsReceived(clientData.gifts_received);
       if (searchParams.get('activation_session_id')) setSearchParams({});
       setSavedProfile(null);
       setProfile({ ...emptyProfile });
@@ -515,8 +511,6 @@ export function DashboardPage() {
     setClientActivation(null);
     setClientProfile(null);
     setCoinTransactions([]);
-    setGiftsSent([]);
-    setGiftsReceived([]);
     setAuthAccountType('unknown');
     setAuthResolved(false);
   }
@@ -652,8 +646,6 @@ export function DashboardPage() {
         clientProfile={clientProfile}
         activation={clientActivation}
         transactions={coinTransactions}
-        giftsSent={giftsSent}
-        giftsReceived={giftsReceived}
         message={message}
         activationBusy={activationBusy}
         avatarUploading={avatarUploading}
@@ -1159,15 +1151,15 @@ function getPublicReferralLink(activation: ClientActivation | null) {
   return `${origin}/r/${encodeURIComponent(activation.referral_code)}`;
 }
 
-function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, giftsSent, giftsReceived, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent, favorites, onRemoveFavorite }: {
+const CLIENT_REFERRAL_REWARD_COINS = 5;
+
+function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent, favorites, onRemoveFavorite }: {
   userEmail: string;
   wallet: Wallet | null;
   coinWallet: CoinWallet | null;
   clientProfile: ClientProfile | null;
   activation: ClientActivation | null;
   transactions: CoinTransaction[];
-  giftsSent: GiftRow[];
-  giftsReceived: GiftRow[];
   message: string;
   activationBusy: boolean;
   avatarUploading: boolean;
@@ -1192,22 +1184,24 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   const availableProfiles = marketProfiles.filter((profile) => profile.available_now).length || Math.min(marketProfiles.length, 3);
   const newToday = marketProfiles.filter((profile) => profile.created_at && new Date(profile.created_at).toDateString() === new Date().toDateString()).length;
   const recentlyActive = marketProfiles.filter((profile) => profile.availability_status === 'available' || profile.available_now).length || availableProfiles;
-  const referralProgress = Math.min(100, Math.round(((activation?.activations || 0) / 3) * 100));
+  const referralActivations = Number(activation?.activations || 0);
+  const earnedReferralCoins = Number(activation?.earned_rewards ?? referralActivations * CLIENT_REFERRAL_REWARD_COINS);
+  const referralProgress = referralActivations > 0 ? 100 : 0;
   const [intentDraft, setIntentDraft] = useState<Partial<ClientIntent>>({
-    status: intent?.status || 'LOOKING_NOW',
+    status: 'LOOKING_NOW',
     city: intent?.city || 'berlin',
     area: intent?.area || '',
     radius_km: intent?.radius_km || 25,
     category: intent?.category || 'ladies',
     budget_min: intent?.budget_min || undefined,
     budget_max: intent?.budget_max || 300,
-    time_window: intent?.time_window || t('clientOffice.intentTonight')
+    time_window: intent?.time_window || ''
   });
   const featureCards = [
     ['Radar', 'Zobacz profile w pobliżu Berlina.', RadioTower, '/city/berlin', true],
     ['Favorite profiles', 'Zapisuj ulubione profile i wracaj do nich szybciej.', Heart, '', activated],
     ['Profile unlocks', 'Odblokuj numery telefonu, WhatsApp, Telegram i galerie.', Lock, '', activated],
-    ['Gifts / Coins', 'Wysyłaj prezenty Coins i odblokowuj prywatne galerie.', Gift, '/coins', activated],
+    ['Coins', t('clientOffice.coinWalletCopy'), Gem, '/coins', activated],
     ['Referrals', 'Udostępnij link i QR po aktywacji konta.', QrCode, '', activated],
     ['Bookings', 'Śledź zapytania i historię kontaktów.', CalendarDays, '', activated],
     ['Private gallery access', 'Uzyskaj dostęp do pełnych galerii VIP.', ImagePlus, '', activated]
@@ -1217,7 +1211,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     [t('clientOffice.viewNearby'), t('clientOffice.viewNearbyCopy'), Sparkles, '/city/berlin', true],
     [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '', activated],
     [t('clientOffice.coinWallet'), t('clientOffice.coinWalletCopy'), Gem, '/coins', activated],
-    [t('clientOffice.sendGift'), t('clientOffice.sendGiftCopy'), Gift, '', activated],
+    [t('clientOffice.referralEyebrow'), t('clientOffice.referralRewardRule', { count: CLIENT_REFERRAL_REWARD_COINS }), QrCode, '', activated],
     [t('dashboard.client.activity'), t('clientOffice.activityCopy'), Clock, '', activated]
   ] as const;
   const unlockChecklist = [
@@ -1240,7 +1234,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
         {!activated && (
           <>
             <div className="onboarding-points">
-              {['Telefon / WhatsApp / Telegram', 'Wszystkie zdjecia', 'Prywatne galerie', 'Prezenty Coins', 'Referral link + QR', t('activation.activationTokenBonus')].map((item) => <span key={item}>{item}</span>)}
+              {[t('clientOffice.unlock.phone'), t('clientOffice.unlock.whatsapp'), t('clientOffice.unlock.galleries'), t('clientOffice.unlock.referral'), t('activation.activationTokenBonus')].map((item) => <span key={item}>{item}</span>)}
             </div>
             <button className="button primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</button>
           </>
@@ -1284,8 +1278,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
           </label>
           <div className="metrics-grid">
             <Metric label={t('clientOffice.coinBalance')} value={Math.round(Number(coinWallet?.balance ?? 0))} />
-            <Metric label={t('clientOffice.giftsSent')} value={giftsSent.length} />
-            <Metric label={t('clientOffice.giftsReceived')} value={giftsReceived.length} />
+            <Metric label={t('clientOffice.tokenBalance')} value={Math.round(Number(wallet?.escort_token_balance ?? 0))} />
           </div>
         </section>
 
@@ -1298,7 +1291,6 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <span>{t('clientOffice.unlock.whatsapp')}</span>
             <span>{t('clientOffice.unlock.telegram')}</span>
             <span>{t('clientOffice.unlock.galleries')}</span>
-            <span>{t('clientOffice.unlock.gifts')}</span>
             <span>{t('clientOffice.unlock.referral')}</span>
           </div>
           <button className="button primary full" type="button" disabled={activationBusy} onClick={onActivate}>
@@ -1309,27 +1301,31 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
         <section className="creator-panel referral-studio">
           <div>
             <p className="eyebrow">{t('clientOffice.referralEyebrow')}</p>
-            <h2>{referralLink || t('clientOffice.referralLocked')}</h2>
+            <h2>{t('clientOffice.referralTitle')}</h2>
+            <p>{referralLink || t('clientOffice.referralLocked')}</p>
             {referralLink && <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(referralLink)}><Copy size={14} /> {t('clientOffice.copyInvite')}</button>}
           </div>
           {referralQrImageUrl ? <img className="client-qr-image" src={referralQrImageUrl} alt="Referral QR" /> : <QrVisual seed="CLIENT-FREE" />}
+          <div className="client-referral-progress">
+            <strong>{t('clientOffice.nextRewardProgress', { count: referralActivations ? 1 : 0 })}</strong>
+            <span>{t('clientOffice.nextReward', { count: CLIENT_REFERRAL_REWARD_COINS })}</span>
+            <div className="progress-track"><span style={{ width: `${referralProgress}%` }} /></div>
+            <p>{t('clientOffice.earnedRewards')}: {earnedReferralCoins} Coins</p>
+          </div>
           <div className="metrics-grid">
             <Metric label={t('clientOffice.clicks')} value={activation?.clicks || 0} />
             <Metric label={t('clientOffice.registrations')} value={activation?.registrations || 0} />
-            <Metric label={t('clientOffice.activations')} value={activation?.activations || 0} />
-            <Metric label={t('clientOffice.earnedRewards')} value={`${activation?.earned_rewards || 0} Coins`} />
+            <Metric label={t('clientOffice.activations')} value={referralActivations} />
+            <Metric label={t('clientOffice.earnedCoins')} value={`${earnedReferralCoins} Coins`} />
           </div>
-          <div className="progress-track"><span style={{ width: `${referralProgress}%` }} /></div>
-          <p className="muted">{t('clientOffice.nextBonus', { count: Math.max(3 - (activation?.activations || 0), 0) })}</p>
         </section>
 
         <section className="creator-panel">
           <p className="eyebrow">{t('clientOffice.liveEyebrow')}</p>
-          <h2>{intent ? t('clientOffice.liveActive', { status: intent.status.replace(/_/g, ' '), city: intent.city }) : t('clientOffice.liveTitle')}</h2>
+          <h2>{t('clientOffice.liveTitle')}</h2>
+          <p>{t('clientOffice.liveCopy')}</p>
           <div className="one-hand-status-toggle">
-            {(['LOOKING_NOW', 'LOOKING_TODAY', 'TRAVELING', 'BROWSING', 'OFFLINE'] as const).map((status) => (
-              <button key={status} type="button" className={intentDraft.status === status ? 'active available' : ''} onClick={() => setIntentDraft({ ...intentDraft, status })}>{t(`clientOffice.intent.${status}`)}</button>
-            ))}
+            <button type="button" className="active available">{t('clientOffice.intent.LOOKING_NOW')}</button>
           </div>
           <div className="one-hand-inline-fields">
             <select value={intentDraft.city || 'berlin'} onChange={(event) => setIntentDraft({ ...intentDraft, city: event.target.value })}>
@@ -1346,7 +1342,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <input type="number" placeholder={t('clientOffice.budgetMax')} value={intentDraft.budget_max || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_max: Number(event.target.value) })} />
             <input placeholder={t('clientOffice.timeWindow')} value={intentDraft.time_window || ''} onChange={(event) => setIntentDraft({ ...intentDraft, time_window: event.target.value })} />
           </div>
-          <button className="button primary full" type="button" onClick={() => onCreateIntent(intentDraft)}>{t('clientOffice.createRequest')}</button>
+          <button className="button primary full" type="button" onClick={() => onCreateIntent({ ...intentDraft, status: 'LOOKING_NOW' })}>{t('clientOffice.createRequest')}</button>
           <p className="muted">{t('clientOffice.livePrivacy')}</p>
           <div className="metrics-grid">
             <Metric label={t('clientOffice.nearbyAdvertisers')} value={matches.length} />
@@ -1377,10 +1373,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
           {favorites.length ? (
             <div className="cards-grid marketplace-grid premium-profile-grid">
               {favorites.map((favorite) => favorite.profile ? (
-                <article key={favorite.id} className="favorite-card-shell">
-                  <ProfileCard profile={favorite.profile} />
-                  <button className="button" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}>{t('favorites.removeFromFavorites')}</button>
-                </article>
+                <ClientFavoriteCard key={favorite.id} favorite={favorite} onRemoveFavorite={onRemoveFavorite} />
               ) : null)}
             </div>
           ) : (
@@ -1442,6 +1435,40 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
       </div>
     </div>
   );
+}
+
+function ClientFavoriteCard({ favorite, onRemoveFavorite }: { favorite: ClientFavorite; onRemoveFavorite: (profileId: string) => void }) {
+  const { t, option } = useI18n();
+  const profile = favorite.profile;
+  if (!profile) return null;
+  const imageUrl = getProfileImageUrl(profile);
+  return (
+    <article className="client-favorite-card favorite-card-shell">
+      <div className="client-favorite-image">
+        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <div className="image-placeholder">{t('app.name')}</div>}
+      </div>
+      <div className="client-favorite-body">
+        <div>
+          <h3>{profile.display_name}</h3>
+          <p><MapPin size={14} /> {profile.work_city || profile.city}{profile.age ? ` - ${profile.age}` : ''}</p>
+        </div>
+        <span>{option(profile.category || 'other')}</span>
+        <div className="client-favorite-actions">
+          <Link className="button primary" to={`/profile/${profile.id}`}>{t('buttons.viewProfile')}</Link>
+          <button className="button" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}>{t('favorites.removeFromFavorites')}</button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function getProfileImageUrl(profile: Profile) {
+  const images = [...(profile.profile_images || []), ...(profile.images || [])];
+  const primary = images.find((image) => image.is_primary || image.is_cover) || images[0];
+  const direct = primary?.public_url || primary?.url || primary?.image_url;
+  if (direct) return direct;
+  const alternate = profile as Profile & { avatar_url?: string; main_photo_url?: string; photo_url?: string; photos?: string[]; media?: Array<{ public_url?: string; url?: string }> };
+  return alternate.main_photo_url || alternate.photo_url || alternate.avatar_url || alternate.photos?.[0] || alternate.media?.[0]?.public_url || alternate.media?.[0]?.url || '';
 }
 
 function BusinessDashboard({ userEmail, message, onActivateSubscription, onLogout }: {
