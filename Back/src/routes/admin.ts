@@ -24,7 +24,7 @@ import { writeAdminAuditLog } from '../services/adminAudit.js';
 import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
-import { activateClientAccount, deactivateClientAccount, getOrCreateCoinWallet, grantCoins } from '../services/clientActivation.js';
+import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
 import { applyManualPaymentOrder } from '../manualPayments.js';
 import {
   buildAdminClient,
@@ -778,12 +778,12 @@ adminRouter.patch('/clients/:id/block', asyncHandler(async (req, res) => {
 adminRouter.patch('/clients/:id/coins', asyncHandler(async (req, res) => {
   const amount = Number(req.body.amount);
   if (!Number.isFinite(amount) || amount === 0) return res.status(400).json({ error: 'amount is required' });
-  const wallet = await getOrCreateCoinWallet(req.params.id);
-  await grantCoins(wallet.id, req.params.id, amount, amount > 0 ? 'admin_credit' : 'admin_debit', {
+  const wallet = await getOrCreateTokenWallet(req.params.id);
+  await adjustTokenWalletBalance(wallet.id, req.params.id, amount, amount > 0 ? 'admin_token_credit' : 'admin_token_debit', {
     note: optionalText(req.body.note, 1000),
     source: 'admin_clients'
   }, req.user?.email);
-  res.json({ wallet: await getOrCreateCoinWallet(req.params.id) });
+  res.json({ wallet: await getOrCreateTokenWallet(req.params.id) });
 }));
 
 adminRouter.get('/users/:id', asyncHandler(async (req, res) => {
@@ -2492,7 +2492,7 @@ async function loadAdminClients() {
     supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     supabaseAdmin.from('client_activations').select('*').limit(5000),
     supabaseAdmin.from('client_activation_payments').select('*').order('created_at', { ascending: false }).limit(5000),
-    supabaseAdmin.from('coin_wallets').select('*').limit(5000),
+    supabaseAdmin.from('wallets').select('*').limit(5000),
     supabaseAdmin.from('client_referrals').select('*').limit(5000),
     supabaseAdmin.from('account_access_logs').select('*').eq('action', 'login').order('created_at', { ascending: false }).limit(5000)
   ]);

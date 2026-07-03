@@ -708,15 +708,45 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
 
 test('client activation token bonus is 7 and favorites are token-gated', async () => {
   const configSource = await readFile(new URL('../Back/src/config.ts', import.meta.url), 'utf8');
+  const clientActivationSource = await readFile(new URL('../Back/src/services/clientActivation.ts', import.meta.url), 'utf8');
+  const adminClientsSource = await readFile(new URL('../Back/src/adminClients.ts', import.meta.url), 'utf8');
+  const adminRouteSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  const tokensSource = await readFile(new URL('../Back/src/routes/tokens.ts', import.meta.url), 'utf8');
   const favoritesSource = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');
   const migration = await readFile(new URL('../supabase/migrations/034_client_favorites_token_cost.sql', import.meta.url), 'utf8');
+  const rpcMigration = await readFile(new URL('../supabase/migrations/037_fix_token_wallet_source_of_truth.sql', import.meta.url), 'utf8');
+  const adminPageSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  const tokenShopSource = await readFile(new URL('../Front/src/pages/TokenShopPage.tsx', import.meta.url), 'utf8');
+  const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+  const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
+  const enLocale = await readFile(new URL('../Front/src/locales/en.json', import.meta.url), 'utf8');
+  const deLocale = await readFile(new URL('../Front/src/locales/de.json', import.meta.url), 'utf8');
+
   assert.match(configSource, /CLIENT_ACTIVATION_TOKEN_BONUS', 7/);
   assert.doesNotMatch(configSource, /CLIENT_ACTIVATION_WELCOME_COINS', 100/);
+  assert.match(clientActivationSource, /getOrCreateTokenWallet\(userId\)/);
+  assert.match(clientActivationSource, /adjustTokenWalletBalance\(wallet\.id, userId, config\.clientActivationWelcomeCoins, 'client_activation_bonus'/);
+  assert.match(clientActivationSource, /\.from\('wallets'\)/);
+  assert.match(adminClientsSource, /token_balance: Number\(input\.wallet\?\.escort_token_balance \|\| 0\)/);
+  assert.match(adminRouteSource, /supabaseAdmin\.from\('wallets'\)\.select\('\*'\)\.limit\(5000\)/);
+  assert.doesNotMatch(adminRouteSource, /loadAdminClients[\s\S]*supabaseAdmin\.from\('coin_wallets'\)\.select\('\*'\)\.limit\(5000\)/);
+  assert.match(tokensSource, /escort_token_balance/);
+  assert.match(tokenShopSource, /wallet\?\.escort_token_balance/);
+  assert.match(adminPageSource, /'token_balance'/);
+  assert.doesNotMatch(adminPageSource, /Coins: \{client\.coins/);
+  assert.match(plLocale, /"admin\.table\.token_balance": "Tokeny"/);
+  assert.match(enLocale, /"admin\.table\.token_balance": "Tokens"/);
+  assert.match(deLocale, /"admin\.table\.token_balance": "Token"/);
   assert.match(favoritesSource, /FAVORITE_TOKEN_COST = 1/);
   assert.match(favoritesSource, /add_client_favorite_with_token/);
   assert.match(favoritesSource, /code: 'NOT_ENOUGH_TOKENS'/);
+  assert.match(favoritesSource, /new_balance/);
+  assert.match(apiSource, /new_balance\?: number/);
   assert.match(migration, /create table if not exists public\.client_favorites/);
   assert.match(migration, /'favorite_profile'/);
+  assert.match(rpcMigration, /returns jsonb/);
+  assert.match(rpcMigration, /'new_balance'/);
+  assert.match(rpcMigration, /set escort_token_balance = v_balance - p_cost/);
 });
 
 test('production regression contracts for Berlin profiles dashboard and client preferences stay wired', async () => {

@@ -566,7 +566,7 @@ export function AdminPage() {
   }
 
   async function adjustClientCoins(client: AdminClient, amount: number) {
-    await action(() => api.adjustAdminClientCoins(token, String(client.id), amount, amount > 0 ? 'Admin client credit' : 'Admin client debit'));
+    await action(() => api.adjustAdminClientCoins(token, String(client.id), amount, amount > 0 ? 'Admin client token credit' : 'Admin client token debit'));
   }
 
   function editStudioProfile(profile: Profile) {
@@ -1577,7 +1577,7 @@ export function AdminPage() {
 
     if (view === 'clients') {
       const totalPages = Math.max(1, Math.ceil(clientsTotal / Number(clientFilters.page_size || 25)));
-      const clientColumns = ['id', 'email', 'type', 'activation', 'status', 'coins', 'provider', 'registered_at', 'last_login'];
+      const clientColumns = ['id', 'email', 'type', 'activation', 'status', 'token_balance', 'provider', 'registered_at', 'last_login'];
       return (
         <>
           <section className="admin-card">
@@ -1619,7 +1619,7 @@ export function AdminPage() {
               <Action title={t('admin.actions.view')} onClick={() => openClientDetails(client)}><Eye size={15} /></Action>
               <Action title={t('admin.clients.activate')} onClick={() => action(() => api.setAdminClientActivation(token, String(client.id), 'client_activated'))}><UserCheck size={15} /></Action>
               <Action title={t('admin.clients.deactivate')} onClick={() => action(() => api.setAdminClientActivation(token, String(client.id), 'client_free'))}><UserX size={15} /></Action>
-              <Action title={t('admin.clients.addCoins')} onClick={() => adjustClientCoins(client, 100)}><Coins size={15} /></Action>
+              <Action title={t('admin.clients.addTokens')} onClick={() => adjustClientCoins(client, 7)}><Coins size={15} /></Action>
               <Action title={client.is_blocked ? t('admin.clients.unblock') : t('admin.clients.block')} danger={Boolean(!client.is_blocked)} onClick={() => action(() => api.blockAdminClient(token, String(client.id), !client.is_blocked))}><Ban size={15} /></Action>
             </>
           )} />
@@ -1629,11 +1629,11 @@ export function AdminPage() {
                 <h3>{client.email}</h3>
                 <p><StatusBadge value={String(client.account_status || 'free')} /> <StatusBadge value={String(client.activation_status || 'client_free')} /></p>
                 <p>{Number(client.activation_amount || 0).toFixed(2)} EUR / {client.payment_provider || '-'}</p>
-                <p>Coins: {client.coins || 0} / Referral: {client.referral_code || '-'}</p>
+                <p>{t('admin.table.token_balance')}: {client.token_balance ?? client.coins ?? 0} / Referral: {client.referral_code || '-'}</p>
                 {client.stripe_warning && <p className="error-text">{client.stripe_warning}</p>}
                 <div className="admin-actions-row">
                   <Action title={t('admin.actions.view')} onClick={() => openClientDetails(client)}><Eye size={15} /></Action>
-                  <Action title={t('admin.clients.addCoins')} onClick={() => adjustClientCoins(client, 100)}><Coins size={15} /></Action>
+                  <Action title={t('admin.clients.addTokens')} onClick={() => adjustClientCoins(client, 7)}><Coins size={15} /></Action>
                 </div>
               </article>
             ))}

@@ -1,6 +1,6 @@
 import { supabaseAdmin } from './supabase.js';
 import { config } from './config.js';
-import { activateClientAccount, getOrCreateCoinWallet, grantCoins } from './services/clientActivation.js';
+import { activateClientAccount, adjustTokenWalletBalance, getOrCreateTokenWallet } from './services/clientActivation.js';
 
 export const manualPaymentProviders = ['manual', 'bank_transfer', 'crypto', 'ccbill', 'paysafe', 'paysafecard'] as const;
 export const manualPaymentPurposes = ['client_activation', 'advertiser_subscription', 'agency_subscription', 'token_package'] as const;
@@ -129,8 +129,8 @@ async function applyManualSubscription(userId: string, order: Record<string, any
 async function applyManualTokenPackage(userId: string, order: Record<string, any>, product: Record<string, any>, adminEmail?: string) {
   const amount = Number(product.tokens || order.tokens_amount || 0);
   if (!amount) return;
-  const wallet = await getOrCreateCoinWallet(userId);
-  await grantCoins(wallet.id, userId, amount, 'manual_payment_tokens', {
+  const wallet = await getOrCreateTokenWallet(userId);
+  await adjustTokenWalletBalance(wallet.id, userId, amount, 'manual_payment_tokens', {
     manual_payment_order_id: order.id,
     product_id: product.id
   }, adminEmail);

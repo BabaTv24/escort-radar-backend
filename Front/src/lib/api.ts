@@ -267,7 +267,7 @@ export const api = {
   tokenPackages: () => request<{ packages: TokenPackage[] }>('/api/tokens/packages'),
   myWallet: (token: string) => request<{ wallet: Wallet }>('/api/tokens/wallet/me', { token }),
   myFavorites: (token: string) => request<{ favorites: ClientFavorite[]; wallet: Wallet }>('/api/favorites', { token }),
-  addFavorite: (token: string, profileId: string) => request<{ favorite: ClientFavorite; wallet: Wallet; already_favorited: boolean; charged: number }>(`/api/favorites/${profileId}`, {
+  addFavorite: (token: string, profileId: string) => request<{ favorite: ClientFavorite; wallet: Wallet; already_favorited: boolean; charged: number; new_balance?: number }>(`/api/favorites/${profileId}`, {
     method: 'POST',
     token
   }),

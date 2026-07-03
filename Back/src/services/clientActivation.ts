@@ -120,8 +120,8 @@ export async function activateClientAccount(userId: string, payment: {
       updated_at: new Date().toISOString()
     }, { onConflict: 'referral_code' });
 
-  const wallet = await getOrCreateCoinWallet(userId);
-  await grantCoins(wallet.id, userId, config.clientActivationWelcomeCoins, 'welcome_bonus', {
+  const wallet = await getOrCreateTokenWallet(userId);
+  await adjustTokenWalletBalance(wallet.id, userId, config.clientActivationWelcomeCoins, 'client_activation_bonus', {
     activation_id: activation.id,
     stripe_checkout_session_id: payment.stripe_checkout_session_id || null
   });
@@ -155,6 +155,61 @@ export async function getOrCreateCoinWallet(userId: string) {
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function getOrCreateTokenWallet(userId: string) {
+  const { data: existing } = await supabaseAdmin.from('wallets').select('*').eq('user_id', userId).maybeSingle();
+  if (existing) return existing;
+
+  const { data, error } = await supabaseAdmin
+    .from('wallets')
+    .insert({ user_id: userId, public_wallet_id: `ERW-${crypto.randomUUID().slice(0, 8).toUpperCase()}` })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function adjustTokenWalletBalance(walletId: string, userId: string, amount: number, transactionType: string, metadata: Record<string, unknown> = {}, adminEmail?: string) {
+  const idempotentTypes = ['client_activation_bonus', 'manual_payment_tokens'];
+  if (idempotentTypes.includes(transactionType)) {
+    const { data: existing } = await supabaseAdmin
+      .from('token_transactions')
+      .select('id')
+      .eq('transaction_type', transactionType)
+      .contains('metadata', metadata)
+      .maybeSingle();
+    if (existing) return;
+  }
+
+  const { data: wallet, error: walletError } = await supabaseAdmin.from('wallets').select('*').eq('id', walletId).single();
+  if (walletError || !wallet) throw walletError || new Error('Token wallet not found');
+
+  const nextBalance = Number(wallet.escort_token_balance || 0) + amount;
+  if (nextBalance < 0) throw new Error('Insufficient token balance');
+
+  const { error: updateError } = await supabaseAdmin
+    .from('wallets')
+    .update({
+      escort_token_balance: nextBalance,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', walletId);
+  if (updateError) throw updateError;
+
+  const absAmount = Math.abs(amount);
+  const transaction = amount >= 0
+    ? { to_wallet_id: walletId, from_wallet_id: null }
+    : { from_wallet_id: walletId, to_wallet_id: null };
+  const { error: txError } = await supabaseAdmin.from('token_transactions').insert({
+    ...transaction,
+    amount: absAmount,
+    transaction_type: transactionType,
+    status: 'completed',
+    admin_note: adminEmail || null,
+    metadata: { ...metadata, user_id: userId }
+  });
+  if (txError) throw txError;
 }
 
 export async function grantCoins(walletId: string, userId: string, amount: number, transactionType: string, metadata: Record<string, unknown> = {}, adminEmail?: string) {
