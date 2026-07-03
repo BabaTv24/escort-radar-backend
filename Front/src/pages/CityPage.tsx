@@ -15,6 +15,7 @@ import { normalizeCategoryKey } from '../lib/categories';
 import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
 import { getCityLabel, normalizeCity, normalizeCountry } from '../lib/globalLocations';
 import { supabase } from '../lib/supabase';
+import { Seo } from '../components/Seo';
 
 const clientSearchLocationStorageKey = 'escortRadar.clientSearchLocation';
 
@@ -364,6 +365,11 @@ export function CityPage() {
 
   return (
     <div className="page city-page luxury-city-page">
+      <Seo
+        title={`Escort Radar ${cityLabel} - Verified 18+ Nightlife Profiles`}
+        description={`Explore privacy-first verified 18+ nightlife profiles in ${cityLabel}, with availability signals, city radar and moderated public listings.`}
+        canonical={`https://escort-radar.fun/city/${urlCitySlug}`}
+      />
       <section className="city-hero compact-city-hero">
         <div>
           <p className="eyebrow">{t('city.eyebrow')}</p>

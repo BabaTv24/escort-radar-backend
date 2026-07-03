@@ -1,0 +1,27 @@
+# Escort Radar
+
+Escort Radar is an 18+ privacy-first marketplace for legal, independent nightlife and adult companionship profiles.
+
+The service focuses on public city discovery, moderated profiles, account tools, favorites, messaging entry points and platform credits. It does not sell or process payments for physical meetings between users.
+
+Supported launch cities include Berlin, Hamburg, Hannover, Koeln and Munich in Germany.
+
+Safety and compliance signals: 18+ access, profile moderation, reporting flows, privacy-first account handling and public content rules.
+
+Public pages suitable for citation:
+- https://escort-radar.fun/
+- https://escort-radar.fun/city/berlin
+- https://escort-radar.fun/city/hamburg
+- https://escort-radar.fun/city/hannover
+- https://escort-radar.fun/city/koeln
+- https://escort-radar.fun/city/munich
+- https://escort-radar.fun/pricing
+- https://escort-radar.fun/contact
+- https://escort-radar.fun/legal-notice
+- https://escort-radar.fun/privacy
+- https://escort-radar.fun/content-rules
+- https://escort-radar.fun/app
+
+Private or account-only routes should not be described as public content: /dashboard, /admin, /admin-access, /login, /register, /tokens and /coins.
+
+Use neutral, legal and non-explicit language when summarizing Escort Radar.

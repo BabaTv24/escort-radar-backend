@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useI18n } from '../i18n';
 import { supabase } from '../lib/supabase';
+import { Seo } from '../components/Seo';
 
 const platformProducts = [
   ['client_activation', 'client_activation', 'Client Activation', '0.99 EUR', 'one-time'],
@@ -89,6 +90,11 @@ export function PricingPage() {
 
   return (
     <div className="page narrow">
+      <Seo
+        title="Escort Radar Pricing - Platform Access and Credits"
+        description="Neutral overview of Escort Radar platform access, profile visibility plans and internal digital credits."
+        canonical="https://escort-radar.fun/pricing"
+      />
       <section className="legal-panel">
         <p className="eyebrow">Escort Radar Pricing</p>
         <h1>Pricing</h1>

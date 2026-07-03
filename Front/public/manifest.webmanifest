@@ -1,23 +1,51 @@
 {
   "name": "Escort Radar",
   "short_name": "Escort Radar",
-  "start_url": "/",
+  "scope": "/",
+  "start_url": "/?source=pwa",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#050505",
   "theme_color": "#050505",
+  "categories": ["lifestyle", "social"],
+  "lang": "de",
+  "dir": "ltr",
   "description": "Privacy-first adult nightlife marketplace for verified 18+ users.",
   "icons": [
     {
       "src": "/favicon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/favicon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Radar",
+      "short_name": "Radar",
+      "description": "Open the Berlin radar.",
+      "url": "/city/berlin",
+      "icons": [{ "src": "/favicon-192x192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Favorites",
+      "short_name": "Favorites",
+      "description": "Open your favorite profiles.",
+      "url": "/dashboard#favorites",
+      "icons": [{ "src": "/favicon-192x192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Account",
+      "short_name": "Account",
+      "description": "Open your Escort Radar account.",
+      "url": "/dashboard",
+      "icons": [{ "src": "/favicon-192x192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050505" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Escort Radar" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <title>Escort Radar – Verified Escorts Near You</title>
     <meta
@@ -35,12 +40,50 @@
     <meta name="twitter:image" content="https://escort-radar.fun/escort-radar-social-preview.jpg" />
 
     <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "Escort Radar",
-        "url": "https://escort-radar.fun/"
-      }
+      [
+        {
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          "name": "Escort Radar",
+          "url": "https://escort-radar.fun/",
+          "inLanguage": ["de", "en", "pl"],
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://escort-radar.fun/city/{search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": "Escort Radar",
+          "url": "https://escort-radar.fun/",
+          "logo": "https://escort-radar.fun/Logo_Escort_5.png"
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "WebApplication",
+          "name": "Escort Radar",
+          "url": "https://escort-radar.fun/",
+          "applicationCategory": "LifestyleApplication",
+          "operatingSystem": "Web",
+          "isAccessibleForFree": true,
+          "audience": {
+            "@type": "PeopleAudience",
+            "requiredMinAge": 18
+          },
+          "description": "Privacy-first 18+ marketplace for legal independent nightlife and adult companionship profiles."
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "MobileApplication",
+          "name": "Escort Radar",
+          "url": "https://escort-radar.fun/app",
+          "applicationCategory": "LifestyleApplication",
+          "operatingSystem": "Android, iOS, Web",
+          "description": "Installable PWA for Escort Radar city discovery, account access, favorites and messages."
+        }
+      ]
     </script>
   </head>
   <body>

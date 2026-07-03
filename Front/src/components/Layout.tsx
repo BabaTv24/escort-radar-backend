@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { CalendarDays, Coins, Heart, LogOut, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
+import { CalendarDays, Coins, LogOut, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
 import { activePublicCategoryOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { api } from '../lib/api';
@@ -31,8 +31,10 @@ export function Layout() {
   const favoritesPath = '/dashboard#favorites';
   const messagesPath = '/dashboard#messages';
   const bookingsPath = '/dashboard#bookings';
+  const tokensPath = '/tokens';
   const accountPath = '/dashboard';
   const authPath = (path: string) => isSignedIn ? path : `/login?next=${encodeURIComponent(path)}`;
+  const isDashboard = location.pathname === '/dashboard';
 
   useEffect(() => {
     let mounted = true;
@@ -40,7 +42,7 @@ export function Layout() {
     async function activateSession(session: Session | null) {
       const next = await resolveHeaderAccount(session);
       if (import.meta.env.DEV) console.debug('[Auth]', { hasSession: Boolean(session), userId: session?.user?.id || null, role: next.role, route: location.pathname });
-      if (import.meta.env.DEV) console.debug('[MobileAuthFlow]', { isMobile: window.matchMedia('(max-width: 760px)').matches, sessionExists: Boolean(session), nextParam: null, finalNavigateTarget: `${location.pathname}${location.hash}`, authState: next.role });
+      if (import.meta.env.DEV) console.debug('[MobileLogin]', { sessionExistsAfterLogin: Boolean(session), navigateTarget: `${location.pathname}${location.hash}` });
       if (mounted) setAccount(next);
     }
 
@@ -85,12 +87,14 @@ export function Layout() {
               <span className="mobile-account-role">{t(`auth.${account.role}`)}</span>
               <Link to="/dashboard">{dashboardLabel}</Link>
               <Link to={favoritesPath}>{t('favorites.favorites')}</Link>
-              <Link to="/tokens">{t('tokens.tokens')}</Link>
+              <Link to={tokensPath}>{t('tokens.tokens')}</Link>
               <button type="button" onClick={logout}>{t('auth.logout')}</button>
             </div>
           ) : (
             <div className="mobile-account-links">
-              <Link to="/login">{t('buttons.login')}</Link>
+              <Link to={authPath(accountPath)}>{t('auth.profile')}</Link>
+              <Link to={authPath(favoritesPath)}>{t('favorites.favorites')}</Link>
+              <Link to={authPath(tokensPath)}>{t('tokens.tokens')}</Link>
               <Link to="/register?type=client">{t('buttons.register')}</Link>
             </div>
           )}
@@ -152,19 +156,19 @@ export function Layout() {
           <Radar size={18} />
           <span>{t('nav.radar')}</span>
         </Link>
-        <Link className={location.pathname === '/dashboard' && location.hash === '#favorites' ? 'active' : ''} to={authPath(favoritesPath)}>
-          <Heart size={18} />
-          <span>{t('favorites.favorites')}</span>
-        </Link>
-        <Link to={authPath(messagesPath)}>
+        <Link className={isDashboard && location.hash === '#messages' ? 'active' : ''} to={authPath(messagesPath)}>
           <MessageCircle size={18} />
           <span>{t('nav.messages')}</span>
         </Link>
-        <Link to={authPath(bookingsPath)}>
+        <Link className={isDashboard && location.hash === '#bookings' ? 'active' : ''} to={authPath(bookingsPath)}>
           <CalendarDays size={18} />
           <span>{t('nav.bookings')}</span>
         </Link>
-        <Link to={authPath(accountPath)}>
+        <Link className={location.pathname === '/tokens' || location.pathname === '/coins' ? 'active' : ''} to={authPath(tokensPath)}>
+          <Coins size={18} />
+          <span>{t('nav.tokens')}</span>
+        </Link>
+        <Link className={isDashboard && !['#favorites', '#messages', '#bookings'].includes(location.hash) ? 'active' : ''} to={authPath(accountPath)}>
           <UserRound size={18} />
           <span>{isSignedIn ? t('auth.dashboard') : t('auth.account')}</span>
         </Link>
@@ -190,6 +194,7 @@ export function Layout() {
           <Link to="/report-abuse"><ShieldCheck size={16} /> {t('nav.report')}</Link>
           <Link to="/contact">{t('nav.contact')}</Link>
           <Link to="/pricing">{t('nav.pricing')}</Link>
+          <Link to="/app">Install App</Link>
           <Link to="/legal-notice">{t('nav.legalNotice')}</Link>
           <Link to="/admin-access">{t('nav.admin')}</Link>
         </div>

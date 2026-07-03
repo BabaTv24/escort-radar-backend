@@ -12,6 +12,7 @@ import { activePublicCategoryOptions } from '../data/filterOptions';
 import type { Profile } from '../types';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { ErrorState, LoadingState } from '../components/LoadingState';
+import { Seo } from '../components/Seo';
 
 export function HomePage() {
   const { t, option } = useI18n();
@@ -50,6 +51,11 @@ export function HomePage() {
 
   return (
     <div className="page">
+      <Seo
+        title="Escort Radar - Verified 18+ Nightlife Profiles"
+        description="Privacy-first 18+ nightlife marketplace with verified independent profiles, city radar, favorites and account tools."
+        canonical="https://escort-radar.fun/"
+      />
       <section className="hero">
         <div className="hero-cinema-bg" aria-hidden="true" />
         <div className="hero-light-leak" aria-hidden="true" />

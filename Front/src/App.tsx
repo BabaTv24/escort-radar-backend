@@ -14,6 +14,7 @@ import { ContactPage } from './pages/ContactPage';
 import { TokenShopPage } from './pages/TokenShopPage';
 import { CoinWalletPage } from './pages/CoinWalletPage';
 import { ReferralPage } from './pages/ReferralPage';
+import { InstallAppPage } from './pages/InstallAppPage';
 import { AgeGate } from './components/AgeGate';
 
 export function App() {
@@ -32,6 +33,9 @@ export function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/tokens" element={<TokenShopPage />} />
           <Route path="/coins" element={<CoinWalletPage />} />
+          <Route path="/app" element={<InstallAppPage />} />
+          <Route path="/app/install" element={<InstallAppPage />} />
+          <Route path="/install" element={<InstallAppPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/terms" element={<LegalPage />} />

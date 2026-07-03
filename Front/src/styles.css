@@ -118,6 +118,9 @@ h1 { margin: 0; gap: .5rem; font-size: clamp(2.8rem, 12vw, 6.8rem); line-height:
 .onboarding-card h2, .admin-access-card h2 { margin: 0; color: #fff8e6; font-size: 1.8rem; }
 .premium-check { min-height: 2.4rem; padding: .6rem .7rem; border: 1px solid rgba(8,247,184,.14); border-radius: .5rem; background: rgba(8,247,184,.045); }
 .onboarding-login-line { display: flex; justify-content: space-between; align-items: center; gap: .8rem; color: #cfc5ae; }
+.remember-email-control { width: fit-content; min-height: 2.75rem; padding: .25rem .15rem; cursor: pointer; }
+.remember-email-control input { flex: 0 0 auto; width: 1.25rem; min-height: 1.25rem; }
+.mobile-login-help { margin: -.2rem 0 .25rem; }
 .wizard-progress { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
 .wizard-progress span, .wizard-progress button { padding: .45rem .7rem; border-radius: 999px; border: 1px solid rgba(247,212,107,.16); color: #bfb29c; background: rgba(255,255,255,.04); cursor: pointer; }
 .wizard-progress span.done, .wizard-progress button.done { color: #08f7b8; border-color: rgba(8,247,184,.28); }
@@ -5475,6 +5478,27 @@ textarea::placeholder {
 
 /* Mobile auth and saved radar location hotfix */
 @media (max-width: 720px) {
+  .onboarding-shell {
+    min-height: 100dvh;
+    padding-bottom: calc(6.25rem + env(safe-area-inset-bottom));
+  }
+
+  .onboarding-hero {
+    min-height: calc(100dvh - 6.25rem);
+    align-items: start;
+    padding-bottom: 1rem;
+  }
+
+  .onboarding-card input,
+  .onboarding-card .button {
+    min-height: 44px;
+  }
+
+  .remember-email-control {
+    width: 100%;
+    min-height: 44px;
+  }
+
   .mobile-account-links a,
   .mobile-account-links button,
   .mobile-account-role {
@@ -5519,3 +5543,132 @@ textarea::placeholder {
 .radar-saved-location strong { color: #fff8e6; font-size: .88rem; }
 .radar-saved-location div { display: flex; flex-wrap: wrap; gap: .4rem; }
 .radar-saved-location small { color: #9ff8df; }
+
+/* PWA install page and final mobile app navigation rules */
+.install-app-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.install-hero {
+  overflow: hidden;
+}
+
+.install-actions {
+  display: grid;
+  gap: .75rem;
+  margin-top: 1rem;
+}
+
+.install-note {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  margin: 0;
+  padding: .78rem .9rem;
+  border: 1px solid rgba(212,175,55,.22);
+  border-radius: .8rem;
+  background: rgba(255,255,255,.045);
+  color: #f6f2e8;
+}
+
+.install-note.success {
+  border-color: rgba(129, 255, 208, .34);
+  color: #9ff8df;
+}
+
+.install-benefits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.install-benefit {
+  min-height: 10rem;
+}
+
+.install-steps ol {
+  display: grid;
+  gap: .45rem;
+  margin: .9rem 0 1rem;
+  padding-left: 1.2rem;
+  color: #d8cfbd;
+}
+
+.luxury-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .luxury-bottom-nav {
+    position: fixed;
+    left: max(.65rem, env(safe-area-inset-left));
+    right: max(.65rem, env(safe-area-inset-right));
+    bottom: max(.55rem, env(safe-area-inset-bottom));
+    z-index: 1000;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: .25rem;
+    padding: .42rem;
+    min-height: 64px;
+    border: 1px solid rgba(212, 175, 55, .26) !important;
+    border-radius: 1.15rem;
+    background: rgba(5, 5, 5, .88) !important;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 18px 70px rgba(0,0,0,.55), 0 0 28px rgba(212,175,55,.10) !important;
+  }
+
+  .luxury-bottom-nav a {
+    min-width: 0;
+    display: grid;
+    place-items: center;
+    gap: .12rem;
+    min-height: 52px;
+    padding: .35rem .2rem;
+    border-radius: .85rem;
+    color: #b9ad96 !important;
+    font-size: .68rem;
+    line-height: 1.05;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .luxury-bottom-nav a svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .luxury-bottom-nav a.active {
+    color: #050505 !important;
+    background: linear-gradient(135deg, #d4af37, #f4d77f) !important;
+    font-weight: 800;
+    box-shadow: 0 0 22px rgba(212,175,55,.18) !important;
+  }
+
+  .luxury-bottom-nav a.active::after {
+    display: none;
+  }
+
+  body {
+    padding-bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+
+  .footer {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .dashboard-action-bar {
+    bottom: calc(5.8rem + env(safe-area-inset-bottom));
+  }
+
+  .profile-floating-cta {
+    bottom: calc(5.9rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 760px) {
+  .install-benefits {
+    grid-template-columns: 1fr;
+  }
+}
