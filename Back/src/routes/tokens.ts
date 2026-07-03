@@ -3,6 +3,7 @@ import { verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler } from '../validation.js';
 import { manualPaymentProducts } from '../manualPayments.js';
+import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 
 export const tokensRouter = Router();
 
@@ -102,14 +103,5 @@ tokensRouter.post('/unlock', verifyUser, asyncHandler(async (req, res) => {
 }));
 
 async function getOrCreateWallet(userId: string) {
-  const { data } = await supabaseAdmin.from('wallets').select('*').eq('user_id', userId).maybeSingle();
-  if (data) return data;
-
-  const { data: wallet, error } = await supabaseAdmin
-    .from('wallets')
-    .insert({ user_id: userId, public_wallet_id: `ERW-${crypto.randomUUID().slice(0, 8).toUpperCase()}` })
-    .select()
-    .single();
-  if (error) throw error;
-  return wallet;
+  return getOrCreateWalletForUser(userId);
 }

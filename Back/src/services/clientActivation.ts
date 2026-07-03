@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { supabaseAdmin } from '../supabase.js';
+import { getOrCreateWalletForUser } from './tokenWallet.js';
 
 export type ClientActivationSummary = {
   state: 'client_free' | 'client_activated';
@@ -158,16 +159,7 @@ export async function getOrCreateCoinWallet(userId: string) {
 }
 
 export async function getOrCreateTokenWallet(userId: string) {
-  const { data: existing } = await supabaseAdmin.from('wallets').select('*').eq('user_id', userId).maybeSingle();
-  if (existing) return existing;
-
-  const { data, error } = await supabaseAdmin
-    .from('wallets')
-    .insert({ user_id: userId, public_wallet_id: `ERW-${crypto.randomUUID().slice(0, 8).toUpperCase()}` })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+  return getOrCreateWalletForUser(userId);
 }
 
 export async function adjustTokenWalletBalance(walletId: string, userId: string, amount: number, transactionType: string, metadata: Record<string, unknown> = {}, adminEmail?: string) {

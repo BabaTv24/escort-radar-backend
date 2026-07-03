@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { config } from '../config.js';
 import { supabaseAdmin } from '../supabase.js';
 import { activateClientAccount, getOrCreateCoinWallet, grantCoins } from './clientActivation.js';
+import { getOrCreateWalletForUser } from './tokenWallet.js';
 import { coinPackages, escortRadarStripeApp, getCoinPackage, getStripePlan, type StripeTransactionType } from '../stripeProducts.js';
 
 type CheckoutInput = {
@@ -424,15 +425,7 @@ async function upsertStripeSubscription(input: {
 }
 
 async function getOrCreateMarketplaceWallet(userId: string) {
-  const { data } = await supabaseAdmin.from('wallets').select('*').eq('user_id', userId).maybeSingle();
-  if (data) return data;
-  const { data: wallet, error } = await supabaseAdmin
-    .from('wallets')
-    .insert({ user_id: userId, public_wallet_id: `ERW-${crypto.randomUUID().slice(0, 8).toUpperCase()}` })
-    .select()
-    .single();
-  if (error) throw error;
-  return wallet;
+  return getOrCreateWalletForUser(userId);
 }
 
 function stringOrNull(value: unknown) {

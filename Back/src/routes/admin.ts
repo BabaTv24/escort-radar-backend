@@ -2204,28 +2204,13 @@ adminRouter.patch('/wallets/:userId', asyncHandler(async (req, res) => {
   const frozen = req.body.frozen === undefined ? undefined : Boolean(req.body.frozen);
   if (!Number.isFinite(balance) || balance < 0) return res.status(400).json({ error: 'Invalid token balance' });
 
-  const { data: existing } = await supabaseAdmin
-    .from('wallets')
-    .select('*')
-    .eq('user_id', req.params.userId)
-    .maybeSingle();
-
   const patch = {
     escort_token_balance: balance,
     ...(frozen === undefined ? {} : { frozen })
   };
 
-  const { data, error } = existing
-    ? await supabaseAdmin.from('wallets').update(patch).eq('id', existing.id).select().single()
-    : await supabaseAdmin
-      .from('wallets')
-      .insert({
-        user_id: req.params.userId,
-        public_wallet_id: `ERW-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-        ...patch
-      })
-      .select()
-      .single();
+  const existing = await getOrCreateTokenWallet(req.params.userId);
+  const { data, error } = await supabaseAdmin.from('wallets').update(patch).eq('id', existing.id).select().single();
 
   if (error) return res.status(400).json({ error: error.message });
   await logAdminAction(req.user?.email, 'wallet_adjusted', 'wallet', data.id, {

@@ -3,6 +3,7 @@ import { verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler, optionalText } from '../validation.js';
 import { getClientActivationSummary } from '../services/clientActivation.js';
+import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 
 export const favoritesRouter = Router();
 
@@ -98,15 +99,7 @@ favoritesRouter.delete('/:profileId', asyncHandler(async (req, res) => {
 }));
 
 async function getOrCreateWallet(userId: string) {
-  const { data } = await supabaseAdmin.from('wallets').select('*').eq('user_id', userId).maybeSingle();
-  if (data) return data;
-  const { data: wallet, error } = await supabaseAdmin
-    .from('wallets')
-    .insert({ user_id: userId, public_wallet_id: `ERW-${crypto.randomUUID().slice(0, 8).toUpperCase()}` })
-    .select()
-    .single();
-  if (error) throw error;
-  return wallet;
+  return getOrCreateWalletForUser(userId);
 }
 
 function isAdmin(metadata: Record<string, unknown> | undefined) {

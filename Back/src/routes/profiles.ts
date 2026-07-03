@@ -8,6 +8,7 @@ import { notifyMatchingClientsForProfile } from './clientIntent.js';
 import { isPublicProfile, publicProfileRejectionReason } from '../publicProfiles.js';
 import { getCityLabel as getGlobalCityLabel, getCountryAliases, normalizeCity as normalizeGlobalCity, normalizeCountry } from '../locations.js';
 import { isActivePublicCategory } from '../categories.js';
+import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 
 export const profilesRouter = Router();
 
@@ -631,14 +632,5 @@ async function generateUniqueValue(column: 'public_user_id' | 'referral_code', g
 }
 
 async function getOrCreateWallet(userId: string) {
-  const { data } = await supabaseAdmin.from('wallets').select('*').eq('user_id', userId).maybeSingle();
-  if (data) return data;
-
-  const { data: wallet, error } = await supabaseAdmin
-    .from('wallets')
-    .insert({ user_id: userId, public_wallet_id: `ERW-${crypto.randomUUID().slice(0, 8).toUpperCase()}` })
-    .select()
-    .single();
-  if (error) return null;
-  return wallet;
+  return getOrCreateWalletForUser(userId).catch(() => null);
 }
