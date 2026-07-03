@@ -928,6 +928,7 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(layoutSource, /navigate\('\/', \{ replace: true \}\)/);
   assert.match(layoutSource, /authPath\(favoritesPath\)/);
   assert.match(layoutSource, /encodeURIComponent\(path\)/);
+  assert.match(layoutSource, /\[MobileAuthFlow\]/);
   assert.match(layoutSource, /t\('favorites\.favorites'\)/);
   assert.match(layoutSource, /t\('nav\.messages'\)/);
   assert.match(layoutSource, /t\('nav\.bookings'\)/);
@@ -937,6 +938,9 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(loginSource, /useSearchParams/);
   assert.match(loginSource, /safeNextPath/);
   assert.match(loginSource, /navigate\(nextPath\)/);
+  assert.match(loginSource, /startsWith\('\/'\)/);
+  assert.match(loginSource, /startsWith\('\/\/'\)/);
+  assert.match(loginSource, /\[MobileAuthFlow\]/);
   assert.match(favoritesSource, /already_exists/);
   assert.match(favoritesSource, /new_balance/);
   assert.match(apiSource, /already_exists\?: boolean/);
@@ -948,6 +952,7 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(dashboardSource, /favorites\.openRadar/);
   assert.match(profileCardSource, /favorites\.alreadyFavorite/);
   assert.match(profileCardSource, /favorites\.buyTokens/);
+  assert.match(profileCardSource, /onFavoriteChange\?\.\(profile\.id\)/);
   assert.match(profileCardSource, /result\.already_exists \|\| result\.already_favorited/);
   assert.match(profilePageSource, /favorites\.alreadyFavorite/);
   assert.match(profilePageSource, /encodeURIComponent\(`\/profile\/\$\{profile!\.id\}`\)/);
@@ -958,6 +963,28 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(plLocale, /"favorites\.loginToSeeFavorites": "Zaloguj si/);
   assert.match(enLocale, /"favorites\.favorites": "Favorites"/);
   assert.match(deLocale, /"favorites\.favorites": "Favoriten"/);
+});
+
+test('city radar status supports favorites filter and login next flow', async () => {
+  const cityPageSource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
+  const radarPanelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
+  const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
+  const enLocale = await readFile(new URL('../Front/src/locales/en.json', import.meta.url), 'utf8');
+  const deLocale = await readFile(new URL('../Front/src/locales/de.json', import.meta.url), 'utf8');
+
+  assert.match(radarPanelSource, /\['favorites', 'favorites', 'favorites\.favoritesFilter'\]/);
+  assert.match(radarPanelSource, /if \(status === 'favorites'\) return true/);
+  assert.match(cityPageSource, /setFavoriteProfileIds\(new Set\(favoritesData\.favorites\.map\(\(favorite\) => favorite\.profile_id\)\)\)/);
+  assert.match(cityPageSource, /draftFilters\.availability_status === 'favorites'/);
+  assert.match(cityPageSource, /profiles\.filter\(\(profile\) => favoriteProfileIds\.has\(profile\.id\)\)/);
+  assert.match(cityPageSource, /favorites\.loginToSeeFavorites/);
+  assert.match(cityPageSource, /encodeURIComponent\(`\$\{location\.pathname\}\$\{location\.search\}`\)/);
+  assert.match(cityPageSource, /favorites\.noFavoritesYet/);
+  assert.match(cityPageSource, /onFavoriteChange=\{handleFavoriteChange\}/);
+  assert.match(cityPageSource, /if \(status === 'favorites'\) return true/);
+  assert.match(plLocale, /"favorites\.favoritesFilter": "Ulubione"/);
+  assert.match(enLocale, /"favorites\.favoritesFilter": "Favorites"/);
+  assert.match(deLocale, /"favorites\.favoritesFilter": "Favoriten"/);
 });
 
 test('client search location can be updated cleared and edited from radar', async () => {

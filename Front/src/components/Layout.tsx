@@ -40,6 +40,7 @@ export function Layout() {
     async function activateSession(session: Session | null) {
       const next = await resolveHeaderAccount(session);
       if (import.meta.env.DEV) console.debug('[Auth]', { hasSession: Boolean(session), userId: session?.user?.id || null, role: next.role, route: location.pathname });
+      if (import.meta.env.DEV) console.debug('[MobileAuthFlow]', { isMobile: window.matchMedia('(max-width: 760px)').matches, sessionExists: Boolean(session), nextParam: null, finalNavigateTarget: `${location.pathname}${location.hash}`, authState: next.role });
       if (mounted) setAccount(next);
     }
 

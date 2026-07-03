@@ -33,6 +33,7 @@ const statusClassByOperator: Record<string, string> = {
   OFFLINE: 'offline'
 };
 const radarStatuses = [
+  ['favorites', 'favorites', 'favorites.favoritesFilter'],
   ['online', 'online-now', 'status.onlineNow'],
   ['AVAILABLE_TODAY', 'available-today', 'status.availableToday'],
   ['BUSY', 'busy', 'status.busy'],
@@ -247,6 +248,7 @@ function getOperatorStatus(profile: Profile) {
 
 function matchesOperatorStatusFilter(profile: Profile, status: string) {
   if (status === 'all') return true;
+  if (status === 'favorites') return true;
   const operatorStatus = getOperatorStatus(profile);
   if (status === 'online' || status === 'available') return operatorStatus === 'ONLINE_NOW' || operatorStatus === 'AVAILABLE_TODAY';
   if (status === 'busy') return operatorStatus === 'BUSY';

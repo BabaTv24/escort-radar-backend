@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation as useRouterLocation, useParams, useSearchParams } from 'react-router-dom';
 import { RadioTower, Search, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Profile, Tag } from '../types';
@@ -65,6 +65,10 @@ export function CityPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel }));
   const [fallbackNotice, setFallbackNotice] = useState(false);
+  const [favoriteProfileIds, setFavoriteProfileIds] = useState<Set<string>>(new Set());
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+  const [hasClientSession, setHasClientSession] = useState(false);
+  const location = useRouterLocation();
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -85,13 +89,30 @@ export function CityPage() {
     let cancelled = false;
     supabase.auth.getSession().then(async ({ data }) => {
       const accessToken = data.session?.access_token;
+      if (!cancelled) setHasClientSession(Boolean(accessToken));
       if (!accessToken) {
+        if (!cancelled) {
+          setFavoriteProfileIds(new Set());
+          setFavoritesLoaded(true);
+        }
         const saved = readSavedSearchLocation();
         if (!cancelled && saved) {
           setSearcherLocation(saved);
           setFallbackNotice(false);
         }
         return;
+      }
+      try {
+        const favoritesData = await api.myFavorites(accessToken);
+        if (!cancelled) {
+          setFavoriteProfileIds(new Set(favoritesData.favorites.map((favorite) => favorite.profile_id)));
+          setFavoritesLoaded(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setFavoriteProfileIds(new Set());
+          setFavoritesLoaded(true);
+        }
       }
       try {
         const { preferences } = await api.clientPreferences(accessToken);
@@ -150,7 +171,13 @@ export function CityPage() {
     };
   }, [query, appliedFilters, searcherLocation, retryKey, urlCitySlug]);
 
-  const sortedProfiles = useMemo(() => sortProfiles(profiles, sortMode), [profiles, sortMode]);
+  const statusFilteredProfiles = useMemo(
+    () => draftFilters.availability_status === 'favorites'
+      ? profiles.filter((profile) => favoriteProfileIds.has(profile.id))
+      : profiles,
+    [profiles, draftFilters.availability_status, favoriteProfileIds]
+  );
+  const sortedProfiles = useMemo(() => sortProfiles(statusFilteredProfiles, sortMode), [statusFilteredProfiles, sortMode]);
   const radarProfiles = useMemo(
     () => sortedProfiles.filter((profile) => getSearchRange(profile, searcherLocation, draftFilters.radius).inRange && matchesOperatorStatusFilter(profile, draftFilters.availability_status)),
     [sortedProfiles, searcherLocation, draftFilters.radius, draftFilters.availability_status]
@@ -165,6 +192,7 @@ export function CityPage() {
       listingProfiles: sortedProfiles.length,
       radarInputProfiles: sortedProfiles.length,
       radarProfiles: radarProfiles.length,
+      favoriteProfiles: favoriteProfileIds.size,
       selectedRadiusKm: draftFilters.radius,
       selectedCategory: appliedFilters.category,
       selectedCity: urlCitySlug,
@@ -180,6 +208,10 @@ export function CityPage() {
   function updateRadarFilter<K extends 'radius' | 'availability_status'>(key: K, value: SearchFilters[K]) {
     setDraftFilters((current) => ({ ...current, [key]: value }));
     setAppliedFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleFavoriteChange(profileId: string) {
+    setFavoriteProfileIds((current) => new Set([...current, profileId]));
   }
 
   function applyDraftFilters() {
@@ -278,7 +310,9 @@ export function CityPage() {
           <span>Status</span>
           <select value={draftFilters.availability_status} onChange={(event) => updateRadarFilter('availability_status', event.target.value)}>
             <option value="all">{t('status.all')}</option>
+            <option value="favorites">{t('favorites.favoritesFilter')}</option>
             <option value="online">{t('status.onlineNow')}</option>
+            <option value="AVAILABLE_TODAY">{t('status.availableToday')}</option>
             <option value="BUSY">{t('status.busy')}</option>
             <option value="APPOINTMENT_ONLY">{t('status.appointmentOnly')}</option>
             <option value="TRAVELING">{t('status.traveling')}</option>
@@ -389,6 +423,18 @@ export function CityPage() {
           onClearManualLocation={clearManualLocation}
           fallbackNotice={fallbackNotice}
         />
+        {draftFilters.availability_status === 'favorites' && !hasClientSession && (
+          <section className="state-panel">
+            <p>{t('favorites.loginToSeeFavorites')}</p>
+            <Link className="button primary" to={`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`}>{t('favorites.openLogin')}</Link>
+          </section>
+        )}
+        {draftFilters.availability_status === 'favorites' && hasClientSession && favoritesLoaded && !favoriteProfileIds.size && (
+          <section className="state-panel">
+            <p>{t('favorites.noFavoritesYet')}</p>
+            <Link className="button primary" to="/dashboard#favorites">{t('favorites.favorites')}</Link>
+          </section>
+        )}
       </section>
 
       <section className="premium-marketplace-layout">
@@ -421,7 +467,7 @@ export function CityPage() {
             sortedProfiles.length ? (
               <>
                 <div id="profiles" className={`cards-grid marketplace-grid premium-profile-grid ${sortedProfiles.length === 1 ? 'single-result-grid' : ''}`}>
-                  {sortedProfiles.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
+                  {sortedProfiles.map((profile) => <ProfileCard key={profile.id} profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />)}
                 </div>
                 {sortedProfiles.length === 1 && (
                   <div className="premium-empty-state invite-empty-state">
@@ -609,6 +655,7 @@ function getOperatorStatus(profile: Profile) {
 
 function matchesOperatorStatusFilter(profile: Profile, status: string) {
   if (status === 'all') return true;
+  if (status === 'favorites') return true;
   const operatorStatus = getOperatorStatus(profile);
   if (status === 'online' || status === 'available') return operatorStatus === 'ONLINE_NOW' || operatorStatus === 'AVAILABLE_TODAY';
   if (status === 'busy') return operatorStatus === 'BUSY';

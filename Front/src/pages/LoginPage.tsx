@@ -15,6 +15,15 @@ export function LoginPage() {
   const { t } = useI18n();
   const nextPath = safeNextPath(searchParams.get('next'));
 
+  if (import.meta.env.DEV) {
+    console.debug('[MobileAuthFlow]', {
+      isMobile: typeof window !== 'undefined' ? window.matchMedia('(max-width: 760px)').matches : false,
+      nextParam: searchParams.get('next'),
+      finalNavigateTarget: nextPath,
+      authState: 'login_page'
+    });
+  }
+
   async function login(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
@@ -24,6 +33,7 @@ export function LoginPage() {
     if (result.error) return setMessage(result.error.message);
     await supabase.auth.getSession();
     if (import.meta.env.DEV) console.debug('[Auth]', { hasSession: Boolean(result.data.session), userId: result.data.user?.id || null, role: result.data.user?.app_metadata?.auth_account_type || null, route: '/login' });
+    if (import.meta.env.DEV) console.debug('[MobileAuthFlow]', { isMobile: window.matchMedia('(max-width: 760px)').matches, sessionExists: Boolean(result.data.session), nextParam: searchParams.get('next'), finalNavigateTarget: nextPath, authState: 'password_login_success' });
     navigate(nextPath);
   }
 

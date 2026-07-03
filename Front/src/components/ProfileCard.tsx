@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BadgeCheck, HeartHandshake, Home, Hotel, Languages, MapPin, MessageCircle, Radio, Star, Video, LockKeyhole } from 'lucide-react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
@@ -9,9 +9,9 @@ import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { formatDistanceKm } from '../lib/geo';
 
-export function ProfileCard({ profile }: { profile: Profile }) {
+export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: { profile: Profile; isFavorite?: boolean; onFavoriteChange?: (profileId: string) => void }) {
   const { t, option } = useI18n();
-  const [favoriteState, setFavoriteState] = useState<'idle' | 'saved'>('idle');
+  const [favoriteState, setFavoriteState] = useState<'idle' | 'saved'>(isFavorite ? 'saved' : 'idle');
   const [favoriteMessage, setFavoriteMessage] = useState('');
   const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
   const status = profile.availability_status || (profile.available_now ? 'available' : 'unavailable');
@@ -32,6 +32,10 @@ export function ProfileCard({ profile }: { profile: Profile }) {
     isNew ? 'NEW' : '',
     (profile.category === 'live_cam' || profile.service_tags?.includes('live-cam')) ? 'LIVE CAM' : ''
   ].filter(Boolean).slice(0, 3);
+
+  useEffect(() => {
+    setFavoriteState(isFavorite ? 'saved' : 'idle');
+  }, [isFavorite]);
 
   return (
     <article className="profile-card premium-profile-card">
@@ -98,6 +102,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
     try {
       const result = await api.addFavorite(token, profile.id);
       setFavoriteState('saved');
+      onFavoriteChange?.(profile.id);
       setFavoriteMessage(result.already_exists || result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
