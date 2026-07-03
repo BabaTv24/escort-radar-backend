@@ -1,40 +1,87 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LogIn, Radar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useI18n } from '../i18n';
+import { getSafeNextPath } from '../lib/authRedirect';
+
+const rememberedEmailStorageKey = 'escortRadar.rememberedEmail';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { t } = useI18n();
-  const nextPath = safeNextPath(searchParams.get('next'));
+  const nextPath = useMemo(() => getSafeNextPath(searchParams), [searchParams]);
+
+  useEffect(() => {
+    const savedEmail = localStorage.getItem(rememberedEmailStorageKey);
+    if (!savedEmail) return;
+    setEmail(savedEmail);
+    setRememberEmail(true);
+  }, []);
 
   if (import.meta.env.DEV) {
-    console.debug('[MobileAuthFlow]', {
-      isMobile: typeof window !== 'undefined' ? window.matchMedia('(max-width: 760px)').matches : false,
+    console.debug('[LoginFlow]', {
+      emailPresent: Boolean(email.trim()),
       nextParam: searchParams.get('next'),
-      finalNavigateTarget: nextPath,
-      authState: 'login_page'
+      finalTarget: nextPath,
+      hasSession: false
     });
   }
 
   async function login(event: FormEvent) {
     event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (import.meta.env.DEV) {
+      console.debug('[LoginFlow]', {
+        emailPresent: Boolean(normalizedEmail),
+        submitFired: true,
+        nextParam: searchParams.get('next'),
+        finalTarget: nextPath,
+        hasSession: false
+      });
+    }
+
     setLoading(true);
     setMessage('');
-    const result = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    setLoading(false);
-    if (result.error) return setMessage(result.error.message);
-    await supabase.auth.getSession();
-    if (import.meta.env.DEV) console.debug('[Auth]', { hasSession: Boolean(result.data.session), userId: result.data.user?.id || null, role: result.data.user?.app_metadata?.auth_account_type || null, route: '/login' });
-    if (import.meta.env.DEV) console.debug('[MobileAuthFlow]', { isMobile: window.matchMedia('(max-width: 760px)').matches, sessionExists: Boolean(result.data.session), nextParam: searchParams.get('next'), finalNavigateTarget: nextPath, authState: 'password_login_success' });
-    navigate(nextPath);
+    try {
+      const result = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+
+      if (result.error) {
+        setMessage(t('auth.loginFailed', { message: result.error.message }));
+        if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: result.error.message, nextParam: searchParams.get('next'), finalTarget: nextPath, hasSession: false });
+        return;
+      }
+
+      const sessionResult = await supabase.auth.getSession();
+
+      if (rememberEmail) {
+        localStorage.setItem(rememberedEmailStorageKey, normalizedEmail);
+      } else {
+        localStorage.removeItem(rememberedEmailStorageKey);
+      }
+
+      if (import.meta.env.DEV) {
+        console.debug('[LoginFlow]', {
+          nextParam: searchParams.get('next'),
+          finalTarget: nextPath,
+          hasSession: Boolean(sessionResult.data.session)
+        });
+      }
+      navigate(nextPath, { replace: true });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : t('states.requestFailed');
+      setMessage(t('auth.loginFailed', { message: errorMessage }));
+      if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: errorMessage, nextParam: searchParams.get('next'), finalTarget: nextPath, hasSession: false });
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function signInWithGoogle() {
@@ -63,11 +110,16 @@ export function LoginPage() {
         <div className="onboarding-card">
           <p className="eyebrow">{t('buttons.login')}</p>
           <h2>{t('auth.loginTitle')}</h2>
+          <p className="muted mobile-login-help">{t('auth.mobileLoginHelp')}</p>
           <form className="stack" onSubmit={login}>
-            <input type="email" required placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
+            <input type="email" required autoComplete="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
+            <label className="remember-email-control">
+              <input type="checkbox" checked={rememberEmail} onChange={(event) => setRememberEmail(event.target.checked)} />
+              <span>{t('auth.rememberEmail')}</span>
+            </label>
             <input type="password" required placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
             <button className="button primary full" type="submit" disabled={loading}>
-              <LogIn size={17} /> {loading ? t('states.loading') : t('buttons.login')}
+              <LogIn size={17} /> {loading ? t('states.loading') : t('auth.loginSubmit')}
             </button>
           </form>
           <button className="button full" type="button" disabled={loading} onClick={signInWithGoogle}>{t('auth.continueWithGoogle')}</button>
@@ -77,10 +129,4 @@ export function LoginPage() {
       </section>
     </div>
   );
-}
-
-function safeNextPath(value: string | null) {
-  const next = String(value || '/dashboard');
-  if (!next.startsWith('/') || next.startsWith('//')) return '/dashboard';
-  return next;
 }

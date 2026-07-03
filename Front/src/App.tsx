@@ -24,13 +24,13 @@ export function App() {
         <Route path="/admin-access" element={<AdminAccessPage />} />
         <Route path="/admin/login" element={<AdminPage />} />
         <Route path="/admin/*" element={<AdminPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/login" element={<LoginPage />} />
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/city/:city" element={<CityPage />} />
           <Route path="/profile/:id" element={<ProfilePage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/tokens" element={<TokenShopPage />} />
           <Route path="/coins" element={<CoinWalletPage />} />
           <Route path="/app" element={<InstallAppPage />} />

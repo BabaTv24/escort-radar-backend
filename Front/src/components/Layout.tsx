@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { CalendarDays, Coins, LogOut, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
+import { CalendarDays, Coins, Heart, LogOut, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
 import { activePublicCategoryOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { api } from '../lib/api';
@@ -35,6 +35,7 @@ export function Layout() {
   const accountPath = '/dashboard';
   const authPath = (path: string) => isSignedIn ? path : `/login?next=${encodeURIComponent(path)}`;
   const isDashboard = location.pathname === '/dashboard';
+  const isAuthRoute = location.pathname === '/login' || location.pathname === '/register';
 
   useEffect(() => {
     let mounted = true;
@@ -156,6 +157,10 @@ export function Layout() {
           <Radar size={18} />
           <span>{t('nav.radar')}</span>
         </Link>
+        <Link className={isDashboard && location.hash === '#favorites' ? 'active' : ''} to={authPath(favoritesPath)}>
+          <Heart size={18} />
+          <span>{t('favorites.favorites')}</span>
+        </Link>
         <Link className={isDashboard && location.hash === '#messages' ? 'active' : ''} to={authPath(messagesPath)}>
           <MessageCircle size={18} />
           <span>{t('nav.messages')}</span>
@@ -164,11 +169,7 @@ export function Layout() {
           <CalendarDays size={18} />
           <span>{t('nav.bookings')}</span>
         </Link>
-        <Link className={location.pathname === '/tokens' || location.pathname === '/coins' ? 'active' : ''} to={authPath(tokensPath)}>
-          <Coins size={18} />
-          <span>{t('nav.tokens')}</span>
-        </Link>
-        <Link className={isDashboard && !['#favorites', '#messages', '#bookings'].includes(location.hash) ? 'active' : ''} to={authPath(accountPath)}>
+        <Link className={(isDashboard && !['#favorites', '#messages', '#bookings'].includes(location.hash)) || isAuthRoute ? 'active' : ''} to={authPath(accountPath)}>
           <UserRound size={18} />
           <span>{isSignedIn ? t('auth.dashboard') : t('auth.account')}</span>
         </Link>

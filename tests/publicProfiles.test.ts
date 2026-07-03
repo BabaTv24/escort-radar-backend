@@ -13,6 +13,7 @@ import {
 } from '../Back/src/adminClients.ts';
 import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts';
 import { isValidLatLng, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
+import { getSafeNextPath } from '../Front/src/lib/authRedirect.ts';
 import { normalizeOperatorStatus, normalizeProfileCategory, validateProfileInput } from '../Back/src/validation.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
@@ -917,6 +918,8 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   const profilePageSource = await readFile(new URL('../Front/src/pages/ProfilePage.tsx', import.meta.url), 'utf8');
   const favoritesSource = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');
   const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+  const authRedirectSource = await readFile(new URL('../Front/src/lib/authRedirect.ts', import.meta.url), 'utf8');
+  const supabaseSource = await readFile(new URL('../Front/src/lib/supabase.ts', import.meta.url), 'utf8');
   const stylesSource = await readFile(new URL('../Front/src/styles.css', import.meta.url), 'utf8');
   const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
   const enLocale = await readFile(new URL('../Front/src/locales/en.json', import.meta.url), 'utf8');
@@ -928,7 +931,10 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(layoutSource, /navigate\('\/', \{ replace: true \}\)/);
   assert.match(layoutSource, /authPath\(favoritesPath\)/);
   assert.match(layoutSource, /encodeURIComponent\(path\)/);
-  assert.match(layoutSource, /\[MobileAuthFlow\]/);
+  assert.match(layoutSource, /const tokensPath = '\/tokens'/);
+  assert.match(layoutSource, /authPath\(accountPath\)/);
+  assert.match(layoutSource, /authPath\(tokensPath\)/);
+  assert.match(layoutSource, /\[MobileLogin\]/);
   assert.match(layoutSource, /t\('favorites\.favorites'\)/);
   assert.match(layoutSource, /t\('nav\.messages'\)/);
   assert.match(layoutSource, /t\('nav\.bookings'\)/);
@@ -936,11 +942,23 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(layoutSource, /t\('auth\.dashboard'\)/);
   assert.match(layoutSource, /t\('auth\.logout'\)/);
   assert.match(loginSource, /useSearchParams/);
-  assert.match(loginSource, /safeNextPath/);
-  assert.match(loginSource, /navigate\(nextPath\)/);
-  assert.match(loginSource, /startsWith\('\/'\)/);
-  assert.match(loginSource, /startsWith\('\/\/'\)/);
-  assert.match(loginSource, /\[MobileAuthFlow\]/);
+  assert.match(loginSource, /getSafeNextPath/);
+  assert.match(loginSource, /navigate\(nextPath, \{ replace: true \}\)/);
+  assert.match(authRedirectSource, /startsWith\('\/'\)/);
+  assert.match(authRedirectSource, /startsWith\('\/\/'\)/);
+  assert.match(authRedirectSource, /startsWith\('http:\/\/'\)/);
+  assert.match(authRedirectSource, /startsWith\('https:\/\/'\)/);
+  assert.match(authRedirectSource, /decodeURIComponent/);
+  assert.match(loginSource, /email\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(loginSource, /supabase\.auth\.getSession\(\)/);
+  assert.match(loginSource, /escortRadar\.rememberedEmail/);
+  assert.match(loginSource, /localStorage\.setItem\(rememberedEmailStorageKey, normalizedEmail\)/);
+  assert.match(loginSource, /localStorage\.removeItem\(rememberedEmailStorageKey\)/);
+  assert.doesNotMatch(loginSource, /localStorage\.setItem\([^)]*password/i);
+  assert.match(loginSource, /\[LoginFlow\]/);
+  assert.match(supabaseSource, /persistSession: true/);
+  assert.match(supabaseSource, /autoRefreshToken: true/);
+  assert.match(supabaseSource, /detectSessionInUrl: true/);
   assert.match(favoritesSource, /already_exists/);
   assert.match(favoritesSource, /new_balance/);
   assert.match(apiSource, /already_exists\?: boolean/);
@@ -958,11 +976,38 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(profilePageSource, /encodeURIComponent\(`\/profile\/\$\{profile!\.id\}`\)/);
   assert.match(stylesSource, /Mobile auth and saved radar location hotfix/);
   assert.match(stylesSource, /\.mobile-account-links a,/);
+  assert.match(stylesSource, /\.remember-email-control/);
   assert.match(plLocale, /"auth\.logout": "Wyloguj"/);
+  assert.match(plLocale, /"auth\.rememberEmail": "Zapami/);
+  assert.match(enLocale, /"auth\.rememberEmail": "Remember email"/);
+  assert.match(deLocale, /"auth\.rememberEmail": "E-Mail merken"/);
   assert.match(plLocale, /"favorites\.favorites": "Ulubione"/);
   assert.match(plLocale, /"favorites\.loginToSeeFavorites": "Zaloguj si/);
   assert.match(enLocale, /"favorites\.favorites": "Favorites"/);
   assert.match(deLocale, /"favorites\.favorites": "Favoriten"/);
+});
+
+test('login safe next path accepts only local redirects and preserves hashes', () => {
+  assert.equal(getSafeNextPath(new URLSearchParams('next=/dashboard%23favorites')), '/dashboard#favorites');
+  assert.equal(getSafeNextPath(new URLSearchParams('next=/dashboard')), '/dashboard');
+  assert.equal(getSafeNextPath(new URLSearchParams('next=https://evil.com')), '/dashboard');
+  assert.equal(getSafeNextPath(new URLSearchParams('next=//evil.com')), '/dashboard');
+  assert.equal(getSafeNextPath(new URLSearchParams('next=javascript:alert(1)')), '/dashboard');
+  assert.equal(getSafeNextPath(new URLSearchParams('')), '/dashboard');
+});
+
+test('mobile logged-out nav uses encoded login next paths', async () => {
+  const layoutSource = await readFile(new URL('../Front/src/components/Layout.tsx', import.meta.url), 'utf8');
+  assert.match(layoutSource, /favoritesPath = '\/dashboard#favorites'/);
+  assert.match(layoutSource, /messagesPath = '\/dashboard#messages'/);
+  assert.match(layoutSource, /bookingsPath = '\/dashboard#bookings'/);
+  assert.match(layoutSource, /accountPath = '\/dashboard'/);
+  assert.match(layoutSource, /authPath\(favoritesPath\)/);
+  assert.match(layoutSource, /authPath\(messagesPath\)/);
+  assert.match(layoutSource, /authPath\(bookingsPath\)/);
+  assert.match(layoutSource, /authPath\(accountPath\)/);
+  assert.match(layoutSource, /`\/login\?next=\$\{encodeURIComponent\(path\)\}`/);
+  assert.doesNotMatch(layoutSource, /\/login\?next=\/dashboard#favorites/);
 });
 
 test('city radar status supports favorites filter and login next flow', async () => {
