@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, Heart, ImagePlus, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
@@ -168,6 +168,7 @@ export function DashboardPage() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -182,6 +183,12 @@ export function DashboardPage() {
 
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (authResolved && authAccountType === 'client' && location.hash === '#favorites') {
+      window.requestAnimationFrame(() => document.getElementById('favorites')?.scrollIntoView({ block: 'start' }));
+    }
+  }, [authResolved, authAccountType, location.hash, clientFavorites.length]);
 
   async function activateSession(session: Session | null) {
     setToken(session?.access_token || '');
@@ -1098,6 +1105,22 @@ function UnknownAccountDashboard({ email, authAccountType, message, onLogout }: 
   message: string;
   onLogout: () => void;
 }) {
+  const { t } = useI18n();
+  if (!email) {
+    return (
+      <div className="page dashboard-page">
+        <section className="dashboard-hero">
+          <p className="eyebrow">{t('favorites.favorites')}</p>
+          <h1>{t('favorites.loginToSeeFavorites')}</h1>
+          <p>{t('favorites.favoriteTokenNote')}</p>
+          <div className="creator-command-actions">
+            <Link className="button primary" to="/login?next=%2Fdashboard%23favorites">{t('buttons.login')}</Link>
+            <Link className="button" to="/register?type=client">{t('buttons.register')}</Link>
+          </div>
+        </section>
+      </div>
+    );
+  }
   return (
     <div className="page dashboard-page">
       <section className="dashboard-hero">
@@ -1109,7 +1132,7 @@ function UnknownAccountDashboard({ email, authAccountType, message, onLogout }: 
           <p>Email: {email || '-'}</p>
           <p>auth_account_type: {authAccountType || '-'}</p>
         </div>
-        <button className="button danger" type="button" onClick={onLogout}>Wyloguj</button>
+        <button className="button danger" type="button" onClick={onLogout}>{t('auth.logout')}</button>
       </section>
     </div>
   );
@@ -1332,9 +1355,11 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <div>
               <p className="eyebrow">{t('favorites.myFavorites')}</p>
               <h2>{t('favorites.myFavorites')}</h2>
+              <p>{t('favorites.favoritesDescription')}</p>
             </div>
             <strong>{Math.round(Number(wallet?.escort_token_balance || 0))} {t('tokens.short')}</strong>
           </div>
+          <p className="muted">{t('favorites.favoriteTokenNote')}</p>
           {favorites.length ? (
             <div className="cards-grid marketplace-grid premium-profile-grid">
               {favorites.map((favorite) => favorite.profile ? (
@@ -1348,7 +1373,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <div className="market-empty-state">
               <Heart size={18} />
               <p>{t('favorites.noFavoritesYet')}</p>
-              <Link className="button primary" to="/city/berlin">{t('home.openRadar')}</Link>
+              <Link className="button primary" to="/city/berlin">{t('favorites.openRadar')}</Link>
             </div>
           )}
         </section>

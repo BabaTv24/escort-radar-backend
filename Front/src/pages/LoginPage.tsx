@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LogIn, Radar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useI18n } from '../i18n';
@@ -11,7 +11,9 @@ export function LoginPage() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { t } = useI18n();
+  const nextPath = safeNextPath(searchParams.get('next'));
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -22,14 +24,14 @@ export function LoginPage() {
     if (result.error) return setMessage(result.error.message);
     await supabase.auth.getSession();
     if (import.meta.env.DEV) console.debug('[Auth]', { hasSession: Boolean(result.data.session), userId: result.data.user?.id || null, role: result.data.user?.app_metadata?.auth_account_type || null, route: '/login' });
-    navigate('/dashboard');
+    navigate(nextPath);
   }
 
   async function signInWithGoogle() {
     setMessage('');
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/dashboard` }
+      options: { redirectTo: `${window.location.origin}${nextPath}` }
     });
     if (error) setMessage('Google login is not configured yet. Please use email login or try later.');
   }
@@ -65,4 +67,10 @@ export function LoginPage() {
       </section>
     </div>
   );
+}
+
+function safeNextPath(value: string | null) {
+  const next = String(value || '/dashboard');
+  if (!next.startsWith('/') || next.startsWith('//')) return '/dashboard';
+  return next;
 }

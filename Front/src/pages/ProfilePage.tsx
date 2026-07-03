@@ -46,6 +46,7 @@ export function ProfilePage() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [profileAccess, setProfileAccess] = useState<ProfileAccess | null>(null);
   const [accessMessage, setAccessMessage] = useState('');
+  const [favoriteSaved, setFavoriteSaved] = useState(false);
   const [activationBusy, setActivationBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
   const { t, option } = useI18n();
@@ -381,12 +382,13 @@ export function ProfilePage() {
             <button className="button primary" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={16} /> Message</button>
             <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={16} /> Call</button>
             <a href="#booking" className="button"><CalendarDays size={16} /> Book</a>
-            <button className="button" type="button" onClick={toggleFavorite}><Heart size={16} /> {t('favorites.addToFavorites')}</button>
+            <button className="button" type="button" disabled={favoriteSaved} onClick={toggleFavorite}><Heart size={16} /> {favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</button>
             <button className="button" type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={16} /> Gift</button>
             <button className="button" type="button" onClick={() => setAccessMessage(activated ? 'Live Cam is available for Premium clients.' : 'Activate for 0.99 EUR to unlock Live Cam.')}><Video size={16} /> Live</button>
           </div>
           {accessMessage && <p className={accessMessage === t('favorites.notEnoughTokens') ? 'error-text' : activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
-          {accessMessage === t('favorites.notEnoughTokens') && <Link className="button" to="/tokens">{t('tokens.openShop')}</Link>}
+          {accessMessage === t('favorites.notEnoughTokens') && <Link className="button" to="/tokens">{t('favorites.buyTokens')}</Link>}
+          {accessMessage === t('favorites.loginToSeeFavorites') && <Link className="button" to="/login">{t('buttons.login')}</Link>}
           <div className="market-contact-facts">
             <MarketFact icon={<BadgeCheck size={16} />} label="Verified" value={profile.verified ? 'Yes' : 'Pending'} />
             <MarketFact icon={<Languages size={16} />} label="Languages" value={languages.join(', ')} />
@@ -448,13 +450,14 @@ export function ProfilePage() {
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token;
     if (!token) {
-      setAccessMessage(t('favorites.favoriteCostsToken'));
-      navigate('/login');
+      setAccessMessage(t('favorites.loginToSeeFavorites'));
+      navigate(`/login?next=${encodeURIComponent(`/profile/${profile!.id}`)}`);
       return;
     }
     try {
       const result = await api.addFavorite(token, profile!.id);
-      setAccessMessage(result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
+      setFavoriteSaved(true);
+      setAccessMessage(result.already_exists || result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       setAccessMessage(message.toLowerCase().includes('token') ? t('favorites.notEnoughTokens') : message || t('states.requestFailed'));

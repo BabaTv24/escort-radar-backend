@@ -28,6 +28,11 @@ export function Layout() {
   const [account, setAccount] = useState<HeaderAccount>({ loading: true, email: '', role: 'account' });
   const isSignedIn = Boolean(account.email);
   const dashboardLabel = account.role === 'advertiser' || account.role === 'business' ? t('auth.myListing') : t('auth.dashboard');
+  const favoritesPath = '/dashboard#favorites';
+  const messagesPath = '/dashboard#messages';
+  const bookingsPath = '/dashboard#bookings';
+  const accountPath = '/dashboard';
+  const authPath = (path: string) => isSignedIn ? path : `/login?next=${encodeURIComponent(path)}`;
 
   useEffect(() => {
     let mounted = true;
@@ -77,7 +82,9 @@ export function Layout() {
           {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
             <div className="mobile-account-links signed-in">
               <span className="mobile-account-role">{t(`auth.${account.role}`)}</span>
-              <Link to="/dashboard">{t('auth.dashboard')}</Link>
+              <Link to="/dashboard">{dashboardLabel}</Link>
+              <Link to={favoritesPath}>{t('favorites.favorites')}</Link>
+              <Link to="/tokens">{t('tokens.tokens')}</Link>
               <button type="button" onClick={logout}>{t('auth.logout')}</button>
             </div>
           ) : (
@@ -144,21 +151,21 @@ export function Layout() {
           <Radar size={18} />
           <span>{t('nav.radar')}</span>
         </Link>
-        <Link className={location.pathname === '/dashboard' && location.hash === '#favorites' ? 'active' : ''} to="/dashboard#favorites">
+        <Link className={location.pathname === '/dashboard' && location.hash === '#favorites' ? 'active' : ''} to={authPath(favoritesPath)}>
           <Heart size={18} />
-          <span>Favorites</span>
+          <span>{t('favorites.favorites')}</span>
         </Link>
-        <Link to="/dashboard">
+        <Link to={authPath(messagesPath)}>
           <MessageCircle size={18} />
-          <span>Messages</span>
+          <span>{t('nav.messages')}</span>
         </Link>
-        <Link to="/dashboard">
+        <Link to={authPath(bookingsPath)}>
           <CalendarDays size={18} />
-          <span>Bookings</span>
+          <span>{t('nav.bookings')}</span>
         </Link>
-        <Link to="/dashboard">
+        <Link to={authPath(accountPath)}>
           <UserRound size={18} />
-          <span>Profile</span>
+          <span>{isSignedIn ? t('auth.dashboard') : t('auth.account')}</span>
         </Link>
       </nav>
       <footer className="footer">

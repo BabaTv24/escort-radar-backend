@@ -77,11 +77,12 @@ export function ProfileCard({ profile }: { profile: Profile }) {
         {profile.services?.length ? <p className="muted line-clamp">{profile.services.slice(0, 4).map(serviceLabel).join(' · ')}</p> : null}
         {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
-        <button className="button full" type="button" onClick={toggleFavorite}>
-          <HeartHandshake size={15} /> {favoriteState === 'saved' ? t('favorites.removeFromFavorites') : t('favorites.addToFavorites')}
+        <button className="button full" type="button" disabled={favoriteState === 'saved'} onClick={toggleFavorite}>
+          <HeartHandshake size={15} /> {favoriteState === 'saved' ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}
         </button>
         {favoriteMessage && <p className={favoriteMessage === t('favorites.notEnoughTokens') ? 'error-text' : 'success'}>{favoriteMessage}</p>}
-        {favoriteMessage === t('favorites.notEnoughTokens') && <Link className="button full" to="/tokens">{t('tokens.openShop')}</Link>}
+        {favoriteMessage === t('favorites.notEnoughTokens') && <Link className="button full" to="/tokens">{t('favorites.buyTokens')}</Link>}
+        {favoriteMessage === t('favorites.loginToSeeFavorites') && <Link className="button full" to="/login">{t('buttons.login')}</Link>}
         <Link to={`/profile/${profile.id}`} className="button primary full">{t('buttons.viewProfile')}</Link>
       </div>
     </article>
@@ -91,19 +92,13 @@ export function ProfileCard({ profile }: { profile: Profile }) {
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token;
     if (!token) {
-      setFavoriteMessage(t('auth.loginFailed', { message: t('buttons.login') }));
+      setFavoriteMessage(t('favorites.loginToSeeFavorites'));
       return;
     }
     try {
-      if (favoriteState === 'saved') {
-        await api.removeFavorite(token, profile.id);
-        setFavoriteState('idle');
-        setFavoriteMessage(t('favorites.favoriteRemoved'));
-        return;
-      }
       const result = await api.addFavorite(token, profile.id);
       setFavoriteState('saved');
-      setFavoriteMessage(result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
+      setFavoriteMessage(result.already_exists || result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       setFavoriteMessage(message.toLowerCase().includes('token') ? t('favorites.notEnoughTokens') : message || t('states.requestFailed'));

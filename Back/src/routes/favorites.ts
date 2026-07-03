@@ -81,6 +81,7 @@ favoritesRouter.post('/:profileId', asyncHandler(async (req, res) => {
     favorite,
     wallet,
     already_favorited: Boolean(result?.already_favorited),
+    already_exists: Boolean(result?.already_favorited),
     charged: Number(result?.charged || 0),
     new_balance: Number(result?.new_balance ?? result?.wallet_balance ?? wallet?.escort_token_balance ?? 0)
   });

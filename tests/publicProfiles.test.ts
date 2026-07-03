@@ -911,19 +911,53 @@ test('public profile maps online aliases and visit mode labels are visible to cl
 
 test('mobile auth bar exposes login register panel and logout actions', async () => {
   const layoutSource = await readFile(new URL('../Front/src/components/Layout.tsx', import.meta.url), 'utf8');
+  const loginSource = await readFile(new URL('../Front/src/pages/LoginPage.tsx', import.meta.url), 'utf8');
+  const dashboardSource = await readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8');
+  const profileCardSource = await readFile(new URL('../Front/src/components/ProfileCard.tsx', import.meta.url), 'utf8');
+  const profilePageSource = await readFile(new URL('../Front/src/pages/ProfilePage.tsx', import.meta.url), 'utf8');
+  const favoritesSource = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');
+  const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
   const stylesSource = await readFile(new URL('../Front/src/styles.css', import.meta.url), 'utf8');
   const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
+  const enLocale = await readFile(new URL('../Front/src/locales/en.json', import.meta.url), 'utf8');
+  const deLocale = await readFile(new URL('../Front/src/locales/de.json', import.meta.url), 'utf8');
 
   assert.match(layoutSource, /supabase\.auth\.getSession/);
   assert.match(layoutSource, /onAuthStateChange/);
   assert.match(layoutSource, /supabase\.auth\.signOut/);
   assert.match(layoutSource, /navigate\('\/', \{ replace: true \}\)/);
+  assert.match(layoutSource, /authPath\(favoritesPath\)/);
+  assert.match(layoutSource, /encodeURIComponent\(path\)/);
+  assert.match(layoutSource, /t\('favorites\.favorites'\)/);
+  assert.match(layoutSource, /t\('nav\.messages'\)/);
+  assert.match(layoutSource, /t\('nav\.bookings'\)/);
   assert.match(layoutSource, /mobile-account-role/);
   assert.match(layoutSource, /t\('auth\.dashboard'\)/);
   assert.match(layoutSource, /t\('auth\.logout'\)/);
+  assert.match(loginSource, /useSearchParams/);
+  assert.match(loginSource, /safeNextPath/);
+  assert.match(loginSource, /navigate\(nextPath\)/);
+  assert.match(favoritesSource, /already_exists/);
+  assert.match(favoritesSource, /new_balance/);
+  assert.match(apiSource, /already_exists\?: boolean/);
+  assert.match(dashboardSource, /id="favorites"/);
+  assert.match(dashboardSource, /api\.myFavorites\(accessToken\)/);
+  assert.match(dashboardSource, /scrollIntoView/);
+  assert.match(dashboardSource, /favorites\.favoritesDescription/);
+  assert.match(dashboardSource, /favorites\.loginToSeeFavorites/);
+  assert.match(dashboardSource, /favorites\.openRadar/);
+  assert.match(profileCardSource, /favorites\.alreadyFavorite/);
+  assert.match(profileCardSource, /favorites\.buyTokens/);
+  assert.match(profileCardSource, /result\.already_exists \|\| result\.already_favorited/);
+  assert.match(profilePageSource, /favorites\.alreadyFavorite/);
+  assert.match(profilePageSource, /encodeURIComponent\(`\/profile\/\$\{profile!\.id\}`\)/);
   assert.match(stylesSource, /Mobile auth and saved radar location hotfix/);
   assert.match(stylesSource, /\.mobile-account-links a,/);
   assert.match(plLocale, /"auth\.logout": "Wyloguj"/);
+  assert.match(plLocale, /"favorites\.favorites": "Ulubione"/);
+  assert.match(plLocale, /"favorites\.loginToSeeFavorites": "Zaloguj si/);
+  assert.match(enLocale, /"favorites\.favorites": "Favorites"/);
+  assert.match(deLocale, /"favorites\.favorites": "Favoriten"/);
 });
 
 test('client search location can be updated cleared and edited from radar', async () => {
