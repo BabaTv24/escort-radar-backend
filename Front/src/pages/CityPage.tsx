@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import type { Profile, Tag } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { ErrorState, LoadingState } from '../components/LoadingState';
-import { categoryOptions, defaultServiceMenuNames, toggleArrayValue, visitTypeOptions } from '../data/filterOptions';
+import { activePublicCategoryOptions, categoryOptions, defaultServiceMenuNames, toggleArrayValue, visitTypeOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
@@ -290,7 +290,7 @@ export function CityPage() {
           <span>Category</span>
           <select value={draftFilters.category} onChange={(event) => updateFilter('category', event.target.value)}>
             <option value="">{t('filters.allCategories')}</option>
-            {categoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
+            {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
           </select>
         </label>
 

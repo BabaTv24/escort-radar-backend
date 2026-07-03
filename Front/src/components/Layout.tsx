@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CalendarDays, Coins, Heart, LogOut, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
-import { categoryOptions } from '../data/filterOptions';
+import { activePublicCategoryOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { api } from '../lib/api';
 import { normalizeCategoryKey } from '../lib/categories';
@@ -63,7 +63,7 @@ export function Layout() {
           <span>Escort Radar</span>
         </Link>
         <nav className="category-nav" aria-label="Categories">
-          {categoryOptions.map((category) => (
+          {activePublicCategoryOptions.map((category) => (
             <Link
               key={category}
               className={activeCategory === category ? 'category-link active' : 'category-link'}

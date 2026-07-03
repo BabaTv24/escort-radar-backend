@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { categoryOptions, normalizeCategoryKey } from '../lib/categories';
+import { activePublicCategoryOptions, normalizeCategoryKey } from '../lib/categories';
 import { citySlug, getCitiesForCountry, getCountryLabel, globalCountries, normalizeCountry } from '../lib/globalLocations';
 import { useI18n } from '../i18n';
 
@@ -130,7 +130,7 @@ export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Ber
           setCity(getCitiesForCountry(nextCountry)[0] || '');
         }}>{globalCountries.map((item) => <option key={item.code} value={item.code}>{getCountryLabel(item.code, lang)}</option>)}</select></label>
         <label><span>{t('search.city')}</span><select value={city} onChange={(event) => setCity(event.target.value)}>{cities.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <label><span>{t('form.category')}</span><select value={category} onChange={(event) => setCategory(normalizeCategoryKey(event.target.value) || '')}><option value="">{t('filters.allCategories')}</option>{categoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}</select></label>
+        <label><span>{t('form.category')}</span><select value={category} onChange={(event) => setCategory(normalizeCategoryKey(event.target.value) || '')}><option value="">{t('filters.allCategories')}</option>{activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}</select></label>
         <button className="button primary" type="button" onClick={submit}><Search size={16} /> {t('search.search')}</button>
       </div>
       <div className="popular-city-row">

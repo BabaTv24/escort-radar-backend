@@ -12,8 +12,8 @@ import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
 import {
   audienceOptions,
+  activePublicCategoryOptions,
   bodyTypeOptions,
-  categoryOptions,
   defaultServiceMenuNames,
   experienceTypeOptions,
   hairColorOptions,
@@ -869,7 +869,7 @@ export function DashboardPage() {
                 </select>
                 <input placeholder={t('form.area')} value={profile.area || ''} onChange={(event) => setProfile({ ...profile, area: event.target.value })} />
                 <select value={profile.category || 'other'} onChange={(event) => setProfile({ ...profile, category: event.target.value })}>
-                  {categoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
+                  {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
                 </select>
                 <input placeholder={t('form.languages')} value={String(profile.languages || '')} onChange={(event) => setProfile({ ...profile, languages: event.target.value.split(',') as any })} />
                 <select value={profile.experience_type || ''} onChange={(event) => setProfile({ ...profile, experience_type: event.target.value })}>
@@ -1300,7 +1300,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             </select>
             <input placeholder="Area" value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
             <select value={intentDraft.category || 'ladies'} onChange={(event) => setIntentDraft({ ...intentDraft, category: event.target.value })}>
-              {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+              {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
               {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}

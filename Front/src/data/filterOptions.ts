@@ -1,4 +1,4 @@
-export { categoryOptions } from '../lib/categories';
+export { activePublicCategoryOptions, categoryOptions } from '../lib/categories';
 export const orientationOptions = ['straight', 'bisexual', 'queer-friendly'];
 export const audienceOptions = ['men', 'women', 'couples'];
 export const visitTypeOptions = ['incall', 'outcall', 'hotel', 'private'];

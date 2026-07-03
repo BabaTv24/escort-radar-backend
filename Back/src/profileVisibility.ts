@@ -1,6 +1,7 @@
 import { normalizeProfileCategory } from './validation.js';
 import { isPublicProfile } from './publicProfiles.js';
 import { getCountryAliases, normalizeCity, normalizeCountry } from './locations.js';
+import { isActivePublicCategory } from './categories.js';
 
 export type VisibilityContext = {
   country?: unknown;
@@ -21,6 +22,7 @@ export type ProfileVisibilityExplanation = {
     cityMatches: boolean;
     countryCompatible: boolean;
     categoryMatches: boolean;
+    categoryActive: boolean;
     hasRadarLocation: boolean;
   };
   normalized: {
@@ -45,10 +47,11 @@ export function explainProfileVisibility(profile: Record<string, any>, context: 
     cityMatches: !city || profileMatchesCity(profile, city),
     countryCompatible: !country || profileMatchesCountry(profile, country) || Boolean(city && profileMatchesCity(profile, city)),
     categoryMatches: !category || normalizedProfileCategory === category,
+    categoryActive: isActivePublicCategory(normalizedProfileCategory),
     hasRadarLocation: hasRadarLocation(profile)
   };
 
-  const isPublicVisible = isPublicProfile(profile);
+  const isPublicVisible = isPublicProfile(profile) && checks.categoryActive;
   const isVisibleInCurrentSearch = isPublicVisible && checks.cityMatches && checks.countryCompatible && checks.categoryMatches;
   const reasons = buildVisibilityReasons(checks, isPublicVisible);
 
@@ -78,6 +81,7 @@ function buildVisibilityReasons(checks: ProfileVisibilityExplanation['checks'], 
   if (!checks.subscriptionActiveOrTrialOrSeed) reasons.push('subscription_inactive');
   if (!checks.cityMatches) reasons.push('city_mismatch');
   if (!checks.countryCompatible) reasons.push('country_mismatch');
+  if (!checks.categoryActive) reasons.push('disabled_category');
   if (!checks.categoryMatches) reasons.push('category_mismatch');
   if (!checks.hasRadarLocation) reasons.push('missing_radar_location');
   if (!reasons.length) reasons.push(isPublicVisible ? 'visible' : 'hidden');

@@ -6,7 +6,8 @@ import { api } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
 import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
-import { categoryOptions } from '../data/filterOptions';
+import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
+import { isActivePublicCategory } from '../lib/categories';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
 import { berlinDistrictOptions, resolveBerlinPostalDistrict } from '../lib/geo';
@@ -1069,7 +1070,7 @@ export function AdminPage() {
         <div className="admin-form-grid">
           <AdminField label={t('admin.profileEditor.displayName')}><input placeholder={t('admin.profileEditor.displayNamePlaceholder')} value={studioForm.display_name} onChange={(event) => setStudioForm({ ...studioForm, display_name: event.target.value })} /></AdminField>
           <AdminField label={t('admin.profileEditor.publicProfileType')} help={t('admin.profileEditor.profileTypeHelp')}><select value={studioForm.profile_type} onChange={(event) => setStudioForm({ ...studioForm, profile_type: event.target.value })}>{adminProfileTypeOptions.map((type) => <option key={type} value={type}>{t(`admin.profileType.${type}`)}</option>)}</select></AdminField>
-          <AdminField label={t('admin.profileEditor.marketplaceCategory')} help={t('admin.profileEditor.categoryHelp')}><select value={studioForm.category} onChange={(event) => setStudioForm({ ...studioForm, category: event.target.value })}>{categoryOptions.map((category) => <option key={category} value={category}>{option(category)}</option>)}</select></AdminField>
+          <AdminField label={t('admin.profileEditor.marketplaceCategory')} help={t('admin.profileEditor.categoryHelp')}><><select value={isActivePublicCategory(studioForm.category) ? studioForm.category : ''} onChange={(event) => setStudioForm({ ...studioForm, category: event.target.value })}><option value="" disabled>{t('admin.profileEditor.marketplaceCategory')}</option>{activePublicCategoryOptions.map((category) => <option key={category} value={category}>{option(category)}</option>)}</select>{!isActivePublicCategory(studioForm.category) && studioForm.category ? <small className="muted"><strong>{t('admin.profileEditor.legacyDisabledCategory')}:</strong> {option(studioForm.category)}. {t('admin.profileEditor.legacyDisabledCategoryHelp')}</small> : null}</></AdminField>
           <AdminField label={t('profileDetails.gender')}><select value={studioForm.gender} onChange={(event) => setStudioForm({ ...studioForm, gender: event.target.value })}><option value="">-</option>{profileGenderOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}</select></AdminField>
           <AdminField label={t('profileDetails.orientation')}><select value={studioForm.orientation} onChange={(event) => setStudioForm({ ...studioForm, orientation: event.target.value })}><option value="">-</option>{profileOrientationOptions.map((item) => <option key={item} value={item}>{t(`profileDetails.${item}`)}</option>)}</select></AdminField>
           <AdminField label={t('admin.profileEditor.age')}><input type="number" value={studioForm.age} onChange={(event) => setStudioForm({ ...studioForm, age: Number(event.target.value) })} /></AdminField>
@@ -2519,6 +2520,7 @@ function ProfileVisibilityAudit({ audit, compact = false }: { audit?: Profile['v
   const checks: Array<[string, boolean]> = [
     ['city', audit.checks.cityMatches],
     ['category', audit.checks.categoryMatches],
+    ['categoryActive', audit.checks.categoryActive],
     ['moderation', audit.checks.moderationApproved],
     ['publication', audit.checks.published],
     ['subscription', audit.checks.subscriptionActiveOrTrialOrSeed],

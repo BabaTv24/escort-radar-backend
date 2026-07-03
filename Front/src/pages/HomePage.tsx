@@ -8,7 +8,7 @@ import { RadarPanel } from '../components/RadarPanel';
 import { useCallback, useEffect, useState } from 'react';
 import type { GeoPoint } from '../lib/geo';
 import { getCityCenter, getSearcherLocationWithFallback } from '../lib/geo';
-import { categoryOptions } from '../data/filterOptions';
+import { activePublicCategoryOptions } from '../data/filterOptions';
 import type { Profile } from '../types';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { ErrorState, LoadingState } from '../components/LoadingState';
@@ -141,7 +141,7 @@ export function HomePage() {
           <h2>{t('home.sections.categoriesTitle')}</h2>
         </div>
         <div className="home-category-grid">
-          {categoryOptions.map((category) => (
+          {activePublicCategoryOptions.map((category) => (
             <Link key={category} to={`/city/berlin?category=${category}`} className="home-category-card">
               <CategoryIcon category={category} />
               <span>{option(category)}</span>

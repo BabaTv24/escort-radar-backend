@@ -7,6 +7,7 @@ import { getClientActivationSummary } from '../services/clientActivation.js';
 import { notifyMatchingClientsForProfile } from './clientIntent.js';
 import { isPublicProfile, publicProfileRejectionReason } from '../publicProfiles.js';
 import { getCityLabel as getGlobalCityLabel, getCountryAliases, normalizeCity as normalizeGlobalCity, normalizeCountry } from '../locations.js';
+import { isActivePublicCategory } from '../categories.js';
 
 export const profilesRouter = Router();
 
@@ -37,6 +38,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
   }
 
   const categoryFilter = normalizeProfileCategory(req.query.category);
+  if (categoryFilter && !isActivePublicCategory(categoryFilter)) return res.json({ profiles: [] });
 
   const tagIds = String(req.query.tags || '')
     .split(',')
@@ -66,7 +68,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     })
     .filter((profile) => !country || profileMatchesCountry(profile, country) || (city && profileMatchesCity(profile, city)))
     .filter((profile) => !city || profileMatchesCity(profile, city))
-    .filter((profile) => !categoryFilter || normalizeProfileCategory(profile.category) === categoryFilter)
+    .filter((profile) => categoryFilter ? normalizeProfileCategory(profile.category) === categoryFilter : isActivePublicCategory(profile.category))
     .map((profile) => sanitizePublicProfile(withImageUrls(profile)))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
 
@@ -178,7 +180,7 @@ profilesRouter.get('/:id', asyncHandler(async (req, res) => {
     .single();
 
   if (error || !data) return res.status(404).json({ error: 'Profile not found' });
-  if (!isPublicProfile(data)) {
+  if (!isPublicProfile(data) || !isActivePublicCategory(data.category)) {
     return res.status(404).json({ error: 'Profile not found' });
   }
 

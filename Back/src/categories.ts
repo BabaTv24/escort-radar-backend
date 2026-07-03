@@ -2,6 +2,14 @@ export const categoryOptions = ['ladies', 'men', 'gay', 'couples', 'trans', 'mas
 
 export type CategoryKey = typeof categoryOptions[number];
 
+export const activePublicCategoryOptions = ['ladies', 'gay', 'couples', 'trans', 'massage', 'live_cam', 'clubs_parties'] as const satisfies readonly CategoryKey[];
+export const disabledPublicCategoryOptions = categoryOptions.filter((category) => !activePublicCategoryOptions.includes(category as (typeof activePublicCategoryOptions)[number]));
+
+export function isActivePublicCategory(value: unknown) {
+  const normalized = normalizeCategoryKey(value);
+  return Boolean(normalized && activePublicCategoryOptions.includes(normalized as (typeof activePublicCategoryOptions)[number]));
+}
+
 const categoryAliasMap: Record<string, CategoryKey> = {
   ladies: 'ladies',
   lady: 'ladies',

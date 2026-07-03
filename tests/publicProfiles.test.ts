@@ -556,9 +556,10 @@ test('environment example includes legal and manual payment readiness variables'
 });
 
 test('category normalization uses canonical mobile category keys', async () => {
-  const { getCategoryAliases, normalizeCategoryKey, categoryOptions } = await import('../Back/src/categories.ts');
+  const { activePublicCategoryOptions, getCategoryAliases, normalizeCategoryKey, categoryOptions } = await import('../Back/src/categories.ts');
   const { citySlug, normalizeCountry } = await import('../Back/src/locations.ts');
   assert.deepEqual(categoryOptions, ['ladies', 'men', 'gay', 'couples', 'trans', 'massage', 'home_hotel', 'live_cam', 'clubs_parties', 'bdsm', 'onlyfans', 'sex_phone', 'films', 'offers', 'other']);
+  assert.deepEqual(activePublicCategoryOptions, ['ladies', 'gay', 'couples', 'trans', 'massage', 'live_cam', 'clubs_parties']);
   assert.equal(normalizeCategoryKey('Gay'), 'gay');
   assert.equal(normalizeCategoryKey('Panie'), 'ladies');
   assert.equal(normalizeCategoryKey('Panowie'), 'men');
@@ -629,10 +630,14 @@ test('admin profile studio separates account profile category and advanced promo
 
 test('visibility audit explains Berlin Hamburg marketplace matrix and category all', async () => {
   const { explainProfileVisibility, profileMatchesSearch } = await import('../Back/src/profileVisibility.ts');
+  const { activePublicCategoryOptions, disabledPublicCategoryOptions } = await import('../Front/src/lib/categories.ts');
   const adminSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
   const profilesSource = await readFile(new URL('../Back/src/routes/profiles.ts', import.meta.url), 'utf8');
   const cityPageSource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
   const globalSearchSource = await readFile(new URL('../Front/src/components/GlobalLocationSearch.tsx', import.meta.url), 'utf8');
+  const layoutSource = await readFile(new URL('../Front/src/components/Layout.tsx', import.meta.url), 'utf8');
+  const homeSource = await readFile(new URL('../Front/src/pages/HomePage.tsx', import.meta.url), 'utf8');
+  const adminPageSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
   const base = {
     status: 'active',
     is_published: true,
@@ -648,7 +653,9 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
   const hamburgLadies = { ...base, id: 'hamburg-ladies', display_name: 'Hamburg Panie', city: 'hamburg', work_city: 'Hamburg', category: 'Panie' };
   const rows = [berlinLadies, berlinGay, berlinHomeHotel, hamburgLadies];
 
-  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'all' })).map((profile) => profile.id), ['berlin-ladies', 'berlin-gay', 'berlin-home-hotel']);
+  assert.deepEqual(activePublicCategoryOptions, ['ladies', 'gay', 'couples', 'trans', 'massage', 'live_cam', 'clubs_parties']);
+  assert.deepEqual(disabledPublicCategoryOptions, ['men', 'home_hotel', 'bdsm', 'onlyfans', 'sex_phone', 'films', 'offers', 'other']);
+  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'all' })).map((profile) => profile.id), ['berlin-ladies', 'berlin-gay']);
   assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'ladies' })).map((profile) => profile.id), ['berlin-ladies']);
   assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'gay' })).map((profile) => profile.id), ['berlin-gay']);
   assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'hamburg', category: 'all' })).map((profile) => profile.id), ['hamburg-ladies']);
@@ -659,12 +666,21 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
   assert.ok(gayInLadies.reasons.includes('category_mismatch'));
 
   const homeHotelAll = explainProfileVisibility(berlinHomeHotel, { country: 'DE', city: 'berlin', category: 'all' });
-  assert.equal(homeHotelAll.isVisibleInCurrentSearch, true);
+  assert.equal(homeHotelAll.isPublicVisible, false);
+  assert.equal(homeHotelAll.isVisibleInCurrentSearch, false);
+  assert.equal(homeHotelAll.checks.categoryActive, false);
+  assert.ok(homeHotelAll.reasons.includes('disabled_category'));
   assert.match(adminSource, /profiles\/visibility-audit/);
   assert.match(adminSource, /visibility_audit: explainProfileVisibility/);
+  assert.match(profilesSource, /isActivePublicCategory\(profile\.category\)/);
   assert.match(profilesSource, /const categoryFilter = normalizeProfileCategory\(req\.query\.category\)/);
   assert.match(cityPageSource, /search\.showingSummary/);
+  assert.match(cityPageSource, /activePublicCategoryOptions\.map/);
   assert.match(globalSearchSource, /<option value="">\{t\('filters\.allCategories'\)\}<\/option>/);
+  assert.match(layoutSource, /activePublicCategoryOptions\.map/);
+  assert.match(homeSource, /activePublicCategoryOptions\.map/);
+  assert.match(adminPageSource, /legacyDisabledCategory/);
+  assert.match(adminPageSource, /activePublicCategoryOptions\.map/);
 });
 
 test('client activation token bonus is 7 and favorites are token-gated', async () => {
