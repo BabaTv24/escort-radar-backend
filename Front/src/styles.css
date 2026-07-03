@@ -5816,3 +5816,33 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Fixed app chrome hotfix */
+.market-header {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1200;
+}
+
+.app-shell > main {
+  padding-top: 6.75rem;
+}
+
+.luxury-bottom-nav {
+  position: fixed !important;
+  z-index: 1150;
+}
+
+@media (max-width: 900px) {
+  .app-shell > main {
+    padding-top: 8.4rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell > main {
+    padding-top: 9.1rem;
+  }
+}

@@ -15,10 +15,14 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showSlowLoginHelp, setShowSlowLoginHelp] = useState(false);
   const mountedRef = useRef(true);
+  const loginRunId = useRef(0);
+  const didRedirectRef = useRef(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { t } = useI18n();
+  const nextParam = searchParams.get('next');
   const nextPath = useMemo(() => getSafeNextPath(searchParams), [searchParams]);
 
   useEffect(() => {
@@ -35,10 +39,31 @@ export function LoginPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!loading) return;
+
+    const currentRun = loginRunId.current;
+    const timeout = window.setTimeout(() => {
+      if (!mountedRef.current || didRedirectRef.current || loginRunId.current !== currentRun) return;
+      setLoading(false);
+      setMessage(t('auth.loginTooLong'));
+      setShowSlowLoginHelp(true);
+      if (import.meta.env.DEV) {
+        console.debug('[MobileLogin] watchdog timeout', {
+          runId: currentRun,
+          nextParam,
+          finalTarget: nextPath
+        });
+      }
+    }, 16000);
+
+    return () => window.clearTimeout(timeout);
+  }, [loading, nextParam, nextPath, t]);
+
   if (import.meta.env.DEV) {
     console.debug('[LoginFlow]', {
       emailPresent: Boolean(email.trim()),
-      nextParam: searchParams.get('next'),
+      nextParam,
       finalTarget: nextPath,
       hasSession: false
     });
@@ -49,11 +74,14 @@ export function LoginPage() {
     if (loading) return;
     const normalizedEmail = email.trim().toLowerCase();
     let didRedirect = false;
+    loginRunId.current += 1;
+    const currentRun = loginRunId.current;
+    didRedirectRef.current = false;
     if (import.meta.env.DEV) {
       console.debug('[LoginFlow]', {
         emailPresent: Boolean(normalizedEmail),
         submitFired: true,
-        nextParam: searchParams.get('next'),
+        nextParam,
         finalTarget: nextPath,
         hasSession: false
       });
@@ -61,6 +89,7 @@ export function LoginPage() {
 
     setLoading(true);
     setMessage('');
+    setShowSlowLoginHelp(false);
     try {
       const result = await withTimeout(
         supabase.auth.signInWithPassword({ email: normalizedEmail, password }),
@@ -69,13 +98,13 @@ export function LoginPage() {
       );
 
       if (result.error) {
-        if (mountedRef.current) setMessage(t('auth.loginFailed', { message: result.error.message }));
-        if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: result.error.message, nextParam: searchParams.get('next'), finalTarget: nextPath, hasSession: false });
+        if (mountedRef.current && loginRunId.current === currentRun) setMessage(t('auth.loginFailed', { message: result.error.message }));
+        if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: result.error.message, nextParam, finalTarget: nextPath, hasSession: false });
         return;
       }
 
       let session: Session | null = result.data.session;
-      if (import.meta.env.DEV) console.debug('[MobileLogin] signIn success', { hasDirectSession: Boolean(session), nextParam: searchParams.get('next'), finalTarget: nextPath });
+      if (import.meta.env.DEV) console.debug('[MobileLogin] signIn success', { hasDirectSession: Boolean(session), nextParam, finalTarget: nextPath });
       if (!session) {
         session = await withTimeout(
           waitForSupabaseSession(5, 200),
@@ -83,9 +112,9 @@ export function LoginPage() {
           t('auth.loginSessionTimeout')
         );
       }
-      if (import.meta.env.DEV) console.debug('[MobileLogin] session after signIn', { hasSession: Boolean(session), nextParam: searchParams.get('next'), finalTarget: nextPath });
+      if (import.meta.env.DEV) console.debug('[MobileLogin] session after signIn', { hasSession: Boolean(session), nextParam, finalTarget: nextPath });
       if (!session) {
-        if (mountedRef.current) setMessage(t('auth.loginFailed', { message: t('auth.loginNoSession') }));
+        if (mountedRef.current && loginRunId.current === currentRun) setMessage(t('auth.loginFailed', { message: t('auth.loginNoSession') }));
         return;
       }
 
@@ -97,19 +126,20 @@ export function LoginPage() {
 
       if (import.meta.env.DEV) {
         console.debug('[MobileLogin] final redirect', {
-          nextParam: searchParams.get('next'),
+          nextParam,
           finalTarget: nextPath,
           hasSession: Boolean(session)
         });
       }
       didRedirect = true;
+      didRedirectRef.current = true;
       navigate(nextPath, { replace: true });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('states.requestFailed');
-      if (mountedRef.current) setMessage(t('auth.loginFailed', { message: errorMessage }));
-      if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: errorMessage, nextParam: searchParams.get('next'), finalTarget: nextPath, hasSession: false });
+      if (mountedRef.current && loginRunId.current === currentRun) setMessage(t('auth.loginFailed', { message: errorMessage }));
+      if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: errorMessage, nextParam, finalTarget: nextPath, hasSession: false });
     } finally {
-      if (mountedRef.current && !didRedirect) setLoading(false);
+      if (mountedRef.current && !didRedirect && loginRunId.current === currentRun) setLoading(false);
     }
   }
 
@@ -150,6 +180,11 @@ export function LoginPage() {
             <button className="button primary full" type="submit" disabled={loading}>
               <LogIn size={17} /> {loading ? t('states.loading') : t('auth.loginSubmit')}
             </button>
+            {showSlowLoginHelp && (
+              <button className="button full" type="submit" disabled={loading}>
+                {t('auth.tryAgain')}
+              </button>
+            )}
           </form>
           <button className="button full" type="button" disabled={loading} onClick={signInWithGoogle}>{t('auth.continueWithGoogle')}</button>
           <Link className="text-link" to="/register">{t('auth.needAccount')}</Link>
