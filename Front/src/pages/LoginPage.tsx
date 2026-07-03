@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LogIn, Radar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useI18n } from '../i18n';
-import { getSafeNextPath, waitForSupabaseSession } from '../lib/authRedirect';
+import { getSafeNextPath, waitForSupabaseSession, withTimeout } from '../lib/authRedirect';
 
 const rememberedEmailStorageKey = 'escortRadar.rememberedEmail';
 
@@ -14,6 +14,7 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const mountedRef = useRef(true);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { t } = useI18n();
@@ -26,6 +27,13 @@ export function LoginPage() {
     setRememberEmail(true);
   }, []);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   if (import.meta.env.DEV) {
     console.debug('[LoginFlow]', {
       emailPresent: Boolean(email.trim()),
@@ -35,9 +43,11 @@ export function LoginPage() {
     });
   }
 
-  async function login(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (loading) return;
     const normalizedEmail = email.trim().toLowerCase();
+    let didRedirect = false;
     if (import.meta.env.DEV) {
       console.debug('[LoginFlow]', {
         emailPresent: Boolean(normalizedEmail),
@@ -51,19 +61,27 @@ export function LoginPage() {
     setLoading(true);
     setMessage('');
     try {
-      const result = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+      const result = await withTimeout(
+        supabase.auth.signInWithPassword({ email: normalizedEmail, password }),
+        15000,
+        t('auth.loginRequestTimeout')
+      );
 
       if (result.error) {
-        setMessage(t('auth.loginFailed', { message: result.error.message }));
+        if (mountedRef.current) setMessage(t('auth.loginFailed', { message: result.error.message }));
         if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: result.error.message, nextParam: searchParams.get('next'), finalTarget: nextPath, hasSession: false });
         return;
       }
 
       if (import.meta.env.DEV) console.debug('[MobileLogin] signIn success', { nextParam: searchParams.get('next'), finalTarget: nextPath });
-      const session = await waitForSupabaseSession(5, 200);
+      const session = await withTimeout(
+        waitForSupabaseSession(5, 200),
+        15000,
+        t('auth.loginSessionTimeout')
+      );
       if (import.meta.env.DEV) console.debug('[MobileLogin] session after signIn', { hasSession: Boolean(session), nextParam: searchParams.get('next'), finalTarget: nextPath });
       if (!session) {
-        setMessage(t('auth.loginFailed', { message: t('states.requestFailed') }));
+        if (mountedRef.current) setMessage(t('auth.loginFailed', { message: t('auth.loginNoSession') }));
         return;
       }
 
@@ -80,13 +98,14 @@ export function LoginPage() {
           hasSession: Boolean(session)
         });
       }
+      didRedirect = true;
       navigate(nextPath, { replace: true });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('states.requestFailed');
-      setMessage(t('auth.loginFailed', { message: errorMessage }));
+      if (mountedRef.current) setMessage(t('auth.loginFailed', { message: errorMessage }));
       if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: errorMessage, nextParam: searchParams.get('next'), finalTarget: nextPath, hasSession: false });
     } finally {
-      setLoading(false);
+      if (mountedRef.current && !didRedirect) setLoading(false);
     }
   }
 
@@ -117,7 +136,7 @@ export function LoginPage() {
           <p className="eyebrow">{t('buttons.login')}</p>
           <h2>{t('auth.loginTitle')}</h2>
           <p className="muted mobile-login-help">{t('auth.mobileLoginHelp')}</p>
-          <form className="stack" onSubmit={login}>
+          <form className="stack" onSubmit={handleSubmit}>
             <input type="email" required autoComplete="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
             <label className="remember-email-control">
               <input type="checkbox" checked={rememberEmail} onChange={(event) => setRememberEmail(event.target.checked)} />
