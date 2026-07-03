@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LogIn, Radar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -73,12 +74,15 @@ export function LoginPage() {
         return;
       }
 
-      if (import.meta.env.DEV) console.debug('[MobileLogin] signIn success', { nextParam: searchParams.get('next'), finalTarget: nextPath });
-      const session = await withTimeout(
-        waitForSupabaseSession(5, 200),
-        15000,
-        t('auth.loginSessionTimeout')
-      );
+      let session: Session | null = result.data.session;
+      if (import.meta.env.DEV) console.debug('[MobileLogin] signIn success', { hasDirectSession: Boolean(session), nextParam: searchParams.get('next'), finalTarget: nextPath });
+      if (!session) {
+        session = await withTimeout(
+          waitForSupabaseSession(5, 200),
+          15000,
+          t('auth.loginSessionTimeout')
+        );
+      }
       if (import.meta.env.DEV) console.debug('[MobileLogin] session after signIn', { hasSession: Boolean(session), nextParam: searchParams.get('next'), finalTarget: nextPath });
       if (!session) {
         if (mountedRef.current) setMessage(t('auth.loginFailed', { message: t('auth.loginNoSession') }));

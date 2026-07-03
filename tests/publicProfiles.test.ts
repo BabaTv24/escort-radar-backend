@@ -951,6 +951,8 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(loginSource, /15000/);
   assert.match(loginSource, /mountedRef\.current && !didRedirect/);
   assert.match(loginSource, /setLoading\(false\)/);
+  assert.match(loginSource, /let session: Session \| null = result\.data\.session/);
+  assert.match(loginSource, /if \(!session\) \{\s*session = await withTimeout\(/);
   assert.match(loginSource, /waitForSupabaseSession\(5, 200\)/);
   assert.match(loginSource, /navigate\(nextPath, \{ replace: true \}\)/);
   assert.match(authRedirectSource, /export async function withTimeout/);
