@@ -943,6 +943,7 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(layoutSource, /t\('auth\.logout'\)/);
   assert.match(loginSource, /useSearchParams/);
   assert.match(loginSource, /getSafeNextPath/);
+  assert.match(loginSource, /waitForSupabaseSession\(5, 200\)/);
   assert.match(loginSource, /navigate\(nextPath, \{ replace: true \}\)/);
   assert.match(authRedirectSource, /startsWith\('\/'\)/);
   assert.match(authRedirectSource, /startsWith\('\/\/'\)/);
@@ -950,12 +951,14 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(authRedirectSource, /startsWith\('https:\/\/'\)/);
   assert.match(authRedirectSource, /decodeURIComponent/);
   assert.match(loginSource, /email\.trim\(\)\.toLowerCase\(\)/);
-  assert.match(loginSource, /supabase\.auth\.getSession\(\)/);
+  assert.match(loginSource, /waitForSupabaseSession\(5, 200\)/);
   assert.match(loginSource, /escortRadar\.rememberedEmail/);
   assert.match(loginSource, /localStorage\.setItem\(rememberedEmailStorageKey, normalizedEmail\)/);
   assert.match(loginSource, /localStorage\.removeItem\(rememberedEmailStorageKey\)/);
   assert.doesNotMatch(loginSource, /localStorage\.setItem\([^)]*password/i);
-  assert.match(loginSource, /\[LoginFlow\]/);
+  assert.match(loginSource, /\[MobileLogin\] signIn success/);
+  assert.match(loginSource, /\[MobileLogin\] session after signIn/);
+  assert.match(loginSource, /\[MobileLogin\] final redirect/);
   assert.match(supabaseSource, /persistSession: true/);
   assert.match(supabaseSource, /autoRefreshToken: true/);
   assert.match(supabaseSource, /detectSessionInUrl: true/);
@@ -963,6 +966,10 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(favoritesSource, /new_balance/);
   assert.match(apiSource, /already_exists\?: boolean/);
   assert.match(dashboardSource, /id="favorites"/);
+  assert.match(dashboardSource, /waitForSupabaseSession\(5, 200\)/);
+  assert.doesNotMatch(dashboardSource, /coinWallet\?\.balance \|\| 100/);
+  assert.doesNotMatch(dashboardSource, /defaultCoins\s*=\s*100/);
+  assert.doesNotMatch(dashboardSource, /receive welcome coins/);
   assert.match(dashboardSource, /api\.myFavorites\(accessToken\)/);
   assert.match(dashboardSource, /scrollIntoView/);
   assert.match(dashboardSource, /favorites\.favoritesDescription/);

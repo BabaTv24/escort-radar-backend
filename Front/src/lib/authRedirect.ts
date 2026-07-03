@@ -1,3 +1,6 @@
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from './supabase';
+
 const defaultNextPath = '/dashboard';
 
 export function getSafeNextPath(searchParams: URLSearchParams): string {
@@ -22,4 +25,17 @@ export function getSafeNextPath(searchParams: URLSearchParams): string {
     return defaultNextPath;
   }
   return next;
+}
+
+export async function waitForSupabaseSession(maxAttempts = 5, delayMs = 180): Promise<Session | null> {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) return data.session;
+    if (attempt < maxAttempts - 1) await wait(delayMs);
+  }
+  return null;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'escort-radar-v3';
+const CACHE_NAME = 'escort-radar-v4';
 const STATIC_ASSETS = ['/manifest.webmanifest', '/icon.svg', '/favicon-192x192.png', '/favicon-512x512.png'];
 
 self.addEventListener('install', (event) => {

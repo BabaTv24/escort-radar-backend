@@ -5,6 +5,7 @@ import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Gift, He
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
+import { waitForSupabaseSession } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
 import type { BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Gift as GiftRow, Profile, ProfileImage, RadarNotification, Tag } from '../types';
 import type { Wallet } from '../types';
@@ -172,16 +173,30 @@ export function DashboardPage() {
   const { t, option } = useI18n();
 
   useEffect(() => {
+    let mounted = true;
     api.tags().then((data) => setPlatformTags(data.tags)).catch(() => setPlatformTags([]));
-    supabase.auth.getSession().then(async ({ data }) => {
-      await activateSession(data.session);
+    setAuthResolved(false);
+    waitForSupabaseSession(5, 200).then(async (session) => {
+      if (!mounted) return;
+      if (session) {
+        await activateSession(session);
+        return;
+      }
+      setToken('');
+      setUserEmail('');
+      setAuthAccountType('unknown');
+      setAuthResolved(true);
+      navigate(`/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}`, { replace: true });
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       await activateSession(session);
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -538,6 +553,18 @@ export function DashboardPage() {
     }
   }
 
+  if (!authResolved) {
+    return (
+      <div className="page dashboard-page">
+        <section className="dashboard-hero">
+          <p className="eyebrow">Escort Radar</p>
+          <h1>{t('states.loading')}</h1>
+          <p>{t('dashboard.client.ready')}</p>
+        </section>
+      </div>
+    );
+  }
+
   if (!token) {
     return (
       <div className="dashboard-guest-shell">
@@ -603,18 +630,6 @@ export function DashboardPage() {
       setDashboardStatus('error');
       setMessage(error instanceof Error ? error.message : 'Could not create request.');
     }
-  }
-
-  if (!authResolved) {
-    return (
-      <div className="page dashboard-page">
-        <section className="dashboard-hero">
-          <p className="eyebrow">Escort Radar</p>
-          <h1>Ladowanie dashboardu...</h1>
-          <p>Sprawdzamy bezpieczny typ konta z backendu.</p>
-        </section>
-      </div>
-    );
   }
 
   if (authAccountType === 'unknown') {
@@ -1105,7 +1120,7 @@ function UnknownAccountDashboard({ email, authAccountType, message, onLogout }: 
   message: string;
   onLogout: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, option } = useI18n();
   if (!email) {
     return (
       <div className="page dashboard-page">
@@ -1167,13 +1182,13 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   favorites: ClientFavorite[];
   onRemoveFavorite: (profileId: string) => void;
 }) {
-  const { t } = useI18n();
+  const { t, option } = useI18n();
   const activated = activation?.state === 'client_activated';
   const referralLink = getPublicReferralLink(activation);
   const referralQrImageUrl = referralLink ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(referralLink)}` : '';
-  const displayName = clientProfile?.display_name || userEmail.split('@')[0] || 'Client';
+  const displayName = clientProfile?.display_name || userEmail.split('@')[0] || t('clientOffice.clientFallback');
   const city = clientProfile?.city || 'Berlin';
-  const statusLabel = activated ? 'Konto aktywne' : 'Konto darmowe';
+  const statusLabel = activated ? t('clientOffice.premiumActive') : t('dashboard.client.freeStatus');
   const availableProfiles = marketProfiles.filter((profile) => profile.available_now).length || Math.min(marketProfiles.length, 3);
   const newToday = marketProfiles.filter((profile) => profile.created_at && new Date(profile.created_at).toDateString() === new Date().toDateString()).length;
   const recentlyActive = marketProfiles.filter((profile) => profile.availability_status === 'available' || profile.available_now).length || availableProfiles;
@@ -1184,9 +1199,9 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     area: intent?.area || '',
     radius_km: intent?.radius_km || 25,
     category: intent?.category || 'ladies',
-    budget_min: intent?.budget_min || 100,
+    budget_min: intent?.budget_min || undefined,
     budget_max: intent?.budget_max || 300,
-    time_window: intent?.time_window || 'Tonight'
+    time_window: intent?.time_window || t('clientOffice.intentTonight')
   });
   const featureCards = [
     ['Radar', 'Zobacz profile w pobliżu Berlina.', RadioTower, '/city/berlin', true],
@@ -1198,36 +1213,36 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     ['Private gallery access', 'Uzyskaj dostęp do pełnych galerii VIP.', ImagePlus, '', activated]
   ] as const;
   const premiumFeatureCards = [
-    ['Otworz radar', 'Zobacz profile w poblizu Berlina.', RadioTower, '/city/berlin', true],
-    ['Zobacz profile w poblizu', 'Przejdz do aktualnych profili w miescie.', Sparkles, '/city/berlin', true],
-    ['Ulubione', 'Zapisuj wybrane profile i wracaj szybciej.', Heart, '', activated],
-    ['Coin Wallet', 'Sprawdz saldo i historie Coins.', Gem, '/coins', activated],
-    ['Wyslij prezent', 'Prezenty Coins sa aktywne po odblokowaniu.', Gift, '', activated],
-    ['Historia aktywnosci', 'Kontrola odblokowan, prezentow i bonusow.', Clock, '', activated]
+    [t('dashboard.client.openRadar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin', true],
+    [t('clientOffice.viewNearby'), t('clientOffice.viewNearbyCopy'), Sparkles, '/city/berlin', true],
+    [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '', activated],
+    [t('clientOffice.coinWallet'), t('clientOffice.coinWalletCopy'), Gem, '/coins', activated],
+    [t('clientOffice.sendGift'), t('clientOffice.sendGiftCopy'), Gift, '', activated],
+    [t('dashboard.client.activity'), t('clientOffice.activityCopy'), Clock, '', activated]
   ] as const;
   const unlockChecklist = [
-    'Telefon odblokowany',
-    'WhatsApp odblokowany',
-    'Telegram odblokowany',
-    'Pelne galerie odblokowane',
-    'Prezenty Coins aktywne',
-    'Referral link aktywny',
+    t('clientOffice.unlock.phone'),
+    t('clientOffice.unlock.whatsapp'),
+    t('clientOffice.unlock.telegram'),
+    t('clientOffice.unlock.galleries'),
+    t('clientOffice.unlock.gifts'),
+    t('clientOffice.unlock.referral'),
     t('activation.activationTokenBonus')
   ];
   void featureCards;
 
   return (
-    <div className="page dashboard-page">
-      <section className="dashboard-hero">
-        <p className="eyebrow">Escort Radar Client</p>
-        <h1>{activated ? 'Konto Premium aktywne' : 'Aktywuj konto za 0,99€'}</h1>
-        <p>{activated ? 'Pelne profile, kontakty, galerie VIP, Coins i referral program sa gotowe.' : 'Odblokuj pelne profile, kontakt, prywatne galerie, prezenty Coins i radar VIP.'}</p>
+    <div className="page dashboard-page premium-client-office">
+      <section className="dashboard-hero client-office-hero">
+        <p className="eyebrow">{t('clientOffice.eyebrow')}</p>
+        <h1>{t('clientOffice.title')}</h1>
+        <p>{activated ? t('clientOffice.subtitleActive') : t('clientOffice.subtitleFree')}</p>
         {!activated && (
           <>
             <div className="onboarding-points">
               {['Telefon / WhatsApp / Telegram', 'Wszystkie zdjecia', 'Prywatne galerie', 'Prezenty Coins', 'Referral link + QR', t('activation.activationTokenBonus')].map((item) => <span key={item}>{item}</span>)}
             </div>
-            <button className="button primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : 'Aktywuj aplikację 0,99 €'}</button>
+            <button className="button primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</button>
           </>
         )}
         {activated && <div className="onboarding-points">{unlockChecklist.map((item) => <span key={item}>{item}</span>)}</div>}
@@ -1244,8 +1259,8 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
           <span className={activated ? 'success' : 'subscription-notice'}>{message || statusLabel}</span>
         </div>
         <div className="creator-command-actions">
-          <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> Otwórz radar</Link>
-          <Link className="button" to="/coins"><Gem size={16} /> Coin Wallet</Link>
+          <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> {t('dashboard.client.openRadar')}</Link>
+          <Link className="button" to="/coins"><Gem size={16} /> {t('clientOffice.coinWallet')}</Link>
           <button className="button danger" type="button" onClick={onLogout}>{t('buttons.logout')}</button>
         </div>
       </section>
@@ -1255,89 +1270,88 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
           <div className="profile-summary">
             {clientProfile?.avatar_url ? <img className="client-qr-image" src={clientProfile.avatar_url} alt="" /> : <div className="qr-visual"><UserRound size={54} /></div>}
             <div>
-              <p className="eyebrow">Client profile</p>
+              <p className="eyebrow">{t('clientOffice.profile')}</p>
               <h2>{displayName}</h2>
               <p>{userEmail}</p>
               <p>{city}</p>
               <span className={`admin-status ${activated ? 'active' : 'pending'}`}>{statusLabel}</span>
-              {activation?.activated_at && <p>Aktywacja: {new Date(activation.activated_at).toLocaleDateString()}</p>}
+              {activation?.activated_at && <p>{t('clientOffice.activatedAt', { date: new Date(activation.activated_at).toLocaleDateString() })}</p>}
             </div>
           </div>
           <label className="button full">
-            {avatarUploading ? t('states.loading') : 'Avatar hochladen'}
+            {avatarUploading ? t('states.loading') : t('clientOffice.uploadAvatar')}
             <input hidden type="file" accept="image/*" onChange={onAvatarUpload} />
           </label>
           <div className="metrics-grid">
-            <Metric label="Coins" value={Math.round(Number(coinWallet?.balance || 0))} />
-            <Metric label="Prezenty wyslane" value={giftsSent.length} />
-            <Metric label="Prezenty otrzymane" value={giftsReceived.length} />
+            <Metric label={t('clientOffice.coinBalance')} value={Math.round(Number(coinWallet?.balance ?? 0))} />
+            <Metric label={t('clientOffice.giftsSent')} value={giftsSent.length} />
+            <Metric label={t('clientOffice.giftsReceived')} value={giftsReceived.length} />
           </div>
         </section>
 
         {!activated && <section className="creator-panel elevated">
-          <p className="eyebrow">Full Escort Radar Experience</p>
-          <h2>Aktywuj konto za 0,99€</h2>
-          <p>Zobacz pełne profile, numery telefonu, prywatne galerie i wysyłaj prezenty Coins.</p>
+          <p className="eyebrow">{t('clientOffice.fullExperience')}</p>
+          <h2>{t('clientOffice.activateTitle')}</h2>
+          <p>{t('clientOffice.subtitleFree')}</p>
           <div className="onboarding-points">
-            <span>unlock phone / WhatsApp / Telegram</span>
-            <span>see all photos</span>
-            <span>send gifts / coins</span>
-            <span>access private gallery</span>
-            <span>save favorites</span>
-            <span>get referral link and QR</span>
-            <span>receive welcome coins</span>
+            <span>{t('clientOffice.unlock.phone')}</span>
+            <span>{t('clientOffice.unlock.whatsapp')}</span>
+            <span>{t('clientOffice.unlock.telegram')}</span>
+            <span>{t('clientOffice.unlock.galleries')}</span>
+            <span>{t('clientOffice.unlock.gifts')}</span>
+            <span>{t('clientOffice.unlock.referral')}</span>
           </div>
           <button className="button primary full" type="button" disabled={activationBusy} onClick={onActivate}>
-            {activationBusy ? t('states.loading') : 'Aktywuj aplikację 0,99 €'}
+            {activationBusy ? t('states.loading') : t('clientOffice.activateCta')}
           </button>
         </section>}
 
         <section className="creator-panel referral-studio">
           <div>
-            <p className="eyebrow">My Referral Program</p>
-            <h2>{referralLink || 'Activate to unlock referrals'}</h2>
-            {referralLink && <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(referralLink)}><Copy size={14} /> {t('referral.copy')}</button>}
+            <p className="eyebrow">{t('clientOffice.referralEyebrow')}</p>
+            <h2>{referralLink || t('clientOffice.referralLocked')}</h2>
+            {referralLink && <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(referralLink)}><Copy size={14} /> {t('clientOffice.copyInvite')}</button>}
           </div>
           {referralQrImageUrl ? <img className="client-qr-image" src={referralQrImageUrl} alt="Referral QR" /> : <QrVisual seed="CLIENT-FREE" />}
           <div className="metrics-grid">
-            <Metric label="Clicks" value={activation?.clicks || 0} />
-            <Metric label="Registrations" value={activation?.registrations || 0} />
-            <Metric label="Activations" value={activation?.activations || 0} />
-            <Metric label="Earned rewards" value={`${activation?.earned_rewards || 0} Coins`} />
+            <Metric label={t('clientOffice.clicks')} value={activation?.clicks || 0} />
+            <Metric label={t('clientOffice.registrations')} value={activation?.registrations || 0} />
+            <Metric label={t('clientOffice.activations')} value={activation?.activations || 0} />
+            <Metric label={t('clientOffice.earnedRewards')} value={`${activation?.earned_rewards || 0} Coins`} />
           </div>
           <div className="progress-track"><span style={{ width: `${referralProgress}%` }} /></div>
-          <p className="muted">Nastepny bonus: {Math.max(3 - (activation?.activations || 0), 0)} aktywacje z polecenia.</p>
+          <p className="muted">{t('clientOffice.nextBonus', { count: Math.max(3 - (activation?.activations || 0), 0) })}</p>
         </section>
 
         <section className="creator-panel">
-          <p className="eyebrow">Client intent</p>
-          <h2>{intent ? `${intent.status.replace(/_/g, ' ')} in ${intent.city}` : 'Create a live request'}</h2>
+          <p className="eyebrow">{t('clientOffice.liveEyebrow')}</p>
+          <h2>{intent ? t('clientOffice.liveActive', { status: intent.status.replace(/_/g, ' '), city: intent.city }) : t('clientOffice.liveTitle')}</h2>
           <div className="one-hand-status-toggle">
             {(['LOOKING_NOW', 'LOOKING_TODAY', 'TRAVELING', 'BROWSING', 'OFFLINE'] as const).map((status) => (
-              <button key={status} type="button" className={intentDraft.status === status ? 'active available' : ''} onClick={() => setIntentDraft({ ...intentDraft, status })}>{status.replace(/_/g, ' ')}</button>
+              <button key={status} type="button" className={intentDraft.status === status ? 'active available' : ''} onClick={() => setIntentDraft({ ...intentDraft, status })}>{t(`clientOffice.intent.${status}`)}</button>
             ))}
           </div>
           <div className="one-hand-inline-fields">
             <select value={intentDraft.city || 'berlin'} onChange={(event) => setIntentDraft({ ...intentDraft, city: event.target.value })}>
               {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <input placeholder="Area" value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
+            <input placeholder={t('clientOffice.area')} value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
             <select value={intentDraft.category || 'ladies'} onChange={(event) => setIntentDraft({ ...intentDraft, category: event.target.value })}>
-              {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+              {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
             </select>
             <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
               {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}
             </select>
-            <input type="number" placeholder="Budget min" value={intentDraft.budget_min || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_min: Number(event.target.value) })} />
-            <input type="number" placeholder="Budget max" value={intentDraft.budget_max || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_max: Number(event.target.value) })} />
-            <input placeholder="Time window" value={intentDraft.time_window || ''} onChange={(event) => setIntentDraft({ ...intentDraft, time_window: event.target.value })} />
+            <input type="number" placeholder={t('clientOffice.budgetMin')} value={intentDraft.budget_min || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_min: Number(event.target.value) })} />
+            <input type="number" placeholder={t('clientOffice.budgetMax')} value={intentDraft.budget_max || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_max: Number(event.target.value) })} />
+            <input placeholder={t('clientOffice.timeWindow')} value={intentDraft.time_window || ''} onChange={(event) => setIntentDraft({ ...intentDraft, time_window: event.target.value })} />
           </div>
-          <button className="button primary full" type="button" onClick={() => onCreateIntent(intentDraft)}>Create live request</button>
-          <p className="muted">Max 1 active request. Cooldown 5 minutes. Exact location is never shown.</p>
+          <button className="button primary full" type="button" onClick={() => onCreateIntent(intentDraft)}>{t('clientOffice.createRequest')}</button>
+          <p className="muted">{t('clientOffice.livePrivacy')}</p>
           <div className="metrics-grid">
-            <Metric label="Nearby active advertisers" value={matches.length} />
-            <Metric label="Notifications" value={notifications.length} />
-            <Metric label="Expires" value={intent?.expires_at ? new Date(intent.expires_at).toLocaleTimeString() : '-'} />
+            <Metric label={t('clientOffice.nearbyAdvertisers')} value={matches.length} />
+            <Metric label={t('clientOffice.notifications')} value={notifications.length} />
+            <Metric label={t('clientOffice.expires')} value={intent?.expires_at ? new Date(intent.expires_at).toLocaleTimeString() : '-'} />
           </div>
           <div className="booking-list">
             {matches.slice(0, 4).map((match) => (
@@ -1346,7 +1360,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
                 <span>{match.match_score ?? match.radar_score ?? 0}</span>
               </div>
             ))}
-            {!matches.length && <p className="muted">No live matches yet.</p>}
+            {!matches.length && <p className="muted">{t('clientOffice.noLiveMatches')}</p>}
           </div>
         </section>
 
@@ -1379,13 +1393,13 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
         </section>
 
         <section className="creator-panel">
-          <p className="eyebrow">Market pulse</p>
-          <h2>Berlin jest aktywny teraz</h2>
+          <p className="eyebrow">{t('clientOffice.insightsEyebrow')}</p>
+          <h2>{t('clientOffice.insightsTitle')}</h2>
           <div className="metrics-grid">
-            <Metric label="Profiles near Berlin" value={marketProfiles.length || 'Dane wkrotce'} />
-            <Metric label="Available now" value={availableProfiles || 'Sprawdz radar'} />
-            <Metric label="New profiles today" value={newToday || 'Brak nowych dzisiaj'} />
-            <Metric label="Recently active" value={recentlyActive || 'Dane wkrotce'} />
+            <Metric label={t('clientOffice.profilesNearCity', { city })} value={marketProfiles.length || 0} />
+            <Metric label={t('clientOffice.availableNow')} value={availableProfiles || 0} />
+            <Metric label={t('clientOffice.newToday')} value={newToday || 0} />
+            <Metric label={t('clientOffice.recentlyActive')} value={recentlyActive || 0} />
           </div>
           <div hidden>
           <p className="eyebrow">Radar Berlin</p>
@@ -1397,16 +1411,16 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
           </div>
           </div>
           <div className="creator-share-row">
-            <Link className="button primary" to="/city/berlin">Otworz radar</Link>
-            <Link className="button" to="/city/berlin">Zobacz profile w poblizu</Link>
+            <Link className="button primary" to="/city/berlin">{t('dashboard.client.openRadar')}</Link>
+            <Link className="button" to="/city/berlin">{t('clientOffice.viewNearby')}</Link>
           </div>
         </section>
 
         <section className="creator-panel">
-          <p className="eyebrow">Client tools</p>
+          <p className="eyebrow">{t('clientOffice.tools')}</p>
           <div className="creator-dashboard-grid">
             {premiumFeatureCards.map(([title, copy, Icon, href, enabled]) => {
-              const content = <><Icon size={16} /> <strong>{title}</strong><span>{enabled ? copy : 'Aktywuj za 0,99€'}</span></>;
+              const content = <><Icon size={16} /> <strong>{title}</strong><span>{enabled ? copy : t('clientOffice.activateCta')}</span></>;
               if (href && enabled) return <Link className="admin-action-btn" to={href} key={title}>{content}</Link>;
               return <button className="admin-action-btn" type="button" key={title} onClick={enabled ? undefined : onActivate}>{content}</button>;
             })}
@@ -1414,7 +1428,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
         </section>
 
         <section className="creator-panel">
-          <p className="eyebrow">Aktywitätsverlauf</p>
+          <p className="eyebrow">{t('dashboard.client.activity')}</p>
           <div className="booking-list">
             {transactions.slice(0, 5).map((transaction) => (
               <div className="booking-row" key={transaction.id}>
@@ -1422,7 +1436,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
                 <span>{transaction.direction === 'credit' ? '+' : '-'}{transaction.amount} Coins</span>
               </div>
             ))}
-            {!transactions.length && <p className="muted">No activity yet. Unlock profiles, send gifts, and collect referral rewards.</p>}
+            {!transactions.length && <p className="muted">{t('clientOffice.noActivity')}</p>}
           </div>
         </section>
       </div>
@@ -1734,7 +1748,7 @@ function DevDebugBox({ userEmail, profile, wallet, uploadStatus, lastApiError }:
 }
 
 function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile: Profile | null; onUpload: () => void; onLogout: () => void }) {
-  const { t } = useI18n();
+  const { t, option } = useI18n();
   return (
     <nav className="mobile-creator-dock">
       <button type="button"><Video size={17} />{t('creator.goLive')}</button>

@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LogIn, Radar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useI18n } from '../i18n';
-import { getSafeNextPath } from '../lib/authRedirect';
+import { getSafeNextPath, waitForSupabaseSession } from '../lib/authRedirect';
 
 const rememberedEmailStorageKey = 'escortRadar.rememberedEmail';
 
@@ -59,7 +59,13 @@ export function LoginPage() {
         return;
       }
 
-      const sessionResult = await supabase.auth.getSession();
+      if (import.meta.env.DEV) console.debug('[MobileLogin] signIn success', { nextParam: searchParams.get('next'), finalTarget: nextPath });
+      const session = await waitForSupabaseSession(5, 200);
+      if (import.meta.env.DEV) console.debug('[MobileLogin] session after signIn', { hasSession: Boolean(session), nextParam: searchParams.get('next'), finalTarget: nextPath });
+      if (!session) {
+        setMessage(t('auth.loginFailed', { message: t('states.requestFailed') }));
+        return;
+      }
 
       if (rememberEmail) {
         localStorage.setItem(rememberedEmailStorageKey, normalizedEmail);
@@ -68,10 +74,10 @@ export function LoginPage() {
       }
 
       if (import.meta.env.DEV) {
-        console.debug('[LoginFlow]', {
+        console.debug('[MobileLogin] final redirect', {
           nextParam: searchParams.get('next'),
           finalTarget: nextPath,
-          hasSession: Boolean(sessionResult.data.session)
+          hasSession: Boolean(session)
         });
       }
       navigate(nextPath, { replace: true });
