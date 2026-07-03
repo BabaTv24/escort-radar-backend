@@ -556,12 +556,23 @@ test('environment example includes legal and manual payment readiness variables'
 });
 
 test('category normalization uses canonical mobile category keys', async () => {
-  const { activePublicCategoryOptions, getCategoryAliases, normalizeCategoryKey, categoryOptions } = await import('../Back/src/categories.ts');
+  const { activePublicCategoryOptions, getCategoryAliases, isActivePublicCategory, normalizeCategoryKey, categoryOptions } = await import('../Back/src/categories.ts');
+  const frontCategories = await import('../Front/src/lib/categories.ts');
   const { citySlug, normalizeCountry } = await import('../Back/src/locations.ts');
   assert.deepEqual(categoryOptions, ['ladies', 'men', 'gay', 'couples', 'trans', 'massage', 'home_hotel', 'live_cam', 'clubs_parties', 'bdsm', 'onlyfans', 'sex_phone', 'films', 'offers', 'other']);
   assert.deepEqual(activePublicCategoryOptions, ['ladies', 'gay', 'couples', 'trans', 'massage', 'live_cam', 'clubs_parties']);
   assert.equal(normalizeCategoryKey('Gay'), 'gay');
   assert.equal(normalizeCategoryKey('Panie'), 'ladies');
+  assert.equal(normalizeCategoryKey('Ladies'), 'ladies');
+  assert.equal(normalizeCategoryKey('female'), 'ladies');
+  assert.equal(normalizeCategoryKey('women'), 'ladies');
+  assert.equal(normalizeCategoryKey('woman'), 'ladies');
+  assert.equal(normalizeCategoryKey('girls'), 'ladies');
+  assert.equal(normalizeCategoryKey('girl'), 'ladies');
+  assert.equal(isActivePublicCategory('Panie'), true);
+  assert.equal(isActivePublicCategory('ladies'), true);
+  assert.equal(frontCategories.isActivePublicCategory('Panie'), true);
+  assert.equal(frontCategories.isActivePublicCategory('ladies'), true);
   assert.equal(normalizeCategoryKey('Panowie'), 'men');
   assert.equal(normalizeCategoryKey('Dom / Hotel'), 'home_hotel');
   assert.equal(normalizeCategoryKey('house_hotel'), 'home_hotel');
@@ -638,6 +649,7 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
   const layoutSource = await readFile(new URL('../Front/src/components/Layout.tsx', import.meta.url), 'utf8');
   const homeSource = await readFile(new URL('../Front/src/pages/HomePage.tsx', import.meta.url), 'utf8');
   const adminPageSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  const plLocale = JSON.parse(await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8'));
   const base = {
     status: 'active',
     is_published: true,
@@ -648,17 +660,24 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
     postal_code: '10115'
   };
   const berlinLadies = { ...base, id: 'berlin-ladies', display_name: 'Berlin Panie', city: 'berlin', work_city: 'Berlin', category: 'Panie' };
+  const berlinLadiesCanonical = { ...base, id: 'berlin-ladies-canonical', display_name: 'Berlin Ladies', city: 'berlin', work_city: 'Berlin', category: 'ladies' };
   const berlinGay = { ...base, id: 'berlin-gay', display_name: 'Berlin Gay', city: 'berlin', work_city: 'Berlin', category: 'Gay' };
   const berlinHomeHotel = { ...base, id: 'berlin-home-hotel', display_name: 'Berlin Dom/Hotel', city: 'berlin', work_city: 'Berlin', category: 'Dom / Hotel' };
   const hamburgLadies = { ...base, id: 'hamburg-ladies', display_name: 'Hamburg Panie', city: 'hamburg', work_city: 'Hamburg', category: 'Panie' };
-  const rows = [berlinLadies, berlinGay, berlinHomeHotel, hamburgLadies];
+  const rows = [berlinLadies, berlinLadiesCanonical, berlinGay, berlinHomeHotel, hamburgLadies];
 
   assert.deepEqual(activePublicCategoryOptions, ['ladies', 'gay', 'couples', 'trans', 'massage', 'live_cam', 'clubs_parties']);
   assert.deepEqual(disabledPublicCategoryOptions, ['men', 'home_hotel', 'bdsm', 'onlyfans', 'sex_phone', 'films', 'offers', 'other']);
-  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'all' })).map((profile) => profile.id), ['berlin-ladies', 'berlin-gay']);
-  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'ladies' })).map((profile) => profile.id), ['berlin-ladies']);
+  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'all' })).map((profile) => profile.id), ['berlin-ladies', 'berlin-ladies-canonical', 'berlin-gay']);
+  assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'ladies' })).map((profile) => profile.id), ['berlin-ladies', 'berlin-ladies-canonical']);
   assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'berlin', category: 'gay' })).map((profile) => profile.id), ['berlin-gay']);
   assert.deepEqual(rows.filter((profile) => profileMatchesSearch(profile, { country: 'DE', city: 'hamburg', category: 'all' })).map((profile) => profile.id), ['hamburg-ladies']);
+
+  const panieInLadies = explainProfileVisibility(berlinLadies, { country: 'DE', city: 'berlin', category: 'ladies' });
+  assert.equal(panieInLadies.isPublicVisible, true);
+  assert.equal(panieInLadies.isVisibleInCurrentSearch, true);
+  assert.equal(panieInLadies.checks.categoryActive, true);
+  assert.equal(panieInLadies.reasons.includes('disabled_category'), false);
 
   const gayInLadies = explainProfileVisibility(berlinGay, { country: 'DE', city: 'berlin', category: 'ladies' });
   assert.equal(gayInLadies.isPublicVisible, true);
@@ -670,6 +689,8 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
   assert.equal(homeHotelAll.isVisibleInCurrentSearch, false);
   assert.equal(homeHotelAll.checks.categoryActive, false);
   assert.ok(homeHotelAll.reasons.includes('disabled_category'));
+  assert.equal(plLocale['admin.visibility.reason.disabled_category'], 'Kategoria wyłączona');
+  assert.equal(plLocale['admin.visibility.reason.category_mismatch'], 'Kategoria nie pasuje do aktualnego widoku');
   assert.match(adminSource, /profiles\/visibility-audit/);
   assert.match(adminSource, /visibility_audit: explainProfileVisibility/);
   assert.match(profilesSource, /isActivePublicCategory\(profile\.category\)/);
@@ -681,6 +702,8 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
   assert.match(homeSource, /activePublicCategoryOptions\.map/);
   assert.match(adminPageSource, /legacyDisabledCategory/);
   assert.match(adminPageSource, /activePublicCategoryOptions\.map/);
+  assert.match(adminPageSource, /adminCategoryToFormValue\(profile\.category\)/);
+  assert.match(adminPageSource, /category: normalizeCategoryKey\(studioForm\.category\) \|\| studioForm\.category/);
 });
 
 test('client activation token bonus is 7 and favorites are token-gated', async () => {

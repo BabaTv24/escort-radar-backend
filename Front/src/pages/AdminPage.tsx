@@ -7,7 +7,7 @@ import { WorkPointMap } from '../components/WorkPointMap';
 import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
-import { isActivePublicCategory } from '../lib/categories';
+import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
 import { berlinDistrictOptions, resolveBerlinPostalDistrict } from '../lib/geo';
@@ -582,7 +582,7 @@ export function AdminPage() {
       account_type: adminAccountTypeToUi(profile.account_type),
       profile_type: adminProfileTypeToUi(profile.profile_type),
       display_name: profile.display_name || '',
-      category: profile.category || 'ladies',
+      category: adminCategoryToFormValue(profile.category),
       city: profile.city || 'berlin',
       area: profile.area || profile.work_area || '',
       work_country: profile.work_country || 'DE',
@@ -725,6 +725,7 @@ export function AdminPage() {
         ...(!studioForm.id ? { password, confirm_password } : {}),
         account_type: adminAccountTypeToBackend(studioForm.account_type),
         profile_type: adminProfileTypeToBackend(studioForm.profile_type),
+        category: normalizeCategoryKey(studioForm.category) || studioForm.category,
         height: studioForm.height_cm,
         languages: Array.isArray(studioForm.languages) ? studioForm.languages : String(studioForm.languages || '').split(',').map((item) => item.trim()).filter(Boolean),
         opening_hours: studioForm.opening_hours ? { note: studioForm.opening_hours } : {},
@@ -1670,7 +1671,7 @@ export function AdminPage() {
           <article className="admin-card profile-studio-list">
             <div className="profile-studio-head">
               <div>
-                <p className="eyebrow">Profile Control</p>
+                <p className="eyebrow">{t('admin.profiles.profileControl')}</p>
                 <h2>{t('admin.profiles.allProfiles')}</h2>
               </div>
               <div className="admin-actions-row">
@@ -1694,27 +1695,28 @@ export function AdminPage() {
                 {['all', ...categoryOptions].map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
               <select value={studioFilters.published} onChange={(event) => setStudioFilters({ ...studioFilters, published: event.target.value })}>
-                <option value="all">published: all</option>
+                <option value="all">{t('admin.filters.publishedAll')}</option>
                 <option value="yes">published</option>
                 <option value="no">unpublished</option>
               </select>
               <select value={studioFilters.suspended} onChange={(event) => setStudioFilters({ ...studioFilters, suspended: event.target.value })}>
-                <option value="all">suspended: all</option>
+                <option value="all">{t('admin.filters.suspendedAll')}</option>
                 <option value="yes">suspended</option>
                 <option value="no">not suspended</option>
               </select>
               <select value={studioFilters.seed} onChange={(event) => setStudioFilters({ ...studioFilters, seed: event.target.value })}>
-                <option value="all">seed: all</option>
+                <option value="all">{t('admin.filters.seedAll')}</option>
                 <option value="yes">seed/demo</option>
                 <option value="no">real/non-seed</option>
               </select>
               <select value={studioFilters.verified} onChange={(event) => setStudioFilters({ ...studioFilters, verified: event.target.value })}>
-                <option value="all">verified: all</option>
+                <option value="all">{t('admin.filters.verifiedAll')}</option>
                 <option value="yes">verified</option>
                 <option value="no">unverified</option>
               </select>
               <select value={studioFilters.premium_tier} onChange={(event) => setStudioFilters({ ...studioFilters, premium_tier: event.target.value })}>
-                {['all', 'standard', 'gold', 'elite', 'diamond'].map((item) => <option key={item} value={item}>tier: {item}</option>)}
+                <option value="all">{t('admin.filters.tierAll')}</option>
+                {['standard', 'gold', 'elite', 'diamond'].map((item) => <option key={item} value={item}>{t(`admin.status.${item}`)}</option>)}
               </select>
               <input placeholder={t('admin.filters.ownerEmail')} value={studioFilters.owner_email} onChange={(event) => setStudioFilters({ ...studioFilters, owner_email: event.target.value })} />
             </div>
@@ -2637,22 +2639,24 @@ function ChartPlaceholder({ title }: { title: string }) {
 }
 
 function AdminTable<T extends Record<string, any>>({ rows, columns, actions, format, labels }: { rows: T[]; columns: string[]; actions?: (row: T) => ReactNode; format?: (key: string, value: unknown, row: T) => unknown; labels?: Record<string, string> }) {
+  const { t } = useI18n();
+  const actionLabel = labels?.actions || t('admin.table.actions');
   return (
     <section className="admin-table-card">
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr>{columns.map((column) => <th key={column}>{labels?.[column] || column}</th>)}{actions && <th>{labels?.actions || 'Actions'}</th>}</tr></thead>
+          <thead><tr>{columns.map((column) => <th key={column}>{labels?.[column] || column}</th>)}{actions && <th>{actionLabel}</th>}</tr></thead>
           <tbody>
             {rows.map((row, index) => (
               <tr key={row.id || index}>
                 {columns.map((column) => <td key={column} data-label={labels?.[column] || column}><CellValue value={format ? format(column, row[column], row) : row[column]} /></td>)}
-                {actions && <td data-label={labels?.actions || 'Actions'}><div className="admin-actions-row">{actions(row)}</div></td>}
+                {actions && <td data-label={actionLabel}><div className="admin-actions-row">{actions(row)}</div></td>}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {!rows.length && <p className="muted">Brak rekordow.</p>}
+      {!rows.length && <p className="muted">{t('admin.table.empty')}</p>}
     </section>
   );
 }
@@ -2695,9 +2699,28 @@ function adminProfileTypeToBackend(value: unknown) {
   return adminProfileTypeOptions.includes(next) ? next : 'private_escort';
 }
 
+function adminCategoryToFormValue(value: unknown) {
+  const normalized = normalizeCategoryKey(value);
+  if (normalized && isActivePublicCategory(normalized)) return normalized;
+  return String(value || 'ladies');
+}
+
+function adminStatusLabel(value: unknown, t: (key: string, vars?: Record<string, string | number>) => string) {
+  const raw = String(value || 'unknown');
+  const key = raw.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const statusKey = `admin.status.${key}`;
+  const statusLabel = t(statusKey);
+  if (statusLabel !== statusKey) return statusLabel;
+  const visibilityKey = `admin.visibility.${key}`;
+  const visibilityLabel = t(visibilityKey);
+  if (visibilityLabel !== visibilityKey) return visibilityLabel;
+  return raw.replace(/_/g, ' ');
+}
+
 function StatusBadge({ value }: { value: string }) {
+  const { t } = useI18n();
   const safeValue = String(value || 'unknown').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-  return <span className={`admin-status ${safeValue}`}>{String(value || 'unknown').replace(/_/g, ' ').toUpperCase()}</span>;
+  return <span className={`admin-status ${safeValue}`}>{adminStatusLabel(value, t)}</span>;
 }
 
 function Action({ children, onClick, danger = false, disabled = false, title }: { children: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; title?: string }) {
