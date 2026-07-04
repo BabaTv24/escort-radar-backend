@@ -81,13 +81,15 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
         {profile.services?.length ? <p className="muted line-clamp">{profile.services.slice(0, 4).map(serviceLabel).join(' · ')}</p> : null}
         {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
-        <button className="button full" type="button" disabled={favoriteState === 'saved'} onClick={toggleFavorite}>
-          <HeartHandshake size={15} /> {favoriteState === 'saved' ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}
-        </button>
+        <div className="premium-card-actions">
+          <button className="button icon-favorite-action" type="button" disabled={favoriteState === 'saved'} onClick={toggleFavorite} aria-label={favoriteState === 'saved' ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}>
+            <HeartHandshake size={16} />
+          </button>
+          <Link to={`/profile/${profile.id}`} className="button primary full">{t('buttons.viewProfile')}</Link>
+        </div>
         {favoriteMessage && <p className={favoriteMessage === t('favorites.notEnoughTokens') ? 'error-text' : 'success'}>{favoriteMessage}</p>}
         {favoriteMessage === t('favorites.notEnoughTokens') && <Link className="button full" to="/tokens">{t('favorites.buyTokens')}</Link>}
         {favoriteMessage === t('favorites.loginToSeeFavorites') && <Link className="button full" to="/login">{t('buttons.login')}</Link>}
-        <Link to={`/profile/${profile.id}`} className="button primary full">{t('buttons.viewProfile')}</Link>
       </div>
     </article>
   );
