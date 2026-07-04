@@ -9048,3 +9048,15 @@ textarea:focus {
     repeating-radial-gradient(circle, rgba(247, 212, 107, .18) 0 1px, transparent 1px 72px) !important;
   animation: none !important;
 }
+
+.landing-hero {
+  background:
+    linear-gradient(90deg, rgba(5,5,5,.92), rgba(5,5,5,.62) 48%, rgba(5,5,5,.36)),
+    linear-gradient(180deg, rgba(5,5,5,.20), rgba(5,5,5,.76)),
+    url("/hero-radar-background.png") center / cover no-repeat,
+    #050505 !important;
+}
+
+.landing-hero .hero-cinema-bg {
+  display: none;
+}
