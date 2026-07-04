@@ -37,6 +37,10 @@ app.use(cors({
 app.use('/api/stripe', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookRouter);
 app.use(express.json({ limit: '1mb' }));
 
+app.get('/', (_req, res) => {
+  res.json({ ok: true, service: 'escort-radar-api', health: '/api/health' });
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'escort-radar-api', environment: config.nodeEnv });
 });
