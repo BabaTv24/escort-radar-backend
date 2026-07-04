@@ -347,6 +347,35 @@ export type ClientProfile = {
   updated_at?: string;
 };
 
+export type ClientPersonalProfile = {
+  id?: string;
+  user_id?: string;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  alternate_phone?: string | null;
+  street?: string | null;
+  house_number?: string | null;
+  postal_code?: string | null;
+  city?: string | null;
+  country?: string | null;
+  birth_date?: string | null;
+  identity_note?: string | null;
+  delivery_note?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  consent_personal_data: boolean;
+  consent_home_service_contact: boolean;
+  consent_verified_client_badge: boolean;
+  profile_complete: boolean;
+  verification_status: 'incomplete' | 'pending' | 'verified' | 'rejected';
+  verified_at?: string | null;
+  verified_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type ClientSearchPreferences = Pick<
   ClientProfile,
   | 'client_search_country'
@@ -373,6 +402,9 @@ export type ClientIntent = {
   active: boolean;
   expires_at: string;
   match_score?: number;
+  client_verification_status?: 'incomplete' | 'pending' | 'verified' | 'rejected';
+  client_verified_badge?: boolean;
+  client_display_name?: string | null;
   created_at?: string;
   updated_at?: string;
 };

@@ -25,6 +25,7 @@ import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
 import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
+import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfile.js';
 import { applyManualPaymentOrder } from '../manualPayments.js';
 import {
   buildAdminClient,
@@ -734,6 +735,47 @@ adminRouter.get('/clients', asyncHandler(async (req, res) => {
     page_size: page.page_size,
     bigbaba
   });
+}));
+
+adminRouter.get('/client-profiles', asyncHandler(async (req, res) => {
+  const status = normalizeClientPersonalVerificationStatus(req.query.verification_status);
+  let query = supabaseAdmin
+    .from('client_personal_profiles')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .limit(500);
+  if (status) query = query.eq('verification_status', status);
+
+  const [{ data: rows, error }, { data: usersResult }] = await Promise.all([
+    query,
+    supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  ]);
+  if (error) return res.status(500).json({ error: error.message });
+
+  const usersById = new Map((usersResult.users || []).map((user) => [user.id, user]));
+  const client_profiles = (rows || []).map((row) => ({
+    ...row,
+    email: usersById.get(row.user_id)?.email || null
+  }));
+  res.json({ client_profiles });
+}));
+
+adminRouter.patch('/client-profiles/:id/verification', asyncHandler(async (req, res) => {
+  const status = normalizeClientPersonalVerificationStatus(req.body.verification_status || req.body.status);
+  if (!status || status === 'incomplete') return res.status(400).json({ error: 'Invalid verification status' });
+
+  const { data, error } = await supabaseAdmin
+    .from('client_personal_profiles')
+    .update({
+      verification_status: status,
+      verified_at: status === 'verified' ? new Date().toISOString() : null,
+      verified_by: status === 'verified' ? req.user!.id : null
+    })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ client_profile: data });
 }));
 
 adminRouter.get('/clients/:id', asyncHandler(async (req, res) => {

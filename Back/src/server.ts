@@ -16,6 +16,7 @@ import { authRouter } from './routes/auth.js';
 import { clientIntentRouter } from './routes/clientIntent.js';
 import { stripeWebhookRouter } from './routes/stripeWebhook.js';
 import { clientPreferencesRouter } from './routes/clientPreferences.js';
+import { clientPersonalProfileRouter } from './routes/clientPersonalProfile.js';
 
 const serverBuildTime = new Date().toISOString();
 const app = express();
@@ -69,6 +70,7 @@ app.use('/api/tags', tagsRouter);
 app.use('/api/client-activation', clientActivationRouter);
 app.use('/api/client-intent', clientIntentRouter);
 app.use('/api/client/preferences', clientPreferencesRouter);
+app.use('/api/client/personal-profile', clientPersonalProfileRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });

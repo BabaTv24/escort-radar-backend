@@ -1104,6 +1104,56 @@ test('premium client favorites render photos and favorite-only actions', async (
   assert.doesNotMatch(dashboardSource, /<ProfileCard profile=\{favorite\.profile\}/);
 });
 
+test('client personal profile migration and API contracts are wired', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/039_client_personal_profiles.sql', import.meta.url), 'utf8');
+  const routeSource = await readFile(new URL('../Back/src/routes/clientPersonalProfile.ts', import.meta.url), 'utf8');
+  const serverSource = await readFile(new URL('../Back/src/server.ts', import.meta.url), 'utf8');
+  const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+
+  assert.match(migration, /create table if not exists public\.client_personal_profiles/);
+  assert.match(migration, /verification_status text not null default 'incomplete'/);
+  assert.match(migration, /enable row level security/);
+  assert.match(migration, /auth\.uid\(\) = user_id/);
+  assert.match(routeSource, /clientPersonalProfileRouter\.get\('\/'/);
+  assert.match(routeSource, /clientPersonalProfileRouter\.put\('\/'/);
+  assert.match(routeSource, /profile_complete: profileComplete/);
+  assert.match(routeSource, /verification_status: nextStatus/);
+  assert.match(serverSource, /app\.use\('\/api\/client\/personal-profile', clientPersonalProfileRouter\)/);
+  assert.match(apiSource, /clientPersonalProfile: \(token: string\)/);
+  assert.match(apiSource, /updateClientPersonalProfile/);
+});
+
+test('client personal profile completion maps to pending verification', async () => {
+  const routeSource = await readFile(new URL('../Back/src/routes/clientPersonalProfile.ts', import.meta.url), 'utf8');
+  assert.match(routeSource, /requiredFields = \['first_name', 'last_name', 'phone', 'street', 'house_number', 'postal_code', 'city', 'country'\]/);
+  assert.match(routeSource, /profile\.consent_personal_data/);
+  assert.match(routeSource, /profile\.consent_home_service_contact/);
+  assert.match(routeSource, /profile\.consent_verified_client_badge/);
+  assert.match(routeSource, /existing\?\.verification_status === 'verified' \? 'verified' : 'pending'/);
+});
+
+test('admin receives client personal profile data and can verify it', async () => {
+  const adminRouteSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  const adminPageSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+  assert.match(adminRouteSource, /adminRouter\.get\('\/client-profiles'/);
+  assert.match(adminRouteSource, /adminRouter\.patch\('\/client-profiles\/:id\/verification'/);
+  assert.match(adminRouteSource, /email: usersById\.get\(row\.user_id\)\?\.email/);
+  assert.match(apiSource, /adminClientPersonalProfiles/);
+  assert.match(apiSource, /setAdminClientPersonalVerification/);
+  assert.match(adminPageSource, /view === 'client-profiles'/);
+  assert.match(adminPageSource, /admin\.nav\.clientProfiles/);
+  assert.match(adminPageSource, /admin\.clientProfiles\.markVerified/);
+});
+
+test('advertiser-visible client badge exposes status without private address', async () => {
+  const intentSource = await readFile(new URL('../Back/src/routes/clientIntent.ts', import.meta.url), 'utf8');
+  assert.match(intentSource, /client_verification_status/);
+  assert.match(intentSource, /client_verified_badge/);
+  assert.match(intentSource, /consent_verified_client_badge === true/);
+  assert.doesNotMatch(intentSource, /select\('user_id, first_name, verification_status, consent_verified_client_badge, street/);
+});
+
 test('client search location can be updated cleared and edited from radar', async () => {
   const routeSource = await readFile(new URL('../Back/src/routes/clientPreferences.ts', import.meta.url), 'utf8');
   const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');

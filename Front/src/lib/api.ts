@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -38,6 +38,12 @@ export const api = {
   clearClientSearchLocation: (token: string) => request<{ preferences: ClientSearchPreferences }>('/api/client/preferences/location', {
     method: 'DELETE',
     token
+  }),
+  clientPersonalProfile: (token: string) => request<{ personal_profile: ClientPersonalProfile | null }>('/api/client/personal-profile', { token }),
+  updateClientPersonalProfile: (token: string, body: Partial<ClientPersonalProfile>) => request<{ personal_profile: ClientPersonalProfile }>('/api/client/personal-profile', {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(body)
   }),
   register: (body: { email: string; password: string; username?: string; auth_account_type: 'client' | 'escort' | 'business'; identity?: string; referred_by_code?: string }) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business' } }>('/api/auth/register', {
     method: 'POST',
@@ -393,6 +399,12 @@ export const api = {
     body: JSON.stringify({ profile_id, coin_cost })
   }),
   adminClientReferrals: (token: string) => request<{ referrals: Record<string, unknown>[] }>('/api/client-activation/admin/referral-stats', { token }),
+  adminClientPersonalProfiles: (token: string, status = 'all') => request<{ client_profiles: ClientPersonalProfile[] }>(`/api/admin/client-profiles${status && status !== 'all' ? `?verification_status=${encodeURIComponent(status)}` : ''}`, { token }),
+  setAdminClientPersonalVerification: (token: string, id: string, verification_status: ClientPersonalProfile['verification_status']) => request<{ client_profile: ClientPersonalProfile }>(`/api/admin/client-profiles/${id}/verification`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ verification_status })
+  }),
   adminSetClientActivation: (token: string, userId: string, state: 'client_free' | 'client_activated') => request(`/api/client-activation/admin/users/${userId}/activation`, {
     method: 'PATCH',
     token,

@@ -5858,6 +5858,98 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.client-status-row,
+.client-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .65rem;
+  align-items: center;
+}
+
+.client-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  width: fit-content;
+  padding: .45rem .7rem;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: #f6e6a8;
+  background: rgba(244,215,127,.12);
+  border: 1px solid rgba(244,215,127,.26);
+}
+
+.client-status-badge.verified {
+  color: #bbf7d0;
+  background: rgba(34,197,94,.14);
+  border-color: rgba(34,197,94,.3);
+}
+
+.client-status-badge.pending {
+  color: #fde68a;
+  background: rgba(245,158,11,.12);
+  border-color: rgba(245,158,11,.28);
+}
+
+.client-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.client-tool-card {
+  min-height: 8.5rem;
+  display: grid;
+  align-content: start;
+  gap: .55rem;
+  padding: 1rem;
+  border-radius: .5rem;
+  color: #f8ecd0;
+  background: linear-gradient(150deg, rgba(244,215,127,.12), rgba(255,255,255,.045));
+  border: 1px solid rgba(244,215,127,.16);
+}
+
+.client-tool-card svg {
+  color: #f4d77f;
+}
+
+.client-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.client-form-grid fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .7rem;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid rgba(244,215,127,.14);
+  border-radius: .5rem;
+  background: rgba(255,255,255,.035);
+}
+
+.client-form-grid legend {
+  padding: 0 .35rem;
+  color: #f4d77f;
+  font-weight: 800;
+}
+
+.client-form-grid textarea,
+.client-form-grid .client-consent-fieldset,
+.client-form-grid .full {
+  grid-column: 1 / -1;
+}
+
+.client-consent-fieldset label {
+  display: flex;
+  gap: .55rem;
+  align-items: flex-start;
+}
+
 .client-referral-progress {
   display: grid;
   gap: .55rem;
@@ -5913,6 +6005,12 @@ body {
 
   .client-office .premium-profile-grid {
     grid-template-columns: 1fr !important;
+  }
+
+  .client-tools-grid,
+  .client-form-grid,
+  .client-form-grid fieldset {
+    grid-template-columns: 1fr;
   }
 
   .client-favorite-card {

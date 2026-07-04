@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { api } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
-import type { AdminActivity, AdminReport, BookingRequest, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, BookingRequest, ClientPersonalProfile, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
@@ -118,6 +118,7 @@ const sections = [
     items: [
       ['dashboard', '/admin', BarChart3, 'admin.nav.dashboard'],
       ['clients', '/admin/clients', Users, 'admin.nav.clients'],
+      ['client-profiles', '/admin/client-profiles', UserCheck, 'admin.nav.clientProfiles'],
       ['profiles', '/admin/profiles', Crown, 'admin.nav.profiles'],
       ['subscriptions', '/admin/subscriptions', Coins, 'admin.nav.subscriptions'],
       ['revenue', '/admin/revenue', BarChart3, 'admin.nav.revenue'],
@@ -182,6 +183,8 @@ export function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [clients, setClients] = useState<AdminClient[]>([]);
   const [clientsTotal, setClientsTotal] = useState(0);
+  const [clientPersonalProfiles, setClientPersonalProfiles] = useState<ClientPersonalProfile[]>([]);
+  const [clientProfileStatusFilter, setClientProfileStatusFilter] = useState('all');
   const [clientFilters, setClientFilters] = useState({ search: '', status: 'all', sort: 'registered_at', direction: 'desc', page: 1, page_size: 25 });
   const [bigbabaClient, setBigbabaClient] = useState<AdminClient | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -422,6 +425,20 @@ export function AdminPage() {
     navigate('/admin/login', { replace: true });
   }
 
+  async function setClientPersonalVerification(id: string, verification_status: ClientPersonalProfile['verification_status']) {
+    if (!token || !id) return;
+    setLoading(true);
+    try {
+      await api.setAdminClientPersonalVerification(token, id, verification_status);
+      await load(token);
+      setMessage(t('admin.clientProfiles.statusSaved'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function logout() {
     localStorage.removeItem(adminTokenStorageKey);
     setToken('');
@@ -449,6 +466,7 @@ export function AdminPage() {
         tagResult,
         photoResult,
         clientReferralResult,
+        clientPersonalProfileResult,
         moderationResult,
         activityLogResult,
         revenueResult,
@@ -471,6 +489,7 @@ export function AdminPage() {
         adminLoadRequest('adminTags', api.adminTags(accessToken)),
         adminLoadRequest('adminPhotos', api.adminPhotos(accessToken)),
         adminLoadRequest('adminClientReferrals', api.adminClientReferrals(accessToken)),
+        adminLoadRequest('adminClientPersonalProfiles', api.adminClientPersonalProfiles(accessToken, clientProfileStatusFilter)),
         adminLoadRequest('adminModeration', api.adminModeration(accessToken)),
         adminLoadRequest('adminActivityLogs', api.adminActivityLogs(accessToken)),
         adminLoadRequest('adminRevenue', api.adminRevenue(accessToken)),
@@ -494,6 +513,7 @@ export function AdminPage() {
       const tagData = settledValue(tagResult, { tags: [] }, 'adminTags');
       const photoData = settledValue(photoResult, { photos: [] }, 'adminPhotos');
       const clientReferralData = settledValue(clientReferralResult, { referrals: [] }, 'adminClientReferrals');
+      const clientPersonalProfileData = settledValue(clientPersonalProfileResult, { client_profiles: [] }, 'adminClientPersonalProfiles');
       const moderationData = settledValue(moderationResult, { profiles: [], queues: {} }, 'adminModeration');
       const activityLogData = settledValue(activityLogResult, { activity_logs: [] }, 'adminActivityLogs');
       const revenueData = settledValue(revenueResult, { stats: {}, payments: [] }, 'adminRevenue');
@@ -520,6 +540,7 @@ export function AdminPage() {
       setTags(tagData.tags);
       setPhotos(photoData.photos as Record<string, any>[]);
       setClientReferrals(clientReferralData.referrals);
+      setClientPersonalProfiles(clientPersonalProfileData.client_profiles);
       setActivity((activityLogData.activity_logs?.length ? activityLogData.activity_logs : statsData.latest_activity) as AdminActivity[]);
       setRevenueEvents((statsData.revenue_events || []) as Record<string, any>[]);
       setRevenueStats(revenueData.stats);
@@ -1645,6 +1666,41 @@ export function AdminPage() {
               <button className="button" disabled={clientFilters.page >= totalPages} onClick={() => setClientFilters({ ...clientFilters, page: clientFilters.page + 1 })}>Next</button>
             </div>
           </section>
+        </>
+      );
+    }
+
+    if (view === 'client-profiles') {
+      const columns = ['email', 'first_name', 'last_name', 'phone', 'city', 'country', 'verification_status', 'profile_complete', 'created_at', 'updated_at'];
+      return (
+        <>
+          <section className="admin-card">
+            <div className="profile-studio-head">
+              <div>
+                <p className="eyebrow">{t('admin.clientProfiles.eyebrow')}</p>
+                <h2>{t('admin.clientProfiles.title')}</h2>
+              </div>
+              <div className="admin-actions-row">
+                <select value={clientProfileStatusFilter} onChange={(event) => setClientProfileStatusFilter(event.target.value)}>
+                  {['all', 'incomplete', 'pending', 'verified', 'rejected'].map((status) => <option key={status} value={status}>{status === 'all' ? t('admin.common.all') : t(`admin.status.${status}`)}</option>)}
+                </select>
+                <button className="button secondary" onClick={() => load()}><RefreshCw size={16} /> {t('admin.actions.refresh')}</button>
+              </div>
+            </div>
+          </section>
+          <AdminTable rows={clientPersonalProfiles} columns={columns} labels={tableLabels(t, columns)} format={(key, value) => {
+            if (key === 'verification_status') return <StatusBadge value={String(value || 'incomplete')} />;
+            if (key === 'profile_complete') return <StatusBadge value={value ? 'yes' : 'no'} />;
+            if (['created_at', 'updated_at'].includes(key)) return formatDateTime(value);
+            return value;
+          }} actions={(row) => (
+            <>
+              <Action title={t('admin.actions.view')} onClick={() => setModal({ title: `${row.first_name || ''} ${row.last_name || ''}`.trim() || String(row.email || row.id), body: JSON.stringify(row, null, 2) })}><Eye size={15} /></Action>
+              <Action title={t('admin.clientProfiles.markVerified')} onClick={() => setClientPersonalVerification(String(row.id), 'verified')}><UserCheck size={15} /></Action>
+              <Action title={t('admin.clientProfiles.markRejected')} danger onClick={() => setClientPersonalVerification(String(row.id), 'rejected')}><UserX size={15} /></Action>
+              <Action title={t('admin.clientProfiles.markPending')} onClick={() => setClientPersonalVerification(String(row.id), 'pending')}><RefreshCw size={15} /></Action>
+            </>
+          )} />
         </>
       );
     }

@@ -159,8 +159,27 @@ async function findClientsForProfile(profile: any) {
     .or(`city.eq.${city},city.ilike.*${cityLabel(city)}*`)
     .limit(50);
 
+  const userIds = [...new Set((data || []).map((intent) => intent.user_id).filter(Boolean))];
+  const { data: personalRows } = userIds.length
+    ? await supabaseAdmin
+      .from('client_personal_profiles')
+      .select('user_id, first_name, verification_status, consent_verified_client_badge')
+      .in('user_id', userIds)
+    : { data: [] };
+  const personalByUserId = new Map((personalRows || []).map((row) => [row.user_id, row]));
+
   return (data || [])
-    .map((intent) => ({ ...intent, match_score: calculateMatchScore(profile, intent) }))
+    .map((intent) => {
+      const personal = personalByUserId.get(intent.user_id);
+      const verified = personal?.verification_status === 'verified' && personal?.consent_verified_client_badge === true;
+      return {
+        ...intent,
+        client_verification_status: personal?.verification_status || 'incomplete',
+        client_verified_badge: verified,
+        client_display_name: verified ? (personal?.first_name || 'Verified client') : null,
+        match_score: calculateMatchScore(profile, intent)
+      };
+    })
     .sort((left, right) => right.match_score - left.match_score)
     .slice(0, 20);
 }

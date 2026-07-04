@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Heart, ImagePlus, Link as LinkIcon, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
+import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Heart, IdCard, ImagePlus, Link as LinkIcon, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Settings, ShieldCheck, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { waitForSupabaseSession } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
-import type { BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, Tag } from '../types';
+import type { BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
@@ -132,6 +132,27 @@ const allowedAuthAccountTypes = ['client', 'escort', 'business'] as const;
 const allowedIdentities = ['male', 'female', 'trans'];
 type AuthAccountType = typeof allowedAuthAccountTypes[number];
 type DashboardAccountType = AuthAccountType | 'admin' | 'unknown';
+const emptyClientPersonalProfile: ClientPersonalProfile = {
+  first_name: '',
+  last_name: '',
+  phone: '',
+  alternate_phone: '',
+  street: '',
+  house_number: '',
+  postal_code: '',
+  city: '',
+  country: '',
+  birth_date: '',
+  identity_note: '',
+  delivery_note: '',
+  emergency_contact_name: '',
+  emergency_contact_phone: '',
+  consent_personal_data: false,
+  consent_home_service_contact: false,
+  consent_verified_client_badge: false,
+  profile_complete: false,
+  verification_status: 'incomplete'
+};
 
 export function DashboardPage() {
   const [token, setToken] = useState('');
@@ -154,6 +175,7 @@ export function DashboardPage() {
   const [lastApiError, setLastApiError] = useState('');
   const [clientActivation, setClientActivation] = useState<ClientActivation | null>(null);
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
+  const [clientPersonalProfile, setClientPersonalProfile] = useState<ClientPersonalProfile | null>(null);
   const [coinWallet, setCoinWallet] = useState<CoinWallet | null>(null);
   const [coinTransactions, setCoinTransactions] = useState<CoinTransaction[]>([]);
   const [marketProfiles, setMarketProfiles] = useState<Profile[]>([]);
@@ -314,6 +336,9 @@ export function DashboardPage() {
         setClientMatches([]);
         setClientNotifications([]);
       });
+      await api.clientPersonalProfile(accessToken).then((data) => {
+        setClientPersonalProfile(data.personal_profile);
+      }).catch(() => setClientPersonalProfile(null));
       setClientActivation(clientData.activation);
       setCoinWallet(clientData.wallet);
       setCoinTransactions(clientData.transactions);
@@ -510,6 +535,7 @@ export function DashboardPage() {
     setCoinWallet(null);
     setClientActivation(null);
     setClientProfile(null);
+    setClientPersonalProfile(null);
     setCoinTransactions([]);
     setAuthAccountType('unknown');
     setAuthResolved(false);
@@ -619,10 +645,24 @@ export function DashboardPage() {
       const refreshed = await api.clientIntentMe(token);
       setClientNotifications(refreshed.notifications);
       setDashboardStatus('success');
-      setMessage('Client request is live for 2 hours.');
+      setMessage(t('clientOffice.liveSaved'));
     } catch (error) {
       setDashboardStatus('error');
-      setMessage(error instanceof Error ? error.message : 'Could not create request.');
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
+  }
+
+  async function saveClientPersonalProfile(body: Partial<ClientPersonalProfile>) {
+    if (!token) return;
+    setDashboardStatus('saving');
+    try {
+      const data = await api.updateClientPersonalProfile(token, body);
+      setClientPersonalProfile(data.personal_profile);
+      setDashboardStatus('success');
+      setMessage(t('clientOffice.personal.saved'));
+    } catch (error) {
+      setDashboardStatus('error');
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     }
   }
 
@@ -645,6 +685,7 @@ export function DashboardPage() {
         coinWallet={coinWallet}
         clientProfile={clientProfile}
         activation={clientActivation}
+        personalProfile={clientPersonalProfile}
         transactions={coinTransactions}
         message={message}
         activationBusy={activationBusy}
@@ -657,6 +698,7 @@ export function DashboardPage() {
         matches={clientMatches}
         notifications={clientNotifications}
         onCreateIntent={(body) => createClientIntent(body)}
+        onSavePersonalProfile={(body) => saveClientPersonalProfile(body)}
         favorites={clientFavorites}
         onRemoveFavorite={removeClientFavorite}
       />
@@ -1153,12 +1195,13 @@ function getPublicReferralLink(activation: ClientActivation | null) {
 
 const CLIENT_REFERRAL_REWARD_COINS = 5;
 
-function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent, favorites, onRemoveFavorite }: {
+function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
   userEmail: string;
   wallet: Wallet | null;
   coinWallet: CoinWallet | null;
   clientProfile: ClientProfile | null;
   activation: ClientActivation | null;
+  personalProfile: ClientPersonalProfile | null;
   transactions: CoinTransaction[];
   message: string;
   activationBusy: boolean;
@@ -1171,11 +1214,14 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   matches: Profile[];
   notifications: RadarNotification[];
   onCreateIntent: (body: Partial<ClientIntent>) => void;
+  onSavePersonalProfile: (body: Partial<ClientPersonalProfile>) => void;
   favorites: ClientFavorite[];
   onRemoveFavorite: (profileId: string) => void;
 }) {
   const { t, option } = useI18n();
   const activated = activation?.state === 'client_activated';
+  const personalVerificationStatus = personalProfile?.verification_status || 'incomplete';
+  const isVerifiedClient = personalVerificationStatus === 'verified';
   const referralLink = getPublicReferralLink(activation);
   const referralQrImageUrl = referralLink ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(referralLink)}` : '';
   const displayName = clientProfile?.display_name || userEmail.split('@')[0] || t('clientOffice.clientFallback');
@@ -1197,6 +1243,10 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     budget_max: intent?.budget_max || 300,
     time_window: intent?.time_window || ''
   });
+  const [personalDraft, setPersonalDraft] = useState<ClientPersonalProfile>({ ...emptyClientPersonalProfile, ...(personalProfile || {}) });
+  useEffect(() => {
+    setPersonalDraft({ ...emptyClientPersonalProfile, ...(personalProfile || {}) });
+  }, [personalProfile]);
   const featureCards = [
     ['Radar', 'Zobacz profile w pobliżu Berlina.', RadioTower, '/city/berlin', true],
     ['Favorite profiles', 'Zapisuj ulubione profile i wracaj do nich szybciej.', Heart, '', activated],
@@ -1212,7 +1262,9 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '', activated],
     [t('clientOffice.coinWallet'), t('clientOffice.coinWalletCopy'), Gem, '/coins', activated],
     [t('clientOffice.referralEyebrow'), t('clientOffice.referralRewardRule', { count: CLIENT_REFERRAL_REWARD_COINS }), QrCode, '', activated],
-    [t('dashboard.client.activity'), t('clientOffice.activityCopy'), Clock, '', activated]
+    [t('clientOffice.personal.title'), t('clientOffice.personal.copy'), IdCard, '#personal-data', activated],
+    [t('dashboard.client.activity'), t('clientOffice.activityCopy'), Clock, '', activated],
+    [t('clientOffice.accountSettings'), t('clientOffice.accountSettingsCopy'), Settings, '', true]
   ] as const;
   const unlockChecklist = [
     t('clientOffice.unlock.phone'),
@@ -1231,6 +1283,16 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
         <p className="eyebrow">{t('clientOffice.eyebrow')}</p>
         <h1>{t('clientOffice.title')}</h1>
         <p>{activated ? t('clientOffice.subtitleActive') : t('clientOffice.subtitleFree')}</p>
+        <div className="client-status-row">
+          <span className="client-status-badge premium"><ShieldCheck size={15} /> {activated ? t('clientOffice.premiumClientActive') : t('dashboard.client.freeStatus')}</span>
+          <span className={`client-status-badge ${isVerifiedClient ? 'verified' : 'pending'}`}><BadgeCheck size={15} /> {t(`clientOffice.personal.status.${personalVerificationStatus}`)}</span>
+        </div>
+        <div className="client-hero-actions">
+          <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> {t('dashboard.client.openRadar')}</Link>
+          <a className="button" href="#favorites"><Heart size={16} /> {t('favorites.myFavorites')}</a>
+          <Link className="button" to="/coins"><Gem size={16} /> {t('clientOffice.coinWallet')}</Link>
+          <a className="button" href="#personal-data"><IdCard size={16} /> {t('clientOffice.personal.title')}</a>
+        </div>
         {!activated && (
           <>
             <div className="onboarding-points">
@@ -1318,6 +1380,52 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <Metric label={t('clientOffice.activations')} value={referralActivations} />
             <Metric label={t('clientOffice.earnedCoins')} value={`${earnedReferralCoins} Coins`} />
           </div>
+        </section>
+
+        <section className="creator-panel client-personal-data-card full-span" id="personal-data">
+          <div className="section-head compact">
+            <div>
+              <p className="eyebrow">{t('clientOffice.personal.eyebrow')}</p>
+              <h2>{t('clientOffice.personal.title')}</h2>
+              <p>{t('clientOffice.personal.copy')}</p>
+            </div>
+            <span className={`client-status-badge ${isVerifiedClient ? 'verified' : 'pending'}`}>{t(`clientOffice.personal.status.${personalDraft.verification_status || 'incomplete'}`)}</span>
+          </div>
+          <form className="client-form-grid" onSubmit={(event) => {
+            event.preventDefault();
+            onSavePersonalProfile(personalDraft);
+          }}>
+            <fieldset>
+              <legend>{t('clientOffice.personal.basic')}</legend>
+              <input placeholder={t('clientOffice.personal.firstName')} value={personalDraft.first_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, first_name: event.target.value })} />
+              <input placeholder={t('clientOffice.personal.lastName')} value={personalDraft.last_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, last_name: event.target.value })} />
+              <input placeholder={t('clientOffice.personal.phone')} value={personalDraft.phone || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, phone: event.target.value })} />
+              <input type="date" value={personalDraft.birth_date || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, birth_date: event.target.value })} />
+            </fieldset>
+            <fieldset>
+              <legend>{t('clientOffice.personal.address')}</legend>
+              <input placeholder={t('clientOffice.personal.street')} value={personalDraft.street || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, street: event.target.value })} />
+              <input placeholder={t('clientOffice.personal.houseNumber')} value={personalDraft.house_number || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, house_number: event.target.value })} />
+              <input placeholder={t('clientOffice.personal.postalCode')} value={personalDraft.postal_code || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, postal_code: event.target.value })} />
+              <input placeholder={t('clientOffice.personal.city')} value={personalDraft.city || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, city: event.target.value })} />
+              <input placeholder={t('clientOffice.personal.country')} value={personalDraft.country || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, country: event.target.value })} />
+            </fieldset>
+            <fieldset>
+              <legend>{t('clientOffice.personal.extraContact')}</legend>
+              <input placeholder={t('clientOffice.personal.alternatePhone')} value={personalDraft.alternate_phone || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, alternate_phone: event.target.value })} />
+              <input placeholder={t('clientOffice.personal.emergencyName')} value={personalDraft.emergency_contact_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, emergency_contact_name: event.target.value })} />
+              <input placeholder={t('clientOffice.personal.emergencyPhone')} value={personalDraft.emergency_contact_phone || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, emergency_contact_phone: event.target.value })} />
+              <textarea placeholder={t('clientOffice.personal.identityNote')} value={personalDraft.identity_note || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, identity_note: event.target.value })} />
+              <textarea placeholder={t('clientOffice.personal.deliveryNote')} value={personalDraft.delivery_note || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, delivery_note: event.target.value })} />
+            </fieldset>
+            <fieldset className="client-consent-fieldset">
+              <legend>{t('clientOffice.personal.consents')}</legend>
+              <label><input type="checkbox" checked={personalDraft.consent_personal_data} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_personal_data: event.target.checked })} /> {t('clientOffice.personal.consentData')}</label>
+              <label><input type="checkbox" checked={personalDraft.consent_home_service_contact} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_home_service_contact: event.target.checked })} /> {t('clientOffice.personal.consentHome')}</label>
+              <label><input type="checkbox" checked={personalDraft.consent_verified_client_badge} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_verified_client_badge: event.target.checked })} /> {t('clientOffice.personal.consentBadge')}</label>
+            </fieldset>
+            <button className="button primary full" type="submit">{t('clientOffice.personal.save')}</button>
+          </form>
         </section>
 
         <section className="creator-panel">
@@ -1411,11 +1519,11 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
 
         <section className="creator-panel">
           <p className="eyebrow">{t('clientOffice.tools')}</p>
-          <div className="creator-dashboard-grid">
+          <div className="client-tools-grid">
             {premiumFeatureCards.map(([title, copy, Icon, href, enabled]) => {
               const content = <><Icon size={16} /> <strong>{title}</strong><span>{enabled ? copy : t('clientOffice.activateCta')}</span></>;
-              if (href && enabled) return <Link className="admin-action-btn" to={href} key={title}>{content}</Link>;
-              return <button className="admin-action-btn" type="button" key={title} onClick={enabled ? undefined : onActivate}>{content}</button>;
+              if (href && enabled) return <Link className="client-tool-card" to={href} key={title}>{content}</Link>;
+              return <button className="client-tool-card" type="button" key={title} onClick={enabled ? undefined : onActivate}>{content}</button>;
             })}
           </div>
         </section>
@@ -2193,7 +2301,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               {nearbyClients.slice(0, 5).map((client) => (
                 <div className="booking-row" key={client.id}>
                   <div><strong>{client.status.replace(/_/g, ' ')}</strong><p>{client.city}{client.area ? `, ${client.area}` : ''} · {client.category || 'any'} · {client.time_window || 'open'}</p></div>
-                  <span>{client.budget_min || 0}-{client.budget_max || 'open'}</span>
+                  <span>{client.client_verified_badge ? t('clientOffice.personal.verifiedBadge') : `${client.budget_min || 0}-${client.budget_max || 'open'}`}</span>
                 </div>
               ))}
               {!nearbyClients.length && <p className="muted">{t('dashboard.advertiser.noNearbyClients')}</p>}
