@@ -97,10 +97,6 @@ export function HomePage() {
         </div>
         <div className="hero-product-preview" aria-hidden="true">
           <div className="hero-preview-window">
-            <div className="hero-preview-topbar">
-              <span>{t('app.name')}</span>
-              <strong>{t('home.preview.appPreview')}</strong>
-            </div>
             <div className="hero-preview-grid">
               <div className="hero-preview-radar-mini">
                 <i />
@@ -114,7 +110,7 @@ export function HomePage() {
                 })}
               </div>
               <div className="hero-preview-profile-mini">
-                {featured[0]?.profile_images?.[0]?.public_url ? <img src={featured[0].profile_images[0].public_url} alt="" /> : <div className="image-placeholder">{t('app.name')}</div>}
+                {featured[0]?.profile_images?.[0]?.public_url ? <img src={featured[0].profile_images[0].public_url} alt="" /> : <div className="image-placeholder">{featured[0]?.display_name?.slice(0, 1) || 'P'}</div>}
                 <div>
                   <span>{featured[0]?.display_name || t('clientOffice.clientFallback')}</span>
                   <strong>{t('home.preview.availableNow')}</strong>
