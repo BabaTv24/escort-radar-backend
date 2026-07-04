@@ -1011,7 +1011,7 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(dashboardSource, /scrollIntoView/);
   assert.match(dashboardSource, /favorites\.favoritesDescription/);
   assert.match(dashboardSource, /favorites\.loginToSeeFavorites/);
-  assert.match(dashboardSource, /favorites\.openRadar/);
+  assert.match(dashboardSource, /clientOffice\.viewNearby/);
   assert.match(profileCardSource, /favorites\.alreadyFavorite/);
   assert.match(profileCardSource, /favorites\.buyTokens/);
   assert.match(profileCardSource, /onFavoriteChange\?\.\(profile\.id\)/);

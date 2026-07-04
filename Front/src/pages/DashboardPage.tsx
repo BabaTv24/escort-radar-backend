@@ -1260,14 +1260,14 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     t('activation.activationTokenBonus')
   ];
   const quickActions = [
-    [t('dashboard.client.openRadar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin'],
+    [t('nav.radar'), t('clientOffice.openRadarCopy'), RadioTower, '#radar'],
     [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '#favorites'],
-    [t('clientOffice.liveTitle'), t('clientOffice.liveCopy'), RadioTower, '#radar'],
+    [t('clientOffice.coinWallet'), t('clientOffice.coinWalletCopy'), Gem, '#wallet'],
     [t('clientOffice.accountSettings'), t('clientOffice.accountSettingsCopy'), Settings, '#settings']
   ] as const;
   const sidebarItems = [
     [t('nav.dashboard'), '#office', ShieldCheck],
-    [t('dashboard.client.openRadar'), '#radar', RadioTower],
+    [t('nav.radar'), '#radar', RadioTower],
     [t('favorites.myFavorites'), '#favorites', Heart],
     [t('clientOffice.coinWallet'), '#wallet', Gem],
     [t('dashboard.client.activity'), '#activity', Clock],
@@ -1361,7 +1361,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <section className="client-office-card client-office-radar" id="radar">
               <div className="client-office-card-header">
                 <div>
-                  <p className="eyebrow">{t('dashboard.client.openRadar')}</p>
+                  <p className="eyebrow">{t('nav.radar')}</p>
                   <h2>{t('clientOffice.profilesNearCity', { city })}</h2>
                 </div>
                 <Link className="button" to="/city/berlin">{t('clientOffice.viewNearby')}</Link>
@@ -1451,7 +1451,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
                 <div className="market-empty-state">
                   <Heart size={18} />
                   <p>{t('favorites.noFavoritesYet')}</p>
-                  <Link className="button primary" to="/city/berlin">{t('favorites.openRadar')}</Link>
+                  <Link className="button" to="/city/berlin">{t('clientOffice.viewNearby')}</Link>
                 </div>
               )}
             </section>
@@ -1507,7 +1507,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
                 <Metric label={t('clientOffice.coinBalance')} value={Math.round(Number(coinWallet?.balance ?? 0))} />
                 <Metric label={t('clientOffice.tokenBalance')} value={Math.round(Number(wallet?.escort_token_balance ?? 0))} />
               </div>
-              <Link className="button primary full" to="/coins">{t('clientOffice.coinWallet')}</Link>
+              <Link className="button primary full" to="/coins">{t('clientOffice.addCoins')}</Link>
               <Link className="button full" to="/tokens">{t('tokens.title')}</Link>
             </section>
 

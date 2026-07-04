@@ -497,6 +497,7 @@
   "clientOffice.coinBalanceCopy": "Echtes Wallet-Guthaben vom Backend.",
   "clientOffice.coinWallet": "Coin Wallet",
   "clientOffice.coinWalletCopy": "Prüfe dein echtes Coin-Guthaben und die Historie.",
+  "clientOffice.addCoins": "Coins hinzufügen",
   "clientOffice.tokenBalance": "Token-Guthaben",
   "clientOffice.giftsSent": "Aktionen gesendet",
   "clientOffice.giftsReceived": "Aktionen erhalten",

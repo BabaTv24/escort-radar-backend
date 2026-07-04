@@ -33,7 +33,8 @@ export function Layout() {
   const tokensPath = '/tokens';
   const accountPath = '/dashboard';
   const authPath = (path: string) => isSignedIn ? path : `/login?next=${encodeURIComponent(path)}`;
-  const isDashboard = location.pathname === '/dashboard';
+  const isDashboardRoute = location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/');
+  const isDashboard = isDashboardRoute;
   const isAuthRoute = location.pathname === '/login' || location.pathname === '/register';
 
   useEffect(() => {
@@ -70,13 +71,15 @@ export function Layout() {
           <img className="brand-logo-img" src="/Logo_Escort_5.png" alt="" />
           <span>Escort Radar</span>
         </Link>
-        <nav className="category-nav premium-main-nav" aria-label={t('nav.main')}>
-          <Link className="category-link" to="/register?type=client">{t('nav.forClients')}</Link>
-          <Link className={cityMatch ? 'category-link active' : 'category-link'} to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`}>{t('nav.radar')}</Link>
-          <Link className="category-link" to="/content-rules">{t('nav.security')}</Link>
-          <Link className="category-link" to="/pricing">{t('nav.premium')}</Link>
-          <Link className="category-link" to="/app">{t('nav.blog')}</Link>
-        </nav>
+        {!isDashboardRoute && (
+          <nav className="category-nav premium-main-nav" aria-label={t('nav.main')}>
+            <Link className="category-link" to="/register?type=client">{t('nav.forClients')}</Link>
+            <Link className={cityMatch ? 'category-link active' : 'category-link'} to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`}>{t('nav.radar')}</Link>
+            <Link className="category-link" to="/content-rules">{t('nav.security')}</Link>
+            <Link className="category-link" to="/pricing">{t('nav.premium')}</Link>
+            <Link className="category-link" to="/app">{t('nav.blog')}</Link>
+          </nav>
+        )}
         <div className="mobile-auth-actions" aria-label="Mobile account controls">
           {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
             <div className="mobile-account-links signed-in">
@@ -101,14 +104,18 @@ export function Layout() {
           </div>
         </div>
         <div className="header-actions">
-          <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action premium-header-cta">
-            <Radar size={17} />
-            <span>{t('home.openRadar')}</span>
-          </Link>
-          <Link to="/tokens" className="radar-action">
-            <Coins size={17} />
-            <span>{t('nav.tokens')}</span>
-          </Link>
+          {!isDashboardRoute && (
+            <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action premium-header-cta">
+              <Radar size={17} />
+              <span>{t('home.openRadar')}</span>
+            </Link>
+          )}
+          {!isDashboardRoute && (
+            <Link to="/tokens" className="radar-action">
+              <Coins size={17} />
+              <span>{t('nav.tokens')}</span>
+            </Link>
+          )}
           <Link to="/coins" className="radar-action">
             <Coins size={17} />
             <span>{t('coins.title')}</span>
@@ -120,7 +127,7 @@ export function Layout() {
                 <span>{t('auth.loggedInAs')}: <strong>{t(`auth.${account.role}`)}</strong></span>
                 {account.email ? <small>{account.email}</small> : null}
               </Link>
-              <Link to="/dashboard" className="radar-action account-dashboard-link">{dashboardLabel}</Link>
+              {!isDashboardRoute && <Link to="/dashboard" className="radar-action account-dashboard-link">{dashboardLabel}</Link>}
               {account.role === 'admin' ? <Link to="/admin" className="radar-action">{t('auth.admin')}</Link> : null}
               <button className="radar-action account-logout" type="button" onClick={logout}>
                 <LogOut size={16} />
@@ -169,32 +176,34 @@ export function Layout() {
           <span>{isSignedIn ? t('auth.dashboard') : t('auth.account')}</span>
         </Link>
       </nav>
-      <footer className="footer">
-        <div>
-          <strong>{t('footer.title')}</strong>
-          <span>{t('footer.notice')}</span>
-          {operatorName ? <small>{t('footer.operatedBy', { operator: operatorName })}</small> : null}
-        </div>
-        <a className="baba-footer-badge baba-image-badge" href="https://www.baba-ai.de" target="_blank" rel="noreferrer">
-          <img src="/Sektion_1_4.png" alt="BABA AI" />
-          <span>
-            <strong>{t('baba.powered')}</strong>
-            <small>{t('baba.infrastructure')}</small>
-          </span>
-        </a>
-        <div className="footer-links">
-          <Link to="/terms">{t('nav.terms')}</Link>
-          <Link to="/privacy">{t('nav.privacy')}</Link>
-          <Link to="/refund-policy">{t('nav.refundPolicy')}</Link>
-          <Link to="/content-rules">{t('nav.policy')}</Link>
-          <Link to="/report-abuse"><ShieldCheck size={16} /> {t('nav.report')}</Link>
-          <Link to="/contact">{t('nav.contact')}</Link>
-          <Link to="/pricing">{t('nav.pricing')}</Link>
-          <Link to="/app">{t('nav.installApp')}</Link>
-          <Link to="/legal-notice">{t('nav.legalNotice')}</Link>
-          <Link to="/admin-access">{t('nav.admin')}</Link>
-        </div>
-      </footer>
+      {!isDashboardRoute && (
+        <footer className="footer">
+          <div>
+            <strong>{t('footer.title')}</strong>
+            <span>{t('footer.notice')}</span>
+            {operatorName ? <small>{t('footer.operatedBy', { operator: operatorName })}</small> : null}
+          </div>
+          <a className="baba-footer-badge baba-image-badge" href="https://www.baba-ai.de" target="_blank" rel="noreferrer">
+            <img src="/Sektion_1_4.png" alt="BABA AI" />
+            <span>
+              <strong>{t('baba.powered')}</strong>
+              <small>{t('baba.infrastructure')}</small>
+            </span>
+          </a>
+          <div className="footer-links">
+            <Link to="/terms">{t('nav.terms')}</Link>
+            <Link to="/privacy">{t('nav.privacy')}</Link>
+            <Link to="/refund-policy">{t('nav.refundPolicy')}</Link>
+            <Link to="/content-rules">{t('nav.policy')}</Link>
+            <Link to="/report-abuse"><ShieldCheck size={16} /> {t('nav.report')}</Link>
+            <Link to="/contact">{t('nav.contact')}</Link>
+            <Link to="/pricing">{t('nav.pricing')}</Link>
+            <Link to="/app">{t('nav.installApp')}</Link>
+            <Link to="/legal-notice">{t('nav.legalNotice')}</Link>
+            <Link to="/admin-access">{t('nav.admin')}</Link>
+          </div>
+        </footer>
+      )}
     </div>
   );
 }

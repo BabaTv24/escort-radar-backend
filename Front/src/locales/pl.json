@@ -497,6 +497,7 @@
   "clientOffice.coinBalanceCopy": "Realne saldo portfela zwrócone przez backend.",
   "clientOffice.coinWallet": "Portfel Coins",
   "clientOffice.coinWalletCopy": "Sprawdź realne saldo i historię Coins.",
+  "clientOffice.addCoins": "Dodaj Coins",
   "clientOffice.tokenBalance": "Saldo tokenów",
   "clientOffice.giftsSent": "Akcje wysłane",
   "clientOffice.giftsReceived": "Akcje otrzymane",

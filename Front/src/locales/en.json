@@ -497,6 +497,7 @@
   "clientOffice.coinBalanceCopy": "Real wallet balance returned by the backend.",
   "clientOffice.coinWallet": "Coin Wallet",
   "clientOffice.coinWalletCopy": "Check your real coin balance and activity.",
+  "clientOffice.addCoins": "Add Coins",
   "clientOffice.tokenBalance": "Token balance",
   "clientOffice.giftsSent": "Actions sent",
   "clientOffice.giftsReceived": "Actions received",
