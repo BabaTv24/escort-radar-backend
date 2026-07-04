@@ -75,15 +75,6 @@ export function Layout() {
           <img className="brand-logo-img" src="/Logo_Escort_5.png" alt="" />
           <span>Escort Radar</span>
         </Link>
-        {!isAppRoute && (
-          <nav className="category-nav premium-main-nav" aria-label={t('nav.main')}>
-            <Link className="category-link" to="/register?type=client">{t('nav.forClients')}</Link>
-            <Link className={cityMatch ? 'category-link active' : 'category-link'} to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`}>{t('nav.radar')}</Link>
-            <Link className="category-link" to="/content-rules">{t('nav.security')}</Link>
-            <Link className="category-link" to="/pricing">{t('nav.premium')}</Link>
-            <Link className="category-link" to="/app">{t('nav.blog')}</Link>
-          </nav>
-        )}
         <div className="mobile-auth-actions" aria-label="Mobile account controls">
           {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
             <div className="mobile-account-links signed-in">

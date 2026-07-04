@@ -714,8 +714,8 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
   assert.match(cityPageSource, /search\.showingSummary/);
   assert.match(cityPageSource, /activePublicCategoryOptions\.map/);
   assert.match(globalSearchSource, /<option value="">\{t\('filters\.allCategories'\)\}<\/option>/);
-  assert.match(layoutSource, /premium-main-nav/);
-  assert.match(layoutSource, /nav\.forClients/);
+  assert.doesNotMatch(layoutSource, /premium-main-nav/);
+  assert.doesNotMatch(layoutSource, /nav\.forClients/);
   assert.match(homeSource, /activePublicCategoryOptions\.map/);
   assert.match(adminPageSource, /legacyDisabledCategory/);
   assert.match(adminPageSource, /activePublicCategoryOptions\.map/);

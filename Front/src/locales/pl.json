@@ -15,11 +15,6 @@
   "nav.contact": "Kontakt",
   "nav.pricing": "Cennik",
   "nav.legalNotice": "Nota prawna",
-  "nav.main": "Nawigacja główna",
-  "nav.forClients": "Dla klientów",
-  "nav.security": "Bezpieczeństwo",
-  "nav.premium": "Premium",
-  "nav.blog": "Blog",
   "nav.installApp": "Zainstaluj aplikację",
   "footer.title": "Premium marketplace nightlife 18+.",
   "footer.operatedBy": "Escort Radar is operated by {{operator}}",
@@ -1918,5 +1913,10 @@
   "home.stats.support": "prywatny support",
   "home.stats.verified": "weryfikacji klienta",
   "home.stats.discreet": "dyskrecji i bezpieczenstwa",
-  "home.productPreviewAlt": "Podglad premium aplikacji Escort Radar"
+  "home.productPreviewAlt": "Podglad premium aplikacji Escort Radar",
+  "home.preview.liveRadar": "Live Radar",
+  "home.preview.nearbyProfiles": "Profile w poblizu",
+  "home.preview.credits": "Credits",
+  "home.preview.availableNow": "Dostepna teraz",
+  "home.preview.verified": "Verified"
 }

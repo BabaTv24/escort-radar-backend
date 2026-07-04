@@ -50,13 +50,13 @@ export function HomePage() {
   }
 
   return (
-    <div className="page">
+    <div className="page landing-page">
       <Seo
         title="Escort Radar - Verified 18+ Nightlife Profiles"
         description="Privacy-first 18+ nightlife marketplace with verified independent profiles, city radar, favorites and account tools."
         canonical="https://escort-radar.fun/"
       />
-      <section className="hero">
+      <section className="landing-section landing-hero hero">
         <div className="hero-cinema-bg" aria-hidden="true" />
         <div className="hero-light-leak" aria-hidden="true" />
         <div className="radar-ring" />
@@ -97,12 +97,12 @@ export function HomePage() {
         </div>
         <div className="hero-app-preview" aria-hidden="true">
           <div className="hero-preview-topbar">
-            <span>{t('clientOffice.title')}</span>
-            <strong>15,000</strong>
+            <span>{t('home.preview.liveRadar')}</span>
+            <strong>{t('home.preview.verified')}</strong>
           </div>
           <div className="hero-preview-grid">
             <article className="hero-preview-card hero-preview-radar">
-              <span>{t('nav.radar')}</span>
+              <span>{t('home.preview.nearbyProfiles')}</span>
               <div className="hero-mini-radar">
                 <i />
                 {featured.slice(0, 5).map((profile, index) => {
@@ -116,7 +116,7 @@ export function HomePage() {
               </div>
             </article>
             <article className="hero-preview-card">
-              <span>{t('clientOffice.coinWallet')}</span>
+              <span>{t('home.preview.credits')}</span>
               <strong>15,000</strong>
               <small>{t('coins.balance')}</small>
               <button className="button primary" type="button" tabIndex={-1}>{t('clientOffice.addCoins')}</button>
@@ -125,7 +125,7 @@ export function HomePage() {
               {featured[0]?.profile_images?.[0]?.public_url ? <img src={featured[0].profile_images[0].public_url} alt="" /> : <div className="image-placeholder">{t('app.name')}</div>}
               <div>
                 <span>{featured[0]?.display_name || t('clientOffice.clientFallback')}</span>
-                <strong>{t('badges.availableNow')}</strong>
+                <strong>{t('home.preview.availableNow')}</strong>
                 <small>{featured[0]?.city || 'Berlin'} - 4.9</small>
               </div>
             </article>
@@ -141,7 +141,7 @@ export function HomePage() {
 
       {!loading && !error && profiles.length > 0 && <>
       {sponsoredProfiles.length > 0 && (
-        <section className="home-marketplace-showcase">
+        <section className="landing-section sponsored-profiles-section home-marketplace-showcase">
           <div className="section-head compact">
             <div>
               <p className="eyebrow">{t('home.sponsoredEyebrow')}</p>
@@ -155,7 +155,7 @@ export function HomePage() {
         </section>
       )}
 
-      {topProfiles.length > 0 && <section className="home-marketplace-showcase">
+      {topProfiles.length > 0 && <section className="landing-section sponsored-profiles-section featured-profiles-section home-marketplace-showcase">
         <div className="section-head compact">
           <div>
             <p className="eyebrow">{t('home.marketplaceEyebrow')}</p>
@@ -183,7 +183,7 @@ export function HomePage() {
         </div>
       </section>}
 
-      <section className="market-section">
+      <section className="landing-section radar-mode-section market-section">
         <div className="section-head compact">
           <p className="eyebrow">{t('home.sections.categories')}</p>
           <h2>{t('home.sections.categoriesTitle')}</h2>
@@ -198,20 +198,22 @@ export function HomePage() {
         </div>
       </section>
 
-      <RadarPanel
-        profiles={profiles}
-        radius={radius}
-        status={radarStatus}
-        city="berlin"
-        onRadiusChange={setRadius}
-        onStatusChange={setRadarStatus}
-        searcherLocation={searcherLocation}
-        onUseLocation={useLocation}
-        fallbackNotice={fallbackNotice}
-        compact
-      />
+      <div className="landing-section live-radar-section">
+        <RadarPanel
+          profiles={profiles}
+          radius={radius}
+          status={radarStatus}
+          city="berlin"
+          onRadiusChange={setRadius}
+          onStatusChange={setRadarStatus}
+          searcherLocation={searcherLocation}
+          onUseLocation={useLocation}
+          fallbackNotice={fallbackNotice}
+          compact
+        />
+      </div>
 
-      <section className="market-section">
+      <section className="landing-section berlin-profiles-section market-section">
         <div className="section-head compact">
           <p className="eyebrow">{t('home.berlinPreview')}</p>
           <h2>{t('home.available')}</h2>
@@ -223,7 +225,7 @@ export function HomePage() {
       </section>
       </>}
 
-      <section className="quick-grid">
+      <section className="landing-section trust-features-section quick-grid">
         <Feature icon={<RadioTower />} title={t('home.features.available.title')} text={t('home.features.available.text')} />
         <Feature icon={<EyeOff />} title={t('home.features.private.title')} text={t('home.features.private.text')} />
         <Feature icon={<Smartphone />} title={t('home.features.mobile.title')} text={t('home.features.mobile.text')} />
@@ -233,7 +235,7 @@ export function HomePage() {
         <Feature icon={<BadgeCheck />} title={t('home.sections.vip')} text={t('home.sections.vipText')} />
       </section>
 
-      <section className="baba-tech-section">
+      <section className="landing-section tech-infrastructure-section baba-tech-section">
         <div className="section-head compact">
           <p className="eyebrow">{t('baba.homeEyebrow')}</p>
           <h2>{t('baba.homeTitle')}</h2>

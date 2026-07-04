@@ -15,11 +15,6 @@
   "nav.contact": "Contact",
   "nav.pricing": "Pricing",
   "nav.legalNotice": "Legal notice",
-  "nav.main": "Main navigation",
-  "nav.forClients": "For Clients",
-  "nav.security": "Security",
-  "nav.premium": "Premium",
-  "nav.blog": "Blog",
   "nav.installApp": "Install App",
   "footer.title": "Premium 18+ nightlife marketplace.",
   "footer.operatedBy": "Escort Radar is operated by {{operator}}",
@@ -1918,5 +1913,10 @@
   "home.stats.support": "private support",
   "home.stats.verified": "client verification",
   "home.stats.discreet": "discretion and security",
-  "home.productPreviewAlt": "Escort Radar premium app preview"
+  "home.productPreviewAlt": "Escort Radar premium app preview",
+  "home.preview.liveRadar": "Live Radar",
+  "home.preview.nearbyProfiles": "Nearby profiles",
+  "home.preview.credits": "Credits",
+  "home.preview.availableNow": "Available now",
+  "home.preview.verified": "Verified"
 }
