@@ -1911,5 +1911,11 @@
   "dashboard.advertiser.status.TRAVELING": "AUF REISEN",
   "dashboard.advertiser.status.APPOINTMENT_ONLY": "NACH TERMIN",
   "dashboard.advertiser.status.BUSY": "BESCHÄFTIGT",
-  "dashboard.advertiser.status.OFFLINE": "OFFLINE"
+  "dashboard.advertiser.status.OFFLINE": "OFFLINE",
+  "home.heroStats": "Premium Statistiken",
+  "home.stats.profiles": "verifizierte Profile",
+  "home.stats.support": "privater Support",
+  "home.stats.verified": "Client-Verifizierung",
+  "home.stats.discreet": "Diskretion und Sicherheit",
+  "home.productPreviewAlt": "Escort Radar Premium App Vorschau"
 }

@@ -1912,5 +1912,11 @@
   "dashboard.advertiser.status.TRAVELING": "W PODRÓŻY",
   "dashboard.advertiser.status.APPOINTMENT_ONLY": "NA UMÓWIENIE",
   "dashboard.advertiser.status.BUSY": "ZAJĘTA",
-  "dashboard.advertiser.status.OFFLINE": "OFFLINE"
+  "dashboard.advertiser.status.OFFLINE": "OFFLINE",
+  "home.heroStats": "Statystyki premium",
+  "home.stats.profiles": "zweryfikowanych profili",
+  "home.stats.support": "prywatny support",
+  "home.stats.verified": "weryfikacji klienta",
+  "home.stats.discreet": "dyskrecji i bezpieczenstwa",
+  "home.productPreviewAlt": "Podglad premium aplikacji Escort Radar"
 }

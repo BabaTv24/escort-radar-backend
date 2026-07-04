@@ -48,7 +48,7 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
         <div className="card-overlay">
           <div>
             <strong>{profile.display_name}</strong>
-            <small>{profile.age ? `${profile.age} · ` : ''}{option(profile.category || 'other')}</small>
+            <small>{profile.age ? `${profile.age} - ` : ''}{option(profile.category || 'other')}</small>
           </div>
           <span>{distanceLabel ? `~${distanceLabel}` : locationLabel}</span>
         </div>
@@ -78,7 +78,7 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
           {profile.hotspot_type && <span>{profile.hotspot_type}</span>}
           {profile.radar_score ? <span>Radar {profile.radar_score}</span> : null}
         </div>
-        {profile.services?.length ? <p className="muted line-clamp">{profile.services.slice(0, 4).map(serviceLabel).join(' · ')}</p> : null}
+        {profile.services?.length ? <p className="muted line-clamp">{profile.services.slice(0, 4).map(serviceLabel).join(' - ')}</p> : null}
         {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
         <div className="premium-card-actions">

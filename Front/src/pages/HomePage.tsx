@@ -84,11 +84,20 @@ export function HomePage() {
           <p className="eyebrow">{t('home.heroEyebrow')}</p>
           <h1>{t('home.heroTitle')}</h1>
           <p className="tagline">{t('home.heroSubtitle')}</p>
+          <div className="hero-stat-row" aria-label={t('home.heroStats')}>
+            <span><strong>12K+</strong>{t('home.stats.profiles')}</span>
+            <span><strong>24/7</strong>{t('home.stats.support')}</span>
+            <span><strong>98%</strong>{t('home.stats.verified')}</span>
+            <span><strong>100%</strong>{t('home.stats.discreet')}</span>
+          </div>
           <div className="hero-actions">
             <Link to="/city/berlin" className="button primary"><RadioTower size={18} /> {t('home.openRadar')}</Link>
             <Link to="/dashboard" className="button"><PlusCircle size={18} /> {t('home.create')}</Link>
           </div>
         </div>
+        <figure className="hero-product-board">
+          <img src="/Mockup_All.png" alt={t('home.productPreviewAlt')} loading="eager" />
+        </figure>
       </section>
 
       {loading && <LoadingState label={t('home.loadingProfiles')} />}

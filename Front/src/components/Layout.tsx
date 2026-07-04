@@ -35,7 +35,9 @@ export function Layout() {
   const authPath = (path: string) => isSignedIn ? path : `/login?next=${encodeURIComponent(path)}`;
   const isDashboardRoute = location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/');
   const isCityRoute = location.pathname.startsWith('/city/');
-  const isAppRoute = isDashboardRoute || isCityRoute;
+  const isCoinRoute = location.pathname === '/coins' || location.pathname === '/tokens';
+  const isProfileRoute = location.pathname.startsWith('/profile/');
+  const isAppRoute = isDashboardRoute || isCityRoute || isCoinRoute || isProfileRoute;
   const isDashboard = isDashboardRoute;
   const isAuthRoute = location.pathname === '/login' || location.pathname === '/register';
 
@@ -178,7 +180,7 @@ export function Layout() {
           <span>{isSignedIn ? t('auth.dashboard') : t('auth.account')}</span>
         </Link>
       </nav>
-      {!isDashboardRoute && (
+      {!isAppRoute && (
         <footer className="footer">
           <div>
             <strong>{t('footer.title')}</strong>
