@@ -63,22 +63,6 @@ export function HomePage() {
         <div className="hero-particles" aria-hidden="true">
           {Array.from({ length: 14 }, (_, index) => <span key={index} />)}
         </div>
-        <div className="hero-strip">
-          {featured.slice(0, 4).map((profile) => (
-            <img key={profile.id} src={profile.profile_images?.[0]?.public_url || '/Logo_Escort_5.png'} alt="" />
-          ))}
-        </div>
-        <div className="hero-floating-profiles" aria-hidden="true">
-          {featured.slice(0, 3).map((profile, index) => (
-            <div className={`hero-profile-preview preview-${index + 1}`} key={profile.id}>
-              {profile.profile_images?.[0]?.public_url ? <img src={profile.profile_images[0].public_url} alt="" /> : null}
-              <div>
-                <strong>{profile.display_name}</strong>
-                <span>{profile.availability_status === 'available' ? t('badges.availableNow') : t('radar.eyebrow')}</span>
-              </div>
-            </div>
-          ))}
-        </div>
         <div className="hero-content">
           <img className="hero-brand-mark" src="/Logo_Escort_5.png" alt="" />
           <p className="eyebrow">{t('home.heroEyebrow')}</p>
@@ -96,34 +80,19 @@ export function HomePage() {
           </div>
         </div>
         <div className="hero-product-preview" aria-hidden="true">
-          <div className="hero-preview-window">
-            <div className="hero-preview-grid">
-              <div className="hero-preview-radar-mini">
-                <i />
-                {featured.slice(0, 3).map((profile, index) => {
-                  const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
-                  return (
-                    <b className={`pin-${index + 1}`} key={profile.id}>
-                      {image?.public_url ? <img src={image.public_url} alt="" /> : null}
-                    </b>
-                  );
-                })}
-              </div>
-              <div className="hero-preview-profile-mini">
-                {featured[0]?.profile_images?.[0]?.public_url ? <img src={featured[0].profile_images[0].public_url} alt="" /> : <div className="image-placeholder">{featured[0]?.display_name?.slice(0, 1) || 'P'}</div>}
+          <div className="hero-radar-orbit" />
+          {featured.slice(0, 3).map((profile, index) => {
+            const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
+            return (
+              <div className={`hero-floating-profile hero-floating-profile-${['a', 'b', 'c'][index]}`} key={profile.id}>
+                {image?.public_url ? <img src={image.public_url} alt="" /> : <div className="image-placeholder">{profile.display_name.slice(0, 1)}</div>}
                 <div>
-                  <span>{featured[0]?.display_name || t('clientOffice.clientFallback')}</span>
-                  <strong>{t('home.preview.availableNow')}</strong>
-                  <small>{featured[0]?.city || 'Berlin'} - 4.9</small>
+                  <span>{profile.display_name}</span>
+                  <strong>{profile.available_now ? t('home.preview.availableNow') : profile.city || 'Berlin'}</strong>
                 </div>
               </div>
-              <div className="hero-preview-wallet-mini">
-                <span>{t('home.preview.credits')}</span>
-                <strong>15,000</strong>
-                <small>{t('home.preview.verified')}</small>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
       </section>
 
