@@ -7130,6 +7130,253 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 
+/* Premium Client Office product layout */
+.client-office-shell {
+  width: min(1420px, calc(100% - 1.5rem));
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: .85rem;
+}
+
+.client-office-main {
+  gap: .85rem;
+  padding: .85rem;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.035), transparent 34%),
+    radial-gradient(circle at 82% 10%, var(--er-purple-glow), transparent 24rem),
+    var(--er-bg);
+}
+
+.client-office-sidebar,
+.client-office-main,
+.client-office-card,
+.client-office-action,
+.client-office-topbar,
+.client-office-hero {
+  border-radius: var(--er-radius-sm);
+}
+
+.client-office-topbar {
+  padding: .65rem .75rem;
+  border: 1px solid var(--er-border);
+  background: var(--er-card);
+}
+
+.client-office-hero {
+  min-height: 132px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 390px) auto;
+  align-items: center;
+  background:
+    linear-gradient(90deg, rgba(12,10,9,.98), rgba(12,10,9,.70)),
+    radial-gradient(circle at 74% 18%, rgba(244,215,127,.12), transparent 18rem),
+    var(--er-card);
+}
+
+.client-office-hero h1 {
+  font-size: clamp(1.75rem, 3vw, 2.8rem);
+}
+
+.client-office-hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .55rem;
+}
+
+.client-office-hero-metrics .metric,
+.client-office-hero-metrics > * {
+  min-width: 0;
+  padding: .7rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  background: var(--er-card-hover);
+}
+
+.client-office-radar {
+  padding: .85rem;
+}
+
+.client-office-radar-stage {
+  display: grid;
+  grid-template-columns: 176px minmax(300px, 1fr) minmax(220px, 280px);
+  gap: .8rem;
+  align-items: stretch;
+}
+
+.client-office-radar-filter,
+.client-office-profile-preview {
+  min-width: 0;
+  padding: .75rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  background: var(--er-card-hover);
+}
+
+.client-office-radar-filter {
+  display: grid;
+  gap: .55rem;
+  align-content: start;
+}
+
+.client-office-radar-filter label,
+.client-office-settings-form label {
+  display: grid;
+  gap: .3rem;
+}
+
+.client-office-radar-filter span,
+.client-office-settings-form span {
+  color: var(--er-muted);
+  font-size: .78rem;
+}
+
+.client-office-radar-map {
+  min-height: 312px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(244,215,127,.20), transparent 10rem),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255,255,255,.025) 1px, transparent 1px),
+    var(--er-surface);
+  background-size: auto, 48px 48px, 48px 48px, auto;
+}
+
+.client-office-radar-core,
+.client-office-radar-pin {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--er-border-gold);
+  border-radius: 999px;
+  background: var(--er-card);
+  color: var(--er-gold-light);
+}
+
+.client-office-radar-core {
+  inset: 50% auto auto 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 42px rgba(244,215,127,.26);
+  z-index: 2;
+}
+
+.client-office-radar-pin {
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0,0,0,.36);
+}
+
+.client-office-radar-pin img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.client-office-radar-pin.pin-1 { left: 22%; top: 24%; }
+.client-office-radar-pin.pin-2 { left: 66%; top: 18%; }
+.client-office-radar-pin.pin-3 { left: 75%; top: 58%; }
+.client-office-radar-pin.pin-4 { left: 33%; top: 68%; }
+.client-office-radar-pin.pin-5 { left: 52%; top: 34%; }
+.client-office-radar-pin.pin-6 { left: 15%; top: 56%; }
+
+.client-office-profile-preview {
+  display: grid;
+  grid-template-rows: 136px auto auto;
+  gap: .65rem;
+}
+
+.client-office-profile-cover {
+  border-radius: var(--er-radius-sm);
+  border: 1px solid var(--er-border);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--er-surface);
+}
+
+.client-office-profile-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.client-office-profile-preview h3,
+.client-office-favorite-item h3 {
+  margin: 0;
+  color: var(--er-text);
+}
+
+.client-office-profile-preview p,
+.client-office-favorite-item p {
+  margin: .2rem 0 0;
+}
+
+.client-office-preview-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .5rem;
+}
+
+.client-office-favorites-list {
+  gap: .5rem;
+}
+
+.client-office-favorite-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .75rem;
+  padding: .55rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  background: var(--er-card-hover);
+}
+
+.client-office-favorite-media {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--er-radius-sm);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--er-border);
+  background: var(--er-surface);
+}
+
+.client-office-favorite-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.client-office-favorite-actions {
+  display: flex;
+  gap: .45rem;
+  flex-wrap: wrap;
+  justify-content: end;
+}
+
+.client-office-settings-form {
+  grid-template-columns: 1fr;
+}
+
+.client-office-settings-form .premium-field,
+.client-office-settings-form .premium-check {
+  grid-column: auto;
+}
+
+@media (min-width: 901px) {
+  .luxury-bottom-nav,
+  .one-hand-bottom-nav,
+  .mobile-creator-dock {
+    display: none !important;
+  }
+
+  body {
+    padding-bottom: 0 !important;
+  }
+}
+
 body {
   padding-bottom: 0;
 }
@@ -7160,8 +7407,10 @@ body {
   .client-office-shell,
   .client-office-topbar,
   .client-office-hero,
+  .client-office-hero-metrics,
   .client-office-quick-actions,
   .client-office-grid,
+  .client-office-radar-stage,
   .client-office-mini-metrics,
   .client-office-form-grid,
   .client-office-settings-form {
@@ -7226,6 +7475,35 @@ body {
 
   .client-office-radar-map {
     min-height: 210px;
+  }
+
+  .client-office-radar-stage {
+    gap: .65rem;
+  }
+
+  .client-office-radar-filter {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .client-office-radar-filter .button {
+    grid-column: 1 / -1;
+  }
+
+  .client-office-profile-preview {
+    grid-template-rows: 160px auto auto;
+  }
+
+  .client-office-favorite-item {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+
+  .client-office-favorite-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .client-office-favorite-actions .button {
+    flex: 1 1 130px;
   }
 
   .coin-balance-card {

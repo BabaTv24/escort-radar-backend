@@ -1249,25 +1249,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   useEffect(() => {
     setPersonalDraft({ ...emptyClientPersonalProfile, ...(personalProfile || {}) });
   }, [personalProfile]);
-  const featureCards = [
-    ['Radar', 'Zobacz profile w pobliżu Berlina.', RadioTower, '/city/berlin', true],
-    ['Favorite profiles', 'Zapisuj ulubione profile i wracaj do nich szybciej.', Heart, '', activated],
-    ['Profile unlocks', 'Odblokuj numery telefonu, WhatsApp, Telegram i galerie.', Lock, '', activated],
-    ['Coins', t('clientOffice.coinWalletCopy'), Gem, '/coins', activated],
-    ['Referrals', 'Udostępnij link i QR po aktywacji konta.', QrCode, '', activated],
-    ['Bookings', 'Śledź zapytania i historię kontaktów.', CalendarDays, '', activated],
-    ['Private gallery access', 'Uzyskaj dostęp do pełnych galerii VIP.', ImagePlus, '', activated]
-  ] as const;
-  const premiumFeatureCards = [
-    [t('dashboard.client.openRadar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin', true],
-    [t('clientOffice.viewNearby'), t('clientOffice.viewNearbyCopy'), Sparkles, '/city/berlin', true],
-    [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '', activated],
-    [t('clientOffice.coinWallet'), t('clientOffice.coinWalletCopy'), Gem, '/coins', activated],
-    [t('clientOffice.referralEyebrow'), t('clientOffice.referralRewardRule', { count: CLIENT_REFERRAL_REWARD_COINS }), QrCode, '', activated],
-    [t('clientOffice.personal.title'), t('clientOffice.personal.copy'), IdCard, '#personal-data', activated],
-    [t('dashboard.client.activity'), t('clientOffice.activityCopy'), Clock, '', activated],
-    [t('clientOffice.accountSettings'), t('clientOffice.accountSettingsCopy'), Settings, '', true]
-  ] as const;
+
   const unlockChecklist = [
     t('clientOffice.unlock.phone'),
     t('clientOffice.unlock.whatsapp'),
@@ -1277,8 +1259,6 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     t('clientOffice.unlock.referral'),
     t('activation.activationTokenBonus')
   ];
-  void featureCards;
-
   const quickActions = [
     [t('dashboard.client.openRadar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin'],
     [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '#favorites'],
@@ -1293,6 +1273,9 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     [t('dashboard.client.activity'), '#activity', Clock],
     [t('clientOffice.accountSettings'), '#settings', Settings]
   ] as const;
+  const radarProfiles = (matches.length ? matches : marketProfiles).slice(0, 6);
+  const spotlightProfile = radarProfiles[0] || marketProfiles[0];
+  const spotlightImage = spotlightProfile ? getProfileImageUrl(spotlightProfile) : '';
 
   return (
     <div className="client-office-shell" id="office">
@@ -1336,13 +1319,18 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
 
         <section className="client-office-hero">
           <div>
-            <p className="eyebrow">{t('clientOffice.premiumClientActive')}</p>
-            <h1>{t('clientOffice.title')}</h1>
+            <p className="eyebrow">{t('clientOffice.eyebrow')}</p>
+            <h1>{t('dashboard.welcome')}, {displayName}</h1>
             <p>{activated ? t('clientOffice.subtitleActive') : t('clientOffice.subtitleFree')}</p>
             <div className="client-status-row">
               <span className="client-status-badge premium"><ShieldCheck size={15} /> {statusLabel}</span>
               <span className={`client-status-badge ${isVerifiedClient ? 'verified' : 'pending'}`}><BadgeCheck size={15} /> {t(`clientOffice.personal.status.${personalVerificationStatus}`)}</span>
             </div>
+          </div>
+          <div className="client-office-hero-metrics">
+            <Metric label={t('clientOffice.coinBalance')} value={Math.round(Number(coinWallet?.balance ?? 0)).toLocaleString()} />
+            <Metric label={t('favorites.myFavorites')} value={favorites.length} />
+            <Metric label={t('clientOffice.availableNow')} value={availableProfiles || 0} />
           </div>
           <div className="client-office-hero-actions">
             <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> {t('dashboard.client.openRadar')}</Link>
@@ -1373,14 +1361,59 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             <section className="client-office-card client-office-radar" id="radar">
               <div className="client-office-card-header">
                 <div>
-                  <p className="eyebrow">{t('clientOffice.liveEyebrow')}</p>
-                  <h2>{t('clientOffice.liveTitle')}</h2>
+                  <p className="eyebrow">{t('dashboard.client.openRadar')}</p>
+                  <h2>{t('clientOffice.profilesNearCity', { city })}</h2>
                 </div>
-                <span>{matches.length} {t('clientOffice.nearbyAdvertisers')}</span>
+                <Link className="button" to="/city/berlin">{t('clientOffice.viewNearby')}</Link>
               </div>
-              <div className="client-office-radar-map">
-                <QrVisual seed={`${city}-${matches.length}`} />
-                <div className="client-office-radar-pulse" />
+              <div className="client-office-radar-stage">
+                <div className="client-office-radar-filter">
+                  <label>
+                    <span>{t('clientOffice.personal.city')}</span>
+                    <select value={intentDraft.city || 'berlin'} onChange={(event) => setIntentDraft({ ...intentDraft, city: event.target.value })}>
+                      {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t('clientOffice.area')}</span>
+                    <input placeholder={t('clientOffice.area')} value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t('radar.radius')}</span>
+                    <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
+                      {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}
+                    </select>
+                  </label>
+                  <button className="button primary full" type="button" onClick={() => onCreateIntent({ ...intentDraft, status: 'LOOKING_NOW' })}>{t('clientOffice.createRequest')}</button>
+                </div>
+                <div className="client-office-radar-map">
+                  <div className="client-office-radar-core"><RadioTower size={20} /></div>
+                  <div className="client-office-radar-pulse" />
+                  {radarProfiles.map((profile, index) => {
+                    const imageUrl = getProfileImageUrl(profile);
+                    return (
+                      <Link className={`client-office-radar-pin pin-${index + 1}`} to={`/profile/${profile.id}`} key={profile.id} aria-label={profile.display_name}>
+                        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <UserRound size={16} />}
+                      </Link>
+                    );
+                  })}
+                </div>
+                {spotlightProfile && (
+                  <article className="client-office-profile-preview">
+                    <div className="client-office-profile-cover">
+                      {spotlightImage ? <img src={spotlightImage} alt="" loading="lazy" /> : <UserRound size={44} />}
+                    </div>
+                    <div>
+                      <p className="eyebrow">{option(spotlightProfile.category || 'other')}</p>
+                      <h3>{spotlightProfile.display_name}</h3>
+                      <p><MapPin size={14} /> {spotlightProfile.work_city || spotlightProfile.city}{spotlightProfile.age ? ` - ${spotlightProfile.age}` : ''}</p>
+                    </div>
+                    <div className="client-office-preview-actions">
+                      <Link className="button" to={`/profile/${spotlightProfile.id}`}><MessageCircle size={15} /> {t('buttons.viewProfile')}</Link>
+                      <Link className="button primary" to={`/profile/${spotlightProfile.id}`}>{t('booking.bookNow')}</Link>
+                    </div>
+                  </article>
+                )}
               </div>
               <div className="client-office-mini-metrics">
                 <Metric label={t('clientOffice.profilesNearCity', { city })} value={marketProfiles.length || 0} />
@@ -1388,23 +1421,6 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
                 <Metric label={t('clientOffice.newToday')} value={newToday || 0} />
                 <Metric label={t('clientOffice.recentlyActive')} value={recentlyActive || 0} />
               </div>
-              <div className="client-office-form-grid">
-                <select value={intentDraft.city || 'berlin'} onChange={(event) => setIntentDraft({ ...intentDraft, city: event.target.value })}>
-                  {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-                <input placeholder={t('clientOffice.area')} value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
-                <select value={intentDraft.category || 'ladies'} onChange={(event) => setIntentDraft({ ...intentDraft, category: event.target.value })}>
-                  {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
-                </select>
-                <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
-                  {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}
-                </select>
-                <input type="number" placeholder={t('clientOffice.budgetMin')} value={intentDraft.budget_min || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_min: Number(event.target.value) })} />
-                <input type="number" placeholder={t('clientOffice.budgetMax')} value={intentDraft.budget_max || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_max: Number(event.target.value) })} />
-                <input placeholder={t('clientOffice.timeWindow')} value={intentDraft.time_window || ''} onChange={(event) => setIntentDraft({ ...intentDraft, time_window: event.target.value })} />
-              </div>
-              <button className="button primary full" type="button" onClick={() => onCreateIntent({ ...intentDraft, status: 'LOOKING_NOW' })}>{t('clientOffice.createRequest')}</button>
-              <p className="muted">{t('clientOffice.livePrivacy')}</p>
               <div className="client-office-row-list">
                 {matches.slice(0, 3).map((match) => (
                   <div className="client-office-row" key={match.id}>
@@ -1427,7 +1443,9 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
               </div>
               {favorites.length ? (
                 <div className="client-office-favorites-list">
-                  {favorites.map((favorite) => favorite.profile ? <ClientFavoriteCard key={favorite.id} favorite={favorite} onRemoveFavorite={onRemoveFavorite} /> : null)}
+                  {favorites.slice(0, 4).map((favorite) => favorite.profile ? (
+                    <ClientOfficeFavoriteItem key={favorite.id} favorite={favorite} onRemoveFavorite={onRemoveFavorite} />
+                  ) : null)}
                 </div>
               ) : (
                 <div className="market-empty-state">
@@ -1525,13 +1543,8 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
                 onSavePersonalProfile(personalDraft);
               }}>
                 <label className="premium-field"><span>{t('clientOffice.settings.email')}</span><input value={userEmail} readOnly /></label>
-                <label className="premium-field"><span>{t('clientOffice.personal.firstName')}</span><input value={personalDraft.first_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, first_name: event.target.value })} /></label>
-                <label className="premium-field"><span>{t('clientOffice.personal.lastName')}</span><input value={personalDraft.last_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, last_name: event.target.value })} /></label>
                 <label className="premium-field"><span>{t('clientOffice.personal.phone')}</span><input value={personalDraft.phone || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, phone: event.target.value })} /></label>
                 <label className="premium-field"><span>{t('clientOffice.personal.city')}</span><input value={personalDraft.city || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, city: event.target.value })} /></label>
-                <label className="premium-field"><span>{t('clientOffice.settings.password')}</span><input value={t('clientOffice.settings.passwordManaged')} readOnly /></label>
-                <label className="premium-field"><span>{t('clientOffice.settings.language')}</span><input value={t('clientOffice.settings.currentLanguage')} readOnly /></label>
-                <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_personal_data} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_personal_data: event.target.checked })} /> {t('clientOffice.personal.consentData')}</label>
                 <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_home_service_contact} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_home_service_contact: event.target.checked })} /> {t('clientOffice.settings.notifications')}</label>
                 <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_verified_client_badge} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_verified_client_badge: event.target.checked })} /> {t('clientOffice.settings.privacy')}</label>
                 <button className="button primary full" type="submit">{t('clientOffice.settings.save')}</button>
@@ -1543,6 +1556,28 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     </div>
   );
 
+}
+
+function ClientOfficeFavoriteItem({ favorite, onRemoveFavorite }: { favorite: ClientFavorite; onRemoveFavorite: (profileId: string) => void }) {
+  const { t, option } = useI18n();
+  const profile = favorite.profile;
+  if (!profile) return null;
+  const imageUrl = getProfileImageUrl(profile);
+  return (
+    <article className="client-office-favorite-item">
+      <Link className="client-office-favorite-media" to={`/profile/${profile.id}`}>
+        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <UserRound size={20} />}
+      </Link>
+      <div>
+        <h3>{profile.display_name}</h3>
+        <p>{profile.work_city || profile.city} · {option(profile.category || 'other')}</p>
+      </div>
+      <div className="client-office-favorite-actions">
+        <Link className="button" to={`/profile/${profile.id}`}>{t('buttons.viewProfile')}</Link>
+        <button className="button" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}>{t('favorites.removeFromFavorites')}</button>
+      </div>
+    </article>
+  );
 }
 
 function ClientFavoriteCard({ favorite, onRemoveFavorite }: { favorite: ClientFavorite; onRemoveFavorite: (profileId: string) => void }) {
