@@ -134,14 +134,31 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         <p className="safety-line">{t('radar.privacy')}</p>
         {fallbackNotice && !hasRadarLocation && <p className="safety-line">{t('radar.fallbackNotice')}</p>}
         <div className="radar-control-group">
-          <span>{t('radar.radius')}</span>
-          <div className="segmented-pills">
-            {radiusOptions.map((item) => (
-              <button key={item} className={radius === item ? 'selected' : ''} type="button" onClick={() => onRadiusChange(item)}>
-                {item} km
-              </button>
-            ))}
-          </div>
+          {compact ? (
+            <label className="live-radar-range">
+              <span>{t('radar.radius')}</span>
+              <strong>{radius} km</strong>
+              <input
+                type="range"
+                min={1}
+                max={100}
+                step={1}
+                value={radius}
+                onChange={(event) => onRadiusChange(Number(event.target.value))}
+              />
+            </label>
+          ) : (
+            <>
+              <span>{t('radar.radius')}</span>
+              <div className="segmented-pills">
+                {radiusOptions.map((item) => (
+                  <button key={item} className={radius === item ? 'selected' : ''} type="button" onClick={() => onRadiusChange(item)}>
+                    {item} km
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
         <div className="radar-control-group">
           <span>{t('radar.status')}</span>

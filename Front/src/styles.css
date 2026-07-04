@@ -8293,36 +8293,37 @@ textarea:focus {
 .hero-floating-profile {
   position: absolute;
   z-index: 2;
-  width: min(250px, 54%);
-  min-height: 96px;
+  width: min(282px, 58%);
+  min-height: 108px;
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
   align-items: center;
-  gap: .85rem;
-  padding: .65rem;
-  border: 1px solid rgba(244,215,127,.30);
-  border-radius: 18px;
+  gap: .95rem;
+  padding: .75rem;
+  border: 1px solid rgba(244,215,127,.42);
+  border-radius: 22px;
   background:
-    linear-gradient(145deg, rgba(255,255,255,.06), rgba(255,255,255,.018)),
-    rgba(13,12,10,.82);
-  box-shadow: 0 30px 90px rgba(0,0,0,.46), 0 0 34px rgba(244,215,127,.10), inset 0 1px 0 rgba(255,255,255,.06);
-  backdrop-filter: blur(16px);
+    linear-gradient(145deg, rgba(255,255,255,.075), rgba(255,255,255,.022)),
+    rgba(13,12,10,.86);
+  box-shadow: 0 36px 110px rgba(0,0,0,.54), 0 0 48px rgba(244,215,127,.16), inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter: blur(18px);
   transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
 .hero-floating-profile img,
 .hero-floating-profile .image-placeholder {
-  width: 74px;
-  height: 82px;
-  border-radius: 14px;
+  width: 84px;
+  height: 90px;
+  border-radius: 17px;
   object-fit: cover;
-  border: 1px solid rgba(244,215,127,.30);
+  border: 1px solid rgba(244,215,127,.42);
 }
 
 .hero-floating-profile span {
   display: block;
   color: var(--er-text);
   font-weight: 900;
+  font-size: 1.06rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8332,7 +8333,7 @@ textarea:focus {
   display: block;
   margin-top: .22rem;
   color: var(--er-success);
-  font-size: .86rem;
+  font-size: .8rem;
 }
 
 .hero-floating-profile-a {
@@ -8359,8 +8360,8 @@ textarea:focus {
 }
 
 .hero-floating-profile:hover {
-  border-color: rgba(244,215,127,.48);
-  box-shadow: 0 34px 96px rgba(0,0,0,.5), 0 0 42px rgba(244,215,127,.14), inset 0 1px 0 rgba(255,255,255,.07);
+  border-color: rgba(244,215,127,.62);
+  box-shadow: 0 40px 120px rgba(0,0,0,.58), 0 0 58px rgba(244,215,127,.22), inset 0 1px 0 rgba(255,255,255,.09);
 }
 
 @keyframes heroFloatA {
@@ -8882,16 +8883,89 @@ textarea:focus {
 }
 
 .live-radar-section .radar-panel.compact {
-  grid-template-columns: minmax(290px, .82fr) minmax(420px, 1fr);
+  grid-template-columns: minmax(290px, .76fr) minmax(560px, 1.24fr);
   align-items: center;
 }
 
 .live-radar-section .radar-panel.compact .radar-visual {
-  width: min(100%, 560px);
+  width: min(100%, 680px);
   aspect-ratio: 1 / 1;
   min-height: 0;
   max-height: none;
   border-radius: 50% !important;
+}
+
+.live-radar-section .live-radar-range {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: .7rem 1rem;
+  width: 100%;
+  padding: .78rem .85rem;
+  border: 1px solid rgba(244,215,127,.24);
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.018)),
+    rgba(8,8,7,.72);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055);
+}
+
+.live-radar-section .live-radar-range span {
+  color: var(--er-muted);
+  font-size: .84rem;
+  font-weight: 800;
+}
+
+.live-radar-section .live-radar-range strong {
+  color: var(--er-gold-light);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.live-radar-section .live-radar-range input {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  accent-color: var(--er-gold);
+  cursor: pointer;
+  appearance: none;
+}
+
+.live-radar-section .live-radar-range input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(244,215,127,.88), rgba(255,58,212,.5));
+}
+
+.live-radar-section .live-radar-range input::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  border: 2px solid #130d05;
+  border-radius: 50%;
+  background: var(--er-gold-light);
+  box-shadow: 0 0 24px rgba(244,215,127,.34);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.live-radar-section .live-radar-range input::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(244,215,127,.88), rgba(255,58,212,.5));
+}
+
+.live-radar-section .live-radar-range input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #130d05;
+  border-radius: 50%;
+  background: var(--er-gold-light);
+  box-shadow: 0 0 24px rgba(244,215,127,.34);
 }
 
 .radar-map-stage .radar-panel {
