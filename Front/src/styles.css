@@ -6560,8 +6560,10 @@ textarea:focus {
 /* Second pass: premium consistency, i18n states, mobile bottom UI */
 :root {
   --er-border-gold: rgba(244, 215, 127, .34);
+  --er-card-hover: rgba(244, 215, 127, .075);
   --er-gold-light: #fff1ba;
   --er-purple-glow: rgba(123, 77, 255, .16);
+  --er-text-soft: #d8cfbc;
   --er-mobile-nav-height: 76px;
   --er-mobile-cta-height: 72px;
 }
@@ -6809,6 +6811,325 @@ textarea:focus {
   display: none;
 }
 
+.client-office-shell {
+  width: min(1280px, calc(100% - 2rem));
+  margin: 1rem auto 3rem;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 1rem;
+  color: var(--er-text);
+}
+
+.client-office-sidebar,
+.client-office-main,
+.client-office-card,
+.client-office-action {
+  border: 1px solid var(--er-border);
+  background: var(--er-card);
+  box-shadow: var(--er-shadow-card);
+}
+
+.client-office-sidebar {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  min-height: calc(100vh - 2rem);
+  padding: 1rem;
+  border-radius: var(--er-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.client-office-brand {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  color: var(--er-gold);
+  font-weight: 700;
+}
+
+.client-office-nav {
+  display: grid;
+  gap: .35rem;
+}
+
+.client-office-nav-item {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .65rem .75rem;
+  border: 1px solid transparent;
+  border-radius: var(--er-radius-sm);
+  color: var(--er-text-soft);
+  background: transparent;
+  text-align: left;
+}
+
+.client-office-nav-item:hover,
+.client-office-nav-item:focus-visible {
+  color: var(--er-gold-light);
+  border-color: var(--er-border-gold);
+  background: var(--er-card-hover);
+}
+
+.client-office-nav-item.danger {
+  margin-top: auto;
+}
+
+.client-office-main {
+  min-width: 0;
+  padding: 1rem;
+  border-radius: var(--er-radius-sm);
+  display: grid;
+  gap: 1rem;
+  background:
+    radial-gradient(circle at 16% 0, rgba(244,215,127,.11), transparent 20rem),
+    radial-gradient(circle at 90% 22%, var(--er-purple-glow), transparent 24rem),
+    var(--er-surface);
+}
+
+.client-office-topbar {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(220px, 1.4fr) auto auto;
+  align-items: center;
+  gap: .75rem;
+}
+
+.client-office-topbar strong,
+.client-office-hero h1,
+.client-office-card h2 {
+  color: var(--er-gold-light);
+}
+
+.client-office-search,
+.client-office-credit-pill,
+.client-office-avatar-button {
+  min-height: 42px;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  background: var(--er-card-hover);
+  color: var(--er-text-soft);
+}
+
+.client-office-search,
+.client-office-credit-pill {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .65rem .8rem;
+}
+
+.client-office-avatar-button {
+  width: 42px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.client-office-avatar-button img,
+.client-office-profile-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.client-office-hero {
+  min-height: 190px;
+  padding: 1.25rem;
+  border: 1px solid var(--er-border-gold);
+  border-radius: var(--er-radius-sm);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 1rem;
+  background:
+    linear-gradient(90deg, rgba(8,8,7,.96), rgba(8,8,7,.72)),
+    var(--er-card);
+}
+
+.client-office-hero h1 {
+  margin: .15rem 0 .4rem;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(2rem, 4vw, 3.75rem);
+  line-height: .95;
+}
+
+.client-office-hero p,
+.client-office-card p,
+.client-office-action small,
+.client-office-row p {
+  color: var(--er-muted);
+}
+
+.client-office-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: .65rem;
+}
+
+.client-office-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.client-office-action {
+  min-height: 86px;
+  padding: .85rem;
+  border-radius: var(--er-radius-sm);
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  color: var(--er-text);
+}
+
+.client-office-action:hover {
+  border-color: var(--er-border-gold);
+  background: var(--er-card-hover);
+}
+
+.client-office-action span {
+  min-width: 0;
+  display: grid;
+  gap: .2rem;
+}
+
+.client-office-action strong,
+.client-office-action small {
+  overflow-wrap: anywhere;
+}
+
+.client-office-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, .9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.client-office-left,
+.client-office-right {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.client-office-card {
+  min-width: 0;
+  padding: 1rem;
+  border-radius: var(--er-radius-sm);
+  display: grid;
+  gap: .9rem;
+}
+
+.client-office-card-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.client-office-card-header h2 {
+  margin: .1rem 0 0;
+}
+
+.client-office-radar-map {
+  position: relative;
+  min-height: 250px;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle, rgba(244,215,127,.20), transparent 34%),
+    linear-gradient(135deg, rgba(255,255,255,.045), transparent 44%),
+    var(--er-surface);
+}
+
+.client-office-radar-map .qr-visual {
+  width: min(66%, 280px);
+  aspect-ratio: 1;
+  opacity: .82;
+}
+
+.client-office-radar-pulse {
+  position: absolute;
+  inset: 18%;
+  border: 1px solid var(--er-border-gold);
+  border-radius: 999px;
+  box-shadow: 0 0 44px rgba(244,215,127,.22);
+}
+
+.client-office-mini-metrics,
+.client-office-form-grid {
+  display: grid;
+  gap: .65rem;
+}
+
+.client-office-mini-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.client-office-form-grid,
+.client-office-settings-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.client-office-form-grid input,
+.client-office-form-grid select {
+  min-width: 0;
+}
+
+.client-office-row-list,
+.client-office-favorites-list,
+.client-office-settings-form {
+  display: grid;
+  gap: .65rem;
+}
+
+.client-office-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+  padding: .75rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  background: var(--er-card-hover);
+}
+
+.client-office-row strong,
+.client-office-row span {
+  color: var(--er-text);
+}
+
+.client-office-profile-image {
+  width: 76px;
+  height: 76px;
+  border: 1px solid var(--er-border-gold);
+  border-radius: var(--er-radius-sm);
+}
+
+.client-office-wallet .button,
+.client-office-settings .button {
+  justify-content: center;
+}
+
+.client-office-settings-form {
+  display: grid;
+}
+
+.client-office-settings-form .premium-check,
+.client-office-settings-form .button {
+  grid-column: 1 / -1;
+}
+
 body {
   padding-bottom: 0;
 }
@@ -6835,8 +7156,76 @@ body {
   .coin-wallet-hero,
   .coin-metric-grid,
   .coin-wallet-grid,
-  .client-settings-grid {
+  .client-settings-grid,
+  .client-office-shell,
+  .client-office-topbar,
+  .client-office-hero,
+  .client-office-quick-actions,
+  .client-office-grid,
+  .client-office-mini-metrics,
+  .client-office-form-grid,
+  .client-office-settings-form {
     grid-template-columns: 1fr;
+  }
+
+  .client-office-shell {
+    width: min(100%, calc(100% - 1rem));
+    margin-top: .5rem;
+    padding-bottom: calc(var(--er-mobile-nav-height) + env(safe-area-inset-bottom) + 1rem);
+  }
+
+  .client-office-sidebar {
+    display: none;
+  }
+
+  .client-office-main {
+    padding: .75rem;
+  }
+
+  .client-office-topbar {
+    min-height: auto;
+  }
+
+  .client-office-search {
+    display: none;
+  }
+
+  .client-office-hero {
+    min-height: auto;
+    align-items: start;
+  }
+
+  .client-office-hero-actions {
+    justify-content: stretch;
+  }
+
+  .client-office-hero-actions .button,
+  .client-office-action {
+    width: 100%;
+  }
+
+  .client-office-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .client-office-right {
+    display: contents;
+  }
+
+  .client-office-left {
+    display: contents;
+  }
+
+  #account { order: 1; }
+  .client-office-radar { order: 2; }
+  .client-office-favorites { order: 3; }
+  .client-office-wallet { order: 4; }
+  .client-office-activity { order: 5; }
+  .client-office-settings { order: 6; }
+
+  .client-office-radar-map {
+    min-height: 210px;
   }
 
   .coin-balance-card {

@@ -1279,312 +1279,270 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   ];
   void featureCards;
 
+  const quickActions = [
+    [t('dashboard.client.openRadar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin'],
+    [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '#favorites'],
+    [t('clientOffice.liveTitle'), t('clientOffice.liveCopy'), RadioTower, '#radar'],
+    [t('clientOffice.accountSettings'), t('clientOffice.accountSettingsCopy'), Settings, '#settings']
+  ] as const;
+  const sidebarItems = [
+    [t('nav.dashboard'), '#office', ShieldCheck],
+    [t('dashboard.client.openRadar'), '#radar', RadioTower],
+    [t('favorites.myFavorites'), '#favorites', Heart],
+    [t('clientOffice.coinWallet'), '#wallet', Gem],
+    [t('dashboard.client.activity'), '#activity', Clock],
+    [t('clientOffice.accountSettings'), '#settings', Settings]
+  ] as const;
+
   return (
-    <div className="page dashboard-page premium-client-office">
-      <section className="dashboard-hero client-office-hero">
-        <p className="eyebrow">{t('clientOffice.eyebrow')}</p>
-        <h1>{t('clientOffice.title')}</h1>
-        <p>{activated ? t('clientOffice.subtitleActive') : t('clientOffice.subtitleFree')}</p>
-        <div className="client-status-row">
-          <span className="client-status-badge premium"><ShieldCheck size={15} /> {activated ? t('clientOffice.premiumClientActive') : t('dashboard.client.freeStatus')}</span>
-          <span className={`client-status-badge ${isVerifiedClient ? 'verified' : 'pending'}`}><BadgeCheck size={15} /> {t(`clientOffice.personal.status.${personalVerificationStatus}`)}</span>
+    <div className="client-office-shell" id="office">
+      <aside className="client-office-sidebar">
+        <div className="client-office-brand">
+          <ShieldCheck size={24} />
+          <span>{t('clientOffice.title')}</span>
         </div>
-        <div className="client-hero-actions">
-          <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> {t('dashboard.client.openRadar')}</Link>
-          <a className="button" href="#favorites"><Heart size={16} /> {t('favorites.myFavorites')}</a>
-          <Link className="button" to="/coins"><Gem size={16} /> {t('clientOffice.coinWallet')}</Link>
-          <a className="button" href="#personal-data"><IdCard size={16} /> {t('clientOffice.personal.title')}</a>
-        </div>
-        {!activated && (
-          <>
-            <div className="onboarding-points">
-              {[t('clientOffice.unlock.phone'), t('clientOffice.unlock.whatsapp'), t('clientOffice.unlock.galleries'), t('clientOffice.unlock.referral'), t('activation.activationTokenBonus')].map((item) => <span key={item}>{item}</span>)}
-            </div>
-            <button className="button primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</button>
-          </>
-        )}
-        {activated && <div className="onboarding-points">{unlockChecklist.map((item) => <span key={item}>{item}</span>)}</div>}
-        <div hidden>
-        <h1>{activated ? 'Konto aktywne' : 'Aktywuj konto za 0,99€'}</h1>
-        {activated && <p>Twoje konto jest aktywne - pelne profile i kontakty sa odblokowane.</p>}
-        <p>{activated ? 'Pełne profile, kontakty, galerie VIP, Coins i referral program są gotowe.' : 'Zobacz pełne profile, numery telefonu, prywatne galerie i wysyłaj prezenty Coins.'}</p>
-        </div>
-      </section>
+        <nav className="client-office-nav" aria-label={t('nav.dashboard')}>
+          {sidebarItems.map(([label, href, Icon]) => (
+            <a className="client-office-nav-item" href={href} key={label}>
+              <Icon size={16} />
+              <span>{label}</span>
+            </a>
+          ))}
+        </nav>
+        <button className="client-office-nav-item danger" type="button" onClick={onLogout}>
+          <LogOut size={16} />
+          <span>{t('buttons.logout')}</span>
+        </button>
+      </aside>
 
-      <section className="creator-command-bar">
-        <div>
-          <strong>{displayName}</strong>
-          <span className={activated ? 'success' : 'subscription-notice'}>{message || statusLabel}</span>
-        </div>
-        <div className="creator-command-actions">
-          <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> {t('dashboard.client.openRadar')}</Link>
-          <Link className="button" to="/coins"><Gem size={16} /> {t('clientOffice.coinWallet')}</Link>
-          <button className="button danger" type="button" onClick={onLogout}>{t('buttons.logout')}</button>
-        </div>
-      </section>
-
-      <div className="dashboard-grid">
-        <section className="creator-panel">
-          <div className="profile-summary">
-            {clientProfile?.avatar_url ? <img className="client-qr-image" src={clientProfile.avatar_url} alt="" /> : <div className="qr-visual"><UserRound size={54} /></div>}
-            <div>
-              <p className="eyebrow">{t('clientOffice.profile')}</p>
-              <h2>{displayName}</h2>
-              <p>{userEmail}</p>
-              <p>{city}</p>
-              <span className={`admin-status ${activated ? 'active' : 'pending'}`}>{statusLabel}</span>
-              {activation?.activated_at && <p>{t('clientOffice.activatedAt', { date: new Date(activation.activated_at).toLocaleDateString() })}</p>}
-            </div>
-          </div>
-          <label className="button full">
-            {avatarUploading ? t('states.loading') : t('clientOffice.uploadAvatar')}
-            <input hidden type="file" accept="image/*" onChange={onAvatarUpload} />
-          </label>
-          <div className="metrics-grid">
-            <Metric label={t('clientOffice.coinBalance')} value={Math.round(Number(coinWallet?.balance ?? 0))} />
-            <Metric label={t('clientOffice.tokenBalance')} value={Math.round(Number(wallet?.escort_token_balance ?? 0))} />
-          </div>
-        </section>
-
-        {!activated && <section className="creator-panel elevated">
-          <p className="eyebrow">{t('clientOffice.fullExperience')}</p>
-          <h2>{t('clientOffice.activateTitle')}</h2>
-          <p>{t('clientOffice.subtitleFree')}</p>
-          <div className="onboarding-points">
-            <span>{t('clientOffice.unlock.phone')}</span>
-            <span>{t('clientOffice.unlock.whatsapp')}</span>
-            <span>{t('clientOffice.unlock.telegram')}</span>
-            <span>{t('clientOffice.unlock.galleries')}</span>
-            <span>{t('clientOffice.unlock.referral')}</span>
-          </div>
-          <button className="button primary full" type="button" disabled={activationBusy} onClick={onActivate}>
-            {activationBusy ? t('states.loading') : t('clientOffice.activateCta')}
-          </button>
-        </section>}
-
-        <section className="creator-panel referral-studio">
+      <main className="client-office-main">
+        <header className="client-office-topbar">
           <div>
-            <p className="eyebrow">{t('clientOffice.referralEyebrow')}</p>
-            <h2>{t('clientOffice.referralTitle')}</h2>
-            <p>{referralLink || t('clientOffice.referralLocked')}</p>
-            {referralLink && <button className="button" type="button" onClick={() => navigator.clipboard?.writeText(referralLink)}><Copy size={14} /> {t('clientOffice.copyInvite')}</button>}
+            <p className="eyebrow">{t('clientOffice.eyebrow')}</p>
+            <strong>{t('clientOffice.title')}</strong>
           </div>
-          {referralQrImageUrl ? <img className="client-qr-image" src={referralQrImageUrl} alt="Referral QR" /> : <QrVisual seed="CLIENT-FREE" />}
-          <div className="client-referral-progress">
-            <strong>{t('clientOffice.nextRewardProgress', { count: referralActivations ? 1 : 0 })}</strong>
-            <span>{t('clientOffice.nextReward', { count: CLIENT_REFERRAL_REWARD_COINS })}</span>
-            <div className="progress-track"><span style={{ width: `${referralProgress}%` }} /></div>
-            <p>{t('clientOffice.earnedRewards')}: {earnedReferralCoins} Coins</p>
+          <div className="client-office-search">
+            <RadioTower size={15} />
+            <span>{t('clientOffice.profilesNearCity', { city })}</span>
           </div>
-          <div className="metrics-grid">
-            <Metric label={t('clientOffice.clicks')} value={activation?.clicks || 0} />
-            <Metric label={t('clientOffice.registrations')} value={activation?.registrations || 0} />
-            <Metric label={t('clientOffice.activations')} value={referralActivations} />
-            <Metric label={t('clientOffice.earnedCoins')} value={`${earnedReferralCoins} Coins`} />
-          </div>
-        </section>
+          <Link className="client-office-credit-pill" to="/coins">
+            <Gem size={15} />
+            <span>{Math.round(Number(coinWallet?.balance ?? 0)).toLocaleString()} {t('coins.title')}</span>
+          </Link>
+          <button className="client-office-avatar-button" type="button" onClick={onLogout} aria-label={t('buttons.logout')}>
+            {clientProfile?.avatar_url ? <img src={clientProfile.avatar_url} alt="" /> : <UserRound size={18} />}
+          </button>
+        </header>
 
-        <section className="creator-panel client-personal-data-card full-span" id="personal-data">
-          <div className="section-head compact">
-            <div>
-              <p className="eyebrow">{t('clientOffice.personal.eyebrow')}</p>
-              <h2>{t('clientOffice.personal.title')}</h2>
-              <p>{t('clientOffice.personal.copy')}</p>
+        <section className="client-office-hero">
+          <div>
+            <p className="eyebrow">{t('clientOffice.premiumClientActive')}</p>
+            <h1>{t('clientOffice.title')}</h1>
+            <p>{activated ? t('clientOffice.subtitleActive') : t('clientOffice.subtitleFree')}</p>
+            <div className="client-status-row">
+              <span className="client-status-badge premium"><ShieldCheck size={15} /> {statusLabel}</span>
+              <span className={`client-status-badge ${isVerifiedClient ? 'verified' : 'pending'}`}><BadgeCheck size={15} /> {t(`clientOffice.personal.status.${personalVerificationStatus}`)}</span>
             </div>
-            <span className={`client-status-badge ${isVerifiedClient ? 'verified' : 'pending'}`}>{t(`clientOffice.personal.status.${personalDraft.verification_status || 'incomplete'}`)}</span>
           </div>
-          <form className="client-form-grid" onSubmit={(event) => {
-            event.preventDefault();
-            onSavePersonalProfile(personalDraft);
-          }}>
-            <fieldset>
-              <legend>{t('clientOffice.personal.basic')}</legend>
-              <input placeholder={t('clientOffice.personal.firstName')} value={personalDraft.first_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, first_name: event.target.value })} />
-              <input placeholder={t('clientOffice.personal.lastName')} value={personalDraft.last_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, last_name: event.target.value })} />
-              <input placeholder={t('clientOffice.personal.phone')} value={personalDraft.phone || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, phone: event.target.value })} />
-              <input type="date" value={personalDraft.birth_date || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, birth_date: event.target.value })} />
-            </fieldset>
-            <fieldset>
-              <legend>{t('clientOffice.personal.address')}</legend>
-              <input placeholder={t('clientOffice.personal.street')} value={personalDraft.street || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, street: event.target.value })} />
-              <input placeholder={t('clientOffice.personal.houseNumber')} value={personalDraft.house_number || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, house_number: event.target.value })} />
-              <input placeholder={t('clientOffice.personal.postalCode')} value={personalDraft.postal_code || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, postal_code: event.target.value })} />
-              <input placeholder={t('clientOffice.personal.city')} value={personalDraft.city || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, city: event.target.value })} />
-              <input placeholder={t('clientOffice.personal.country')} value={personalDraft.country || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, country: event.target.value })} />
-            </fieldset>
-            <fieldset>
-              <legend>{t('clientOffice.personal.extraContact')}</legend>
-              <input placeholder={t('clientOffice.personal.alternatePhone')} value={personalDraft.alternate_phone || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, alternate_phone: event.target.value })} />
-              <input placeholder={t('clientOffice.personal.emergencyName')} value={personalDraft.emergency_contact_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, emergency_contact_name: event.target.value })} />
-              <input placeholder={t('clientOffice.personal.emergencyPhone')} value={personalDraft.emergency_contact_phone || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, emergency_contact_phone: event.target.value })} />
-              <textarea placeholder={t('clientOffice.personal.identityNote')} value={personalDraft.identity_note || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, identity_note: event.target.value })} />
-              <textarea placeholder={t('clientOffice.personal.deliveryNote')} value={personalDraft.delivery_note || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, delivery_note: event.target.value })} />
-            </fieldset>
-            <fieldset className="client-consent-fieldset">
-              <legend>{t('clientOffice.personal.consents')}</legend>
-              <label><input type="checkbox" checked={personalDraft.consent_personal_data} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_personal_data: event.target.checked })} /> {t('clientOffice.personal.consentData')}</label>
-              <label><input type="checkbox" checked={personalDraft.consent_home_service_contact} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_home_service_contact: event.target.checked })} /> {t('clientOffice.personal.consentHome')}</label>
-              <label><input type="checkbox" checked={personalDraft.consent_verified_client_badge} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_verified_client_badge: event.target.checked })} /> {t('clientOffice.personal.consentBadge')}</label>
-            </fieldset>
-            <button className="button primary full" type="submit">{t('clientOffice.personal.save')}</button>
-          </form>
+          <div className="client-office-hero-actions">
+            <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> {t('dashboard.client.openRadar')}</Link>
+            {!activated && <button className="button" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</button>}
+          </div>
         </section>
 
-        <section className="creator-panel">
-          <p className="eyebrow">{t('clientOffice.liveEyebrow')}</p>
-          <h2>{t('clientOffice.liveTitle')}</h2>
-          <p>{t('clientOffice.liveCopy')}</p>
-          <div className="one-hand-status-toggle">
-            <button type="button" className="active available">{t('clientOffice.intent.LOOKING_NOW')}</button>
-          </div>
-          <div className="one-hand-inline-fields">
-            <select value={intentDraft.city || 'berlin'} onChange={(event) => setIntentDraft({ ...intentDraft, city: event.target.value })}>
-              {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-            <input placeholder={t('clientOffice.area')} value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
-            <select value={intentDraft.category || 'ladies'} onChange={(event) => setIntentDraft({ ...intentDraft, category: event.target.value })}>
-              {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
-            </select>
-            <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
-              {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}
-            </select>
-            <input type="number" placeholder={t('clientOffice.budgetMin')} value={intentDraft.budget_min || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_min: Number(event.target.value) })} />
-            <input type="number" placeholder={t('clientOffice.budgetMax')} value={intentDraft.budget_max || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_max: Number(event.target.value) })} />
-            <input placeholder={t('clientOffice.timeWindow')} value={intentDraft.time_window || ''} onChange={(event) => setIntentDraft({ ...intentDraft, time_window: event.target.value })} />
-          </div>
-          <button className="button primary full" type="button" onClick={() => onCreateIntent({ ...intentDraft, status: 'LOOKING_NOW' })}>{t('clientOffice.createRequest')}</button>
-          <p className="muted">{t('clientOffice.livePrivacy')}</p>
-          <div className="metrics-grid">
-            <Metric label={t('clientOffice.nearbyAdvertisers')} value={matches.length} />
-            <Metric label={t('clientOffice.notifications')} value={notifications.length} />
-            <Metric label={t('clientOffice.expires')} value={intent?.expires_at ? new Date(intent.expires_at).toLocaleTimeString() : '-'} />
-          </div>
-          <div className="booking-list">
-            {matches.slice(0, 4).map((match) => (
-              <div className="booking-row" key={match.id}>
-                <div><strong>{match.display_name}</strong><p>{match.work_city || match.city} · {match.operator_status || match.availability_status}</p></div>
-                <span>{match.match_score ?? match.radar_score ?? 0}</span>
+        {message && <p className={activated ? 'success' : 'subscription-notice'}>{message}</p>}
+
+        <section className="client-office-quick-actions" aria-label={t('clientOffice.tools')}>
+          {quickActions.map(([title, copy, Icon, href]) => {
+            const content = (
+              <>
+                <Icon size={18} />
+                <span><strong>{title}</strong><small>{copy}</small></span>
+              </>
+            );
+            return href.startsWith('/') ? (
+              <Link className="client-office-action" to={href} key={title}>{content}</Link>
+            ) : (
+              <a className="client-office-action" href={href} key={title}>{content}</a>
+            );
+          })}
+        </section>
+
+        <section className="client-office-grid">
+          <div className="client-office-left">
+            <section className="client-office-card client-office-radar" id="radar">
+              <div className="client-office-card-header">
+                <div>
+                  <p className="eyebrow">{t('clientOffice.liveEyebrow')}</p>
+                  <h2>{t('clientOffice.liveTitle')}</h2>
+                </div>
+                <span>{matches.length} {t('clientOffice.nearbyAdvertisers')}</span>
               </div>
-            ))}
-            {!matches.length && <p className="muted">{t('clientOffice.noLiveMatches')}</p>}
-          </div>
-        </section>
-
-        <section className="creator-panel full-span" id="favorites">
-          <div className="section-head compact">
-            <div>
-              <p className="eyebrow">{t('favorites.myFavorites')}</p>
-              <h2>{t('favorites.myFavorites')}</h2>
-              <p>{t('favorites.favoritesDescription')}</p>
-            </div>
-            <strong>{Math.round(Number(wallet?.escort_token_balance || 0))} {t('tokens.short')}</strong>
-          </div>
-          <p className="muted">{t('favorites.favoriteTokenNote')}</p>
-          {favorites.length ? (
-            <div className="cards-grid marketplace-grid premium-profile-grid">
-              {favorites.map((favorite) => favorite.profile ? (
-                <ClientFavoriteCard key={favorite.id} favorite={favorite} onRemoveFavorite={onRemoveFavorite} />
-              ) : null)}
-            </div>
-          ) : (
-            <div className="market-empty-state">
-              <Heart size={18} />
-              <p>{t('favorites.noFavoritesYet')}</p>
-              <Link className="button primary" to="/city/berlin">{t('favorites.openRadar')}</Link>
-            </div>
-          )}
-        </section>
-
-        <section className="creator-panel">
-          <p className="eyebrow">{t('clientOffice.insightsEyebrow')}</p>
-          <h2>{t('clientOffice.insightsTitle')}</h2>
-          <div className="metrics-grid">
-            <Metric label={t('clientOffice.profilesNearCity', { city })} value={marketProfiles.length || 0} />
-            <Metric label={t('clientOffice.availableNow')} value={availableProfiles || 0} />
-            <Metric label={t('clientOffice.newToday')} value={newToday || 0} />
-            <Metric label={t('clientOffice.recentlyActive')} value={recentlyActive || 0} />
-          </div>
-          <div hidden>
-          <p className="eyebrow">Radar Berlin</p>
-          <h2>1 profile near Berlin available now</h2>
-          <p>Otwórz radar albo zobacz profile w pobliżu.</p>
-          <div className="creator-share-row">
-            <Link className="button primary" to="/city/berlin">Otwórz radar</Link>
-            <Link className="button" to="/city/berlin">Zobacz profile w pobliżu</Link>
-          </div>
-          </div>
-          <div className="creator-share-row">
-            <Link className="button primary" to="/city/berlin">{t('dashboard.client.openRadar')}</Link>
-            <Link className="button" to="/city/berlin">{t('clientOffice.viewNearby')}</Link>
-          </div>
-        </section>
-
-        <section className="creator-panel">
-          <p className="eyebrow">{t('clientOffice.tools')}</p>
-          <div className="client-tools-grid">
-            {premiumFeatureCards.map(([title, copy, Icon, href, enabled]) => {
-              const content = <><Icon size={16} /> <strong>{title}</strong><span>{enabled ? copy : t('clientOffice.activateCta')}</span></>;
-              if (href && enabled) return <Link className="client-tool-card" to={href} key={title}>{content}</Link>;
-              return <button className="client-tool-card" type="button" key={title} onClick={enabled ? undefined : onActivate}>{content}</button>;
-            })}
-          </div>
-        </section>
-
-        <section className="creator-panel client-settings-panel" id="settings">
-          <div className="creator-panel-head">
-            <div>
-              <p className="eyebrow">{t('clientOffice.settings.eyebrow')}</p>
-              <h2>{t('clientOffice.settings.title')}</h2>
-              <p>{t('clientOffice.settings.copy')}</p>
-            </div>
-            <span className="client-status-badge premium">{t('clientOffice.settings.currentLanguage')}</span>
-          </div>
-          <div className="client-settings-grid">
-            <label className="premium-field">
-              <span>{t('clientOffice.settings.email')}</span>
-              <input value={userEmail} readOnly />
-              <small>{t('clientOffice.settings.emailHelp')}</small>
-            </label>
-            <label className="premium-field">
-              <span>{t('clientOffice.personal.phone')}</span>
-              <input value={personalDraft.phone || ''} placeholder={t('clientOffice.personal.phone')} onChange={(event) => setPersonalDraft({ ...personalDraft, phone: event.target.value })} />
-            </label>
-            <label className="premium-field">
-              <span>{t('clientOffice.settings.password')}</span>
-              <input value={t('clientOffice.settings.passwordManaged')} readOnly />
-              <small>{t('clientOffice.settings.passwordHelp')}</small>
-            </label>
-            <label className="premium-field">
-              <span>{t('clientOffice.settings.language')}</span>
-              <input value={t('clientOffice.settings.currentLanguage')} readOnly />
-            </label>
-            <label className="premium-check client-settings-check">
-              <input type="checkbox" checked={personalDraft.consent_home_service_contact} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_home_service_contact: event.target.checked })} />
-              {t('clientOffice.settings.notifications')}
-            </label>
-            <label className="premium-check client-settings-check">
-              <input type="checkbox" checked={personalDraft.consent_verified_client_badge} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_verified_client_badge: event.target.checked })} />
-              {t('clientOffice.settings.privacy')}
-            </label>
-          </div>
-          <button className="button primary" type="button" onClick={() => onSavePersonalProfile(personalDraft)}>{t('clientOffice.settings.save')}</button>
-        </section>
-
-        <section className="creator-panel">
-          <p className="eyebrow">{t('dashboard.client.activity')}</p>
-          <div className="booking-list">
-            {transactions.slice(0, 5).map((transaction) => (
-              <div className="booking-row" key={transaction.id}>
-                <div><strong>{transaction.transaction_type}</strong><p>{new Date(transaction.created_at).toLocaleString()}</p></div>
-                <span>{transaction.direction === 'credit' ? '+' : '-'}{transaction.amount} Coins</span>
+              <div className="client-office-radar-map">
+                <QrVisual seed={`${city}-${matches.length}`} />
+                <div className="client-office-radar-pulse" />
               </div>
-            ))}
-            {!transactions.length && <p className="muted">{t('clientOffice.noActivity')}</p>}
+              <div className="client-office-mini-metrics">
+                <Metric label={t('clientOffice.profilesNearCity', { city })} value={marketProfiles.length || 0} />
+                <Metric label={t('clientOffice.availableNow')} value={availableProfiles || 0} />
+                <Metric label={t('clientOffice.newToday')} value={newToday || 0} />
+                <Metric label={t('clientOffice.recentlyActive')} value={recentlyActive || 0} />
+              </div>
+              <div className="client-office-form-grid">
+                <select value={intentDraft.city || 'berlin'} onChange={(event) => setIntentDraft({ ...intentDraft, city: event.target.value })}>
+                  {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <input placeholder={t('clientOffice.area')} value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
+                <select value={intentDraft.category || 'ladies'} onChange={(event) => setIntentDraft({ ...intentDraft, category: event.target.value })}>
+                  {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
+                </select>
+                <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
+                  {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}
+                </select>
+                <input type="number" placeholder={t('clientOffice.budgetMin')} value={intentDraft.budget_min || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_min: Number(event.target.value) })} />
+                <input type="number" placeholder={t('clientOffice.budgetMax')} value={intentDraft.budget_max || ''} onChange={(event) => setIntentDraft({ ...intentDraft, budget_max: Number(event.target.value) })} />
+                <input placeholder={t('clientOffice.timeWindow')} value={intentDraft.time_window || ''} onChange={(event) => setIntentDraft({ ...intentDraft, time_window: event.target.value })} />
+              </div>
+              <button className="button primary full" type="button" onClick={() => onCreateIntent({ ...intentDraft, status: 'LOOKING_NOW' })}>{t('clientOffice.createRequest')}</button>
+              <p className="muted">{t('clientOffice.livePrivacy')}</p>
+              <div className="client-office-row-list">
+                {matches.slice(0, 3).map((match) => (
+                  <div className="client-office-row" key={match.id}>
+                    <div><strong>{match.display_name}</strong><p>{match.work_city || match.city} - {match.operator_status || match.availability_status}</p></div>
+                    <span>{match.match_score ?? match.radar_score ?? 0}</span>
+                  </div>
+                ))}
+                {!matches.length && <p className="muted">{t('clientOffice.noLiveMatches')}</p>}
+              </div>
+            </section>
+
+            <section className="client-office-card client-office-favorites" id="favorites">
+              <div className="client-office-card-header">
+                <div>
+                  <p className="eyebrow">{t('favorites.myFavorites')}</p>
+                  <h2>{t('favorites.myFavorites')}</h2>
+                  <p>{t('favorites.favoritesDescription')}</p>
+                </div>
+                <span>{favorites.length}</span>
+              </div>
+              {favorites.length ? (
+                <div className="client-office-favorites-list">
+                  {favorites.map((favorite) => favorite.profile ? <ClientFavoriteCard key={favorite.id} favorite={favorite} onRemoveFavorite={onRemoveFavorite} /> : null)}
+                </div>
+              ) : (
+                <div className="market-empty-state">
+                  <Heart size={18} />
+                  <p>{t('favorites.noFavoritesYet')}</p>
+                  <Link className="button primary" to="/city/berlin">{t('favorites.openRadar')}</Link>
+                </div>
+              )}
+            </section>
+
+            <section className="client-office-card client-office-activity" id="activity">
+              <div className="client-office-card-header">
+                <div>
+                  <p className="eyebrow">{t('dashboard.client.activity')}</p>
+                  <h2>{t('dashboard.client.activity')}</h2>
+                </div>
+                <Clock size={18} />
+              </div>
+              <div className="client-office-row-list">
+                {transactions.slice(0, 5).map((transaction) => (
+                  <div className="client-office-row" key={transaction.id}>
+                    <div><strong>{transaction.transaction_type}</strong><p>{new Date(transaction.created_at).toLocaleString()}</p></div>
+                    <span>{transaction.direction === 'credit' ? '+' : '-'}{transaction.amount} Coins</span>
+                  </div>
+                ))}
+                {!transactions.length && <p className="muted">{t('clientOffice.noActivity')}</p>}
+              </div>
+            </section>
+          </div>
+
+          <div className="client-office-right">
+            <section className="client-office-card" id="account">
+              <div className="profile-summary">
+                {clientProfile?.avatar_url ? <img className="client-office-profile-image" src={clientProfile.avatar_url} alt="" /> : <div className="qr-visual"><UserRound size={46} /></div>}
+                <div>
+                  <p className="eyebrow">{t('clientOffice.profile')}</p>
+                  <h2>{displayName}</h2>
+                  <p>{userEmail}</p>
+                  <span className={`admin-status ${activated ? 'active' : 'pending'}`}>{statusLabel}</span>
+                </div>
+              </div>
+              <label className="button full">
+                {avatarUploading ? t('states.loading') : t('clientOffice.uploadAvatar')}
+                <input hidden type="file" accept="image/*" onChange={onAvatarUpload} />
+              </label>
+              {activation?.activated_at && <p className="muted">{t('clientOffice.activatedAt', { date: new Date(activation.activated_at).toLocaleDateString() })}</p>}
+              {!activated && <button className="button primary full" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</button>}
+            </section>
+
+            <section className="client-office-card client-office-wallet" id="wallet">
+              <div className="client-office-card-header">
+                <div>
+                  <p className="eyebrow">{t('clientOffice.coinWallet')}</p>
+                  <h2>{Math.round(Number(coinWallet?.balance ?? 0)).toLocaleString()}</h2>
+                </div>
+                <Gem size={22} />
+              </div>
+              <div className="client-office-mini-metrics">
+                <Metric label={t('clientOffice.coinBalance')} value={Math.round(Number(coinWallet?.balance ?? 0))} />
+                <Metric label={t('clientOffice.tokenBalance')} value={Math.round(Number(wallet?.escort_token_balance ?? 0))} />
+              </div>
+              <Link className="button primary full" to="/coins">{t('clientOffice.coinWallet')}</Link>
+              <Link className="button full" to="/tokens">{t('tokens.title')}</Link>
+            </section>
+
+            <section className="client-office-card referral-studio">
+              <div className="client-office-card-header">
+                <div>
+                  <p className="eyebrow">{t('clientOffice.referralEyebrow')}</p>
+                  <h2>{t('clientOffice.referralTitle')}</h2>
+                </div>
+                <QrCode size={18} />
+              </div>
+              {referralQrImageUrl ? <img className="client-qr-image" src={referralQrImageUrl} alt="Referral QR" /> : <QrVisual seed="CLIENT-FREE" />}
+              <p className="muted">{referralLink || t('clientOffice.referralLocked')}</p>
+              {referralLink && <button className="button full" type="button" onClick={() => navigator.clipboard?.writeText(referralLink)}><Copy size={14} /> {t('clientOffice.copyInvite')}</button>}
+              <div className="client-referral-progress">
+                <strong>{t('clientOffice.nextRewardProgress', { count: referralActivations ? 1 : 0 })}</strong>
+                <span>{t('clientOffice.nextReward', { count: CLIENT_REFERRAL_REWARD_COINS })}</span>
+                <div className="progress-track"><span style={{ width: `${referralProgress}%` }} /></div>
+                <p>{t('clientOffice.earnedRewards')}: {earnedReferralCoins} Coins</p>
+              </div>
+            </section>
+
+            <section className="client-office-card client-office-settings" id="settings">
+              <div className="client-office-card-header">
+                <div>
+                  <p className="eyebrow">{t('clientOffice.settings.eyebrow')}</p>
+                  <h2>{t('clientOffice.settings.title')}</h2>
+                </div>
+                <span className={`client-status-badge ${isVerifiedClient ? 'verified' : 'pending'}`}>{t(`clientOffice.personal.status.${personalDraft.verification_status || 'incomplete'}`)}</span>
+              </div>
+              <form className="client-office-settings-form" onSubmit={(event) => {
+                event.preventDefault();
+                onSavePersonalProfile(personalDraft);
+              }}>
+                <label className="premium-field"><span>{t('clientOffice.settings.email')}</span><input value={userEmail} readOnly /></label>
+                <label className="premium-field"><span>{t('clientOffice.personal.firstName')}</span><input value={personalDraft.first_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, first_name: event.target.value })} /></label>
+                <label className="premium-field"><span>{t('clientOffice.personal.lastName')}</span><input value={personalDraft.last_name || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, last_name: event.target.value })} /></label>
+                <label className="premium-field"><span>{t('clientOffice.personal.phone')}</span><input value={personalDraft.phone || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, phone: event.target.value })} /></label>
+                <label className="premium-field"><span>{t('clientOffice.personal.city')}</span><input value={personalDraft.city || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, city: event.target.value })} /></label>
+                <label className="premium-field"><span>{t('clientOffice.settings.password')}</span><input value={t('clientOffice.settings.passwordManaged')} readOnly /></label>
+                <label className="premium-field"><span>{t('clientOffice.settings.language')}</span><input value={t('clientOffice.settings.currentLanguage')} readOnly /></label>
+                <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_personal_data} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_personal_data: event.target.checked })} /> {t('clientOffice.personal.consentData')}</label>
+                <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_home_service_contact} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_home_service_contact: event.target.checked })} /> {t('clientOffice.settings.notifications')}</label>
+                <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_verified_client_badge} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_verified_client_badge: event.target.checked })} /> {t('clientOffice.settings.privacy')}</label>
+                <button className="button primary full" type="submit">{t('clientOffice.settings.save')}</button>
+              </form>
+            </section>
           </div>
         </section>
-      </div>
+      </main>
     </div>
   );
+
 }
 
 function ClientFavoriteCard({ favorite, onRemoveFavorite }: { favorite: ClientFavorite; onRemoveFavorite: (profileId: string) => void }) {
