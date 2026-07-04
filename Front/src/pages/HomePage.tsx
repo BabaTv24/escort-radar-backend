@@ -95,17 +95,16 @@ export function HomePage() {
             <Link to="/dashboard" className="button"><PlusCircle size={18} /> {t('home.create')}</Link>
           </div>
         </div>
-        <div className="hero-app-preview" aria-hidden="true">
-          <div className="hero-preview-topbar">
-            <span>{t('home.preview.liveRadar')}</span>
-            <strong>{t('home.preview.verified')}</strong>
-          </div>
-          <div className="hero-preview-grid">
-            <article className="hero-preview-card hero-preview-radar">
-              <span>{t('home.preview.nearbyProfiles')}</span>
-              <div className="hero-mini-radar">
+        <div className="hero-product-preview" aria-hidden="true">
+          <div className="hero-preview-window">
+            <div className="hero-preview-topbar">
+              <span>{t('app.name')}</span>
+              <strong>{t('home.preview.appPreview')}</strong>
+            </div>
+            <div className="hero-preview-grid">
+              <div className="hero-preview-radar-mini">
                 <i />
-                {featured.slice(0, 5).map((profile, index) => {
+                {featured.slice(0, 3).map((profile, index) => {
                   const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
                   return (
                     <b className={`pin-${index + 1}`} key={profile.id}>
@@ -114,21 +113,20 @@ export function HomePage() {
                   );
                 })}
               </div>
-            </article>
-            <article className="hero-preview-card">
-              <span>{t('home.preview.credits')}</span>
-              <strong>15,000</strong>
-              <small>{t('coins.balance')}</small>
-              <button className="button primary" type="button" tabIndex={-1}>{t('clientOffice.addCoins')}</button>
-            </article>
-            <article className="hero-preview-card hero-preview-profile">
-              {featured[0]?.profile_images?.[0]?.public_url ? <img src={featured[0].profile_images[0].public_url} alt="" /> : <div className="image-placeholder">{t('app.name')}</div>}
-              <div>
-                <span>{featured[0]?.display_name || t('clientOffice.clientFallback')}</span>
-                <strong>{t('home.preview.availableNow')}</strong>
-                <small>{featured[0]?.city || 'Berlin'} - 4.9</small>
+              <div className="hero-preview-profile-mini">
+                {featured[0]?.profile_images?.[0]?.public_url ? <img src={featured[0].profile_images[0].public_url} alt="" /> : <div className="image-placeholder">{t('app.name')}</div>}
+                <div>
+                  <span>{featured[0]?.display_name || t('clientOffice.clientFallback')}</span>
+                  <strong>{t('home.preview.availableNow')}</strong>
+                  <small>{featured[0]?.city || 'Berlin'} - 4.9</small>
+                </div>
               </div>
-            </article>
+              <div className="hero-preview-wallet-mini">
+                <span>{t('home.preview.credits')}</span>
+                <strong>15,000</strong>
+                <small>{t('home.preview.verified')}</small>
+              </div>
+            </div>
           </div>
         </div>
       </section>
