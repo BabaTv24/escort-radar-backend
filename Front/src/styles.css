@@ -8180,7 +8180,7 @@ textarea:focus-visible,
   }
 }
 
-/* Mockup_All premium convergence pass */
+/* Premium convergence pass based on the supplied design reference */
 :root {
   --er-bg: #070706;
   --er-bg-soft: #0d0c0a;
@@ -8369,35 +8369,144 @@ textarea:focus {
   line-height: 1;
 }
 
-.hero-product-board {
+.hero-app-preview {
   position: relative;
   z-index: 2;
-  margin: 0;
   align-self: stretch;
   min-height: 420px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: .85rem;
+  padding: .85rem;
   border: 1px solid rgba(244,215,127,.2);
   border-radius: var(--er-radius-md);
   overflow: hidden;
-  background: #070706;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(244,215,127,.12), transparent 17rem),
+    linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.014)),
+    #090908;
   box-shadow: 0 32px 110px rgba(0,0,0,.48), 0 0 50px rgba(217,168,78,.08);
 }
 
-.hero-product-board img {
-  width: 100%;
-  height: 100%;
-  min-height: inherit;
-  object-fit: cover;
-  object-position: 50% 7%;
-  display: block;
-  opacity: .92;
+.hero-preview-topbar {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+  padding: .7rem .8rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  background: rgba(0,0,0,.28);
+  color: var(--er-text-soft);
 }
 
-.hero-product-board::after {
-  content: "";
+.hero-preview-topbar strong {
+  color: var(--er-gold-light);
+}
+
+.hero-preview-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(230px, 1.05fr) minmax(190px, .75fr);
+  grid-template-rows: minmax(180px, 1fr) minmax(130px, auto);
+  gap: .85rem;
+}
+
+.hero-preview-card {
+  min-width: 0;
+  padding: .85rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  display: grid;
+  align-content: start;
+  gap: .55rem;
+  background: linear-gradient(145deg, rgba(255,255,255,.05), rgba(255,255,255,.018)), rgba(14,14,12,.84);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 16px 46px rgba(0,0,0,.28);
+}
+
+.hero-preview-card > span,
+.hero-preview-card small {
+  color: var(--er-muted);
+}
+
+.hero-preview-card > strong {
+  color: var(--er-gold-light);
+  font-size: 1.65rem;
+}
+
+.hero-preview-radar {
+  grid-row: 1 / 3;
+}
+
+.hero-mini-radar {
+  position: relative;
+  min-height: 100%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(244,215,127,.18);
+  border-radius: var(--er-radius-sm);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(244,215,127,.22), transparent 7rem),
+    repeating-radial-gradient(circle, rgba(244,215,127,.18) 0 1px, transparent 1px 56px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255,255,255,.025) 1px, transparent 1px),
+    #080908;
+  background-size: auto, auto, 44px 44px, 44px 44px, auto;
+}
+
+.hero-mini-radar i {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(7,7,6,.42), transparent 28%), linear-gradient(0deg, rgba(7,7,6,.18), transparent 42%);
-  pointer-events: none;
+  left: calc(50% - 6px);
+  top: calc(50% - 6px);
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--er-gold-light);
+  box-shadow: 0 0 36px rgba(244,215,127,.72);
+}
+
+.hero-mini-radar b {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border: 2px solid var(--er-gold-light);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--er-surface-2);
+  box-shadow: 0 14px 30px rgba(0,0,0,.42), 0 0 0 5px rgba(244,215,127,.08);
+}
+
+.hero-mini-radar b img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-mini-radar .pin-1 { left: 22%; top: 22%; }
+.hero-mini-radar .pin-2 { left: 68%; top: 18%; }
+.hero-mini-radar .pin-3 { left: 74%; top: 62%; }
+.hero-mini-radar .pin-4 { left: 32%; top: 70%; }
+.hero-mini-radar .pin-5 { left: 52%; top: 38%; }
+
+.hero-preview-profile {
+  grid-template-columns: 78px minmax(0, 1fr);
+  align-items: center;
+}
+
+.hero-preview-profile img,
+.hero-preview-profile .image-placeholder {
+  width: 78px;
+  height: 98px;
+  border-radius: var(--er-radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--er-border);
+}
+
+.hero-preview-profile strong {
+  display: block;
+  color: var(--er-success);
+  font-size: .86rem;
 }
 
 .radar-ring,
@@ -8651,8 +8760,8 @@ textarea:focus {
 
 .age-gate {
   background:
-    linear-gradient(90deg, rgba(5,5,5,.94), rgba(5,5,5,.7)),
-    url('/Mockup_All.png') center / cover no-repeat,
+    radial-gradient(circle at 24% 10%, rgba(244,215,127,.16), transparent 24rem),
+    radial-gradient(circle at 82% 12%, var(--er-purple-glow), transparent 28rem),
     #050505;
 }
 
@@ -8676,7 +8785,7 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
-  .hero-product-board {
+  .hero-app-preview {
     min-height: 360px;
   }
 
@@ -8725,12 +8834,13 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .hero-product-board {
+  .hero-app-preview {
     min-height: 300px;
   }
 
-  .hero-product-board img {
-    object-position: 47% 4%;
+  .hero-preview-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
   }
 
   .client-office-shell {
@@ -8761,7 +8871,7 @@ textarea:focus {
     grid-template-columns: 1fr 1fr;
   }
 
-  .hero-product-board {
+  .hero-app-preview {
     min-height: 230px;
   }
 

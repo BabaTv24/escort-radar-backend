@@ -95,9 +95,42 @@ export function HomePage() {
             <Link to="/dashboard" className="button"><PlusCircle size={18} /> {t('home.create')}</Link>
           </div>
         </div>
-        <figure className="hero-product-board">
-          <img src="/Mockup_All.png" alt={t('home.productPreviewAlt')} loading="eager" />
-        </figure>
+        <div className="hero-app-preview" aria-hidden="true">
+          <div className="hero-preview-topbar">
+            <span>{t('clientOffice.title')}</span>
+            <strong>15,000</strong>
+          </div>
+          <div className="hero-preview-grid">
+            <article className="hero-preview-card hero-preview-radar">
+              <span>{t('nav.radar')}</span>
+              <div className="hero-mini-radar">
+                <i />
+                {featured.slice(0, 5).map((profile, index) => {
+                  const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
+                  return (
+                    <b className={`pin-${index + 1}`} key={profile.id}>
+                      {image?.public_url ? <img src={image.public_url} alt="" /> : null}
+                    </b>
+                  );
+                })}
+              </div>
+            </article>
+            <article className="hero-preview-card">
+              <span>{t('clientOffice.coinWallet')}</span>
+              <strong>15,000</strong>
+              <small>{t('coins.balance')}</small>
+              <button className="button primary" type="button" tabIndex={-1}>{t('clientOffice.addCoins')}</button>
+            </article>
+            <article className="hero-preview-card hero-preview-profile">
+              {featured[0]?.profile_images?.[0]?.public_url ? <img src={featured[0].profile_images[0].public_url} alt="" /> : <div className="image-placeholder">{t('app.name')}</div>}
+              <div>
+                <span>{featured[0]?.display_name || t('clientOffice.clientFallback')}</span>
+                <strong>{t('badges.availableNow')}</strong>
+                <small>{featured[0]?.city || 'Berlin'} - 4.9</small>
+              </div>
+            </article>
+          </div>
+        </div>
       </section>
 
       {loading && <LoadingState label={t('home.loadingProfiles')} />}
