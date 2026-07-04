@@ -16,8 +16,8 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
   const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
   const status = profile.availability_status || (profile.available_now ? 'available' : 'unavailable');
   const operatorStatus = profile.operator_status || (status === 'available' ? 'ONLINE_NOW' : status === 'busy' ? 'BUSY' : 'OFFLINE');
-  const operatorLabel = operatorStatusLabel(operatorStatus);
-  const priceFrom = getPriceFrom(profile);
+  const operatorLabel = operatorStatusLabel(operatorStatus, t);
+  const priceFrom = getPriceFrom(profile, t);
   const reviewCount = 12 + (profile.id.length % 37);
   const rating = (4.6 + (profile.id.length % 4) / 10).toFixed(1);
   const locationLabel = getPublicLocationLabel(profile, t);
@@ -63,12 +63,12 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
           <span><Star size={14} /> {rating} ({reviewCount})</span>
         </div>
         <div className="mini-icon-row" aria-label="Profile features">
-          {profile.visit_types?.includes('hotel') && <span title="Hotel visit"><Hotel size={15} /></span>}
-          {profile.visit_types?.includes('incall') && <span title="Home visit"><Home size={15} /></span>}
-          {profile.service_tags?.includes('conversation') && <span title="Chat"><MessageCircle size={15} /></span>}
-          {profile.category === 'live_cam' && <span title="Cam"><Video size={15} /></span>}
-          {profile.verified && <span title="Verified"><BadgeCheck size={15} /></span>}
-          {profile.audience?.includes('couples') && <span title="Couples"><HeartHandshake size={15} /></span>}
+          {profile.visit_types?.includes('hotel') && <span title={t('profileCard.hotelVisit')}><Hotel size={15} /></span>}
+          {profile.visit_types?.includes('incall') && <span title={t('profileCard.homeVisit')}><Home size={15} /></span>}
+          {profile.service_tags?.includes('conversation') && <span title={t('profileCard.chat')}><MessageCircle size={15} /></span>}
+          {profile.category === 'live_cam' && <span title={t('profileCard.cam')}><Video size={15} /></span>}
+          {profile.verified && <span title={t('profileCard.verified')}><BadgeCheck size={15} /></span>}
+          {profile.audience?.includes('couples') && <span title={t('profileCard.couples')}><HeartHandshake size={15} /></span>}
         </div>
         <div className="badges">
           {profile.private_studio && <span><LockKeyhole size={14} /> Private</span>}
@@ -129,22 +129,22 @@ function operatorStatusClass(status: string) {
   return classes[status] || 'offline';
 }
 
-function operatorStatusLabel(status: string) {
+function operatorStatusLabel(status: string, t: (key: string) => string) {
   const labels: Record<string, string> = {
-    ONLINE_NOW: 'Online now',
-    BUSY: 'Busy',
-    TRAVELING: 'Traveling',
-    AVAILABLE_TODAY: 'Available today',
-    APPOINTMENT_ONLY: 'Appointment only',
-    OFFLINE: 'Offline'
+    ONLINE_NOW: t('status.onlineNow'),
+    BUSY: t('status.busy'),
+    TRAVELING: t('status.traveling'),
+    AVAILABLE_TODAY: t('status.availableToday'),
+    APPOINTMENT_ONLY: t('status.appointmentOnly'),
+    OFFLINE: t('status.offline')
   };
-  return labels[status] || 'Offline';
+  return labels[status] || t('status.offline');
 }
 
-function getPriceFrom(profile: Profile) {
+function getPriceFrom(profile: Profile, t: (key: string) => string) {
   const prices = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_3h, profile.price_night]
     .map((value) => Number(value || 0))
     .filter((value) => value > 0);
-  if (!prices.length) return 'Preis auf Anfrage';
+  if (!prices.length) return t('profile.priceOnRequest');
   return `ab ${Math.min(...prices)} ${profile.currency || 'EUR'} / h`;
 }

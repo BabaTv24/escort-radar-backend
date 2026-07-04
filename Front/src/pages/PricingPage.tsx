@@ -131,7 +131,7 @@ export function PricingPage() {
           <div className="manual-payment-grid">
             <div className="manual-account-summary">
               <span>Account email</span>
-              <strong>{accountEmail || 'Login required'}</strong>
+              <strong>{accountEmail || t('tokens.loginRequired')}</strong>
             </div>
             <label>
               Product

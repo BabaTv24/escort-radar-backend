@@ -215,7 +215,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         )}
         {radarProfiles.map(({ profile, distanceKm, point, operatorStatus, statusClass }) => {
           const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
-          const price = getPrice(profile);
+          const price = getPrice(profile, t);
           const tooltipClass = getTooltipClass(point);
           const distanceLabel = formatDistanceKm(distanceKm, t('radar.distanceUnavailable'));
 
@@ -317,10 +317,10 @@ function getInitials(name: string) {
   return `${parts[0]?.[0] || 'P'}${parts[1]?.[0] || ''}`;
 }
 
-function getPrice(profile: Profile) {
+function getPrice(profile: Profile, t: (key: string, vars?: Record<string, string | number>) => string) {
   const prices = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_3h, profile.price_night]
     .map((value) => Number(value || 0))
     .filter((value) => value > 0);
-  if (!prices.length) return 'Price on request';
-  return `from ${Math.min(...prices)} ${profile.currency || 'EUR'}`;
+  if (!prices.length) return t('profile.priceOnRequest');
+  return t('profile.priceFrom', { amount: Math.min(...prices), currency: profile.currency || 'EUR' });
 }

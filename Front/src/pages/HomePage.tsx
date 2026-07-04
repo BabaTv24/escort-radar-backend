@@ -11,7 +11,7 @@ import { getCityCenter, getSearcherLocationWithFallback } from '../lib/geo';
 import { activePublicCategoryOptions } from '../data/filterOptions';
 import type { Profile } from '../types';
 import { getPublicProfiles } from '../lib/publicProfiles';
-import { ErrorState, LoadingState } from '../components/LoadingState';
+import { EmptyState, ErrorState, LoadingState } from '../components/LoadingState';
 import { Seo } from '../components/Seo';
 
 export function HomePage() {
@@ -36,10 +36,10 @@ export function HomePage() {
       .then(setProfiles)
       .catch((reason) => {
         setProfiles([]);
-        setError(reason instanceof Error ? reason.message : 'Could not load profiles.');
+        setError(reason instanceof Error ? reason.message : t('home.loadError'));
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [t]);
 
   useEffect(loadProfiles, [loadProfiles]);
 
@@ -91,10 +91,10 @@ export function HomePage() {
         </div>
       </section>
 
-      {loading && <LoadingState label="Loading profiles..." />}
+      {loading && <LoadingState label={t('home.loadingProfiles')} />}
       {error && <ErrorState message={error} onRetry={loadProfiles} />}
       {!loading && !error && profiles.length === 0 && (
-        <div className="state-panel">No public profiles are available yet.</div>
+        <EmptyState title={t('home.noProfilesTitle')} message={t('home.noProfilesText')} />
       )}
 
       {!loading && !error && profiles.length > 0 && <>
@@ -102,8 +102,8 @@ export function HomePage() {
         <section className="home-marketplace-showcase">
           <div className="section-head compact">
             <div>
-              <p className="eyebrow">Profile sponsorowane</p>
-              <h2>Profile sponsorowane</h2>
+              <p className="eyebrow">{t('home.sponsoredEyebrow')}</p>
+              <h2>{t('home.sponsoredTitle')}</h2>
             </div>
             <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> {t('home.openRadar')}</Link>
           </div>
@@ -116,8 +116,8 @@ export function HomePage() {
       {topProfiles.length > 0 && <section className="home-marketplace-showcase">
         <div className="section-head compact">
           <div>
-            <p className="eyebrow">Escort Radar Marketplace</p>
-            <h2>Top Escorts in deiner Naehe</h2>
+            <p className="eyebrow">{t('home.marketplaceEyebrow')}</p>
+            <h2>{t('home.marketplaceTitle')}</h2>
           </div>
           <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> {t('home.openRadar')}</Link>
         </div>
@@ -128,13 +128,13 @@ export function HomePage() {
               <Link to={`/profile/${profile.id}`} className="top-avatar" key={profile.id}>
                 {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{profile.display_name.slice(0, 1)}</span>}
                 <strong>{profile.display_name}</strong>
-                <small>{profile.available_now ? 'Available now' : profile.city}</small>
+                <small>{profile.available_now ? t('badges.availableNow') : profile.city}</small>
               </Link>
             );
           })}
         </div>
         <div className="sort-tabs static-tabs" aria-label="Marketplace sorting preview">
-          {['Bestplatzierte', 'Neu', 'In der Naehe', 'Online'].map((item, index) => <span className={index === 0 ? 'selected' : ''} key={item}>{item}</span>)}
+          {['home.sort.best', 'home.sort.new', 'home.sort.near', 'home.sort.online'].map((item, index) => <span className={index === 0 ? 'selected' : ''} key={item}>{t(item)}</span>)}
         </div>
         <div className="cards-grid marketplace-grid premium-profile-grid">
           {topProfiles.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}

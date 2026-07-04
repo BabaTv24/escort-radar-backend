@@ -57,7 +57,7 @@ export function ProfilePage() {
     api.profile(id)
       .then(async (data) => {
         const mapped = mapApiProfileToPublicProfile(data.profile);
-        if (!mapped) throw new Error('Profile data is invalid.');
+        if (!mapped) throw new Error(t('profile.invalidData'));
         setProfile(mapped);
         getPublicProfiles(new URLSearchParams({ city: mapped.city }))
           .then((profiles) => setSimilarProfiles(profiles.filter((item) => item.id !== mapped.id).slice(0, 6)))
@@ -71,7 +71,7 @@ export function ProfilePage() {
         }
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Could not load profile.');
+        setError(err instanceof Error ? err.message : t('profile.loadError'));
       });
   }, [id, retryKey]);
 
@@ -80,11 +80,11 @@ export function ProfilePage() {
 
   const activated = profileAccess?.client_state === 'client_activated';
   const galleryImages = activated && profileAccess?.full_gallery?.length ? profileAccess.full_gallery : profile.profile_images || [];
-  const priceFrom = getPriceFrom(profile);
-  const contactFallback = 'Kontakt nie zostal jeszcze dodany';
+  const priceFrom = getPriceFrom(profile, t);
+  const contactFallback = t('profile.contactMissing');
   const locationLabel = getPublicLocationLabel(profile, t);
   const locationPrivacyLabel = t(`radar.${getPublicLocationMode(profile) === 'exact' ? 'exactAddress' : getPublicLocationMode(profile) === 'postal_area' ? 'postalArea' : getPublicLocationMode(profile) === 'hidden' ? 'hideExactLocation' : 'cityOnly'}`);
-  const statusLabel = operatorStatusLabel(profile.operator_status || (profile.availability_status === 'available' ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE'));
+  const statusLabel = operatorStatusLabel(profile.operator_status || (profile.availability_status === 'available' ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE'), t);
   const statusClass = operatorStatusClass(profile.operator_status || (profile.availability_status === 'available' ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE'));
   const travelNotice = getTravelNotice(profile);
   const languages = profile.languages?.length ? profile.languages : ['DE', 'EN'];
@@ -131,7 +131,7 @@ export function ProfilePage() {
           <section className="market-gallery-card">
             <div className="market-gallery-main">
               {galleryImages[0]?.public_url ? (
-                <button type="button" onClick={() => setGalleryIndex(0)} aria-label="Open gallery">
+                <button type="button" onClick={() => setGalleryIndex(0)} aria-label={t('profile.openGallery')}>
                   <img src={galleryImages[0].public_url} alt="" loading="eager" />
                 </button>
               ) : (
@@ -139,19 +139,19 @@ export function ProfilePage() {
               )}
               <div className="market-gallery-overlay">
                 <div className="market-badge-row">
-                  {profile.verified && <span><BadgeCheck size={14} /> Verified</span>}
-                  <span>Premium</span>
-                  <span><Video size={14} /> Live Cam</span>
+                  {profile.verified && <span><BadgeCheck size={14} /> {t('profile.verified')}</span>}
+                  <span>{t('profile.premium')}</span>
+                  <span><Video size={14} /> {t('profile.liveCam')}</span>
                 </div>
                 <span className={`status ${statusClass}`}>{statusLabel}</span>
                 <h1>{profile.display_name}</h1>
                 <p><MapPin size={15} /> {locationLabel}{profile.distance_km ? ` - ${profile.distance_km} km` : ''}</p>
                 {travelNotice && <p>{travelNotice}</p>}
                 <div className="market-hero-facts">
-                  <span><Star size={14} /> 4.9 rating</span>
+                  <span><Star size={14} /> {t('profile.rating', { rating: '4.9' })}</span>
                   <span>{priceFrom}</span>
-                  {profile.radar_score ? <span>Radar score {profile.radar_score}</span> : null}
-                  <span>{profile.age ? `${profile.age} years` : 'Age verified'}</span>
+                  {profile.radar_score ? <span>{t('profile.radarScore', { score: profile.radar_score })}</span> : null}
+                  <span>{profile.age ? t('profile.ageYears', { age: profile.age }) : t('profile.ageVerified')}</span>
                 </div>
               </div>
               <span className="media-counter">1/{Math.max(galleryImages.length, 1)}</span>
@@ -166,32 +166,32 @@ export function ProfilePage() {
                   onClick={() => activated ? setGalleryIndex(index + 1) : startClientActivation()}
                 >
                   {image.public_url ? <img src={image.public_url} alt="" loading="lazy" /> : <div className="image-placeholder large">{t('profile.noImage')}</div>}
-                  {!activated && <span><LockKeyhole size={15} /> Unlock all photos for 0.99€</span>}
+                  {!activated && <span><LockKeyhole size={15} /> {t('profile.unlockPhotos')}</span>}
                 </button>
               ))}
-              {!galleryImages.slice(1, 6).length && <span className="market-empty-inline">More verified photos coming soon.</span>}
+              {!galleryImages.slice(1, 6).length && <span className="market-empty-inline">{t('profile.morePhotosSoon')}</span>}
             </div>
           </section>
 
-          <nav className="market-profile-tabs" aria-label="Profile sections">
+          <nav className="market-profile-tabs" aria-label={t('profile.sections')}>
             {(['overview', 'services', 'prices', 'reviews'] as const).map((tab) => (
               <button key={tab} className={activeTab === tab ? 'active' : ''} type="button" onClick={() => setActiveTab(tab)}>
-                {tab[0].toUpperCase() + tab.slice(1)}
+                {t(`profile.tabs.${tab}`)}
               </button>
             ))}
           </nav>
 
-          <MarketSection tab="overview" activeTab={activeTab} eyebrow="Overview" title="Private introduction">
+          <MarketSection tab="overview" activeTab={activeTab} eyebrow={t('profile.tabs.overview')} title={t('profile.privateIntroduction')}>
             <p>{profile.description || t('profile.fallbackDescription')}</p>
             <div className="market-detail-grid">
-              <MarketFact icon={<ShieldCheck size={17} />} label="Verification" value={profile.verified ? 'Verified profile' : 'Verification pending'} />
-              <MarketFact icon={<Languages size={17} />} label="Languages" value={languages.join(', ')} />
-              <MarketFact icon={<MapPin size={17} />} label="Visit type" value={visitTypes.map(option).join(', ')} />
+              <MarketFact icon={<ShieldCheck size={17} />} label={t('profile.verification')} value={profile.verified ? t('profile.verifiedProfile') : t('profile.verificationPending')} />
+              <MarketFact icon={<Languages size={17} />} label={t('profile.languages')} value={languages.join(', ')} />
+              <MarketFact icon={<MapPin size={17} />} label={t('profile.visitType')} value={visitTypes.map(option).join(', ')} />
               {clientVisitMode && <MarketFact icon={<MapPin size={17} />} label={t('profileDetails.visitMode')} value={clientVisitMode} />}
-              <MarketFact icon={<MapPin size={17} />} label="Location privacy" value={locationPrivacyLabel} />
-              <MarketFact icon={<MapPin size={17} />} label="Service radius" value={`${profile.service_radius_km || 25} km`} />
-              <MarketFact icon={<MapPin size={17} />} label="Hotspot" value={profile.hotspot_type || 'Not set'} />
-              <MarketFact icon={<Clock size={17} />} label="Last active" value={profile.availability_status === 'available' ? 'Available now' : 'Recently active'} />
+              <MarketFact icon={<MapPin size={17} />} label={t('profile.locationPrivacy')} value={locationPrivacyLabel} />
+              <MarketFact icon={<MapPin size={17} />} label={t('profile.serviceRadius')} value={`${profile.service_radius_km || 25} km`} />
+              <MarketFact icon={<MapPin size={17} />} label={t('profile.hotspot')} value={profile.hotspot_type || t('profile.notSet')} />
+              <MarketFact icon={<Clock size={17} />} label={t('profile.lastActive')} value={profile.availability_status === 'available' ? t('badges.availableNow') : t('profile.recentlyActive')} />
             </div>
           </MarketSection>
 
@@ -220,26 +220,26 @@ export function ProfilePage() {
                     <strong>{t('profileDetails.profileDetails')}</strong>
                     <p>{t('profileDetails.premiumDetailsLocked')}</p>
                   </div>
-                  <button className="button primary" type="button" onClick={startClientActivation}>Activate 0.99 EUR</button>
+                  <button className="button primary" type="button" onClick={startClientActivation}>{t('profile.activateClient')}</button>
                 </div>
               )}
             </MarketSection>
           ) : null}
 
-          <MarketSection tab="overview" activeTab={activeTab} eyebrow="Availability" title="Schedule and radar status">
+          <MarketSection tab="overview" activeTab={activeTab} eyebrow={t('profile.availability')} title={t('profile.scheduleTitle')}>
             <div className="market-schedule-grid">
               {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
                 <div key={day}>
                   <span>{day}</span>
-                  <strong>{index < 5 ? '18:00 - 02:00' : 'On request'}</strong>
+                  <strong>{index < 5 ? '18:00 - 02:00' : t('profile.onRequest')}</strong>
                 </div>
               ))}
             </div>
             {travelNotice && <p className="success">{travelNotice}</p>}
-            <p className="muted-copy">{profile.availability_note || 'Schedule is confirmed directly before booking. Radar status updates with live availability.'}</p>
+            <p className="muted-copy">{profile.availability_note || t('profile.scheduleFallback')}</p>
           </MarketSection>
 
-          <MarketSection tab="services" activeTab={activeTab} eyebrow="Services" title="Selected experiences">
+          <MarketSection tab="services" activeTab={activeTab} eyebrow={t('profile.tabs.services')} title={t('profile.selectedExperiences')}>
             {selectedServices.length ? (
               <div className="tag-list premium-tags">
                 {selectedServices.map((key) => <span key={key}>{serviceLabel(key)}</span>)}
@@ -260,30 +260,30 @@ export function ProfilePage() {
                   <strong>{t('pricing.servicePricing')}</strong>
                   <p>{t('profileDetails.premiumDetailsLocked')}</p>
                 </div>
-                <button className="button primary" type="button" onClick={startClientActivation}>Activate 0.99 EUR</button>
+                <button className="button primary" type="button" onClick={startClientActivation}>{t('profile.activateClient')}</button>
               </div>
             ) : null}
           </MarketSection>
 
-          <MarketSection tab="prices" activeTab={activeTab} eyebrow="Prices" title="Transparent rates">
+          <MarketSection tab="prices" activeTab={activeTab} eyebrow={t('profile.tabs.prices')} title={t('profile.transparentRates')}>
             <PriceList profile={profile} />
           </MarketSection>
 
-          <MarketSection tab="reviews" activeTab={activeTab} eyebrow="Reviews" title="Verified guest feedback">
+          <MarketSection tab="reviews" activeTab={activeTab} eyebrow={t('profile.tabs.reviews')} title={t('profile.verifiedFeedback')}>
             <div className="market-review-summary">
               <strong><Star size={18} /> 4.9</strong>
-              <span>Verified reviews are shown after moderation.</span>
+              <span>{t('profile.reviewsModerated')}</span>
             </div>
             <div className="market-empty-state">
               <BadgeCheck size={18} />
-              <p>No public reviews yet. First verified reviews will appear here after moderation.</p>
+              <p>{t('profile.noReviewsYet')}</p>
             </div>
           </MarketSection>
 
           <section className="market-section private-gallery-panel">
             <div className="market-section-heading">
-              <p className="eyebrow">VIP gallery</p>
-              <h2>Private gallery</h2>
+              <p className="eyebrow">{t('profile.vipGallery')}</p>
+              <h2>{t('profile.privateGallery')}</h2>
             </div>
             {activated && profileAccess?.vip_gallery_unlocked ? (
               <div className="market-gallery-thumbs vip">
@@ -297,18 +297,18 @@ export function ProfilePage() {
               <div className="market-lock-card">
                 <LockKeyhole size={18} />
                 <div>
-                  <strong>Private gallery</strong>
-                  <p>Unlock with Coins after client activation.</p>
+                  <strong>{t('profile.privateGallery')}</strong>
+                  <p>{t('profile.unlockGalleryText')}</p>
                 </div>
-                <button className="button primary" type="button" onClick={activated ? unlockVipGallery : startClientActivation}>{activated ? 'Unlock with Coins' : 'Activate 0.99 EUR'}</button>
+                <button className="button primary" type="button" onClick={activated ? unlockVipGallery : startClientActivation}>{activated ? t('profile.unlockWithCoins') : t('profile.activateClient')}</button>
               </div>
             )}
           </section>
 
           <section className="market-section" id="booking">
             <div className="market-section-heading">
-              <p className="eyebrow">Booking</p>
-              <h2>Send a booking request</h2>
+              <p className="eyebrow">{t('profile.booking')}</p>
+              <h2>{t('profile.sendBookingRequest')}</h2>
             </div>
             <form onSubmit={submitBooking} className="market-booking-form">
               <input name="email" type="email" placeholder={t('form.email')} required />
@@ -320,31 +320,31 @@ export function ProfilePage() {
                 <option value="240">240 min</option>
               </select>
               <textarea name="message" placeholder={t('form.message')} />
-              <button className="button primary" type="submit">Send booking request</button>
+              <button className="button primary" type="submit">{t('buttons.sendBooking')}</button>
               {bookingMessage && <p className="success">{bookingMessage}</p>}
             </form>
           </section>
 
           <section className="market-section similar-profiles">
             <div className="market-section-heading">
-              <p className="eyebrow">Nearby</p>
-              <h2>Similar profiles</h2>
+              <p className="eyebrow">{t('profile.nearby')}</p>
+              <h2>{t('profile.similarProfiles')}</h2>
             </div>
             <div className="similar-profile-grid">
               {similarProfiles.length ? similarProfiles.map((item) => (
                 <a key={item.id} href={`/profile/${item.id}`}>
                   {item.profile_images?.[0]?.public_url && <img src={item.profile_images[0].public_url} alt="" loading="lazy" />}
                   <strong>{item.display_name}</strong>
-                  <span>{item.area || item.city} - {getPriceFrom(item)}</span>
+                  <span>{item.area || item.city} - {getPriceFrom(item, t)}</span>
                 </a>
-              )) : <div className="market-empty-state"><p>No similar profiles in this area yet.</p></div>}
+              )) : <div className="market-empty-state"><p>{t('profile.noSimilarProfiles')}</p></div>}
             </div>
           </section>
 
           <section className="market-section report-section">
             <div className="market-section-heading">
-              <p className="eyebrow">Safety</p>
-              <h2>Report profile</h2>
+              <p className="eyebrow">{t('profile.safety')}</p>
+              <h2>{t('profile.reportProfile')}</h2>
             </div>
             <form onSubmit={submitReport} className="market-booking-form">
               <input name="email" type="email" placeholder={t('form.emailOptional')} />
@@ -366,11 +366,11 @@ export function ProfilePage() {
           <h2>{profile.display_name}</h2>
           <p><MapPin size={15} /> {locationLabel}</p>
           <div className="market-contact-price">
-            <span>From</span>
+            <span>{t('profile.from')}</span>
             <strong>{priceFrom}</strong>
           </div>
-          <div className="market-rating-line"><Star size={16} /> 4.9 <span>verified rating</span></div>
-          {!activated && <p className="subscription-notice">Activate for 0.99 EUR to reveal direct contact.</p>}
+          <div className="market-rating-line"><Star size={16} /> 4.9 <span>{t('profile.verifiedRating')}</span></div>
+          {!activated && <p className="subscription-notice">{t('profile.activateRevealContact')}</p>}
           {activated && (
             <div className="contact-unlocked-list">
               <p><Phone size={15} /> Phone: {profileAccess?.phone_number || contactFallback}</p>
@@ -379,21 +379,21 @@ export function ProfilePage() {
             </div>
           )}
           <div className="market-contact-actions">
-            <button className="button primary" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={16} /> Message</button>
-            <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={16} /> Call</button>
-            <a href="#booking" className="button"><CalendarDays size={16} /> Book</a>
+            <button className="button primary" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={16} /> {t('nav.messages')}</button>
+            <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={16} /> {t('profile.call')}</button>
+            <a href="#booking" className="button"><CalendarDays size={16} /> {t('profile.book')}</a>
             <button className="button" type="button" disabled={favoriteSaved} onClick={toggleFavorite}><Heart size={16} /> {favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</button>
-            <button className="button" type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={16} /> Gift</button>
-            <button className="button" type="button" onClick={() => setAccessMessage(activated ? 'Live Cam is available for Premium clients.' : 'Activate for 0.99 EUR to unlock Live Cam.')}><Video size={16} /> Live</button>
+            <button className="button" type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={16} /> {t('profile.gift')}</button>
+            <button className="button" type="button" onClick={() => setAccessMessage(activated ? t('profile.liveCamAvailable') : t('profile.liveCamLocked'))}><Video size={16} /> {t('profile.live')}</button>
           </div>
           {accessMessage && <p className={accessMessage === t('favorites.notEnoughTokens') ? 'error-text' : activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
           {accessMessage === t('favorites.notEnoughTokens') && <Link className="button" to="/tokens">{t('favorites.buyTokens')}</Link>}
           {accessMessage === t('favorites.loginToSeeFavorites') && <Link className="button" to="/login">{t('buttons.login')}</Link>}
           <div className="market-contact-facts">
-            <MarketFact icon={<BadgeCheck size={16} />} label="Verified" value={profile.verified ? 'Yes' : 'Pending'} />
-            <MarketFact icon={<Languages size={16} />} label="Languages" value={languages.join(', ')} />
-            <MarketFact icon={<MapPin size={16} />} label="Visits" value={visitTypes.map(option).join(', ')} />
-            <MarketFact icon={<Clock size={16} />} label="Last active" value={profile.availability_status === 'available' ? 'Now' : 'Recently'} />
+            <MarketFact icon={<BadgeCheck size={16} />} label={t('profile.verified')} value={profile.verified ? t('profile.yes') : t('profile.pending')} />
+            <MarketFact icon={<Languages size={16} />} label={t('profile.languages')} value={languages.join(', ')} />
+            <MarketFact icon={<MapPin size={16} />} label={t('profile.visits')} value={visitTypes.map(option).join(', ')} />
+            <MarketFact icon={<Clock size={16} />} label={t('profile.lastActive')} value={profile.availability_status === 'available' ? t('profile.now') : t('profile.recently')} />
           </div>
         </aside>
       </section>
@@ -413,9 +413,9 @@ export function ProfilePage() {
       )}
 
       <nav className="profile-floating-cta">
-        <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={17} /> Message</button>
-        <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={17} /> Call</button>
-        <a href="#booking"><CalendarDays size={17} /> Book</a>
+        <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={17} /> {t('nav.messages')}</button>
+        <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={17} /> {t('profile.call')}</button>
+        <a href="#booking"><CalendarDays size={17} /> {t('profile.book')}</a>
       </nav>
     </div>
   );
@@ -424,7 +424,7 @@ export function ProfilePage() {
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token;
     if (!token) {
-      setAccessMessage('Zaloguj sie, aby aktywowac konto za 0,99 EUR.');
+      setAccessMessage(t('profile.loginToActivate'));
       return;
     }
 
@@ -432,7 +432,7 @@ export function ProfilePage() {
     try {
       navigate('/pricing?product=client_activation');
     } catch (err) {
-      setAccessMessage(err instanceof Error ? err.message : 'Nie udalo sie uruchomic platnosci.');
+      setAccessMessage(err instanceof Error ? err.message : t('profile.paymentStartFailed'));
     } finally {
       setActivationBusy(false);
     }
@@ -441,9 +441,9 @@ export function ProfilePage() {
   async function sendGift() {
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token;
-    if (!token) return setAccessMessage('Login required.');
+    if (!token) return setAccessMessage(t('favorites.loginToSeeFavorites'));
     await api.sendGift(token, { profile_id: profile!.id, gift_type: 'rose', coin_cost: 10 });
-    setAccessMessage('Gift sent.');
+    setAccessMessage(t('profile.giftSent'));
   }
 
   async function toggleFavorite() {
@@ -467,11 +467,11 @@ export function ProfilePage() {
   async function unlockVipGallery() {
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token;
-    if (!token) return setAccessMessage('Login required.');
+    if (!token) return setAccessMessage(t('favorites.loginToSeeFavorites'));
     await api.unlockVipGallery(token, profile!.id, 25);
     const access = await api.profileAccess(token, profile!.id);
     setProfileAccess(access.access);
-    setAccessMessage('VIP gallery unlocked.');
+    setAccessMessage(t('profile.vipGalleryUnlocked'));
   }
 }
 
@@ -520,24 +520,24 @@ function getMoreAboutRows(profile: Profile, languages: string[], t: (key: string
     .filter((row) => row.value);
 }
 
-function getPriceFrom(profile: Profile) {
+function getPriceFrom(profile: Profile, t: (key: string, vars?: Record<string, string | number>) => string) {
   const values = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_3h, profile.price_night]
     .map((value) => Number(value || 0))
     .filter((value) => value > 0);
-  if (!values.length) return 'Cena na zapytanie';
-  return `${Math.min(...values)} ${profile.currency || 'EUR'}`;
+  if (!values.length) return t('profile.priceOnRequest');
+  return t('profile.priceFrom', { amount: Math.min(...values), currency: profile.currency || 'EUR' });
 }
 
-function operatorStatusLabel(status: string) {
+function operatorStatusLabel(status: string, t: (key: string) => string) {
   const labels: Record<string, string> = {
-    ONLINE_NOW: 'Online now',
-    BUSY: 'Busy',
-    TRAVELING: 'Traveling',
-    AVAILABLE_TODAY: 'Available today',
-    APPOINTMENT_ONLY: 'Appointment only',
-    OFFLINE: 'Offline'
+    ONLINE_NOW: t('status.onlineNow'),
+    BUSY: t('status.busy'),
+    TRAVELING: t('status.traveling'),
+    AVAILABLE_TODAY: t('status.availableToday'),
+    APPOINTMENT_ONLY: t('status.appointmentOnly'),
+    OFFLINE: t('status.offline')
   };
-  return labels[status] || 'Offline';
+  return labels[status] || t('status.offline');
 }
 
 function operatorStatusClass(status: string) {
@@ -626,7 +626,7 @@ function FullscreenGallery({ images, index, profile, onIndex, onClose, touchStar
         {image?.public_url && <img className={locked ? 'locked-gallery-image' : ''} src={image.public_url} alt="" />}
         {locked && (
           <button className="gallery-unlock-overlay" type="button" onClick={onUnlock}>
-            <LockKeyhole size={18} /> Unlock all photos for 0.99€
+            <LockKeyhole size={18} /> {t('profile.unlockPhotos')}
           </button>
         )}
         <figcaption>

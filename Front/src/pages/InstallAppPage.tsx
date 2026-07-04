@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Bell, Download, Heart, MessageCircle, Radar, Share2, ShieldCheck, Smartphone, Star, UserRound } from 'lucide-react';
 import { Seo } from '../components/Seo';
+import { useI18n } from '../i18n';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -44,6 +45,7 @@ function usePwaInstallPrompt() {
 export function InstallAppPage() {
   const { canInstall, installed, promptInstall } = usePwaInstallPrompt();
   const device = useMemo(() => detectDevice(), []);
+  const { t } = useI18n();
 
   return (
     <div className="page narrow install-app-page">
@@ -53,59 +55,59 @@ export function InstallAppPage() {
         canonical="https://escort-radar.fun/app"
       />
       <section className="install-hero legal-panel">
-        <p className="eyebrow">Escort Radar App</p>
-        <h1>Install App</h1>
-        <p>Use Escort Radar like a mobile app with faster access to radar, messages, favorites and your account.</p>
+        <p className="eyebrow">{t('install.eyebrow')}</p>
+        <h1>{t('install.title')}</h1>
+        <p>{t('install.copy')}</p>
         <div className="install-actions">
           {device === 'android' && canInstall ? (
             <button className="button primary" type="button" onClick={promptInstall}>
-              <Download size={18} /> Install App
+              <Download size={18} /> {t('install.title')}
             </button>
           ) : null}
           {device === 'android' && !canInstall ? (
-            <p className="install-note"><Smartphone size={18} /> Open this page in Chrome and use the browser install prompt when it appears.</p>
+            <p className="install-note"><Smartphone size={18} /> {t('install.androidPrompt')}</p>
           ) : null}
           {device === 'ios' ? (
-            <p className="install-note"><Share2 size={18} /> In Safari, tap Share, then choose Add to Home Screen.</p>
+            <p className="install-note"><Share2 size={18} /> {t('install.iosPrompt')}</p>
           ) : null}
           {device === 'desktop' ? (
-            <p className="install-note"><Download size={18} /> Use your browser menu or address bar install icon to add Escort Radar to your device.</p>
+            <p className="install-note"><Download size={18} /> {t('install.desktopPrompt')}</p>
           ) : null}
-          {installed ? <p className="install-note success"><Star size={18} /> Escort Radar is installed on this device.</p> : null}
+          {installed ? <p className="install-note success"><Star size={18} /> {t('install.installed')}</p> : null}
         </div>
       </section>
 
       <section className="install-benefits">
-        <InstallBenefit icon={<Radar />} title="Radar" text="Open city radar without typing the address again." />
-        <InstallBenefit icon={<MessageCircle />} title="Messages" text="Return to conversations with less friction." />
-        <InstallBenefit icon={<Heart />} title="Favorites" text="Keep your saved profiles close from the home screen." />
-        <InstallBenefit icon={<Bell />} title="Fast access" text="Launch in a standalone app-like window." />
-        <InstallBenefit icon={<ShieldCheck />} title="Privacy-first" text="Designed for verified 18+ marketplace use." />
-        <InstallBenefit icon={<UserRound />} title="Account" text="Reach dashboard tools quickly after login." />
+        <InstallBenefit icon={<Radar />} title={t('install.benefit.radar')} text={t('install.benefit.radarText')} />
+        <InstallBenefit icon={<MessageCircle />} title={t('install.benefit.messages')} text={t('install.benefit.messagesText')} />
+        <InstallBenefit icon={<Heart />} title={t('install.benefit.favorites')} text={t('install.benefit.favoritesText')} />
+        <InstallBenefit icon={<Bell />} title={t('install.benefit.fast')} text={t('install.benefit.fastText')} />
+        <InstallBenefit icon={<ShieldCheck />} title={t('install.benefit.privacy')} text={t('install.benefit.privacyText')} />
+        <InstallBenefit icon={<UserRound />} title={t('install.benefit.account')} text={t('install.benefit.accountText')} />
       </section>
 
       <section className="legal-panel install-steps">
-        <h2>{device === 'ios' ? 'iPhone instructions' : device === 'android' ? 'Android instructions' : 'Desktop instructions'}</h2>
+        <h2>{device === 'ios' ? t('install.iosInstructions') : device === 'android' ? t('install.androidInstructions') : t('install.desktopInstructions')}</h2>
         {device === 'ios' ? (
           <ol>
-            <li>Open Escort Radar in Safari.</li>
-            <li>Tap the Share button.</li>
-            <li>Choose Add to Home Screen and confirm.</li>
+            <li>{t('install.iosStep1')}</li>
+            <li>{t('install.iosStep2')}</li>
+            <li>{t('install.iosStep3')}</li>
           </ol>
         ) : device === 'android' ? (
           <ol>
-            <li>Open Escort Radar in Chrome.</li>
-            <li>Tap Install App when the prompt is available.</li>
-            <li>If no prompt appears, use Chrome menu, then Add to Home screen.</li>
+            <li>{t('install.androidStep1')}</li>
+            <li>{t('install.androidStep2')}</li>
+            <li>{t('install.androidStep3')}</li>
           </ol>
         ) : (
           <ol>
-            <li>Open Escort Radar in Chrome, Edge or another PWA-capable browser.</li>
-            <li>Use the install icon in the address bar or browser menu.</li>
-            <li>Launch Escort Radar from your desktop or app launcher.</li>
+            <li>{t('install.desktopStep1')}</li>
+            <li>{t('install.desktopStep2')}</li>
+            <li>{t('install.desktopStep3')}</li>
           </ol>
         )}
-        <Link className="button" to="/city/berlin"><Radar size={17} /> Open Radar</Link>
+        <Link className="button" to="/city/berlin"><Radar size={17} /> {t('home.openRadar')}</Link>
       </section>
     </div>
   );

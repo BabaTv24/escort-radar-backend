@@ -1100,7 +1100,9 @@ export function DashboardPage() {
 
       {creatorTab === 'live' && <LiveCreatorControls />}
       {creatorTab === 'privacy' && <section className="creator-panel"><AiPrivacyTools /></section>}
-      <DevDebugBox userEmail={userEmail} profile={savedProfile} wallet={wallet} uploadStatus={uploadStatus} lastApiError={lastApiError} />
+      {import.meta.env.DEV && window.localStorage.getItem('escortRadar.showDebugBox') === '1' && (
+        <DevDebugBox userEmail={userEmail} profile={savedProfile} wallet={wallet} uploadStatus={uploadStatus} lastApiError={lastApiError} />
+      )}
 
       <MobileCreatorDock
         savedProfile={savedProfile}
@@ -1526,6 +1528,46 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
               return <button className="client-tool-card" type="button" key={title} onClick={enabled ? undefined : onActivate}>{content}</button>;
             })}
           </div>
+        </section>
+
+        <section className="creator-panel client-settings-panel" id="settings">
+          <div className="creator-panel-head">
+            <div>
+              <p className="eyebrow">{t('clientOffice.settings.eyebrow')}</p>
+              <h2>{t('clientOffice.settings.title')}</h2>
+              <p>{t('clientOffice.settings.copy')}</p>
+            </div>
+            <span className="client-status-badge premium">{t('clientOffice.settings.currentLanguage')}</span>
+          </div>
+          <div className="client-settings-grid">
+            <label className="premium-field">
+              <span>{t('clientOffice.settings.email')}</span>
+              <input value={userEmail} readOnly />
+              <small>{t('clientOffice.settings.emailHelp')}</small>
+            </label>
+            <label className="premium-field">
+              <span>{t('clientOffice.personal.phone')}</span>
+              <input value={personalDraft.phone || ''} placeholder={t('clientOffice.personal.phone')} onChange={(event) => setPersonalDraft({ ...personalDraft, phone: event.target.value })} />
+            </label>
+            <label className="premium-field">
+              <span>{t('clientOffice.settings.password')}</span>
+              <input value={t('clientOffice.settings.passwordManaged')} readOnly />
+              <small>{t('clientOffice.settings.passwordHelp')}</small>
+            </label>
+            <label className="premium-field">
+              <span>{t('clientOffice.settings.language')}</span>
+              <input value={t('clientOffice.settings.currentLanguage')} readOnly />
+            </label>
+            <label className="premium-check client-settings-check">
+              <input type="checkbox" checked={personalDraft.consent_home_service_contact} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_home_service_contact: event.target.checked })} />
+              {t('clientOffice.settings.notifications')}
+            </label>
+            <label className="premium-check client-settings-check">
+              <input type="checkbox" checked={personalDraft.consent_verified_client_badge} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_verified_client_badge: event.target.checked })} />
+              {t('clientOffice.settings.privacy')}
+            </label>
+          </div>
+          <button className="button primary" type="button" onClick={() => onSavePersonalProfile(personalDraft)}>{t('clientOffice.settings.save')}</button>
         </section>
 
         <section className="creator-panel">
@@ -2873,15 +2915,7 @@ function operatorToAvailability(status: NonNullable<Profile['operator_status']>)
 }
 
 function operatorStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    ONLINE_NOW: 'Online now',
-    BUSY: 'Busy',
-    TRAVELING: 'Traveling',
-    AVAILABLE_TODAY: 'Available today',
-    APPOINTMENT_ONLY: 'Appointment only',
-    OFFLINE: 'Offline'
-  };
-  return labels[status] || 'Offline';
+  return status.toLowerCase().replaceAll('_', ' ');
 }
 
 let googlePlacesPromise: Promise<any> | null = null;

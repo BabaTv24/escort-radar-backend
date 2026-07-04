@@ -180,9 +180,24 @@ test('sponsored profile is public, mapped, and does not count as paid subscripti
 test('sponsored profiles have a public homepage section and badge', async () => {
   const homeSource = await readFile(new URL('../Front/src/pages/HomePage.tsx', import.meta.url), 'utf8');
   const cardSource = await readFile(new URL('../Front/src/components/ProfileCard.tsx', import.meta.url), 'utf8');
-  assert.match(homeSource, /Profile sponsorowane/);
+  assert.match(homeSource, /home\.sponsoredTitle/);
   assert.match(homeSource, /sponsoredProfiles/);
   assert.match(cardSource, /SPONSOROWANY/);
+});
+
+test('premium client office redesign keeps high-end UI tokens and mobile chrome', async () => {
+  const styles = await readFile(new URL('../Front/src/styles.css', import.meta.url), 'utf8');
+  const homeSource = await readFile(new URL('../Front/src/pages/HomePage.tsx', import.meta.url), 'utf8');
+  const en = await readFile(new URL('../Front/src/locales/en.json', import.meta.url), 'utf8');
+  assert.match(styles, /--er-bg:/);
+  assert.match(styles, /--er-gold:/);
+  assert.match(styles, /\.premium-client-office/);
+  assert.match(styles, /\.client-tools-grid/);
+  assert.match(styles, /\.radar-panel/);
+  assert.match(styles, /\.luxury-bottom-nav/);
+  assert.match(styles, /@keyframes er-shimmer/);
+  assert.match(homeSource, /home\.heroTitle/);
+  assert.match(en, /Your Private Client Office/);
 });
 
 test('business profile limit is enforced for max 30 and 31st profile returns 409', async () => {
@@ -699,7 +714,8 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
   assert.match(cityPageSource, /search\.showingSummary/);
   assert.match(cityPageSource, /activePublicCategoryOptions\.map/);
   assert.match(globalSearchSource, /<option value="">\{t\('filters\.allCategories'\)\}<\/option>/);
-  assert.match(layoutSource, /activePublicCategoryOptions\.map/);
+  assert.match(layoutSource, /premium-main-nav/);
+  assert.match(layoutSource, /nav\.forClients/);
   assert.match(homeSource, /activePublicCategoryOptions\.map/);
   assert.match(adminPageSource, /legacyDisabledCategory/);
   assert.match(adminPageSource, /activePublicCategoryOptions\.map/);

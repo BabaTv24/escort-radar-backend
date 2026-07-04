@@ -4,7 +4,7 @@ import { RadioTower, Search, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Profile, Tag } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
-import { ErrorState, LoadingState } from '../components/LoadingState';
+import { EmptyState, ErrorState, LoadingState } from '../components/LoadingState';
 import { activePublicCategoryOptions, categoryOptions, defaultServiceMenuNames, toggleArrayValue, visitTypeOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
@@ -162,7 +162,7 @@ export function CityPage() {
       .catch((reason) => {
         if (cancelled) return;
         setProfiles([]);
-        setError(reason instanceof Error ? reason.message : 'Could not load profiles.');
+        setError(reason instanceof Error ? reason.message : t('home.loadError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -286,18 +286,18 @@ export function CityPage() {
       <section className={`filter-panel marketplace-filter-panel ${mode === 'mobile' ? 'mobile' : ''}`}>
         <div className="filter-panel-head">
           <div>
-            <p className="eyebrow">Curated search</p>
-            <h2>Filters</h2>
+            <p className="eyebrow">{t('city.filtersEyebrow')}</p>
+            <h2>{t('city.filtersTitle')}</h2>
           </div>
           {mode === 'mobile' ? (
-            <button className="button" type="button" onClick={() => setFiltersOpen(false)} aria-label="Close filters">
+            <button className="button" type="button" onClick={() => setFiltersOpen(false)} aria-label={t('city.closeFilters')}>
               <X size={17} />
             </button>
           ) : null}
         </div>
 
         <div className="premium-filter-group">
-          <span>Radius</span>
+          <span>{t('radar.radius')}</span>
           <div className="segmented-pills">
             {[5, 10, 25, 50, 100].map((radius) => (
               <button key={radius} className={draftFilters.radius === radius ? 'selected' : ''} type="button" onClick={() => updateRadarFilter('radius', radius)}>
@@ -308,7 +308,7 @@ export function CityPage() {
         </div>
 
         <label className="premium-field compact-field">
-          <span>Status</span>
+          <span>{t('radar.status')}</span>
           <select value={draftFilters.availability_status} onChange={(event) => updateRadarFilter('availability_status', event.target.value)}>
             <option value="all">{t('status.all')}</option>
             <option value="favorites">{t('favorites.favoritesFilter')}</option>
@@ -322,7 +322,7 @@ export function CityPage() {
         </label>
 
         <label className="premium-field compact-field">
-          <span>Category</span>
+          <span>{t('filters.category')}</span>
           <select value={draftFilters.category} onChange={(event) => updateFilter('category', event.target.value)}>
             <option value="">{t('filters.allCategories')}</option>
             {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
@@ -330,7 +330,7 @@ export function CityPage() {
         </label>
 
         <label className="premium-field compact-field">
-          <span>Price</span>
+          <span>{t('filters.price')}</span>
           <input type="number" placeholder={t('filters.priceMax')} value={draftFilters.price_max} onChange={(event) => updateFilter('price_max', event.target.value)} />
         </label>
 
@@ -346,7 +346,7 @@ export function CityPage() {
         />
 
         <button className="button ghost more-filter-button" type="button" onClick={() => setShowAdvanced((value) => !value)}>
-          <SlidersHorizontal size={17} /> More filters
+          <SlidersHorizontal size={17} /> {t('city.moreFilters')}
         </button>
 
         <div className={showAdvanced ? 'advanced-filters open compact-advanced-filters' : 'advanced-filters compact-advanced-filters'}>
@@ -357,7 +357,7 @@ export function CityPage() {
         <div className="filter-actions">
           <button className="button primary" type="button" onClick={applyDraftFilters}>{t('buttons.apply')}</button>
           <button className="button" type="button" onClick={resetFilters}>{t('buttons.reset')}</button>
-          <span>{radarProfiles.length} in range</span>
+          <span>{t('radar.inRange', { count: radarProfiles.length })}</span>
         </div>
       </section>
     );
@@ -378,12 +378,12 @@ export function CityPage() {
           <p className="muted">{t('search.showingSummary', { city: cityLabel, category: categoryLabel, count: sortedProfiles.length })}</p>
         </div>
         <div className="city-hero-stats">
-          <span><strong>{sortedProfiles.length}</strong> Active profiles</span>
-          <span><strong>{onlineCount}</strong> Online now</span>
-          <span><strong>{availableTodayCount}</strong> Available today</span>
+          <span><strong>{sortedProfiles.length}</strong> {t('city.activeProfiles')}</span>
+          <span><strong>{onlineCount}</strong> {t('status.onlineNow')}</span>
+          <span><strong>{availableTodayCount}</strong> {t('status.availableToday')}</span>
         </div>
         <div className="hero-actions">
-          <a href="#city-radar" className="button primary"><RadioTower size={17} /> Open radar</a>
+          <a href="#city-radar" className="button primary"><RadioTower size={17} /> {t('home.openRadar')}</a>
           <Link to="/dashboard" className="button">{t('buttons.addListing')}</Link>
         </div>
       </section>
@@ -393,11 +393,11 @@ export function CityPage() {
       <section className="top-escorts-strip marketplace-avatar-strip">
         <div className="section-head compact">
           <div>
-            <p className="eyebrow">Top profiles</p>
-            <h2>{cityLabel} Radar Select</h2>
+            <p className="eyebrow">{t('city.topProfiles')}</p>
+            <h2>{t('city.radarSelect', { city: cityLabel })}</h2>
           </div>
           <button className="button mobile-filter-trigger" type="button" onClick={() => setFiltersOpen(true)}>
-            <SlidersHorizontal size={17} /> Filter
+            <SlidersHorizontal size={17} /> {t('city.filter')}
           </button>
         </div>
         <div className="avatar-carousel">
@@ -411,7 +411,7 @@ export function CityPage() {
                 <small>{getOperatorStatus(profile).replaceAll('_', ' ')}</small>
               </Link>
             );
-          }) : <p className="muted">Premium profiles appear here when available.</p>}
+          }) : <p className="muted">{t('city.premiumProfilesEmpty')}</p>}
         </div>
       </section>
 
@@ -450,15 +450,15 @@ export function CityPage() {
         <div className="listing-main">
           <div className="listing-toolbar">
             <div>
-              <p className="eyebrow">{sortedProfiles.length === 1 ? `1 profile near ${cityLabel}` : 'Profiles near you'}</p>
-              <h2>{sortedProfiles.length ? `${sortedProfiles.length} marketplace profiles` : `No profiles near ${cityLabel}`}</h2>
+              <p className="eyebrow">{sortedProfiles.length === 1 ? t('city.oneProfileNear', { city: cityLabel }) : t('city.profilesNearYou')}</p>
+              <h2>{sortedProfiles.length ? t('city.marketplaceProfiles', { count: sortedProfiles.length }) : t('city.noProfilesNear', { city: cityLabel })}</h2>
             </div>
-            <div className="sort-tabs" aria-label="Sort profiles">
+            <div className="sort-tabs" aria-label={t('city.sortProfiles')}>
               {[
-                ['best', 'Best'],
-                ['new', 'New'],
-                ['near', 'Near'],
-                ['online', 'Online']
+                ['best', t('home.sort.best')],
+                ['new', t('home.sort.new')],
+                ['near', t('home.sort.near')],
+                ['online', t('home.sort.online')]
               ].map(([key, label]) => (
                 <button key={key} className={sortMode === key ? 'selected' : ''} type="button" onClick={() => setSortMode(key as typeof sortMode)}>
                   {label}
@@ -478,26 +478,25 @@ export function CityPage() {
                 {sortedProfiles.length === 1 && (
                   <div className="premium-empty-state invite-empty-state">
                     <RadioTower size={32} />
-                    <h2>Be one of the first profiles in {cityLabel}</h2>
-                    <p>Berlin-style premium visibility is ready here as soon as more verified advertisers join.</p>
-                    <Link className="button primary" to="/dashboard">Add listing</Link>
+                    <h2>{t('city.firstProfileTitle', { city: cityLabel })}</h2>
+                    <p>{t('city.firstProfileText')}</p>
+                    <Link className="button primary" to="/dashboard">{t('buttons.addListing')}</Link>
                   </div>
                 )}
               </>
             ) : (
-              <div className="premium-empty-state">
-                <RadioTower size={34} />
-                <h2>{t('search.noProfilesForCity')}</h2>
-                <p>Try changing category, status or service filters.</p>
-                <button className="button primary" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}>Increase radius</button>
-              </div>
+              <EmptyState
+                title={t('search.noProfilesForCity')}
+                message={t('city.emptySearchText')}
+                action={<button className="button primary" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}>{t('city.increaseRadius')}</button>}
+              />
             )
           )}
         </div>
       </section>
 
-      <div className={filtersOpen ? 'mobile-filter-sheet open' : 'mobile-filter-sheet'} role="dialog" aria-modal="true" aria-label="Profile filters">
-        <button className="mobile-filter-backdrop" type="button" aria-label="Close filters" onClick={() => setFiltersOpen(false)} />
+      <div className={filtersOpen ? 'mobile-filter-sheet open' : 'mobile-filter-sheet'} role="dialog" aria-modal="true" aria-label={t('city.profileFilters')}>
+        <button className="mobile-filter-backdrop" type="button" aria-label={t('city.closeFilters')} onClick={() => setFiltersOpen(false)} />
         <div className="mobile-filter-panel">
           {renderFilters('mobile')}
         </div>
@@ -532,7 +531,7 @@ function ServiceSelect({ search, selectedCount, values, options, onSearch, onTog
       <legend>{t('filters.services')} {selectedCount ? `(${selectedCount})` : ''}</legend>
       <label className="service-search-input" aria-label={t('filters.services')}>
         <Search size={15} />
-        <input value={search} placeholder="Search services" onChange={(event) => onSearch(event.target.value)} />
+        <input value={search} placeholder={t('filters.searchServices')} onChange={(event) => onSearch(event.target.value)} />
       </label>
       <div className="chip-grid">
         {filteredOptions.map((item) => (

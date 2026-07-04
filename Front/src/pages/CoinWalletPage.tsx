@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import type { ClientActivation, CoinTransaction, CoinWallet, Gift as GiftRow } from '../types';
+import { EmptyState } from '../components/LoadingState';
+import { useI18n } from '../i18n';
 
 export function CoinWalletPage() {
   const [wallet, setWallet] = useState<CoinWallet | null>(null);
@@ -12,11 +14,12 @@ export function CoinWalletPage() {
   const [giftsSent, setGiftsSent] = useState<GiftRow[]>([]);
   const [giftsReceived, setGiftsReceived] = useState<GiftRow[]>([]);
   const [message, setMessage] = useState('');
+  const { t } = useI18n();
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!data.session?.access_token) {
-        setMessage('Login required to view Coin Wallet.');
+        setMessage(t('coins.loginRequired'));
         return;
       }
       try {
@@ -27,38 +30,40 @@ export function CoinWalletPage() {
         setGiftsSent(result.gifts_sent);
         setGiftsReceived(result.gifts_received);
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Request failed.');
+        setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
       }
     });
-  }, []);
+  }, [t]);
 
   return (
-    <div className="page token-page">
-      <section className="token-hero">
-        <p className="eyebrow">Variant B</p>
-        <h1><WalletCards size={34} /> Coin Wallet</h1>
-        <p>Coins are client-side platform credits for gifts, VIP gallery unlocks, and future live-cam access.</p>
-        <div className="token-balance-card">
-          <span>Balance</span>
-          <strong>{Math.round(Number(wallet?.balance || 0))}</strong>
-          <small>{activation?.state || 'client_free'}</small>
+    <div className="page coin-wallet-page">
+      <section className="token-hero coin-wallet-hero">
+        <div>
+          <p className="eyebrow">{t('coins.eyebrow')}</p>
+          <h1><WalletCards size={34} /> {t('coins.title')}</h1>
+          <p>{t('coins.subtitle')}</p>
         </div>
-        {activation?.state !== 'client_activated' && <Link className="button primary" to="/dashboard">Activate account</Link>}
+        <div className="token-balance-card coin-balance-card">
+          <span>{t('coins.balance')}</span>
+          <strong>{Math.round(Number(wallet?.balance || 0))}</strong>
+          <small>{t(`coins.state.${activation?.state || 'client_free'}`)}</small>
+        </div>
+        {activation?.state !== 'client_activated' && <Link className="button primary" to="/dashboard">{t('coins.activateAccount')}</Link>}
       </section>
 
-      <section className="admin-metric-grid">
-        <article className="admin-card stat"><span>Lifetime earned</span><strong>{Math.round(Number(wallet?.lifetime_earned || 0))}</strong></article>
-        <article className="admin-card stat"><span>Lifetime spent</span><strong>{Math.round(Number(wallet?.lifetime_spent || 0))}</strong></article>
-        <article className="admin-card stat"><span>Gifts sent</span><strong>{giftsSent.length}</strong></article>
-        <article className="admin-card stat"><span>Gifts received</span><strong>{giftsReceived.length}</strong></article>
+      <section className="coin-metric-grid">
+        <article className="coin-metric-card"><span>{t('coins.lifetimeEarned')}</span><strong>{Math.round(Number(wallet?.lifetime_earned || 0))}</strong></article>
+        <article className="coin-metric-card"><span>{t('coins.lifetimeSpent')}</span><strong>{Math.round(Number(wallet?.lifetime_spent || 0))}</strong></article>
+        <article className="coin-metric-card"><span>{t('coins.giftsSent')}</span><strong>{giftsSent.length}</strong></article>
+        <article className="coin-metric-card"><span>{t('coins.giftsReceived')}</span><strong>{giftsReceived.length}</strong></article>
       </section>
 
-      <section className="profile-info-grid">
-        <article className="info-panel">
-          <h2><History size={18} /> Transactions</h2>
-          <div className="booking-list">
+      <section className="coin-wallet-grid">
+        <article className="coin-wallet-panel">
+          <h2><History size={18} /> {t('coins.transactions')}</h2>
+          <div className="coin-row-list">
             {transactions.map((transaction) => (
-              <div className="booking-row" key={transaction.id}>
+              <div className="coin-row" key={transaction.id}>
                 <div>
                   <strong>{transaction.transaction_type}</strong>
                   <p>{new Date(transaction.created_at).toLocaleString()}</p>
@@ -68,18 +73,18 @@ export function CoinWalletPage() {
                 </span>
               </div>
             ))}
-            {!transactions.length && <p className="muted">No coin transactions yet.</p>}
+            {!transactions.length && <EmptyState title={t('coins.noTransactions')} message={t('coins.noTransactionsText')} />}
           </div>
         </article>
 
-        <article className="info-panel">
-          <h2><Gift size={18} /> Gifts sent</h2>
-          <GiftList rows={giftsSent} />
+        <article className="coin-wallet-panel">
+          <h2><Gift size={18} /> {t('coins.giftsSent')}</h2>
+          <GiftList rows={giftsSent} emptyLabel={t('coins.noGifts')} />
         </article>
 
-        <article className="info-panel">
-          <h2><Gift size={18} /> Gifts received</h2>
-          <GiftList rows={giftsReceived} />
+        <article className="coin-wallet-panel">
+          <h2><Gift size={18} /> {t('coins.giftsReceived')}</h2>
+          <GiftList rows={giftsReceived} emptyLabel={t('coins.noGifts')} />
         </article>
       </section>
 
@@ -88,12 +93,12 @@ export function CoinWalletPage() {
   );
 }
 
-function GiftList({ rows }: { rows: GiftRow[] }) {
-  if (!rows.length) return <p className="muted">No gifts yet.</p>;
+function GiftList({ rows, emptyLabel }: { rows: GiftRow[]; emptyLabel: string }) {
+  if (!rows.length) return <p className="muted">{emptyLabel}</p>;
   return (
-    <div className="booking-list">
+    <div className="coin-row-list">
       {rows.map((gift) => (
-        <div className="booking-row" key={gift.id}>
+        <div className="coin-row" key={gift.id}>
           <div>
             <strong>{gift.gift_type}</strong>
             <p>{new Date(gift.created_at).toLocaleString()}</p>

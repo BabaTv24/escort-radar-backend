@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CalendarDays, Coins, Heart, LogOut, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
-import { activePublicCategoryOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import { api } from '../lib/api';
 import { normalizeCategoryKey } from '../lib/categories';
@@ -17,7 +16,7 @@ type HeaderAccount = {
 };
 
 export function Layout() {
-  const { lang, setLang, t, option } = useI18n();
+  const { lang, setLang, t } = useI18n();
   const operatorName = import.meta.env.VITE_LEGAL_OPERATOR_NAME || '';
   const location = useLocation();
   const navigate = useNavigate();
@@ -71,16 +70,12 @@ export function Layout() {
           <img className="brand-logo-img" src="/Logo_Escort_5.png" alt="" />
           <span>Escort Radar</span>
         </Link>
-        <nav className="category-nav" aria-label="Categories">
-          {activePublicCategoryOptions.map((category) => (
-            <Link
-              key={category}
-              className={activeCategory === category ? 'category-link active' : 'category-link'}
-              to={`/city/${currentCity}?category=${category}`}
-            >
-              {option(category)}
-            </Link>
-          ))}
+        <nav className="category-nav premium-main-nav" aria-label={t('nav.main')}>
+          <Link className="category-link" to="/register?type=client">{t('nav.forClients')}</Link>
+          <Link className={cityMatch ? 'category-link active' : 'category-link'} to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`}>{t('nav.radar')}</Link>
+          <Link className="category-link" to="/content-rules">{t('nav.security')}</Link>
+          <Link className="category-link" to="/pricing">{t('nav.premium')}</Link>
+          <Link className="category-link" to="/app">{t('nav.blog')}</Link>
         </nav>
         <div className="mobile-auth-actions" aria-label="Mobile account controls">
           {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
@@ -116,7 +111,7 @@ export function Layout() {
           </Link>
           <Link to="/coins" className="radar-action">
             <Coins size={17} />
-            <span>Coins</span>
+            <span>{t('coins.title')}</span>
           </Link>
           {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
             <div className="header-account-area">
@@ -195,7 +190,7 @@ export function Layout() {
           <Link to="/report-abuse"><ShieldCheck size={16} /> {t('nav.report')}</Link>
           <Link to="/contact">{t('nav.contact')}</Link>
           <Link to="/pricing">{t('nav.pricing')}</Link>
-          <Link to="/app">Install App</Link>
+          <Link to="/app">{t('nav.installApp')}</Link>
           <Link to="/legal-notice">{t('nav.legalNotice')}</Link>
           <Link to="/admin-access">{t('nav.admin')}</Link>
         </div>
