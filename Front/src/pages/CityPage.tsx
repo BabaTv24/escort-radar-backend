@@ -187,6 +187,7 @@ export function CityPage() {
   const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
   const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
   const categoryLabel = appliedFilters.category ? option(appliedFilters.category) : t('filters.allCategories');
+  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   if (import.meta.env.DEV) {
     console.debug('[CityPageProfiles]', {
       apiProfiles: profiles.length,
@@ -364,91 +365,68 @@ export function CityPage() {
   }
 
   return (
-    <div className="page city-page luxury-city-page">
+    <div className="page city-page luxury-city-page radar-search-page">
       <Seo
         title={`Escort Radar ${cityLabel} - Verified 18+ Nightlife Profiles`}
         description={`Explore privacy-first verified 18+ nightlife profiles in ${cityLabel}, with availability signals, city radar and moderated public listings.`}
         canonical={`https://escort-radar.fun/city/${urlCitySlug}`}
       />
-      <section className="city-hero compact-city-hero">
-        <div>
+      <section className="radar-search-header">
+        <div className="radar-search-title">
           <p className="eyebrow">{t('city.eyebrow')}</p>
-          <h1>{cityLabel}</h1>
-          {appliedFilters.category && <div className="active-category-badge">{option(appliedFilters.category)}</div>}
-          <p className="muted">{t('search.showingSummary', { city: cityLabel, category: categoryLabel, count: sortedProfiles.length })}</p>
+          <h1>{cityLabel} Radar</h1>
+          <p>{t('search.showingSummary', { city: cityLabel, category: categoryLabel, count: sortedProfiles.length })}</p>
+          {appliedFilters.category && <span className="active-category-badge">{option(appliedFilters.category)}</span>}
         </div>
-        <div className="city-hero-stats">
-          <span><strong>{sortedProfiles.length}</strong> {t('city.activeProfiles')}</span>
-          <span><strong>{onlineCount}</strong> {t('status.onlineNow')}</span>
-          <span><strong>{availableTodayCount}</strong> {t('status.availableToday')}</span>
-        </div>
-        <div className="hero-actions">
-          <a href="#city-radar" className="button primary"><RadioTower size={17} /> {t('home.openRadar')}</a>
-          <Link to="/dashboard" className="button">{t('buttons.addListing')}</Link>
-        </div>
-      </section>
-
-      <GlobalLocationSearch initialCountry={countryCode} initialCity={cityLabel} initialCategory={appliedFilters.category || 'all'} compact />
-
-      <section className="top-escorts-strip marketplace-avatar-strip">
-        <div className="section-head compact">
-          <div>
-            <p className="eyebrow">{t('city.topProfiles')}</p>
-            <h2>{t('city.radarSelect', { city: cityLabel })}</h2>
-          </div>
+        <div className="radar-search-controls">
+          <GlobalLocationSearch initialCountry={countryCode} initialCity={cityLabel} initialCategory={appliedFilters.category || 'all'} compact />
           <button className="button mobile-filter-trigger" type="button" onClick={() => setFiltersOpen(true)}>
             <SlidersHorizontal size={17} /> {t('city.filter')}
           </button>
         </div>
-        <div className="avatar-carousel">
-          {topProfiles.length ? topProfiles.map((profile) => {
-            const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
-            const statusClass = getStatusClass(profile);
-            return (
-              <Link to={`/profile/${profile.id}`} className={`top-avatar ${statusClass}`} key={profile.id}>
-                {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{getInitials(profile.display_name)}</span>}
-                <strong>{profile.display_name}</strong>
-                <small>{getOperatorStatus(profile).replaceAll('_', ' ')}</small>
-              </Link>
-            );
-          }) : <p className="muted">{t('city.premiumProfilesEmpty')}</p>}
+        <div className="radar-search-stats">
+          <span><strong>{sortedProfiles.length}</strong> {t('city.activeProfiles')}</span>
+          <span><strong>{onlineCount}</strong> {t('status.onlineNow')}</span>
+          <span><strong>{availableTodayCount}</strong> {t('status.availableToday')}</span>
         </div>
       </section>
 
-      <section id="city-radar" className="compact-radar-wrap">
-        <RadarPanel
-          profiles={sortedProfiles}
-          radius={draftFilters.radius}
-          status={draftFilters.availability_status}
-          city={urlCitySlug}
-          onRadiusChange={(value) => updateRadarFilter('radius', value)}
-          onStatusChange={(value) => updateRadarFilter('availability_status', value)}
-          searcherLocation={searcherLocation}
-          onUseLocation={useLocation}
-          onSetManualLocation={setManualLocation}
-          onClearManualLocation={clearManualLocation}
-          fallbackNotice={fallbackNotice}
-        />
-        {draftFilters.availability_status === 'favorites' && !hasClientSession && (
-          <section className="state-panel">
-            <p>{t('favorites.loginToSeeFavorites')}</p>
-            <Link className="button primary" to={`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`}>{t('favorites.openLogin')}</Link>
-          </section>
-        )}
-        {draftFilters.availability_status === 'favorites' && hasClientSession && favoritesLoaded && !favoriteProfileIds.size && (
-          <section className="state-panel">
-            <p>{t('favorites.noFavoritesYet')}</p>
-            <Link className="button primary" to="/dashboard#favorites">{t('favorites.favorites')}</Link>
-          </section>
-        )}
-      </section>
-
-      <section className="premium-marketplace-layout">
-        <aside className="desktop-filter-rail">
+      <section className="premium-radar-app-grid">
+        <aside className="radar-filters-sidebar">
           {renderFilters('desktop')}
         </aside>
-        <div className="listing-main">
-          <div className="listing-toolbar">
+
+        <main id="city-radar" className="radar-map-stage">
+          <RadarPanel
+            profiles={sortedProfiles}
+            radius={draftFilters.radius}
+            status={draftFilters.availability_status}
+            city={urlCitySlug}
+            onRadiusChange={(value) => updateRadarFilter('radius', value)}
+            onStatusChange={(value) => updateRadarFilter('availability_status', value)}
+            searcherLocation={searcherLocation}
+            onUseLocation={useLocation}
+            onSetManualLocation={setManualLocation}
+            onClearManualLocation={clearManualLocation}
+            fallbackNotice={fallbackNotice}
+            mapApiKey={googleMapsApiKey}
+          />
+          {draftFilters.availability_status === 'favorites' && !hasClientSession && (
+            <section className="state-panel">
+              <p>{t('favorites.loginToSeeFavorites')}</p>
+              <Link className="button primary" to={`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`}>{t('favorites.openLogin')}</Link>
+            </section>
+          )}
+          {draftFilters.availability_status === 'favorites' && hasClientSession && favoritesLoaded && !favoriteProfileIds.size && (
+            <section className="state-panel">
+              <p>{t('favorites.noFavoritesYet')}</p>
+              <Link className="button primary" to="/dashboard#favorites">{t('favorites.favorites')}</Link>
+            </section>
+          )}
+        </main>
+
+        <aside className="radar-results-panel">
+          <div className="listing-toolbar radar-results-toolbar">
             <div>
               <p className="eyebrow">{sortedProfiles.length === 1 ? t('city.oneProfileNear', { city: cityLabel }) : t('city.profilesNearYou')}</p>
               <h2>{sortedProfiles.length ? t('city.marketplaceProfiles', { count: sortedProfiles.length }) : t('city.noProfilesNear', { city: cityLabel })}</h2>
@@ -467,13 +445,27 @@ export function CityPage() {
             </div>
           </div>
 
+          <div className="radar-result-strip">
+            {topProfiles.length ? topProfiles.slice(0, 5).map((profile) => {
+              const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
+              const statusClass = getStatusClass(profile);
+              return (
+                <Link to={`/profile/${profile.id}`} className={`top-avatar ${statusClass}`} key={profile.id}>
+                  {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{getInitials(profile.display_name)}</span>}
+                  <strong>{profile.display_name}</strong>
+                  <small>{getOperatorStatus(profile).replaceAll('_', ' ')}</small>
+                </Link>
+              );
+            }) : <p className="muted">{t('city.premiumProfilesEmpty')}</p>}
+          </div>
+
           {loading && <LoadingState />}
           {error && <ErrorState message={error} onRetry={() => setRetryKey((value) => value + 1)} />}
           {!loading && !error && (
             sortedProfiles.length ? (
               <>
-                <div id="profiles" className={`cards-grid marketplace-grid premium-profile-grid ${sortedProfiles.length === 1 ? 'single-result-grid' : ''}`}>
-                  {sortedProfiles.map((profile) => <ProfileCard key={profile.id} profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />)}
+                <div id="profiles" className={`radar-results-list cards-grid marketplace-grid premium-profile-grid ${sortedProfiles.length === 1 ? 'single-result-grid' : ''}`}>
+                  {sortedProfiles.slice(0, 10).map((profile) => <ProfileCard key={profile.id} profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />)}
                 </div>
                 {sortedProfiles.length === 1 && (
                   <div className="premium-empty-state invite-empty-state">
@@ -492,7 +484,7 @@ export function CityPage() {
               />
             )
           )}
-        </div>
+        </aside>
       </section>
 
       <div className={filtersOpen ? 'mobile-filter-sheet open' : 'mobile-filter-sheet'} role="dialog" aria-modal="true" aria-label={t('city.profileFilters')}>

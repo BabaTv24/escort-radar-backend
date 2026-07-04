@@ -34,6 +34,8 @@ export function Layout() {
   const accountPath = '/dashboard';
   const authPath = (path: string) => isSignedIn ? path : `/login?next=${encodeURIComponent(path)}`;
   const isDashboardRoute = location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/');
+  const isCityRoute = location.pathname.startsWith('/city/');
+  const isAppRoute = isDashboardRoute || isCityRoute;
   const isDashboard = isDashboardRoute;
   const isAuthRoute = location.pathname === '/login' || location.pathname === '/register';
 
@@ -71,7 +73,7 @@ export function Layout() {
           <img className="brand-logo-img" src="/Logo_Escort_5.png" alt="" />
           <span>Escort Radar</span>
         </Link>
-        {!isDashboardRoute && (
+        {!isAppRoute && (
           <nav className="category-nav premium-main-nav" aria-label={t('nav.main')}>
             <Link className="category-link" to="/register?type=client">{t('nav.forClients')}</Link>
             <Link className={cityMatch ? 'category-link active' : 'category-link'} to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`}>{t('nav.radar')}</Link>
@@ -104,7 +106,7 @@ export function Layout() {
           </div>
         </div>
         <div className="header-actions">
-          {!isDashboardRoute && (
+          {!isAppRoute && (
             <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action premium-header-cta">
               <Radar size={17} />
               <span>{t('home.openRadar')}</span>

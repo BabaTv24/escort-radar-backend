@@ -1260,14 +1260,14 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     t('activation.activationTokenBonus')
   ];
   const quickActions = [
-    [t('nav.radar'), t('clientOffice.openRadarCopy'), RadioTower, '#radar'],
+    [t('nav.radar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin'],
     [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '#favorites'],
     [t('clientOffice.coinWallet'), t('clientOffice.coinWalletCopy'), Gem, '#wallet'],
     [t('clientOffice.accountSettings'), t('clientOffice.accountSettingsCopy'), Settings, '#settings']
   ] as const;
   const sidebarItems = [
     [t('nav.dashboard'), '#office', ShieldCheck],
-    [t('nav.radar'), '#radar', RadioTower],
+    [t('nav.radar'), '/city/berlin', RadioTower],
     [t('favorites.myFavorites'), '#favorites', Heart],
     [t('clientOffice.coinWallet'), '#wallet', Gem],
     [t('dashboard.client.activity'), '#activity', Clock],
@@ -1286,10 +1286,17 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
         </div>
         <nav className="client-office-nav" aria-label={t('nav.dashboard')}>
           {sidebarItems.map(([label, href, Icon]) => (
-            <a className="client-office-nav-item" href={href} key={label}>
-              <Icon size={16} />
-              <span>{label}</span>
-            </a>
+            href.startsWith('/') ? (
+              <Link className="client-office-nav-item" to={href} key={label}>
+                <Icon size={16} />
+                <span>{label}</span>
+              </Link>
+            ) : (
+              <a className="client-office-nav-item" href={href} key={label}>
+                <Icon size={16} />
+                <span>{label}</span>
+              </a>
+            )
           ))}
         </nav>
         <button className="client-office-nav-item danger" type="button" onClick={onLogout}>

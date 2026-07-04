@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { Profile } from '../types';
 import { radiusOptions } from '../data/filterOptions';
@@ -22,6 +22,7 @@ type RadarPanelProps = {
   onClearManualLocation?: () => void;
   fallbackNotice?: boolean;
   compact?: boolean;
+  mapApiKey?: string;
 };
 
 const statusClassByOperator: Record<string, string> = {
@@ -32,6 +33,8 @@ const statusClassByOperator: Record<string, string> = {
   TRAVELING: 'traveling',
   OFFLINE: 'offline'
 };
+let radarGoogleMapsPromise: Promise<any> | null = null;
+
 const radarStatuses = [
   ['favorites', 'favorites', 'favorites.favoritesFilter'],
   ['online', 'online-now', 'status.onlineNow'],
@@ -42,7 +45,7 @@ const radarStatuses = [
   ['OFFLINE', 'offline', 'status.offline']
 ] as const;
 
-export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false }: RadarPanelProps) {
+export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false, mapApiKey = '' }: RadarPanelProps) {
   const { t } = useI18n();
   const [manualQuery, setManualQuery] = useState('');
   const [manualError, setManualError] = useState('');
@@ -199,7 +202,8 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         </div>
         {compact && <Link to={`/city/${city}`} className="button primary">{t('radar.cta')}</Link>}
       </div>
-      <div className={hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} aria-label={t('radar.title')}>
+      <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
+        {mapApiKey && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
         <div className="radar-distance-rings" aria-hidden="true">
           <span className="radar-distance-ring selected">
             <em>{radius} km {t('radar.radiusLabel').toLowerCase()}</em>
@@ -241,6 +245,78 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
     </section>
   );
 }
+
+function RadarMapBackground({ apiKey, center }: { apiKey: string; center: GeoPoint }) {
+  const mapNode = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!apiKey || !isValidLatLng(center.lat, center.lng)) return;
+    let active = true;
+    loadRadarGoogleMaps(apiKey)
+      .then((google) => {
+        if (!active || !mapNode.current) return;
+        const position = { lat: center.lat, lng: center.lng };
+        if (!mapRef.current) {
+          mapRef.current = new google.maps.Map(mapNode.current, {
+            center: position,
+            zoom: 12,
+            clickableIcons: false,
+            disableDefaultUI: true,
+            gestureHandling: 'none',
+            keyboardShortcuts: false,
+            styles: radarMapStyles
+          });
+          return;
+        }
+        mapRef.current.setCenter(position);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiKey, center.lat, center.lng]);
+
+  if (failed) return null;
+  return <div ref={mapNode} className="radar-google-map" aria-hidden="true" />;
+}
+
+function loadRadarGoogleMaps(apiKey: string) {
+  const existing = (window as any).google;
+  if (existing?.maps) return Promise.resolve(existing);
+  if (radarGoogleMapsPromise) return radarGoogleMapsPromise;
+
+  radarGoogleMapsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      const google = (window as any).google;
+      google?.maps ? resolve(google) : reject(new Error('Google Maps unavailable'));
+    };
+    script.onerror = () => reject(new Error('Google Maps failed'));
+    document.head.appendChild(script);
+  });
+
+  return radarGoogleMapsPromise;
+}
+
+const radarMapStyles = [
+  { elementType: 'geometry', stylers: [{ color: '#0b0b0d' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#b9a66d' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#080809' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#4a3a1b' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#171719' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#050506' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2a2415' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#05070c' }] }
+];
 
 function getOperatorStatus(profile: Profile) {
   return profile.operator_status || (profile.available_now ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE');
