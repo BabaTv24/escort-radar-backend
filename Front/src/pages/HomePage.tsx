@@ -57,12 +57,6 @@ export function HomePage() {
         canonical="https://escort-radar.fun/"
       />
       <section className="landing-section landing-hero hero">
-        <div className="hero-cinema-bg" aria-hidden="true" />
-        <div className="hero-light-leak" aria-hidden="true" />
-        <div className="radar-ring" />
-        <div className="hero-particles" aria-hidden="true">
-          {Array.from({ length: 14 }, (_, index) => <span key={index} />)}
-        </div>
         <div className="hero-content">
           <img className="hero-brand-mark" src="/Logo_Escort_5.png" alt="" />
           <p className="eyebrow">{t('home.heroEyebrow')}</p>
@@ -80,7 +74,6 @@ export function HomePage() {
           </div>
         </div>
         <div className="hero-product-preview" aria-hidden="true">
-          <div className="hero-radar-orbit" />
           {featured.slice(0, 3).map((profile, index) => {
             const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
             return (
