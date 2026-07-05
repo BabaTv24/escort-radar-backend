@@ -10,6 +10,9 @@ type GlobalLocationSearchProps = {
   initialCity?: string;
   initialCategory?: string;
   compact?: boolean;
+  showHeader?: boolean;
+  showPlaceSearch?: boolean;
+  showPopularCities?: boolean;
 };
 
 let placesPromise: Promise<any> | null = null;
@@ -33,7 +36,15 @@ function loadPlaces(apiKey: string) {
   return placesPromise;
 }
 
-export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Berlin', initialCategory = 'all', compact = false }: GlobalLocationSearchProps) {
+export function GlobalLocationSearch({
+  initialCountry = 'DE',
+  initialCity = 'Berlin',
+  initialCategory = 'all',
+  compact = false,
+  showHeader = true,
+  showPlaceSearch = true,
+  showPopularCities = true
+}: GlobalLocationSearchProps) {
   const navigate = useNavigate();
   const { lang, t, option } = useI18n();
   const googleKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -108,15 +119,15 @@ export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Ber
   }
 
   return (
-    <section className={compact ? 'global-search compact' : 'global-search'}>
+    <section className={compact ? 'global-search compact radar-search-bar' : 'global-search radar-search-bar'}>
       <div ref={serviceNode} hidden />
-      <div className="section-head compact">
+      {showHeader ? <div className="section-head compact">
         <div>
           <p className="eyebrow">{t('search.searchAds')}</p>
           <h2>{t('search.searchAds')}</h2>
         </div>
-      </div>
-      {googleKey ? (
+      </div> : null}
+      {showPlaceSearch && googleKey ? (
         <div className="global-search-place">
           <input value={placeQuery} placeholder={t('location.searchAddressOrPlace')} onChange={(event) => setPlaceQuery(event.target.value)} />
           <button className="button" type="button" disabled={busy} onClick={searchPlace}>{busy ? t('states.loading') : t('search.search')}</button>
@@ -133,13 +144,13 @@ export function GlobalLocationSearch({ initialCountry = 'DE', initialCity = 'Ber
         <label><span>{t('form.category')}</span><select value={category} onChange={(event) => setCategory(normalizeCategoryKey(event.target.value) || '')}><option value="">{t('filters.allCategories')}</option>{activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}</select></label>
         <button className="button primary" type="button" onClick={submit}><Search size={16} /> {t('search.search')}</button>
       </div>
-      <div className="popular-city-row">
+      {showPopularCities ? <div className="popular-city-row popular-cities-chips">
         <span>{t('search.popularCities')}</span>
         {cities.slice(0, 8).map((item) => <button type="button" key={item} onClick={() => {
           setCity(item);
           navigateToCity(item);
         }}>{item}</button>)}
-      </div>
+      </div> : null}
     </section>
   );
 }

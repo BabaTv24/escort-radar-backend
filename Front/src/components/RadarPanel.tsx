@@ -127,7 +127,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
 
   return (
     <section className={compact ? 'radar-panel compact' : 'radar-panel'}>
-      <div className="radar-copy">
+      <div className="radar-copy radar-control-panel">
         <p className="eyebrow">{t('radar.eyebrow')}</p>
         <h2>{t('radar.title')}</h2>
         <p>{t('radar.subtitle')}</p>
@@ -219,7 +219,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         </div>
         {compact && <Link to={`/city/${city}`} className="button primary">{t('radar.cta')}</Link>}
       </div>
-      <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
+      <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
         {mapApiKey && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
         <div className="radar-distance-rings" aria-hidden="true">
           <span className="radar-distance-ring selected">

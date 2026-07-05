@@ -7848,11 +7848,11 @@ textarea:focus-visible,
 }
 
 .radar-search-page {
-  width: min(calc(100vw - 32px), 1540px);
-  max-width: 1540px;
+  width: min(calc(100vw - 48px), 1480px);
+  max-width: 1480px;
   margin: 1rem auto 2rem;
   display: grid;
-  gap: 1rem;
+  gap: 18px;
 }
 
 .radar-search-header,
@@ -7868,7 +7868,7 @@ textarea:focus-visible,
   border: 1px solid var(--er-border);
   border-radius: var(--er-radius-sm);
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(360px, 520px) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 420px);
   align-items: center;
   gap: 1rem;
   background: var(--er-panel-gradient);
@@ -7888,15 +7888,32 @@ textarea:focus-visible,
 }
 
 .radar-search-controls {
+  grid-column: 1 / -1;
   display: grid;
   gap: .55rem;
 }
 
-.radar-search-controls .global-location-search {
+.radar-search-controls .global-search,
+.radar-search-controls .radar-search-bar {
   margin: 0;
 }
 
+.radar-search-bar.compact {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.radar-search-bar.compact .global-search-grid {
+  grid-template-columns: minmax(150px, .85fr) minmax(170px, 1fr) minmax(190px, 1fr) auto;
+  align-items: end;
+  gap: .7rem;
+}
+
 .radar-search-stats {
+  grid-column: 2;
+  grid-row: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(88px, 1fr));
   gap: .5rem;
@@ -7920,8 +7937,8 @@ textarea:focus-visible,
 
 .premium-radar-app-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 300px) minmax(520px, 1fr) minmax(340px, 400px);
-  gap: 1rem;
+  grid-template-columns: minmax(260px, 300px) minmax(560px, 1fr) minmax(340px, 400px);
+  gap: 18px;
   align-items: start;
 }
 
@@ -7929,9 +7946,8 @@ textarea:focus-visible,
 .radar-results-panel {
   position: sticky;
   top: 5.4rem;
-  max-height: calc(100vh - 6.4rem);
-  overflow: auto;
-  scrollbar-width: thin;
+  max-height: none;
+  overflow: visible;
 }
 
 .radar-filters-sidebar .marketplace-filter-panel,
@@ -7949,19 +7965,19 @@ textarea:focus-visible,
 
 .radar-map-stage .radar-panel {
   min-height: calc(100vh - 12.2rem);
-  padding: .85rem;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  padding: 1rem;
+  grid-template-columns: minmax(250px, 300px) minmax(560px, 1fr);
   align-items: stretch;
 }
 
 .radar-map-stage .radar-copy {
-  max-height: calc(100vh - 14rem);
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .radar-map-stage .radar-visual {
   width: 100% !important;
-  min-height: min(760px, calc(100vh - 14rem));
+  min-height: min(760px, calc(100vh - 13.5rem));
   border-radius: var(--er-radius-sm);
   overflow: hidden !important;
 }
@@ -8050,6 +8066,11 @@ textarea:focus-visible,
   .radar-search-header,
   .premium-radar-app-grid {
     grid-template-columns: 1fr;
+  }
+
+  .radar-search-stats {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .radar-filters-sidebar {
@@ -8506,16 +8527,17 @@ textarea:focus {
 }
 
 .radar-search-page {
-  width: min(calc(100vw - 32px), 1540px);
-  max-width: 1540px;
+  width: min(calc(100vw - 48px), 1480px);
+  max-width: 1480px;
 }
 
 .radar-search-header {
-  grid-template-columns: minmax(260px, 1fr) minmax(380px, 540px) minmax(270px, auto);
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 420px);
 }
 
 .premium-radar-app-grid {
-  grid-template-columns: minmax(250px, 300px) minmax(520px, 1fr) minmax(330px, 410px);
+  grid-template-columns: minmax(260px, 300px) minmax(560px, 1fr) minmax(340px, 400px);
+  gap: 18px;
 }
 
 .radar-panel {
@@ -8651,6 +8673,13 @@ textarea:focus {
 
 .global-search.compact {
   padding: .75rem;
+}
+
+.radar-search-bar.compact {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .global-search.compact .section-head {
@@ -8995,15 +9024,16 @@ textarea:focus {
 }
 
 .radar-map-stage .radar-panel {
-  grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(250px, 300px) minmax(560px, 1fr);
+  gap: 1rem;
 }
 
 .radar-map-stage .radar-visual {
   width: 100% !important;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   min-height: 0 !important;
   height: auto;
-  max-height: calc(100vh - 13rem);
+  max-height: min(760px, calc(100vh - 12.5rem));
   overflow: hidden !important;
 }
 

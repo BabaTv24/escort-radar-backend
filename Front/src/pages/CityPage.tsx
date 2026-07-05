@@ -371,7 +371,7 @@ export function CityPage() {
         description={`Explore privacy-first verified 18+ nightlife profiles in ${cityLabel}, with availability signals, city radar and moderated public listings.`}
         canonical={`https://escort-radar.fun/city/${urlCitySlug}`}
       />
-      <section className="radar-search-header">
+      <section className="radar-search-header radar-city-header">
         <div className="radar-search-title">
           <p className="eyebrow">{t('city.eyebrow')}</p>
           <h1>{cityLabel} Radar</h1>
@@ -379,7 +379,15 @@ export function CityPage() {
           {appliedFilters.category && <span className="active-category-badge">{option(appliedFilters.category)}</span>}
         </div>
         <div className="radar-search-controls">
-          <GlobalLocationSearch initialCountry={countryCode} initialCity={cityLabel} initialCategory={appliedFilters.category || 'all'} compact />
+          <GlobalLocationSearch
+            initialCountry={countryCode}
+            initialCity={cityLabel}
+            initialCategory={appliedFilters.category || 'all'}
+            compact
+            showHeader={false}
+            showPlaceSearch={false}
+            showPopularCities={false}
+          />
           <button className="button mobile-filter-trigger" type="button" onClick={() => setFiltersOpen(true)}>
             <SlidersHorizontal size={17} /> {t('city.filter')}
           </button>
@@ -391,12 +399,12 @@ export function CityPage() {
         </div>
       </section>
 
-      <section className="premium-radar-app-grid">
+      <section className="premium-radar-app-grid radar-page-grid">
         <aside className="radar-filters-sidebar">
           {renderFilters('desktop')}
         </aside>
 
-        <main id="city-radar" className="radar-map-stage">
+        <main id="city-radar" className="radar-map-stage radar-main-stage">
           <RadarPanel
             profiles={sortedProfiles}
             radius={draftFilters.radius}
@@ -445,7 +453,7 @@ export function CityPage() {
             </div>
           </div>
 
-          <div className="radar-result-strip">
+          <div className="radar-result-strip radar-avatar-strip">
             {topProfiles.length ? topProfiles.slice(0, 5).map((profile) => {
               const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
               const statusClass = getStatusClass(profile);
