@@ -8175,6 +8175,18 @@ body {
   object-fit: contain;
 }
 
+.brand-wordmark-img {
+  width: clamp(150px, 16vw, 230px);
+  height: 42px;
+  max-width: 100%;
+  object-fit: contain;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 0 18px rgba(244,215,127,.24));
+}
+
 .category-link,
 .radar-action,
 .account-pill,
@@ -8735,6 +8747,11 @@ textarea:focus {
     width: min(100%, calc(100% - 12px));
     margin-top: 6px;
     grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .brand-wordmark-img {
+    width: clamp(118px, 34vw, 170px);
+    height: 34px;
   }
 
   .header-actions {

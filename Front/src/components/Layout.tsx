@@ -73,7 +73,7 @@ export function Layout() {
       <header className="market-header">
         <Link to="/" className="brand" translate="no">
           <img className="brand-logo-img" src="/Logo_Escort_5.png" alt="" />
-          <span>Escort Radar</span>
+          <img className="brand-wordmark-img" src="/brand-escort-radar-fun.png" alt="Escort-Radar.fun" />
         </Link>
         <div className="mobile-auth-actions" aria-label="Mobile account controls">
           {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
