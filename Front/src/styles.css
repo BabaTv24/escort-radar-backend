@@ -9090,6 +9090,188 @@ textarea:focus {
   max-height: 46px;
 }
 
+/* Vertical premium Radar City layout */
+.radar-city-page {
+  width: min(calc(100vw - 48px), 1480px);
+  max-width: 1480px;
+  gap: 20px;
+}
+
+.radar-city-page .radar-city-header,
+.radar-city-page .radar-main-stage,
+.radar-city-page .radar-filters-section,
+.radar-city-page .radar-results-section {
+  min-width: 0;
+}
+
+.radar-city-page .radar-main-stage,
+.radar-city-page .radar-filters-section,
+.radar-city-page .radar-results-section {
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-md);
+  background:
+    radial-gradient(circle at 12% 0, rgba(244,215,127,.10), transparent 24rem),
+    radial-gradient(circle at 90% 12%, var(--er-purple-glow), transparent 28rem),
+    var(--er-card);
+  box-shadow: var(--er-shadow-card);
+}
+
+.radar-city-page .radar-main-stage {
+  padding: 1rem;
+}
+
+.radar-city-page .mobile-filter-trigger {
+  display: none !important;
+}
+
+.radar-city-page .radar-main-stage .radar-panel {
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: clamp(1rem, 2vw, 1.35rem);
+  grid-template-columns: minmax(320px, 420px) minmax(560px, 1fr);
+  align-items: center;
+  gap: clamp(1rem, 2.4vw, 2rem);
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.radar-city-page .radar-control-panel {
+  max-width: 420px;
+  overflow: visible;
+}
+
+.radar-city-page .radar-control-panel h2 {
+  font-size: clamp(1.85rem, 3vw, 3rem);
+  line-height: 1.04;
+}
+
+.radar-city-page .radar-visual-canvas {
+  width: min(100%, 820px) !important;
+  aspect-ratio: 1 / 1;
+  min-height: 560px !important;
+  max-height: 820px;
+  justify-self: center;
+  border-radius: 50% !important;
+}
+
+.radar-city-page .radar-filters-section {
+  padding: 1rem;
+}
+
+.radar-city-page .radar-filters-section .marketplace-filter-panel {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 1rem;
+  border: 0;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.radar-city-page .radar-filters-section .filter-panel-head,
+.radar-city-page .radar-filters-section .advanced-filters,
+.radar-city-page .radar-filters-section .filter-actions {
+  grid-column: 1 / -1;
+}
+
+.radar-city-page .radar-filters-section .chip-fieldset,
+.radar-city-page .radar-filters-section .premium-field,
+.radar-city-page .radar-filters-section .premium-filter-group {
+  margin: 0;
+}
+
+.radar-city-page .radar-results-section {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.radar-city-page .radar-results-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
+  align-items: end;
+  gap: 1rem;
+}
+
+.radar-city-page .radar-avatar-strip {
+  grid-template-columns: repeat(8, minmax(72px, 1fr));
+  gap: .7rem;
+}
+
+.radar-city-page .radar-results-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important;
+  gap: 1rem !important;
+}
+
+.radar-city-page .radar-featured-profile-card {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .radar-city-page {
+    width: min(100%, calc(100% - 24px));
+  }
+
+  .radar-city-page .radar-main-stage .radar-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .radar-city-page .radar-control-panel {
+    max-width: none;
+  }
+
+  .radar-city-page .radar-visual-canvas {
+    min-height: min(680px, calc(100vw - 72px)) !important;
+  }
+
+  .radar-city-page .radar-filters-section .marketplace-filter-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .radar-city-page .radar-results-header {
+    grid-template-columns: 1fr;
+  }
+
+  .radar-city-page .radar-avatar-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .radar-city-page {
+    width: min(100%, calc(100% - 12px));
+    gap: .85rem;
+  }
+
+  .radar-city-page .radar-main-stage,
+  .radar-city-page .radar-filters-section,
+  .radar-city-page .radar-results-section {
+    padding: .75rem;
+  }
+
+  .radar-city-page .radar-main-stage .radar-panel {
+    padding: 0;
+  }
+
+  .radar-city-page .radar-visual-canvas {
+    width: 100% !important;
+    min-height: 0 !important;
+    max-height: none;
+  }
+
+  .radar-city-page .radar-filters-section .marketplace-filter-panel,
+  .radar-city-page .radar-results-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .radar-city-page .radar-avatar-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .footer {
   width: min(1500px, calc(100% - 24px));
   margin: 0 auto 1rem;

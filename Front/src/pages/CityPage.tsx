@@ -365,7 +365,7 @@ export function CityPage() {
   }
 
   return (
-    <div className="page city-page luxury-city-page radar-search-page">
+    <div className="page city-page luxury-city-page radar-search-page radar-city-page">
       <Seo
         title={`Escort Radar ${cityLabel} - Verified 18+ Nightlife Profiles`}
         description={`Explore privacy-first verified 18+ nightlife profiles in ${cityLabel}, with availability signals, city radar and moderated public listings.`}
@@ -399,100 +399,102 @@ export function CityPage() {
         </div>
       </section>
 
-      <section className="premium-radar-app-grid radar-page-grid">
-        <aside className="radar-filters-sidebar">
-          {renderFilters('desktop')}
-        </aside>
+      <section id="city-radar" className="radar-map-stage radar-main-stage">
+        <RadarPanel
+          profiles={sortedProfiles}
+          radius={draftFilters.radius}
+          status={draftFilters.availability_status}
+          city={urlCitySlug}
+          onRadiusChange={(value) => updateRadarFilter('radius', value)}
+          onStatusChange={(value) => updateRadarFilter('availability_status', value)}
+          searcherLocation={searcherLocation}
+          onUseLocation={useLocation}
+          onSetManualLocation={setManualLocation}
+          onClearManualLocation={clearManualLocation}
+          fallbackNotice={fallbackNotice}
+          mapApiKey={googleMapsApiKey}
+        />
+        {draftFilters.availability_status === 'favorites' && !hasClientSession && (
+          <section className="state-panel">
+            <p>{t('favorites.loginToSeeFavorites')}</p>
+            <Link className="button primary" to={`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`}>{t('favorites.openLogin')}</Link>
+          </section>
+        )}
+        {draftFilters.availability_status === 'favorites' && hasClientSession && favoritesLoaded && !favoriteProfileIds.size && (
+          <section className="state-panel">
+            <p>{t('favorites.noFavoritesYet')}</p>
+            <Link className="button primary" to="/dashboard#favorites">{t('favorites.favorites')}</Link>
+          </section>
+        )}
+      </section>
 
-        <main id="city-radar" className="radar-map-stage radar-main-stage">
-          <RadarPanel
-            profiles={sortedProfiles}
-            radius={draftFilters.radius}
-            status={draftFilters.availability_status}
-            city={urlCitySlug}
-            onRadiusChange={(value) => updateRadarFilter('radius', value)}
-            onStatusChange={(value) => updateRadarFilter('availability_status', value)}
-            searcherLocation={searcherLocation}
-            onUseLocation={useLocation}
-            onSetManualLocation={setManualLocation}
-            onClearManualLocation={clearManualLocation}
-            fallbackNotice={fallbackNotice}
-            mapApiKey={googleMapsApiKey}
-          />
-          {draftFilters.availability_status === 'favorites' && !hasClientSession && (
-            <section className="state-panel">
-              <p>{t('favorites.loginToSeeFavorites')}</p>
-              <Link className="button primary" to={`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`}>{t('favorites.openLogin')}</Link>
-            </section>
-          )}
-          {draftFilters.availability_status === 'favorites' && hasClientSession && favoritesLoaded && !favoriteProfileIds.size && (
-            <section className="state-panel">
-              <p>{t('favorites.noFavoritesYet')}</p>
-              <Link className="button primary" to="/dashboard#favorites">{t('favorites.favorites')}</Link>
-            </section>
-          )}
-        </main>
+      <section className="radar-filters-section">
+        {renderFilters('desktop')}
+      </section>
 
-        <aside className="radar-results-panel">
-          <div className="listing-toolbar radar-results-toolbar">
-            <div>
-              <p className="eyebrow">{sortedProfiles.length === 1 ? t('city.oneProfileNear', { city: cityLabel }) : t('city.profilesNearYou')}</p>
-              <h2>{sortedProfiles.length ? t('city.marketplaceProfiles', { count: sortedProfiles.length }) : t('city.noProfilesNear', { city: cityLabel })}</h2>
-            </div>
-            <div className="sort-tabs" aria-label={t('city.sortProfiles')}>
-              {[
-                ['best', t('home.sort.best')],
-                ['new', t('home.sort.new')],
-                ['near', t('home.sort.near')],
-                ['online', t('home.sort.online')]
-              ].map(([key, label]) => (
-                <button key={key} className={sortMode === key ? 'selected' : ''} type="button" onClick={() => setSortMode(key as typeof sortMode)}>
-                  {label}
-                </button>
-              ))}
-            </div>
+      <section className="radar-results-section">
+        <div className="listing-toolbar radar-results-toolbar radar-results-header">
+          <div>
+            <p className="eyebrow">{sortedProfiles.length === 1 ? t('city.oneProfileNear', { city: cityLabel }) : t('city.profilesNearYou')}</p>
+            <h2>{sortedProfiles.length ? t('city.marketplaceProfiles', { count: sortedProfiles.length }) : t('city.noProfilesNear', { city: cityLabel })}</h2>
           </div>
-
-          <div className="radar-result-strip radar-avatar-strip">
-            {topProfiles.length ? topProfiles.slice(0, 5).map((profile) => {
-              const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
-              const statusClass = getStatusClass(profile);
-              return (
-                <Link to={`/profile/${profile.id}`} className={`top-avatar ${statusClass}`} key={profile.id}>
-                  {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{getInitials(profile.display_name)}</span>}
-                  <strong>{profile.display_name}</strong>
-                  <small>{getOperatorStatus(profile).replaceAll('_', ' ')}</small>
-                </Link>
-              );
-            }) : <p className="muted">{t('city.premiumProfilesEmpty')}</p>}
+          <div className="sort-tabs" aria-label={t('city.sortProfiles')}>
+            {[
+              ['best', t('home.sort.best')],
+              ['new', t('home.sort.new')],
+              ['near', t('home.sort.near')],
+              ['online', t('home.sort.online')]
+            ].map(([key, label]) => (
+              <button key={key} className={sortMode === key ? 'selected' : ''} type="button" onClick={() => setSortMode(key as typeof sortMode)}>
+                {label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          {loading && <LoadingState />}
-          {error && <ErrorState message={error} onRetry={() => setRetryKey((value) => value + 1)} />}
-          {!loading && !error && (
-            sortedProfiles.length ? (
-              <>
-                <div id="profiles" className={`radar-results-list cards-grid marketplace-grid premium-profile-grid ${sortedProfiles.length === 1 ? 'single-result-grid' : ''}`}>
-                  {sortedProfiles.slice(0, 10).map((profile) => <ProfileCard key={profile.id} profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />)}
-                </div>
-                {sortedProfiles.length === 1 && (
-                  <div className="premium-empty-state invite-empty-state">
-                    <RadioTower size={32} />
-                    <h2>{t('city.firstProfileTitle', { city: cityLabel })}</h2>
-                    <p>{t('city.firstProfileText')}</p>
-                    <Link className="button primary" to="/dashboard">{t('buttons.addListing')}</Link>
+        <div className="radar-result-strip radar-avatar-strip">
+          {topProfiles.length ? topProfiles.slice(0, 8).map((profile) => {
+            const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
+            const statusClass = getStatusClass(profile);
+            return (
+              <Link to={`/profile/${profile.id}`} className={`top-avatar ${statusClass}`} key={profile.id}>
+                {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{getInitials(profile.display_name)}</span>}
+                <strong>{profile.display_name}</strong>
+                <small>{getOperatorStatus(profile).replaceAll('_', ' ')}</small>
+              </Link>
+            );
+          }) : <p className="muted">{t('city.premiumProfilesEmpty')}</p>}
+        </div>
+
+        {loading && <LoadingState />}
+        {error && <ErrorState message={error} onRetry={() => setRetryKey((value) => value + 1)} />}
+        {!loading && !error && (
+          sortedProfiles.length ? (
+            <>
+              <div id="profiles" className={`radar-results-list radar-results-grid cards-grid marketplace-grid premium-profile-grid ${sortedProfiles.length === 1 ? 'single-result-grid' : ''}`}>
+                {sortedProfiles.slice(0, 10).map((profile) => (
+                  <div className="radar-featured-profile-card" key={profile.id}>
+                    <ProfileCard profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />
                   </div>
-                )}
-              </>
-            ) : (
-              <EmptyState
-                title={t('search.noProfilesForCity')}
-                message={t('city.emptySearchText')}
-                action={<button className="button primary" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}>{t('city.increaseRadius')}</button>}
-              />
-            )
-          )}
-        </aside>
+                ))}
+              </div>
+              {sortedProfiles.length === 1 && (
+                <div className="premium-empty-state invite-empty-state">
+                  <RadioTower size={32} />
+                  <h2>{t('city.firstProfileTitle', { city: cityLabel })}</h2>
+                  <p>{t('city.firstProfileText')}</p>
+                  <Link className="button primary" to="/dashboard">{t('buttons.addListing')}</Link>
+                </div>
+              )}
+            </>
+          ) : (
+            <EmptyState
+              title={t('search.noProfilesForCity')}
+              message={t('city.emptySearchText')}
+              action={<button className="button primary" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}>{t('city.increaseRadius')}</button>}
+            />
+          )
+        )}
       </section>
 
       <div className={filtersOpen ? 'mobile-filter-sheet open' : 'mobile-filter-sheet'} role="dialog" aria-modal="true" aria-label={t('city.profileFilters')}>
