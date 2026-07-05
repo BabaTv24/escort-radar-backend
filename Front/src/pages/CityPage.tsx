@@ -297,16 +297,20 @@ export function CityPage() {
           ) : null}
         </div>
 
-        <div className="premium-filter-group">
-          <span>{t('radar.radius')}</span>
-          <div className="segmented-pills">
-            {[5, 10, 25, 50, 100].map((radius) => (
-              <button key={radius} className={draftFilters.radius === radius ? 'selected' : ''} type="button" onClick={() => updateRadarFilter('radius', radius)}>
-                {radius} km
-              </button>
-            ))}
-          </div>
-        </div>
+        <label className="radar-radius-slider premium-filter-group">
+          <span className="radar-radius-slider-head">
+            <span>{t('radar.radius')}</span>
+            <strong>{draftFilters.radius} km</strong>
+          </span>
+          <input
+            type="range"
+            min={1}
+            max={100}
+            step={1}
+            value={draftFilters.radius}
+            onChange={(event) => updateRadarFilter('radius', Number(event.target.value))}
+          />
+        </label>
 
         <label className="premium-field compact-field">
           <span>{t('radar.status')}</span>

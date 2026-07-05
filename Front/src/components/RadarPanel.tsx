@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { Profile } from '../types';
-import { radiusOptions } from '../data/filterOptions';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
 import { formatDistanceKm, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm } from '../lib/geo';
@@ -148,16 +147,20 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
               />
             </label>
           ) : (
-            <>
-              <span>{t('radar.radius')}</span>
-              <div className="segmented-pills">
-                {radiusOptions.map((item) => (
-                  <button key={item} className={radius === item ? 'selected' : ''} type="button" onClick={() => onRadiusChange(item)}>
-                    {item} km
-                  </button>
-                ))}
-              </div>
-            </>
+            <label className="radar-radius-slider">
+              <span className="radar-radius-slider-head">
+                <span>{t('radar.radius')}</span>
+                <strong>{radius} km</strong>
+              </span>
+              <input
+                type="range"
+                min={1}
+                max={100}
+                step={1}
+                value={radius}
+                onChange={(event) => onRadiusChange(Number(event.target.value))}
+              />
+            </label>
           )}
         </div>
         <div className="radar-control-group">
