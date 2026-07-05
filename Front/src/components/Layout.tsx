@@ -71,7 +71,7 @@ export function Layout() {
   return (
     <div className="app-shell" translate="no">
       <header className="market-header">
-        <Link to="/" className="brand" translate="no">
+        <Link to="/" className="brand-logo" translate="no">
           <img className="brand-logo-img" src="/Logo_Escort_5.png" alt="" />
           <img className="brand-wordmark-img" src="/brand-escort-radar-fun.png" alt="Escort-Radar.fun" />
         </Link>

@@ -8169,22 +8169,37 @@ body {
   color: var(--er-text);
 }
 
+.brand-logo {
+  min-width: max-content;
+  min-height: 58px;
+  display: inline-flex;
+  align-items: center;
+  gap: .8rem;
+  padding: .18rem .4rem .18rem 0;
+  color: var(--er-text);
+  text-decoration: none;
+  overflow: visible;
+}
+
 .brand-logo-img {
-  width: 34px;
-  height: 34px;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
 }
 
 .brand-wordmark-img {
-  width: clamp(150px, 16vw, 230px);
-  height: 42px;
+  flex: 0 0 auto;
+  width: clamp(230px, 22vw, 360px);
+  height: 56px;
   max-width: 100%;
   object-fit: contain;
+  object-position: left center;
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
-  filter: drop-shadow(0 0 18px rgba(244,215,127,.24));
+  filter: drop-shadow(0 0 20px rgba(244,215,127,.30)) drop-shadow(0 0 30px rgba(123,77,255,.14));
 }
 
 .category-link,
@@ -8749,9 +8764,20 @@ textarea:focus {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .brand-wordmark-img {
-    width: clamp(118px, 34vw, 170px);
+  .brand-logo {
+    min-height: 46px;
+    gap: .48rem;
+    padding-right: .1rem;
+  }
+
+  .brand-logo-img {
+    width: 34px;
     height: 34px;
+  }
+
+  .brand-wordmark-img {
+    width: clamp(150px, 42vw, 215px);
+    height: 42px;
   }
 
   .header-actions {
