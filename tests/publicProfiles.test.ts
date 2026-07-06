@@ -1104,7 +1104,7 @@ test('premium client referral reward and live request contract stay client-only'
   assert.match(dashboardSource, /earnedReferralCoins/);
   assert.match(dashboardSource, /onCreateIntent\(\{ \.\.\.intentDraft, status: 'LOOKING_NOW' \}\)/);
   assert.doesNotMatch(dashboardSource, /\['LOOKING_NOW', 'LOOKING_TODAY', 'TRAVELING', 'BROWSING', 'OFFLINE'\]/);
-  assert.match(plLocale, /"clientOffice\.nextReward": "Następna nagroda: \{\{count\}\} Coins"/);
+  assert.match(plLocale, /"clientOffice\.nextReward": "Następna nagroda: \{\{count\}\} BigCoins"/);
   assert.match(plLocale, /"clientOffice\.createRequest": "Wyślij request"/);
 });
 

@@ -681,7 +681,6 @@ export function DashboardPage() {
     return (
       <ClientDashboard
         userEmail={userEmail}
-        wallet={wallet}
         coinWallet={coinWallet}
         clientProfile={clientProfile}
         activation={clientActivation}
@@ -1197,9 +1196,8 @@ function getPublicReferralLink(activation: ClientActivation | null) {
 
 const CLIENT_REFERRAL_REWARD_COINS = 5;
 
-function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activation, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
+function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
   userEmail: string;
-  wallet: Wallet | null;
   coinWallet: CoinWallet | null;
   clientProfile: ClientProfile | null;
   activation: ClientActivation | null;
@@ -1259,6 +1257,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
     t('clientOffice.unlock.referral'),
     t('activation.activationTokenBonus')
   ];
+  const bigCoinsBalance = Math.round(Number(coinWallet?.balance ?? 0));
   const quickActions = [
     [t('nav.radar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin'],
     [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '#favorites'],
@@ -1278,8 +1277,8 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
   const spotlightImage = spotlightProfile ? getProfileImageUrl(spotlightProfile) : '';
 
   return (
-    <div className="client-office-shell" id="office">
-      <aside className="client-office-sidebar">
+    <div className="client-office-shell client-dashboard-shell" id="office">
+      <aside className="client-office-sidebar client-dashboard-sidebar">
         <div className="client-office-brand">
           <ShieldCheck size={24} />
           <span>{t('clientOffice.title')}</span>
@@ -1305,8 +1304,8 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
         </button>
       </aside>
 
-      <main className="client-office-main">
-        <header className="client-office-topbar">
+      <main className="client-office-main client-dashboard-main">
+        <header className="client-office-topbar client-dashboard-header">
           <div>
             <p className="eyebrow">{t('clientOffice.eyebrow')}</p>
             <strong>{t('clientOffice.title')}</strong>
@@ -1317,14 +1316,14 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
           </div>
           <Link className="client-office-credit-pill" to="/coins">
             <Gem size={15} />
-            <span>{Math.round(Number(coinWallet?.balance ?? 0)).toLocaleString()} {t('coins.title')}</span>
+            <span>{bigCoinsBalance.toLocaleString()} {t('clientOffice.bigCoins')}</span>
           </Link>
           <button className="client-office-avatar-button" type="button" onClick={onLogout} aria-label={t('buttons.logout')}>
             {clientProfile?.avatar_url ? <img src={clientProfile.avatar_url} alt="" /> : <UserRound size={18} />}
           </button>
         </header>
 
-        <section className="client-office-hero">
+        <section className="client-office-hero client-welcome-panel">
           <div>
             <p className="eyebrow">{t('clientOffice.eyebrow')}</p>
             <h1>{t('dashboard.welcome')}, {displayName}</h1>
@@ -1335,19 +1334,18 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             </div>
           </div>
           <div className="client-office-hero-metrics">
-            <Metric label={t('clientOffice.coinBalance')} value={Math.round(Number(coinWallet?.balance ?? 0)).toLocaleString()} />
+            <Metric label={t('clientOffice.coinBalance')} value={bigCoinsBalance.toLocaleString()} />
             <Metric label={t('favorites.myFavorites')} value={favorites.length} />
             <Metric label={t('clientOffice.availableNow')} value={availableProfiles || 0} />
           </div>
           <div className="client-office-hero-actions">
-            <Link className="button primary" to="/city/berlin"><RadioTower size={16} /> {t('dashboard.client.openRadar')}</Link>
             {!activated && <button className="button" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</button>}
           </div>
         </section>
 
         {message && <p className={activated ? 'success' : 'subscription-notice'}>{message}</p>}
 
-        <section className="client-office-quick-actions" aria-label={t('clientOffice.tools')}>
+        <section className="client-office-quick-actions client-quick-actions" aria-label={t('clientOffice.tools')}>
           {quickActions.map(([title, copy, Icon, href]) => {
             const content = (
               <>
@@ -1365,7 +1363,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
 
         <section className="client-office-grid">
           <div className="client-office-left">
-            <section className="client-office-card client-office-radar" id="radar">
+            <section className="client-office-card client-office-radar client-radar-preview-section" id="radar">
               <div className="client-office-card-header">
                 <div>
                   <p className="eyebrow">{t('nav.radar')}</p>
@@ -1439,7 +1437,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
               </div>
             </section>
 
-            <section className="client-office-card client-office-favorites" id="favorites">
+            <section className="client-office-card client-office-favorites client-favorites-section" id="favorites">
               <div className="client-office-card-header">
                 <div>
                   <p className="eyebrow">{t('favorites.myFavorites')}</p>
@@ -1463,7 +1461,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
               )}
             </section>
 
-            <section className="client-office-card client-office-activity" id="activity">
+            <section className="client-office-card client-office-activity client-activity-section" id="activity">
               <div className="client-office-card-header">
                 <div>
                   <p className="eyebrow">{t('dashboard.client.activity')}</p>
@@ -1475,7 +1473,7 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
                 {transactions.slice(0, 5).map((transaction) => (
                   <div className="client-office-row" key={transaction.id}>
                     <div><strong>{transaction.transaction_type}</strong><p>{new Date(transaction.created_at).toLocaleString()}</p></div>
-                    <span>{transaction.direction === 'credit' ? '+' : '-'}{transaction.amount} Coins</span>
+                    <span>{transaction.direction === 'credit' ? '+' : '-'}{transaction.amount} {t('clientOffice.bigCoins')}</span>
                   </div>
                 ))}
                 {!transactions.length && <p className="muted">{t('clientOffice.noActivity')}</p>}
@@ -1483,8 +1481,8 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
             </section>
           </div>
 
-          <div className="client-office-right">
-            <section className="client-office-card" id="account">
+          <div className="client-office-right client-dashboard-right-column">
+            <section className="client-office-card client-profile-summary-card" id="account">
               <div className="profile-summary">
                 {clientProfile?.avatar_url ? <img className="client-office-profile-image" src={clientProfile.avatar_url} alt="" /> : <div className="qr-visual"><UserRound size={46} /></div>}
                 <div>
@@ -1502,23 +1500,22 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
               {!activated && <button className="button primary full" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</button>}
             </section>
 
-            <section className="client-office-card client-office-wallet" id="wallet">
+            <section className="client-office-card client-office-wallet client-bigcoins-wallet-card" id="wallet">
               <div className="client-office-card-header">
                 <div>
                   <p className="eyebrow">{t('clientOffice.coinWallet')}</p>
-                  <h2>{Math.round(Number(coinWallet?.balance ?? 0)).toLocaleString()}</h2>
+                  <h2>{bigCoinsBalance.toLocaleString()} {t('clientOffice.bigCoins')}</h2>
                 </div>
                 <Gem size={22} />
               </div>
               <div className="client-office-mini-metrics">
-                <Metric label={t('clientOffice.coinBalance')} value={Math.round(Number(coinWallet?.balance ?? 0))} />
-                <Metric label={t('clientOffice.tokenBalance')} value={Math.round(Number(wallet?.escort_token_balance ?? 0))} />
+                <Metric label={t('clientOffice.coinBalance')} value={bigCoinsBalance} />
+                <Metric label={t('clientOffice.earnedCoins')} value={earnedReferralCoins} />
               </div>
               <Link className="button primary full" to="/coins">{t('clientOffice.addCoins')}</Link>
-              <Link className="button full" to="/tokens">{t('tokens.title')}</Link>
             </section>
 
-            <section className="client-office-card referral-studio">
+            <section className="client-office-card referral-studio client-referral-card">
               <div className="client-office-card-header">
                 <div>
                   <p className="eyebrow">{t('clientOffice.referralEyebrow')}</p>
@@ -1533,11 +1530,11 @@ function ClientDashboard({ userEmail, wallet, coinWallet, clientProfile, activat
                 <strong>{t('clientOffice.nextRewardProgress', { count: referralActivations ? 1 : 0 })}</strong>
                 <span>{t('clientOffice.nextReward', { count: CLIENT_REFERRAL_REWARD_COINS })}</span>
                 <div className="progress-track"><span style={{ width: `${referralProgress}%` }} /></div>
-                <p>{t('clientOffice.earnedRewards')}: {earnedReferralCoins} Coins</p>
+                <p>{t('clientOffice.earnedRewards')}: {earnedReferralCoins} {t('clientOffice.bigCoins')}</p>
               </div>
             </section>
 
-            <section className="client-office-card client-office-settings" id="settings">
+            <section className="client-office-card client-office-settings client-settings-card" id="settings">
               <div className="client-office-card-header">
                 <div>
                   <p className="eyebrow">{t('clientOffice.settings.eyebrow')}</p>
