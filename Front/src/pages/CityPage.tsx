@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation as useRouterLocation, useParams, useSearchParams } from 'react-router-dom';
-import { RadioTower, Search, SlidersHorizontal, X } from 'lucide-react';
+import { LockKeyhole, RadioTower, Search, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Profile, Tag } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
@@ -69,6 +69,7 @@ export function CityPage() {
   const [favoriteProfileIds, setFavoriteProfileIds] = useState<Set<string>>(new Set());
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
   const [hasClientSession, setHasClientSession] = useState(false);
+  const [clientActivationState, setClientActivationState] = useState<'client_free' | 'client_activated'>('client_free');
   const location = useRouterLocation();
   const { t, option } = useI18n();
 
@@ -95,6 +96,7 @@ export function CityPage() {
         if (!cancelled) {
           setFavoriteProfileIds(new Set());
           setFavoritesLoaded(true);
+          setClientActivationState('client_free');
         }
         const saved = readSavedSearchLocation();
         if (!cancelled && saved) {
@@ -114,6 +116,12 @@ export function CityPage() {
           setFavoriteProfileIds(new Set());
           setFavoritesLoaded(true);
         }
+      }
+      try {
+        const clientActivationData = await api.clientActivationMe(accessToken);
+        if (!cancelled) setClientActivationState(clientActivationData.activation.state);
+      } catch {
+        if (!cancelled) setClientActivationState('client_free');
       }
       try {
         const { preferences } = await api.clientPreferences(accessToken);
@@ -188,6 +196,7 @@ export function CityPage() {
   const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
   const categoryLabel = appliedFilters.category ? option(appliedFilters.category) : t('filters.allCategories');
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+  const isClientActivated = clientActivationState === 'client_activated';
   if (import.meta.env.DEV) {
     console.debug('[CityPageProfiles]', {
       apiProfiles: profiles.length,
@@ -283,6 +292,7 @@ export function CityPage() {
   }
 
   function renderFilters(mode: 'desktop' | 'mobile') {
+    const advancedFiltersLocked = false;
     return (
       <section className={`filter-panel marketplace-filter-panel ${mode === 'mobile' ? 'mobile' : ''}`}>
         <div className="filter-panel-head">
@@ -314,21 +324,31 @@ export function CityPage() {
 
         <label className="premium-field compact-field">
           <span>{t('radar.status')}</span>
-          <select value={draftFilters.availability_status} onChange={(event) => updateRadarFilter('availability_status', event.target.value)}>
+          <select
+            className={draftFilters.availability_status === 'favorites' ? 'status-select-favorites' : ''}
+            value={draftFilters.availability_status}
+            onChange={(event) => updateRadarFilter('availability_status', event.target.value)}
+          >
             <option value="all">{t('status.all')}</option>
             <option value="favorites">{t('favorites.favoritesFilter')}</option>
             <option value="online">{t('status.onlineNow')}</option>
-            <option value="AVAILABLE_TODAY">{t('status.availableToday')}</option>
             <option value="BUSY">{t('status.busy')}</option>
-            <option value="APPOINTMENT_ONLY">{t('status.appointmentOnly')}</option>
-            <option value="TRAVELING">{t('status.traveling')}</option>
             <option value="OFFLINE">{t('status.offline')}</option>
           </select>
         </label>
 
+        <div className={advancedFiltersLocked ? 'premium-filter-locked radar-advanced-filters locked' : 'radar-advanced-filters'}>
+          {advancedFiltersLocked && (
+            <div className="premium-filter-lock-panel">
+              <strong>{t('clientOffice.activateTitle')}</strong>
+              <span>{t('activation.activationTokenBonusDescription')}</span>
+              <Link className="button primary" to="/dashboard">{t('clientOffice.activateCta')}</Link>
+            </div>
+          )}
+
         <label className="premium-field compact-field">
           <span>{t('filters.category')}</span>
-          <select value={draftFilters.category} onChange={(event) => updateFilter('category', event.target.value)}>
+          <select value={draftFilters.category} disabled={advancedFiltersLocked} onChange={(event) => updateFilter('category', event.target.value)}>
             <option value="">{t('filters.allCategories')}</option>
             {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
           </select>
@@ -336,33 +356,64 @@ export function CityPage() {
 
         <label className="premium-field compact-field">
           <span>{t('filters.price')}</span>
-          <input type="number" placeholder={t('filters.priceMax')} value={draftFilters.price_max} onChange={(event) => updateFilter('price_max', event.target.value)} />
+          <input type="number" placeholder={t('filters.priceMax')} value={draftFilters.price_max} disabled={advancedFiltersLocked} onChange={(event) => updateFilter('price_max', event.target.value)} />
         </label>
 
-        <MultiSelect title={t('filters.visitType')} values={draftFilters.visit_types} options={visitTypeOptions} onToggle={(value) => updateFilter('visit_types', toggleArrayValue(draftFilters.visit_types, value))} />
+        <MultiSelect title={t('filters.visitType')} values={draftFilters.visit_types} options={visitTypeOptions} disabled={advancedFiltersLocked} onToggle={(value) => updateFilter('visit_types', toggleArrayValue(draftFilters.visit_types, value))} />
 
         <ServiceSelect
           search={draftFilters.service_search}
           selectedCount={draftFilters.services.length + draftFilters.service_tags.length + draftFilters.tag_ids.length}
           values={draftFilters.services}
           options={defaultServiceMenuNames}
+          disabled={advancedFiltersLocked}
           onSearch={(value) => updateFilter('service_search', value)}
           onToggle={(value) => updateFilter('services', toggleArrayValue(draftFilters.services, value))}
         />
 
-        <button className="button ghost more-filter-button" type="button" onClick={() => setShowAdvanced((value) => !value)}>
+        <button className="button ghost more-filter-button" type="button" disabled={advancedFiltersLocked} onClick={() => setShowAdvanced((value) => !value)}>
           <SlidersHorizontal size={17} /> {t('city.moreFilters')}
         </button>
 
         <div className={showAdvanced ? 'advanced-filters open compact-advanced-filters' : 'advanced-filters compact-advanced-filters'}>
-          <MultiSelect title={t('filters.serviceTags')} values={draftFilters.service_tags} options={[]} onToggle={(value) => updateFilter('service_tags', toggleArrayValue(draftFilters.service_tags, value))} />
-          <TagSelect title={t('tags.title')} tags={platformTags} values={draftFilters.tag_ids} onToggle={(value) => updateFilter('tag_ids', toggleArrayValue(draftFilters.tag_ids, value))} />
+          <MultiSelect title={t('filters.serviceTags')} values={draftFilters.service_tags} options={[]} disabled={advancedFiltersLocked} onToggle={(value) => updateFilter('service_tags', toggleArrayValue(draftFilters.service_tags, value))} />
+          <TagSelect title={t('tags.title')} tags={platformTags} values={draftFilters.tag_ids} disabled={advancedFiltersLocked} onToggle={(value) => updateFilter('tag_ids', toggleArrayValue(draftFilters.tag_ids, value))} />
+        </div>
         </div>
 
         <div className="filter-actions">
           <button className="button primary" type="button" onClick={applyDraftFilters}>{t('buttons.apply')}</button>
           <button className="button" type="button" onClick={resetFilters}>{t('buttons.reset')}</button>
           <span>{t('radar.inRange', { count: radarProfiles.length })}</span>
+        </div>
+      </section>
+    );
+  }
+
+  function renderLockedFilters() {
+    const loginTarget = `/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
+    return (
+      <section className="radar-filters-section radar-filters-section-locked">
+        <div className="premium-lock-overlay">
+          <LockKeyhole size={30} />
+          <p className="eyebrow">Premium Radar Filters</p>
+          <h3>{t('clientOffice.activateTitle')}</h3>
+          <p>
+            Aktywuj konto klienta za 0,99 EUR, aby korzystać z promienia, statusu, kategorii, ceny, typu wizyty, usług i tagów premium.
+          </p>
+          <div className="premium-lock-actions">
+            <Link className="button primary" to="/dashboard">{t('clientOffice.activateCta')}</Link>
+            {!hasClientSession && <Link className="button secondary" to={loginTarget}>{t('buttons.login')}</Link>}
+          </div>
+        </div>
+
+        <div className="locked-filter-preview" aria-hidden="true">
+          <span>{t('radar.radius')} <strong>{draftFilters.radius} km</strong></span>
+          <span>{t('radar.status')}</span>
+          <span>{t('filters.category')}</span>
+          <span>{t('filters.price')}</span>
+          <span>{t('filters.visitType')}</span>
+          <span>{t('filters.services')}</span>
         </div>
       </section>
     );
@@ -432,9 +483,11 @@ export function CityPage() {
         )}
       </section>
 
-      <section className="radar-filters-section">
-        {renderFilters('desktop')}
-      </section>
+      {isClientActivated ? (
+        <section className="radar-filters-section">
+          {renderFilters('desktop')}
+        </section>
+      ) : renderLockedFilters()}
 
       <section className="radar-results-section">
         <div className="listing-toolbar radar-results-toolbar radar-results-header">
@@ -504,22 +557,22 @@ export function CityPage() {
       <div className={filtersOpen ? 'mobile-filter-sheet open' : 'mobile-filter-sheet'} role="dialog" aria-modal="true" aria-label={t('city.profileFilters')}>
         <button className="mobile-filter-backdrop" type="button" aria-label={t('city.closeFilters')} onClick={() => setFiltersOpen(false)} />
         <div className="mobile-filter-panel">
-          {renderFilters('mobile')}
+          {isClientActivated ? renderFilters('mobile') : renderLockedFilters()}
         </div>
       </div>
     </div>
   );
 }
 
-function MultiSelect({ title, values, options, onToggle }: { title: string; values: string[]; options: string[]; onToggle: (value: string) => void }) {
+function MultiSelect({ title, values, options, disabled = false, onToggle }: { title: string; values: string[]; options: string[]; disabled?: boolean; onToggle: (value: string) => void }) {
   const { option: translateOption } = useI18n();
   if (!options.length) return null;
   return (
-    <fieldset className="chip-fieldset">
+    <fieldset className="chip-fieldset" disabled={disabled}>
       <legend>{title}</legend>
       <div className="chip-grid">
         {options.slice(0, 10).map((item) => (
-          <button key={item} className={values.includes(item) ? 'chip selected' : 'chip'} type="button" onClick={() => onToggle(item)}>
+          <button key={item} className={values.includes(item) ? 'chip selected' : 'chip'} type="button" disabled={disabled} onClick={() => onToggle(item)}>
             {translateOption(item)}
           </button>
         ))}
@@ -528,20 +581,20 @@ function MultiSelect({ title, values, options, onToggle }: { title: string; valu
   );
 }
 
-function ServiceSelect({ search, selectedCount, values, options, onSearch, onToggle }: { search: string; selectedCount: number; values: string[]; options: string[]; onSearch: (value: string) => void; onToggle: (value: string) => void }) {
+function ServiceSelect({ search, selectedCount, values, options, disabled = false, onSearch, onToggle }: { search: string; selectedCount: number; values: string[]; options: string[]; disabled?: boolean; onSearch: (value: string) => void; onToggle: (value: string) => void }) {
   const { t, option: translateOption } = useI18n();
   const filteredOptions = options.filter((item) => translateOption(item).toLowerCase().includes(search.toLowerCase())).slice(0, 10);
 
   return (
-    <fieldset className="chip-fieldset service-search-filter">
+    <fieldset className="chip-fieldset service-search-filter" disabled={disabled}>
       <legend>{t('filters.services')} {selectedCount ? `(${selectedCount})` : ''}</legend>
       <label className="service-search-input" aria-label={t('filters.services')}>
         <Search size={15} />
-        <input value={search} placeholder={t('filters.searchServices')} onChange={(event) => onSearch(event.target.value)} />
+        <input value={search} placeholder={t('filters.searchServices')} disabled={disabled} onChange={(event) => onSearch(event.target.value)} />
       </label>
       <div className="chip-grid">
         {filteredOptions.map((item) => (
-          <button key={item} className={values.includes(item) ? 'chip selected' : 'chip'} type="button" onClick={() => onToggle(item)}>
+          <button key={item} className={values.includes(item) ? 'chip selected' : 'chip'} type="button" disabled={disabled} onClick={() => onToggle(item)}>
             {translateOption(item)}
           </button>
         ))}
@@ -550,13 +603,13 @@ function ServiceSelect({ search, selectedCount, values, options, onSearch, onTog
   );
 }
 
-function TagSelect({ title, values, tags, onToggle }: { title: string; values: string[]; tags: Tag[]; onToggle: (value: string) => void }) {
+function TagSelect({ title, values, tags, disabled = false, onToggle }: { title: string; values: string[]; tags: Tag[]; disabled?: boolean; onToggle: (value: string) => void }) {
   return (
-    <fieldset className="chip-fieldset premium-tag-picker">
+    <fieldset className="chip-fieldset premium-tag-picker" disabled={disabled}>
       <legend>{title}</legend>
       <div className="chip-grid">
         {tags.slice(0, 10).map((tag) => (
-          <button key={tag.id} className={values.includes(tag.id) ? 'chip selected' : 'chip'} type="button" onClick={() => onToggle(tag.id)}>
+          <button key={tag.id} className={values.includes(tag.id) ? 'chip selected' : 'chip'} type="button" disabled={disabled} onClick={() => onToggle(tag.id)}>
             {tag.label}
           </button>
         ))}
@@ -668,7 +721,8 @@ function matchesOperatorStatusFilter(profile: Profile, status: string) {
   if (status === 'all') return true;
   if (status === 'favorites') return true;
   const operatorStatus = getOperatorStatus(profile);
-  if (status === 'online' || status === 'available') return operatorStatus === 'ONLINE_NOW' || operatorStatus === 'AVAILABLE_TODAY';
+  if (status === 'online') return operatorStatus === 'ONLINE_NOW';
+  if (status === 'available') return operatorStatus === 'ONLINE_NOW' || operatorStatus === 'AVAILABLE_TODAY';
   if (status === 'busy') return operatorStatus === 'BUSY';
   if (status === 'unavailable') return operatorStatus === 'OFFLINE';
   return operatorStatus === status;
