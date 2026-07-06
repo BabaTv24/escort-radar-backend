@@ -72,6 +72,7 @@ export function CityPage() {
   const [hasClientSession, setHasClientSession] = useState(false);
   const [clientActivationState, setClientActivationState] = useState<'client_free' | 'client_activated'>('client_free');
   const marketplaceCarouselRef = useRef<HTMLDivElement | null>(null);
+  const marketplacePauseTimeoutRef = useRef<number | null>(null);
   const location = useRouterLocation();
   const { t, option } = useI18n();
 
@@ -195,6 +196,9 @@ export function CityPage() {
   );
   const topProfiles = sortedProfiles.slice(0, 12);
   const marketplaceCarouselProfiles = sortedProfiles.slice(0, 10);
+  const marketplaceCarouselSlides = marketplaceCarouselProfiles.length > 1
+    ? [...marketplaceCarouselProfiles, ...marketplaceCarouselProfiles]
+    : marketplaceCarouselProfiles;
   const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
   const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
   const categoryLabel = appliedFilters.category ? option(appliedFilters.category) : t('filters.allCategories');
@@ -204,6 +208,12 @@ export function CityPage() {
   useEffect(() => {
     marketplaceCarouselRef.current?.scrollTo({ left: 0, behavior: 'auto' });
   }, [sortMode, appliedFilters, sortedProfiles.length]);
+
+  useEffect(() => {
+    return () => {
+      if (marketplacePauseTimeoutRef.current) window.clearTimeout(marketplacePauseTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (marketplaceCarouselProfiles.length <= 1 || isMarketplaceCarouselPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -241,6 +251,22 @@ export function CityPage() {
     setFavoriteProfileIds((current) => new Set([...current, profileId]));
   }
 
+  function normalizeMarketplaceScroll() {
+    const node = marketplaceCarouselRef.current;
+    const track = node?.querySelector<HTMLElement>('.radar-marketplace-carousel-track');
+    if (!node || !track || marketplaceCarouselProfiles.length <= 1) return;
+    const loopWidth = track.scrollWidth / 2;
+    if (loopWidth <= 0) return;
+    if (node.scrollLeft >= loopWidth) node.scrollLeft -= loopWidth;
+    if (node.scrollLeft <= 0) node.scrollLeft += loopWidth;
+  }
+
+  function pauseMarketplaceTemporarily() {
+    setMarketplaceCarouselPaused(true);
+    if (marketplacePauseTimeoutRef.current) window.clearTimeout(marketplacePauseTimeoutRef.current);
+    marketplacePauseTimeoutRef.current = window.setTimeout(() => setMarketplaceCarouselPaused(false), 15000);
+  }
+
   function scrollMarketplace(direction: 'prev' | 'next') {
     const node = marketplaceCarouselRef.current;
     if (!node) return;
@@ -248,16 +274,12 @@ export function CityPage() {
     const slideWidth = firstSlide?.offsetWidth ?? 300;
     const gap = 18;
     const amount = slideWidth + gap;
-    const maxScroll = node.scrollWidth - node.clientWidth;
 
-    if (direction === 'next' && node.scrollLeft + amount >= maxScroll - 4) {
-      node.scrollTo({ left: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-      return;
-    }
-
-    if (direction === 'prev' && node.scrollLeft <= 4) {
-      node.scrollTo({ left: maxScroll, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-      return;
+    normalizeMarketplaceScroll();
+    if (direction === 'prev' && node.scrollLeft <= amount) {
+      const track = node.querySelector<HTMLElement>('.radar-marketplace-carousel-track');
+      const loopWidth = track ? track.scrollWidth / 2 : 0;
+      if (loopWidth > 0) node.scrollLeft += loopWidth;
     }
 
     node.scrollBy({
@@ -267,12 +289,12 @@ export function CityPage() {
   }
 
   function goToPreviousMarketplaceSlide() {
-    setMarketplaceCarouselPaused(true);
+    pauseMarketplaceTemporarily();
     scrollMarketplace('prev');
   }
 
   function goToNextMarketplaceSlide() {
-    setMarketplaceCarouselPaused(true);
+    pauseMarketplaceTemporarily();
     scrollMarketplace('next');
   }
 
@@ -596,10 +618,13 @@ export function CityPage() {
                 onMouseLeave={() => setMarketplaceCarouselPaused(false)}
                 onFocus={() => setMarketplaceCarouselPaused(true)}
                 onBlur={() => setMarketplaceCarouselPaused(false)}
+                onScroll={normalizeMarketplaceScroll}
+                onPointerDown={pauseMarketplaceTemporarily}
+                onTouchStart={pauseMarketplaceTemporarily}
               >
                 <div className="radar-marketplace-carousel-track profile-carousel-track">
-                  {marketplaceCarouselProfiles.map((profile) => (
-                    <div className="radar-featured-profile-card marketplace-carousel-slide profile-carousel-card" key={profile.id}>
+                  {marketplaceCarouselSlides.map((profile, index) => (
+                    <div className="radar-featured-profile-card marketplace-carousel-slide profile-carousel-card" key={`${profile.id}-${index}`}>
                       <ProfileCard profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />
                     </div>
                   ))}

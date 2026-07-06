@@ -253,35 +253,71 @@ function ProfileCarouselSection({
   actionLabel?: string;
   actionVariant?: 'button' | 'text';
 }) {
-  const [slideIndex, setSlideIndex] = useState(0);
   const [isPaused, setPaused] = useState(false);
   const carouselRef = useRef<HTMLDivElement | null>(null);
+  const pauseTimeoutRef = useRef<number | null>(null);
   const visibleProfiles = profiles.slice(0, 12);
-  const carouselProfiles = visibleProfiles.length > 5 ? [...visibleProfiles, ...visibleProfiles.slice(0, 5)] : visibleProfiles;
+  const carouselProfiles = visibleProfiles.length > 1 ? [...visibleProfiles, ...visibleProfiles] : visibleProfiles;
 
   useEffect(() => {
     if (visibleProfiles.length <= 1 || isPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const id = window.setInterval(() => {
-      setSlideIndex((current) => (current + 1) % visibleProfiles.length);
+      scrollProfileCarousel('next');
     }, 3000);
     return () => window.clearInterval(id);
   }, [isPaused, visibleProfiles.length]);
 
   useEffect(() => {
-    const carousel = carouselRef.current;
-    const target = carousel?.querySelector<HTMLElement>(`[data-profile-slide="${slideIndex}"]`);
-    if (!carousel || !target) return;
-    carousel.scrollTo({ left: target.offsetLeft, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-  }, [slideIndex]);
+    return () => {
+      if (pauseTimeoutRef.current) window.clearTimeout(pauseTimeoutRef.current);
+    };
+  }, []);
+
+  function normalizeProfileCarouselScroll() {
+    const node = carouselRef.current;
+    const track = node?.querySelector<HTMLElement>('.profile-carousel-track');
+    if (!node || !track || visibleProfiles.length <= 1) return;
+    const loopWidth = track.scrollWidth / 2;
+    if (loopWidth <= 0) return;
+    if (node.scrollLeft >= loopWidth) node.scrollLeft -= loopWidth;
+    if (node.scrollLeft <= 0) node.scrollLeft += loopWidth;
+  }
+
+  function pauseProfileCarouselTemporarily() {
+    setPaused(true);
+    if (pauseTimeoutRef.current) window.clearTimeout(pauseTimeoutRef.current);
+    pauseTimeoutRef.current = window.setTimeout(() => setPaused(false), 15000);
+  }
+
+  function scrollProfileCarousel(direction: 'prev' | 'next') {
+    const node = carouselRef.current;
+    if (!node) return;
+    const firstSlide = node.querySelector<HTMLElement>('.profile-carousel-slide');
+    const slideWidth = firstSlide?.offsetWidth ?? 300;
+    const gap = 18;
+    const amount = slideWidth + gap;
+
+    normalizeProfileCarouselScroll();
+    if (direction === 'prev' && node.scrollLeft <= amount) {
+      const track = node.querySelector<HTMLElement>('.profile-carousel-track');
+      const loopWidth = track ? track.scrollWidth / 2 : 0;
+      if (loopWidth > 0) node.scrollLeft += loopWidth;
+    }
+
+    node.scrollBy({
+      left: direction === 'next' ? amount : -amount,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    });
+  }
 
   function goToPreviousSlide() {
-    setPaused(true);
-    setSlideIndex((current) => (current === 0 ? visibleProfiles.length - 1 : current - 1));
+    pauseProfileCarouselTemporarily();
+    scrollProfileCarousel('prev');
   }
 
   function goToNextSlide() {
-    setPaused(true);
-    setSlideIndex((current) => (current + 1) % visibleProfiles.length);
+    pauseProfileCarouselTemporarily();
+    scrollProfileCarousel('next');
   }
 
   if (visibleProfiles.length === 0) return null;
@@ -318,10 +354,17 @@ function ProfileCarouselSection({
         </div>
       </div>
 
-      <div className="profile-carousel" aria-live="polite" ref={carouselRef}>
+      <div
+        className="profile-carousel"
+        aria-live="polite"
+        ref={carouselRef}
+        onScroll={normalizeProfileCarouselScroll}
+        onPointerDown={pauseProfileCarouselTemporarily}
+        onTouchStart={pauseProfileCarouselTemporarily}
+      >
         <div className="profile-carousel-track">
           {carouselProfiles.map((profile, index) => (
-            <div className="profile-carousel-card" data-profile-slide={index % visibleProfiles.length} key={`${profile.id}-${index}`}>
+            <div className="profile-carousel-card profile-carousel-slide" key={`${profile.id}-${index}`}>
               <ProfileCard profile={profile} />
             </div>
           ))}
