@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation as useRouterLocation, useParams, useSearchParams } from 'react-router-dom';
-import { LockKeyhole, RadioTower, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LockKeyhole, RadioTower, Search, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Profile, Tag } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
@@ -61,6 +61,8 @@ export function CityPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortMode, setSortMode] = useState<'best' | 'new' | 'near' | 'online'>('best');
+  const [marketplaceSlideIndex, setMarketplaceSlideIndex] = useState(0);
+  const [isMarketplaceCarouselPaused, setMarketplaceCarouselPaused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
@@ -70,6 +72,7 @@ export function CityPage() {
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
   const [hasClientSession, setHasClientSession] = useState(false);
   const [clientActivationState, setClientActivationState] = useState<'client_free' | 'client_activated'>('client_free');
+  const marketplaceCarouselRef = useRef<HTMLDivElement | null>(null);
   const location = useRouterLocation();
   const { t, option } = useI18n();
 
@@ -192,11 +195,35 @@ export function CityPage() {
     [sortedProfiles, searcherLocation, draftFilters.radius, draftFilters.availability_status]
   );
   const topProfiles = sortedProfiles.slice(0, 12);
+  const marketplaceCarouselProfiles = sortedProfiles.slice(0, 10);
+  const marketplaceCarouselSlides = marketplaceCarouselProfiles.length > 5
+    ? [...marketplaceCarouselProfiles, ...marketplaceCarouselProfiles.slice(0, 5)]
+    : marketplaceCarouselProfiles;
   const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
   const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
   const categoryLabel = appliedFilters.category ? option(appliedFilters.category) : t('filters.allCategories');
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const isClientActivated = clientActivationState === 'client_activated';
+
+  useEffect(() => {
+    setMarketplaceSlideIndex(0);
+  }, [sortMode, appliedFilters, sortedProfiles.length]);
+
+  useEffect(() => {
+    if (marketplaceCarouselProfiles.length <= 1 || isMarketplaceCarouselPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const id = window.setInterval(() => {
+      setMarketplaceSlideIndex((current) => (current + 1) % marketplaceCarouselProfiles.length);
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [isMarketplaceCarouselPaused, marketplaceCarouselProfiles.length]);
+
+  useEffect(() => {
+    const carousel = marketplaceCarouselRef.current;
+    const target = carousel?.querySelector<HTMLElement>(`[data-marketplace-slide="${marketplaceSlideIndex}"]`);
+    if (!carousel || !target) return;
+    carousel.scrollTo({ left: target.offsetLeft, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }, [marketplaceSlideIndex]);
+
   if (import.meta.env.DEV) {
     console.debug('[CityPageProfiles]', {
       apiProfiles: profiles.length,
@@ -223,6 +250,16 @@ export function CityPage() {
 
   function handleFavoriteChange(profileId: string) {
     setFavoriteProfileIds((current) => new Set([...current, profileId]));
+  }
+
+  function goToPreviousMarketplaceSlide() {
+    setMarketplaceCarouselPaused(true);
+    setMarketplaceSlideIndex((current) => (current === 0 ? marketplaceCarouselProfiles.length - 1 : current - 1));
+  }
+
+  function goToNextMarketplaceSlide() {
+    setMarketplaceCarouselPaused(true);
+    setMarketplaceSlideIndex((current) => (current + 1) % marketplaceCarouselProfiles.length);
   }
 
   function applyDraftFilters() {
@@ -528,12 +565,31 @@ export function CityPage() {
         {!loading && !error && (
           sortedProfiles.length ? (
             <>
-              <div id="profiles" className={`radar-results-list radar-results-grid cards-grid marketplace-grid premium-profile-grid ${sortedProfiles.length === 1 ? 'single-result-grid' : ''}`}>
-                {sortedProfiles.slice(0, 10).map((profile) => (
-                  <div className="radar-featured-profile-card" key={profile.id}>
-                    <ProfileCard profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />
-                  </div>
-                ))}
+              <div className="radar-marketplace-carousel-controls profile-carousel-controls">
+                <button type="button" aria-label="Poprzednie profile marketplace" onClick={goToPreviousMarketplaceSlide}>
+                  <ChevronLeft size={18} />
+                </button>
+                <button type="button" aria-label="Następne profile marketplace" onClick={goToNextMarketplaceSlide}>
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+              <div
+                id="profiles"
+                className={`radar-results-list radar-results-grid radar-marketplace-carousel profile-carousel ${sortedProfiles.length === 1 ? 'single-result-grid' : ''}`}
+                aria-live="polite"
+                ref={marketplaceCarouselRef}
+                onMouseEnter={() => setMarketplaceCarouselPaused(true)}
+                onMouseLeave={() => setMarketplaceCarouselPaused(false)}
+                onFocus={() => setMarketplaceCarouselPaused(true)}
+                onBlur={() => setMarketplaceCarouselPaused(false)}
+              >
+                <div className="radar-marketplace-carousel-track profile-carousel-track">
+                  {marketplaceCarouselSlides.map((profile, index) => (
+                    <div className="radar-featured-profile-card profile-carousel-card" data-marketplace-slide={index % marketplaceCarouselProfiles.length} key={`${profile.id}-${index}`}>
+                      <ProfileCard profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />
+                    </div>
+                  ))}
+                </div>
               </div>
               {sortedProfiles.length === 1 && (
                 <div className="premium-empty-state invite-empty-state">

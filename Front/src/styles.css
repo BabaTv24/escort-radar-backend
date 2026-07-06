@@ -9094,6 +9094,114 @@ textarea:focus {
     linear-gradient(180deg, rgba(32,27,18,.98), rgba(12,12,11,.96)) !important;
 }
 
+.profile-carousel-card .profile-card,
+.profile-carousel-section .profile-card {
+  width: 100%;
+  min-width: 0;
+}
+
+.radar-city-page .radar-marketplace-carousel-controls {
+  justify-content: flex-end;
+}
+
+.radar-city-page .radar-marketplace-carousel {
+  display: block !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.radar-city-page .radar-marketplace-carousel-track {
+  width: max-content;
+  min-width: 100%;
+}
+
+.radar-city-page .radar-marketplace-carousel .radar-featured-profile-card {
+  flex: 0 0 calc((100% - 56px) / 5);
+  width: calc((100% - 56px) / 5);
+  min-width: 220px;
+  scroll-snap-align: start;
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-profile-card {
+  height: 100%;
+}
+
+@media (max-width: 1280px) {
+  .profile-carousel-card,
+  .radar-city-page .radar-marketplace-carousel .radar-featured-profile-card {
+    flex-basis: calc((100% - 42px) / 4);
+    width: calc((100% - 42px) / 4);
+  }
+}
+
+@media (max-width: 1119px) {
+  .profile-carousel-card,
+  .radar-city-page .radar-marketplace-carousel .radar-featured-profile-card {
+    flex-basis: calc((100% - 28px) / 3);
+    width: calc((100% - 28px) / 3);
+  }
+}
+
+@media (max-width: 820px) {
+  .section-heading-row {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .profile-carousel-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .profile-carousel-card,
+  .radar-city-page .radar-marketplace-carousel .radar-featured-profile-card {
+    flex-basis: calc((100% - 14px) / 2);
+    width: calc((100% - 14px) / 2);
+  }
+}
+
+@media (max-width: 767px) {
+  .profile-carousel,
+  .radar-city-page .radar-marketplace-carousel {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .profile-carousel-track,
+  .radar-marketplace-carousel-track {
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+    width: max-content;
+    min-width: 100%;
+    transform: none !important;
+    transition: none;
+  }
+
+  .profile-carousel-card,
+  .radar-city-page .radar-marketplace-carousel .radar-featured-profile-card {
+    flex: 0 0 min(86vw, 340px);
+    width: min(86vw, 340px);
+    min-width: min(86vw, 340px);
+    scroll-snap-align: center;
+  }
+
+  .profile-carousel-card .profile-card,
+  .profile-carousel-section .profile-card,
+  .radar-city-page .radar-marketplace-carousel .profile-card {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .profile-carousel-actions {
+    align-items: stretch;
+  }
+}
+
 .live-radar-section .radar-panel.compact {
   grid-template-columns: minmax(290px, .76fr) minmax(560px, 1.24fr);
   align-items: center;
@@ -9574,6 +9682,40 @@ textarea:focus {
 
 .radar-city-page .radar-featured-profile-card {
   min-width: 0;
+}
+
+.radar-city-page .radar-results-grid.radar-marketplace-carousel {
+  display: block !important;
+  grid-template-columns: none !important;
+  gap: 0 !important;
+}
+
+.radar-city-page .radar-results-grid.radar-marketplace-carousel .radar-featured-profile-card {
+  flex: 0 0 calc((100% - 56px) / 5);
+  width: calc((100% - 56px) / 5);
+  min-width: 220px;
+}
+
+@media (max-width: 1280px) {
+  .radar-city-page .radar-results-grid.radar-marketplace-carousel .radar-featured-profile-card {
+    flex-basis: calc((100% - 42px) / 4);
+    width: calc((100% - 42px) / 4);
+  }
+}
+
+@media (max-width: 1119px) {
+  .radar-city-page .radar-results-grid.radar-marketplace-carousel .radar-featured-profile-card {
+    flex-basis: calc((100% - 28px) / 3);
+    width: calc((100% - 28px) / 3);
+  }
+}
+
+@media (max-width: 767px) {
+  .radar-city-page .radar-results-grid.radar-marketplace-carousel .radar-featured-profile-card {
+    flex: 0 0 min(86vw, 340px);
+    width: min(86vw, 340px);
+    min-width: min(86vw, 340px);
+  }
 }
 
 .footer-presection.premium-footer-info {
