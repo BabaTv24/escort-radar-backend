@@ -257,7 +257,6 @@ function ProfileCarouselSection({
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const pauseTimeoutRef = useRef<number | null>(null);
   const visibleProfiles = profiles.slice(0, 12);
-  const carouselProfiles = visibleProfiles.length > 1 ? [...visibleProfiles, ...visibleProfiles] : visibleProfiles;
 
   useEffect(() => {
     if (visibleProfiles.length <= 1 || isPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -273,16 +272,6 @@ function ProfileCarouselSection({
     };
   }, []);
 
-  function normalizeProfileCarouselScroll() {
-    const node = carouselRef.current;
-    const track = node?.querySelector<HTMLElement>('.profile-carousel-track');
-    if (!node || !track || visibleProfiles.length <= 1) return;
-    const loopWidth = track.scrollWidth / 2;
-    if (loopWidth <= 0) return;
-    if (node.scrollLeft >= loopWidth) node.scrollLeft -= loopWidth;
-    if (node.scrollLeft <= 0) node.scrollLeft += loopWidth;
-  }
-
   function pauseProfileCarouselTemporarily() {
     setPaused(true);
     if (pauseTimeoutRef.current) window.clearTimeout(pauseTimeoutRef.current);
@@ -296,12 +285,16 @@ function ProfileCarouselSection({
     const slideWidth = firstSlide?.offsetWidth ?? 300;
     const gap = 18;
     const amount = slideWidth + gap;
+    const maxScroll = node.scrollWidth - node.clientWidth;
 
-    normalizeProfileCarouselScroll();
-    if (direction === 'prev' && node.scrollLeft <= amount) {
-      const track = node.querySelector<HTMLElement>('.profile-carousel-track');
-      const loopWidth = track ? track.scrollWidth / 2 : 0;
-      if (loopWidth > 0) node.scrollLeft += loopWidth;
+    if (direction === 'next' && node.scrollLeft + amount >= maxScroll - 4) {
+      node.scrollTo({ left: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      return;
+    }
+
+    if (direction === 'prev' && node.scrollLeft <= 4) {
+      node.scrollTo({ left: maxScroll, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      return;
     }
 
     node.scrollBy({
@@ -358,13 +351,12 @@ function ProfileCarouselSection({
         className="profile-carousel"
         aria-live="polite"
         ref={carouselRef}
-        onScroll={normalizeProfileCarouselScroll}
         onPointerDown={pauseProfileCarouselTemporarily}
         onTouchStart={pauseProfileCarouselTemporarily}
       >
         <div className="profile-carousel-track">
-          {carouselProfiles.map((profile, index) => (
-            <div className="profile-carousel-card profile-carousel-slide" key={`${profile.id}-${index}`}>
+          {visibleProfiles.map((profile) => (
+            <div className="profile-carousel-card profile-carousel-slide" key={profile.id}>
               <ProfileCard profile={profile} />
             </div>
           ))}

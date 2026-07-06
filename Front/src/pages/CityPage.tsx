@@ -196,9 +196,6 @@ export function CityPage() {
   );
   const topProfiles = sortedProfiles.slice(0, 12);
   const marketplaceCarouselProfiles = sortedProfiles.slice(0, 10);
-  const marketplaceCarouselSlides = marketplaceCarouselProfiles.length > 1
-    ? [...marketplaceCarouselProfiles, ...marketplaceCarouselProfiles]
-    : marketplaceCarouselProfiles;
   const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
   const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
   const categoryLabel = appliedFilters.category ? option(appliedFilters.category) : t('filters.allCategories');
@@ -251,16 +248,6 @@ export function CityPage() {
     setFavoriteProfileIds((current) => new Set([...current, profileId]));
   }
 
-  function normalizeMarketplaceScroll() {
-    const node = marketplaceCarouselRef.current;
-    const track = node?.querySelector<HTMLElement>('.radar-marketplace-carousel-track');
-    if (!node || !track || marketplaceCarouselProfiles.length <= 1) return;
-    const loopWidth = track.scrollWidth / 2;
-    if (loopWidth <= 0) return;
-    if (node.scrollLeft >= loopWidth) node.scrollLeft -= loopWidth;
-    if (node.scrollLeft <= 0) node.scrollLeft += loopWidth;
-  }
-
   function pauseMarketplaceTemporarily() {
     setMarketplaceCarouselPaused(true);
     if (marketplacePauseTimeoutRef.current) window.clearTimeout(marketplacePauseTimeoutRef.current);
@@ -274,12 +261,16 @@ export function CityPage() {
     const slideWidth = firstSlide?.offsetWidth ?? 300;
     const gap = 18;
     const amount = slideWidth + gap;
+    const maxScroll = node.scrollWidth - node.clientWidth;
 
-    normalizeMarketplaceScroll();
-    if (direction === 'prev' && node.scrollLeft <= amount) {
-      const track = node.querySelector<HTMLElement>('.radar-marketplace-carousel-track');
-      const loopWidth = track ? track.scrollWidth / 2 : 0;
-      if (loopWidth > 0) node.scrollLeft += loopWidth;
+    if (direction === 'next' && node.scrollLeft + amount >= maxScroll - 4) {
+      node.scrollTo({ left: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      return;
+    }
+
+    if (direction === 'prev' && node.scrollLeft <= 4) {
+      node.scrollTo({ left: maxScroll, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      return;
     }
 
     node.scrollBy({
@@ -618,13 +609,12 @@ export function CityPage() {
                 onMouseLeave={() => setMarketplaceCarouselPaused(false)}
                 onFocus={() => setMarketplaceCarouselPaused(true)}
                 onBlur={() => setMarketplaceCarouselPaused(false)}
-                onScroll={normalizeMarketplaceScroll}
                 onPointerDown={pauseMarketplaceTemporarily}
                 onTouchStart={pauseMarketplaceTemporarily}
               >
                 <div className="radar-marketplace-carousel-track profile-carousel-track">
-                  {marketplaceCarouselSlides.map((profile, index) => (
-                    <div className="radar-featured-profile-card marketplace-carousel-slide profile-carousel-card" key={`${profile.id}-${index}`}>
+                  {marketplaceCarouselProfiles.map((profile) => (
+                    <div className="radar-featured-profile-card marketplace-carousel-slide profile-carousel-card" key={profile.id}>
                       <ProfileCard profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />
                     </div>
                   ))}
