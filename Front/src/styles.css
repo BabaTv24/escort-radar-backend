@@ -10051,3 +10051,92 @@ textarea:focus {
     url("/hero-radar-background.png") center / cover no-repeat,
     #050505 !important;
 }
+
+/* Compact profile sliders: landing and city marketplace. */
+.profile-carousel-card,
+.radar-city-page .radar-marketplace-carousel .radar-featured-profile-card,
+.radar-city-page .radar-results-grid.radar-marketplace-carousel .radar-featured-profile-card {
+  flex: 0 0 clamp(240px, 19vw, 290px) !important;
+  width: clamp(240px, 19vw, 290px) !important;
+  min-width: clamp(240px, 19vw, 290px) !important;
+  max-width: 300px;
+}
+
+.profile-carousel-section .profile-card,
+.profile-carousel-card .profile-card,
+.radar-city-page .radar-marketplace-carousel .profile-card {
+  width: 100%;
+  max-width: 300px;
+  min-width: 0;
+}
+
+.profile-carousel-section .premium-profile-card .card-image,
+.profile-carousel-card .premium-profile-card .card-image,
+.radar-city-page .radar-marketplace-carousel .premium-profile-card .card-image {
+  aspect-ratio: 4 / 4.85;
+  max-height: 360px;
+  overflow: hidden;
+}
+
+.profile-carousel-section .premium-profile-card .card-image img,
+.profile-carousel-card .premium-profile-card .card-image img,
+.radar-city-page .radar-marketplace-carousel .premium-profile-card .card-image img {
+  max-height: 360px;
+  object-fit: cover;
+}
+
+.profile-carousel-section .premium-profile-card .card-body,
+.radar-city-page .radar-marketplace-carousel .premium-profile-card .card-body {
+  padding: .66rem;
+}
+
+.profile-carousel-section .premium-profile-card h3,
+.radar-city-page .radar-marketplace-carousel .premium-profile-card h3 {
+  font-size: clamp(.94rem, 1vw, 1.06rem);
+}
+
+.profile-carousel-section .premium-card-actions .button,
+.radar-city-page .radar-marketplace-carousel .premium-card-actions .button {
+  min-height: 2.35rem;
+}
+
+@media (max-width: 767px) {
+  .profile-carousel-section,
+  .radar-city-page .radar-results-section {
+    overflow: hidden;
+  }
+
+  .profile-carousel,
+  .radar-city-page .radar-marketplace-carousel {
+    padding-bottom: calc(var(--er-mobile-nav-height, 72px) + env(safe-area-inset-bottom) + .75rem);
+  }
+
+  .profile-carousel-card,
+  .radar-city-page .radar-marketplace-carousel .radar-featured-profile-card,
+  .radar-city-page .radar-results-grid.radar-marketplace-carousel .radar-featured-profile-card {
+    flex: 0 0 min(84vw, 320px) !important;
+    width: min(84vw, 320px) !important;
+    min-width: min(84vw, 320px) !important;
+    max-width: 320px;
+    scroll-snap-align: center;
+  }
+
+  .profile-carousel-section .profile-card,
+  .profile-carousel-card .profile-card,
+  .radar-city-page .radar-marketplace-carousel .profile-card {
+    max-width: 320px;
+  }
+
+  .profile-carousel-section .premium-profile-card .card-image,
+  .profile-carousel-card .premium-profile-card .card-image,
+  .radar-city-page .radar-marketplace-carousel .premium-profile-card .card-image {
+    aspect-ratio: 4 / 4.75;
+    max-height: 400px;
+  }
+
+  .profile-carousel-section .premium-profile-card .card-image img,
+  .profile-carousel-card .premium-profile-card .card-image img,
+  .radar-city-page .radar-marketplace-carousel .premium-profile-card .card-image img {
+    max-height: 400px;
+  }
+}

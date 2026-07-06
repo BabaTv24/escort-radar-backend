@@ -1,4 +1,5 @@
-import { Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Route, Routes, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
 import { CityPage } from './pages/CityPage';
@@ -20,6 +21,7 @@ import { AgeGate } from './components/AgeGate';
 export function App() {
   return (
     <AgeGate>
+      <ScrollToTop />
       <Routes>
         <Route path="/admin-access" element={<AdminAccessPage />} />
         <Route path="/admin/login" element={<AdminPage />} />
@@ -51,4 +53,14 @@ export function App() {
       </Routes>
     </AgeGate>
   );
+}
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [pathname]);
+
+  return null;
 }
