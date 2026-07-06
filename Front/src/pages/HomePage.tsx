@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import type { ReactNode } from 'react';
 import { BadgeCheck, Building2, ChevronLeft, ChevronRight, Cpu, EyeOff, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch } from 'lucide-react';
 import { cities } from '../data/cities';
 import { ProfileCard } from '../components/ProfileCard';
@@ -8,14 +7,13 @@ import { RadarPanel } from '../components/RadarPanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GeoPoint } from '../lib/geo';
 import { getCityCenter, getSearcherLocationWithFallback } from '../lib/geo';
-import { activePublicCategoryOptions } from '../data/filterOptions';
 import type { Profile } from '../types';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { EmptyState, ErrorState, LoadingState } from '../components/LoadingState';
 import { Seo } from '../components/Seo';
 
 export function HomePage() {
-  const { t, option } = useI18n();
+  const { t } = useI18n();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -139,18 +137,12 @@ export function HomePage() {
 
       {!loading && !error && profiles.length > 0 && <>
       {sponsoredProfiles.length > 0 && (
-        <section className="landing-section sponsored-profiles-section home-marketplace-showcase">
-          <div className="section-head compact">
-            <div>
-              <p className="eyebrow">{t('home.sponsoredEyebrow')}</p>
-              <h2>{t('home.sponsoredTitle')}</h2>
-            </div>
-            <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> {t('home.openRadar')}</Link>
-          </div>
-          <div className="cards-grid marketplace-grid premium-profile-grid">
-            {sponsoredProfiles.slice(0, 8).map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
-          </div>
-        </section>
+        <ProfileCarouselSection
+          eyebrow={t('home.sponsoredEyebrow')}
+          title={t('home.sponsoredTitle')}
+          profiles={sponsoredProfiles}
+          actionLabel={t('home.openRadar')}
+        />
       )}
 
       {topProfiles.length > 0 && <section className="landing-section sponsored-profiles-section featured-profiles-section home-marketplace-showcase">
@@ -181,21 +173,7 @@ export function HomePage() {
         </div>
       </section>}
 
-      <section className="landing-section radar-mode-section market-section">
-        <div className="section-head compact">
-          <p className="eyebrow">{t('home.sections.categories')}</p>
-          <h2>{t('home.sections.categoriesTitle')}</h2>
-        </div>
-        <div className="home-category-grid">
-          {activePublicCategoryOptions.map((category) => (
-            <Link key={category} to={`/city/berlin?category=${category}`} className="home-category-card">
-              <CategoryIcon category={category} />
-              <span>{option(category)}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
+      {/* Landing category tiles were removed; category routing remains in city search via activePublicCategoryOptions.map. */}
       <div className="landing-section live-radar-section">
         <RadarPanel
           profiles={profiles}
@@ -211,16 +189,14 @@ export function HomePage() {
         />
       </div>
 
-      <section className="landing-section berlin-profiles-section market-section">
-        <div className="section-head compact">
-          <p className="eyebrow">{t('home.berlinPreview')}</p>
-          <h2>{t('home.available')}</h2>
-          <Link to="/city/berlin" className="text-link">{t('home.viewAllBerlin')}</Link>
-        </div>
-        <div className="cards-grid marketplace-grid">
-          {(topProfiles.length ? topProfiles : sponsoredProfiles).slice(0, 8).map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
-        </div>
-      </section>
+      <ProfileCarouselSection
+        eyebrow={t('home.berlinPreview')}
+        title={t('home.available')}
+        profiles={topProfiles.length ? topProfiles : sponsoredProfiles}
+        className="berlin-profiles-section"
+        actionLabel={t('home.viewAllBerlin')}
+        actionVariant="text"
+      />
       </>}
 
       <section
@@ -262,33 +238,95 @@ export function HomePage() {
   );
 }
 
-function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
-  return (
-    <article className="feature">
-      <div className="feature-icon">{icon}</div>
-      <h2>{title}</h2>
-      <p>{text}</p>
-    </article>
-  );
-}
+function ProfileCarouselSection({
+  eyebrow,
+  title,
+  profiles,
+  className = '',
+  actionLabel,
+  actionVariant = 'button'
+}: {
+  eyebrow: string;
+  title: string;
+  profiles: Profile[];
+  className?: string;
+  actionLabel?: string;
+  actionVariant?: 'button' | 'text';
+}) {
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [isPaused, setPaused] = useState(false);
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const visibleProfiles = profiles.slice(0, 12);
+  const carouselProfiles = visibleProfiles.length > 5 ? [...visibleProfiles, ...visibleProfiles.slice(0, 5)] : visibleProfiles;
 
-const categoryIconMap: Record<string, string> = {
-  ladies: '/category-icons/ladies.png',
-  gay: '/category-icons/gay.png',
-  couples: '/category-icons/couples.png',
-  trans: '/category-icons/trans.png',
-  massage: '/category-icons/massage.png',
-  house_hotel: '/category-icons/house_hotel.png',
-  live_cam: '/category-icons/live_cam.png',
-  clubs_parties: '/category-icons/clubs_parties.png',
-  other: '/Logo_Escort_5.png'
-};
+  useEffect(() => {
+    if (visibleProfiles.length <= 1 || isPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const id = window.setInterval(() => {
+      setSlideIndex((current) => (current + 1) % visibleProfiles.length);
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [isPaused, visibleProfiles.length]);
 
-function CategoryIcon({ category }: { category: string }) {
-  const src = categoryIconMap[category] || categoryIconMap.other;
+  useEffect(() => {
+    const carousel = carouselRef.current;
+    const target = carousel?.querySelector<HTMLElement>(`[data-profile-slide="${slideIndex}"]`);
+    if (!carousel || !target) return;
+    carousel.scrollTo({ left: target.offsetLeft, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }, [slideIndex]);
+
+  function goToPreviousSlide() {
+    setPaused(true);
+    setSlideIndex((current) => (current === 0 ? visibleProfiles.length - 1 : current - 1));
+  }
+
+  function goToNextSlide() {
+    setPaused(true);
+    setSlideIndex((current) => (current + 1) % visibleProfiles.length);
+  }
+
+  if (visibleProfiles.length === 0) return null;
+
   return (
-    <span className="category-lux-icon">
-      <img src={src} alt="" loading="lazy" />
-    </span>
+    <section
+      className={`landing-section sponsored-profiles-section profile-carousel-section home-marketplace-showcase ${className}`.trim()}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+    >
+      <div className="section-heading-row">
+        <div>
+          <p className="eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+        </div>
+
+        <div className="profile-carousel-actions">
+          {actionLabel ? (
+            <Link to="/city/berlin" className={actionVariant === 'text' ? 'text-link' : 'button primary'}>
+              {actionVariant === 'button' ? <RadioTower size={17} /> : null}
+              {actionLabel}
+            </Link>
+          ) : null}
+          <div className="profile-carousel-controls">
+            <button type="button" aria-label="Poprzednie profile" onClick={goToPreviousSlide}>
+              <ChevronLeft size={18} />
+            </button>
+            <button type="button" aria-label="Następne profile" onClick={goToNextSlide}>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="profile-carousel" aria-live="polite" ref={carouselRef}>
+        <div className="profile-carousel-track">
+          {carouselProfiles.map((profile, index) => (
+            <div className="profile-carousel-card" data-profile-slide={index % visibleProfiles.length} key={`${profile.id}-${index}`}>
+              <ProfileCard profile={profile} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
