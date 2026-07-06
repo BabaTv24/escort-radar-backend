@@ -45,6 +45,7 @@ export function ProfilePage() {
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [profileAccess, setProfileAccess] = useState<ProfileAccess | null>(null);
+  const [profileAccessChecked, setProfileAccessChecked] = useState(false);
   const [accessMessage, setAccessMessage] = useState('');
   const [favoriteSaved, setFavoriteSaved] = useState(false);
   const [activationBusy, setActivationBusy] = useState(false);
@@ -54,6 +55,8 @@ export function ProfilePage() {
   useEffect(() => {
     setError('');
     setProfile(null);
+    setProfileAccess(null);
+    setProfileAccessChecked(false);
     api.profile(id)
       .then(async (data) => {
         const mapped = mapApiProfileToPublicProfile(data.profile);
@@ -67,7 +70,10 @@ export function ProfilePage() {
         if (token) {
           api.profileAccess(token, id)
             .then((accessData) => setProfileAccess(accessData.access))
-            .catch(() => setProfileAccess(null));
+            .catch(() => setProfileAccess(null))
+            .finally(() => setProfileAccessChecked(true));
+        } else {
+          setProfileAccessChecked(true);
         }
       })
       .catch((err) => {
@@ -79,6 +85,7 @@ export function ProfilePage() {
   if (!profile) return <div className="page narrow"><LoadingState /></div>;
 
   const activated = profileAccess?.client_state === 'client_activated';
+  const canUsePremiumProfileFeatures = activated;
   const galleryImages = activated && profileAccess?.full_gallery?.length ? profileAccess.full_gallery : profile.profile_images || [];
   const priceFrom = getPriceFrom(profile, t);
   const contactFallback = t('profile.contactMissing');
@@ -305,60 +312,75 @@ export function ProfilePage() {
             )}
           </section>
 
-          <section className="market-section" id="booking">
-            <div className="market-section-heading">
-              <p className="eyebrow">{t('profile.booking')}</p>
-              <h2>{t('profile.sendBookingRequest')}</h2>
-            </div>
-            <form onSubmit={submitBooking} className="market-booking-form">
-              <input name="email" type="email" placeholder={t('form.email')} required />
-              <input name="date" type="date" aria-label={t('form.date')} required />
-              <input name="time" type="time" aria-label={t('form.time')} required />
-              <select name="duration" defaultValue="60">
-                <option value="60">60 min</option>
-                <option value="120">120 min</option>
-                <option value="240">240 min</option>
-              </select>
-              <textarea name="message" placeholder={t('form.message')} />
-              <button className="button primary" type="submit">{t('buttons.sendBooking')}</button>
-              {bookingMessage && <p className="success">{bookingMessage}</p>}
-            </form>
-          </section>
+          {canUsePremiumProfileFeatures ? (
+            <>
+              <section className="market-section" id="booking">
+                <div className="market-section-heading">
+                  <p className="eyebrow">{t('profile.booking')}</p>
+                  <h2>{t('profile.sendBookingRequest')}</h2>
+                </div>
+                <form onSubmit={submitBooking} className="market-booking-form">
+                  <input name="email" type="email" placeholder={t('form.email')} required />
+                  <input name="date" type="date" aria-label={t('form.date')} required />
+                  <input name="time" type="time" aria-label={t('form.time')} required />
+                  <select name="duration" defaultValue="60">
+                    <option value="60">60 min</option>
+                    <option value="120">120 min</option>
+                    <option value="240">240 min</option>
+                  </select>
+                  <textarea name="message" placeholder={t('form.message')} />
+                  <button className="button primary" type="submit">{t('buttons.sendBooking')}</button>
+                  {bookingMessage && <p className="success">{bookingMessage}</p>}
+                </form>
+              </section>
 
-          <section className="market-section similar-profiles">
-            <div className="market-section-heading">
-              <p className="eyebrow">{t('profile.nearby')}</p>
-              <h2>{t('profile.similarProfiles')}</h2>
-            </div>
-            <div className="similar-profile-grid">
-              {similarProfiles.length ? similarProfiles.map((item) => (
-                <a key={item.id} href={`/profile/${item.id}`}>
-                  {item.profile_images?.[0]?.public_url && <img src={item.profile_images[0].public_url} alt="" loading="lazy" />}
-                  <strong>{item.display_name}</strong>
-                  <span>{item.area || item.city} - {getPriceFrom(item, t)}</span>
-                </a>
-              )) : <div className="market-empty-state"><p>{t('profile.noSimilarProfiles')}</p></div>}
-            </div>
-          </section>
+              <section className="market-section similar-profiles">
+                <div className="market-section-heading">
+                  <p className="eyebrow">{t('profile.nearby')}</p>
+                  <h2>{t('profile.similarProfiles')}</h2>
+                </div>
+                <div className="similar-profile-grid">
+                  {similarProfiles.length ? similarProfiles.map((item) => (
+                    <a key={item.id} href={`/profile/${item.id}`}>
+                      {item.profile_images?.[0]?.public_url && <img src={item.profile_images[0].public_url} alt="" loading="lazy" />}
+                      <strong>{item.display_name}</strong>
+                      <span>{item.area || item.city} - {getPriceFrom(item, t)}</span>
+                    </a>
+                  )) : <div className="market-empty-state"><p>{t('profile.noSimilarProfiles')}</p></div>}
+                </div>
+              </section>
 
-          <section className="market-section report-section">
-            <div className="market-section-heading">
-              <p className="eyebrow">{t('profile.safety')}</p>
-              <h2>{t('profile.reportProfile')}</h2>
-            </div>
-            <form onSubmit={submitReport} className="market-booking-form">
-              <input name="email" type="email" placeholder={t('form.emailOptional')} />
-              <select name="reason" required>
-                <option value="policy concern">{t('profile.reportReasonPolicy')}</option>
-                <option value="suspected illegal content">{t('profile.reportReasonIllegal')}</option>
-                <option value="non-consensual data">{t('profile.reportReasonData')}</option>
-                <option value="other">{t('profile.reportReasonOther')}</option>
-              </select>
-              <textarea name="message" placeholder={t('profile.reportDetails')} />
-              <button className="button" type="submit"><Flag size={16} /> {t('buttons.submitReport')}</button>
-              {reportMessage && <p className="success">{reportMessage}</p>}
-            </form>
-          </section>
+              <section className="market-section report-section">
+                <div className="market-section-heading">
+                  <p className="eyebrow">{t('profile.safety')}</p>
+                  <h2>{t('profile.reportProfile')}</h2>
+                </div>
+                <form onSubmit={submitReport} className="market-booking-form">
+                  <input name="email" type="email" placeholder={t('form.emailOptional')} />
+                  <select name="reason" required>
+                    <option value="policy concern">{t('profile.reportReasonPolicy')}</option>
+                    <option value="suspected illegal content">{t('profile.reportReasonIllegal')}</option>
+                    <option value="non-consensual data">{t('profile.reportReasonData')}</option>
+                    <option value="other">{t('profile.reportReasonOther')}</option>
+                  </select>
+                  <textarea name="message" placeholder={t('profile.reportDetails')} />
+                  <button className="button" type="submit"><Flag size={16} /> {t('buttons.submitReport')}</button>
+                  {reportMessage && <p className="success">{reportMessage}</p>}
+                </form>
+              </section>
+            </>
+          ) : profileAccessChecked ? (
+            <section className="market-section profile-premium-upsell">
+              <div className="market-lock-card">
+                <LockKeyhole size={18} />
+                <div>
+                  <strong>{t('profile.premiumFeaturesLockedTitle')}</strong>
+                  <p>{t('profile.premiumFeaturesLockedText')}</p>
+                </div>
+                <button className="button primary" type="button" onClick={startClientActivation}>{t('profile.activateClient')}</button>
+              </div>
+            </section>
+          ) : null}
         </main>
 
         <aside className="market-contact-panel">
@@ -381,7 +403,7 @@ export function ProfilePage() {
           <div className="market-contact-actions">
             <button className="button primary" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={16} /> {t('nav.messages')}</button>
             <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={16} /> {t('profile.call')}</button>
-            <a href="#booking" className="button"><CalendarDays size={16} /> {t('profile.book')}</a>
+            {canUsePremiumProfileFeatures && <a href="#booking" className="button"><CalendarDays size={16} /> {t('profile.book')}</a>}
             <button className="button" type="button" disabled={favoriteSaved} onClick={toggleFavorite}><Heart size={16} /> {favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</button>
             <button className="button" type="button" onClick={activated ? sendGift : startClientActivation}><Gift size={16} /> {t('profile.gift')}</button>
             <button className="button" type="button" onClick={() => setAccessMessage(activated ? t('profile.liveCamAvailable') : t('profile.liveCamLocked'))}><Video size={16} /> {t('profile.live')}</button>
@@ -415,7 +437,7 @@ export function ProfilePage() {
       <nav className="profile-floating-cta">
         <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : startClientActivation()}><MessageCircle size={17} /> {t('nav.messages')}</button>
         <button type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : startClientActivation()}><Phone size={17} /> {t('profile.call')}</button>
-        <a href="#booking"><CalendarDays size={17} /> {t('profile.book')}</a>
+        {canUsePremiumProfileFeatures && <a href="#booking"><CalendarDays size={17} /> {t('profile.book')}</a>}
       </nav>
     </div>
   );

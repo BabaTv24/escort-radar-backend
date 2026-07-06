@@ -1102,6 +1102,8 @@
   "profile.unlockGalleryText": "Nach Client-Aktivierung mit Coins freischalten.",
   "profile.unlockWithCoins": "Mit Coins freischalten",
   "profile.activateClient": "0,99 EUR aktivieren",
+  "profile.premiumFeaturesLockedTitle": "Premium-Profilfunktionen",
+  "profile.premiumFeaturesLockedText": "Aktiviere dein Konto fuer 0,99 EUR, um Buchungen und Premium-Funktionen freizuschalten.",
   "profile.booking": "Buchung",
   "profile.sendBookingRequest": "Buchungsanfrage senden",
   "profile.nearby": "In der Nähe",

@@ -1102,6 +1102,8 @@
   "profile.unlockGalleryText": "Odblokuj Coins po aktywacji klienta.",
   "profile.unlockWithCoins": "Odblokuj Coins",
   "profile.activateClient": "Aktywuj 0,99 EUR",
+  "profile.premiumFeaturesLockedTitle": "Funkcje premium profilu",
+  "profile.premiumFeaturesLockedText": "Aktywuj konto za 0,99 EUR, aby odblokowac rezerwacje i funkcje premium.",
   "profile.booking": "Rezerwacja",
   "profile.sendBookingRequest": "Wyślij request rezerwacji",
   "profile.nearby": "W pobliżu",
