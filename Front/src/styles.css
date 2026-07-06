@@ -7936,6 +7936,58 @@ textarea:focus-visible,
   gap: .7rem;
 }
 
+.radar-city-page .radar-search-bar {
+  width: 100%;
+  max-width: 880px;
+  justify-self: start;
+}
+
+.radar-city-page .radar-search-bar.compact .global-search-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(160px, 210px)
+    minmax(160px, 230px)
+    minmax(190px, 260px)
+    minmax(120px, 150px);
+  gap: 10px;
+  align-items: end;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.radar-city-page .radar-search-bar label {
+  min-width: 0;
+  gap: .28rem;
+}
+
+.radar-city-page .radar-search-bar label span {
+  color: rgba(244,215,127,.78);
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.radar-city-page .radar-search-bar select,
+.radar-city-page .radar-search-bar input {
+  min-width: 0;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 34px 0 12px;
+  border-color: rgba(244,215,127,.18);
+  border-radius: 12px;
+  background-color: rgba(8,8,7,.78);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 10px 28px rgba(0,0,0,.16);
+  font-size: .9rem;
+}
+
+.radar-city-page .radar-search-bar .button {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
 .radar-search-stats {
   grid-column: 2;
   grid-row: 1;
@@ -9888,6 +9940,22 @@ textarea:focus {
   }
 }
 
+@media (max-width: 900px) {
+  .radar-city-page .radar-search-bar {
+    max-width: 100%;
+  }
+
+  .radar-city-page .radar-search-bar.compact .global-search-grid {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .radar-city-page .radar-search-bar .button {
+    justify-content: center;
+  }
+}
+
 @media (max-width: 720px) {
   .radar-city-page {
     width: min(100%, calc(100% - 12px));
@@ -9898,6 +9966,32 @@ textarea:focus {
   .radar-city-page .radar-filters-section,
   .radar-city-page .radar-results-section {
     padding: .75rem;
+  }
+
+  .radar-city-page .radar-city-header {
+    padding: .75rem;
+    overflow: hidden;
+  }
+
+  .radar-city-page .radar-search-controls,
+  .radar-city-page .radar-search-bar,
+  .radar-city-page .radar-search-bar.compact .global-search-grid {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .radar-city-page .radar-search-bar.compact .global-search-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .radar-city-page .radar-search-bar select,
+  .radar-city-page .radar-search-bar input,
+  .radar-city-page .radar-search-bar .button {
+    min-height: 40px;
+    max-width: 100%;
+    font-size: .88rem;
   }
 
   .radar-city-page .radar-main-stage .radar-panel {
