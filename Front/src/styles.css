@@ -10847,6 +10847,82 @@ textarea:focus {
   }
 }
 
+/* Profile desktop polish: align hero photo with contact panel and let lower content span full width. */
+@media (min-width: 1024px) {
+  .premium-profile-page {
+    width: min(1440px, calc(100% - 48px));
+    padding-bottom: 4rem;
+  }
+
+  .premium-profile-page .market-profile-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 380px);
+    gap: 24px;
+    align-items: stretch;
+    width: min(1440px, calc(100vw - 48px));
+  }
+
+  .premium-profile-page .market-profile-main {
+    display: contents;
+  }
+
+  .premium-profile-page .market-gallery-card {
+    grid-column: 1;
+    grid-row: 1;
+    height: 720px;
+    min-height: 720px;
+    max-height: 720px;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .premium-profile-page .market-gallery-main {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    aspect-ratio: auto;
+  }
+
+  .premium-profile-page .market-gallery-main button,
+  .premium-profile-page .market-gallery-main img {
+    height: 100%;
+  }
+
+  .premium-profile-page .market-contact-panel {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: stretch;
+    height: 720px;
+    min-height: 720px;
+    max-height: 720px;
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+    overflow: hidden;
+  }
+
+  .premium-profile-page .market-profile-tabs,
+  .premium-profile-page .market-section {
+    grid-column: 1 / -1;
+  }
+
+  .premium-profile-page .market-contact-actions {
+    margin-top: auto;
+  }
+
+  .premium-profile-page .market-contact-actions .market-activation-action {
+    grid-column: 1 / -1;
+  }
+
+  .premium-profile-page .market-contact-facts {
+    min-height: 0;
+  }
+}
+
+.profile-floating-cta {
+  display: none !important;
+}
+
 @media (max-width: 380px) {
   .brand-logo {
     max-width: 92px;
