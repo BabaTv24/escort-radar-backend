@@ -37,10 +37,7 @@ let radarGoogleMapsPromise: Promise<any> | null = null;
 const radarStatuses = [
   ['favorites', 'favorites', 'favorites.favoritesFilter'],
   ['online', 'online-now', 'status.onlineNow'],
-  ['AVAILABLE_TODAY', 'available-today', 'status.availableToday'],
   ['BUSY', 'busy', 'status.busy'],
-  ['APPOINTMENT_ONLY', 'appointment-only', 'status.appointmentOnly'],
-  ['TRAVELING', 'traveling', 'status.traveling'],
   ['OFFLINE', 'offline', 'status.offline']
 ] as const;
 
@@ -170,7 +167,12 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
               ['all', '', 'status.all'],
               ...radarStatuses
             ].map(([value, _statusClass, labelKey]) => (
-              <button key={value} className={status === value ? 'selected' : ''} type="button" onClick={() => onStatusChange(value)}>
+              <button
+                key={value}
+                className={`status-chip ${value === 'favorites' ? 'status-chip-favorites' : ''} ${status === value ? 'selected' : ''}`.trim()}
+                type="button"
+                onClick={() => onStatusChange(value)}
+              >
                 {t(labelKey)}
               </button>
             ))}
@@ -346,7 +348,8 @@ function matchesOperatorStatusFilter(profile: Profile, status: string) {
   if (status === 'all') return true;
   if (status === 'favorites') return true;
   const operatorStatus = getOperatorStatus(profile);
-  if (status === 'online' || status === 'available') return operatorStatus === 'ONLINE_NOW' || operatorStatus === 'AVAILABLE_TODAY';
+  if (status === 'online') return operatorStatus === 'ONLINE_NOW';
+  if (status === 'available') return operatorStatus === 'ONLINE_NOW' || operatorStatus === 'AVAILABLE_TODAY';
   if (status === 'busy') return operatorStatus === 'BUSY';
   if (status === 'unavailable') return operatorStatus === 'OFFLINE';
   return operatorStatus === status;
