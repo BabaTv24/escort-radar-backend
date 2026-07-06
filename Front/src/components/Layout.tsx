@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { CalendarDays, Coins, Heart, LogOut, MessageCircle, Radar, ShieldCheck, UserRound } from 'lucide-react';
+import { CalendarDays, Coins, Heart, LogOut, Menu, MessageCircle, Radar, ShieldCheck, UserRound, X } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { api } from '../lib/api';
 import { normalizeCategoryKey } from '../lib/categories';
@@ -25,6 +25,7 @@ export function Layout() {
   const cityMatch = location.pathname.match(/^\/city\/([^/]+)/);
   const currentCity = cityMatch?.[1] || 'berlin';
   const [account, setAccount] = useState<HeaderAccount>({ loading: true, email: '', role: 'account' });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isSignedIn = Boolean(account.email);
   const dashboardLabel = account.role === 'advertiser' || account.role === 'business' ? t('auth.myListing') : t('auth.dashboard');
   const favoritesPath = '/dashboard#favorites';
@@ -62,6 +63,10 @@ export function Layout() {
     };
   }, []);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname, location.hash]);
+
   async function logout() {
     await supabase.auth.signOut();
     setAccount({ loading: false, email: '', role: 'account' });
@@ -76,28 +81,41 @@ export function Layout() {
           <img className="brand-wordmark-img" src="/brand-escort-radar-fun.png" alt="Escort-Radar.fun" />
         </Link>
         <div className="mobile-auth-actions" aria-label="Mobile account controls">
-          {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
-            <div className="mobile-account-links signed-in">
-              <span className="mobile-account-role">{t(`auth.${account.role}`)}</span>
-              <Link to="/dashboard">{dashboardLabel}</Link>
-              <Link to={favoritesPath}>{t('favorites.favorites')}</Link>
-              <Link to={tokensPath}>{t('tokens.tokens')}</Link>
-              <button type="button" onClick={logout}>{t('auth.logout')}</button>
-            </div>
-          ) : (
-            <div className="mobile-account-links">
-              <Link to={authPath(accountPath)}>{t('auth.profile')}</Link>
-              <Link to={authPath(favoritesPath)}>{t('favorites.favorites')}</Link>
-              <Link to={authPath(tokensPath)}>{t('tokens.tokens')}</Link>
-              <Link to="/register?type=client">{t('buttons.register')}</Link>
-            </div>
-          )}
+          <button
+            type="button"
+            className="mobile-menu-toggle"
+            aria-label={mobileMenuOpen ? t('nav.closeMenu') : t('nav.openMenu')}
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen((value) => !value)}
+          >
+            {mobileMenuOpen ? <X size={19} /> : <Menu size={20} />}
+          </button>
           <div className="mobile-language-switcher" aria-label="Language" translate="no">
             {(['de', 'pl', 'en'] as const).map((item) => (
               <button key={item} className={lang === item ? 'selected' : ''} onClick={() => setLang(item)}>{item.toUpperCase()}</button>
             ))}
           </div>
         </div>
+        {mobileMenuOpen && (
+          <div className="mobile-menu-panel">
+            <Link to={authPath(tokensPath)}><Coins size={16} /> {t('nav.tokens')}</Link>
+            <Link to="/coins"><Coins size={16} /> {t('coins.title')}</Link>
+            {isSignedIn ? (
+              <>
+                <span className="mobile-account-role">{t(`auth.${account.role}`)}</span>
+                <Link to="/dashboard"><UserRound size={16} /> {dashboardLabel}</Link>
+                <Link to={favoritesPath}><Heart size={16} /> {t('favorites.favorites')}</Link>
+                <button type="button" onClick={logout}><LogOut size={16} /> {t('auth.logout')}</button>
+              </>
+            ) : (
+              <>
+                <Link to="/register?type=client"><UserRound size={16} /> {t('buttons.register')}</Link>
+                <Link to="/register?type=escort"><Radar size={16} /> {t('buttons.addListing')}</Link>
+                <Link to="/login"><UserRound size={16} /> {t('buttons.login')}</Link>
+              </>
+            )}
+          </div>
+        )}
         <div className="header-actions">
           {!isAppRoute && (
             <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action premium-header-cta">
