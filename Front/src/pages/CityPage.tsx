@@ -61,7 +61,6 @@ export function CityPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortMode, setSortMode] = useState<'best' | 'new' | 'near' | 'online'>('best');
-  const [marketplaceSlideIndex, setMarketplaceSlideIndex] = useState(0);
   const [isMarketplaceCarouselPaused, setMarketplaceCarouselPaused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -196,9 +195,6 @@ export function CityPage() {
   );
   const topProfiles = sortedProfiles.slice(0, 12);
   const marketplaceCarouselProfiles = sortedProfiles.slice(0, 10);
-  const marketplaceCarouselSlides = marketplaceCarouselProfiles.length > 5
-    ? [...marketplaceCarouselProfiles, ...marketplaceCarouselProfiles.slice(0, 5)]
-    : marketplaceCarouselProfiles;
   const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
   const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
   const categoryLabel = appliedFilters.category ? option(appliedFilters.category) : t('filters.allCategories');
@@ -206,23 +202,16 @@ export function CityPage() {
   const isClientActivated = clientActivationState === 'client_activated';
 
   useEffect(() => {
-    setMarketplaceSlideIndex(0);
+    marketplaceCarouselRef.current?.scrollTo({ left: 0, behavior: 'auto' });
   }, [sortMode, appliedFilters, sortedProfiles.length]);
 
   useEffect(() => {
     if (marketplaceCarouselProfiles.length <= 1 || isMarketplaceCarouselPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const id = window.setInterval(() => {
-      setMarketplaceSlideIndex((current) => (current + 1) % marketplaceCarouselProfiles.length);
+      scrollMarketplace('next');
     }, 3000);
     return () => window.clearInterval(id);
   }, [isMarketplaceCarouselPaused, marketplaceCarouselProfiles.length]);
-
-  useEffect(() => {
-    const carousel = marketplaceCarouselRef.current;
-    const target = carousel?.querySelector<HTMLElement>(`[data-marketplace-slide="${marketplaceSlideIndex}"]`);
-    if (!carousel || !target) return;
-    carousel.scrollTo({ left: target.offsetLeft, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-  }, [marketplaceSlideIndex]);
 
   if (import.meta.env.DEV) {
     console.debug('[CityPageProfiles]', {
@@ -252,14 +241,39 @@ export function CityPage() {
     setFavoriteProfileIds((current) => new Set([...current, profileId]));
   }
 
+  function scrollMarketplace(direction: 'prev' | 'next') {
+    const node = marketplaceCarouselRef.current;
+    if (!node) return;
+    const firstSlide = node.querySelector<HTMLElement>('.marketplace-carousel-slide');
+    const slideWidth = firstSlide?.offsetWidth ?? 300;
+    const gap = 18;
+    const amount = slideWidth + gap;
+    const maxScroll = node.scrollWidth - node.clientWidth;
+
+    if (direction === 'next' && node.scrollLeft + amount >= maxScroll - 4) {
+      node.scrollTo({ left: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      return;
+    }
+
+    if (direction === 'prev' && node.scrollLeft <= 4) {
+      node.scrollTo({ left: maxScroll, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      return;
+    }
+
+    node.scrollBy({
+      left: direction === 'next' ? amount : -amount,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    });
+  }
+
   function goToPreviousMarketplaceSlide() {
     setMarketplaceCarouselPaused(true);
-    setMarketplaceSlideIndex((current) => (current === 0 ? marketplaceCarouselProfiles.length - 1 : current - 1));
+    scrollMarketplace('prev');
   }
 
   function goToNextMarketplaceSlide() {
     setMarketplaceCarouselPaused(true);
-    setMarketplaceSlideIndex((current) => (current + 1) % marketplaceCarouselProfiles.length);
+    scrollMarketplace('next');
   }
 
   function applyDraftFilters() {
@@ -584,8 +598,8 @@ export function CityPage() {
                 onBlur={() => setMarketplaceCarouselPaused(false)}
               >
                 <div className="radar-marketplace-carousel-track profile-carousel-track">
-                  {marketplaceCarouselSlides.map((profile, index) => (
-                    <div className="radar-featured-profile-card profile-carousel-card" data-marketplace-slide={index % marketplaceCarouselProfiles.length} key={`${profile.id}-${index}`}>
+                  {marketplaceCarouselProfiles.map((profile) => (
+                    <div className="radar-featured-profile-card marketplace-carousel-slide profile-carousel-card" key={profile.id}>
                       <ProfileCard profile={profile} isFavorite={favoriteProfileIds.has(profile.id)} onFavoriteChange={handleFavoriteChange} />
                     </div>
                   ))}

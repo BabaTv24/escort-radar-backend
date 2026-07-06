@@ -10140,3 +10140,147 @@ textarea:focus {
     max-height: 400px;
   }
 }
+
+/* City marketplace carousel: native scrolling and aligned premium cards. */
+.radar-city-page .radar-marketplace-carousel-controls {
+  width: 100%;
+  justify-content: flex-end;
+  gap: .6rem;
+  margin-top: -.25rem;
+}
+
+.radar-city-page .radar-marketplace-carousel-controls button {
+  width: 44px;
+  height: 44px;
+}
+
+.radar-city-page .radar-results-grid.radar-marketplace-carousel {
+  display: block !important;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 6px 2px 14px;
+  scroll-padding-inline: 2px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.radar-city-page .radar-marketplace-carousel-track {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  width: max-content;
+  min-width: 100%;
+  transform: none !important;
+  transition: none !important;
+}
+
+.radar-city-page .radar-marketplace-carousel .marketplace-carousel-slide,
+.radar-city-page .radar-results-grid.radar-marketplace-carousel .marketplace-carousel-slide {
+  flex: 0 0 clamp(250px, 20vw, 292px) !important;
+  width: clamp(250px, 20vw, 292px) !important;
+  min-width: clamp(250px, 20vw, 292px) !important;
+  max-width: 292px;
+  scroll-snap-align: start;
+}
+
+.radar-city-page .radar-marketplace-carousel .profile-card.premium-profile-card {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(244,215,127,.22);
+  border-radius: 18px !important;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(244,215,127,.12), transparent 12rem),
+    linear-gradient(180deg, rgba(30,25,18,.98), rgba(10,10,9,.98)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 22px 70px rgba(0,0,0,.32);
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-profile-card .card-image {
+  flex: 0 0 auto;
+  margin: 8px 8px 0;
+  border-radius: 14px;
+  aspect-ratio: 4 / 4.75;
+  max-height: 345px;
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-profile-card .card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: .54rem;
+  padding: .72rem;
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-profile-card .card-body > div:first-child {
+  display: grid;
+  gap: .18rem;
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-profile-card .card-body h3 {
+  min-height: 1.35rem;
+  margin: 0;
+  line-height: 1.15;
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-profile-card .card-body p {
+  margin: 0;
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-card-meta,
+.radar-city-page .radar-marketplace-carousel .mini-icon-row,
+.radar-city-page .radar-marketplace-carousel .badges {
+  margin: 0;
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-card-meta {
+  min-height: 2rem;
+  align-items: center;
+}
+
+.radar-city-page .radar-marketplace-carousel .mini-icon-row,
+.radar-city-page .radar-marketplace-carousel .badges {
+  gap: .35rem;
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-card-actions {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: .5rem;
+  align-items: center;
+}
+
+.radar-city-page .radar-marketplace-carousel .premium-card-actions .button {
+  width: 100%;
+  min-height: 40px;
+  padding-inline: .65rem;
+}
+
+.radar-city-page .radar-marketplace-carousel .icon-favorite-action {
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+}
+
+@media (max-width: 767px) {
+  .radar-city-page .radar-marketplace-carousel .marketplace-carousel-slide,
+  .radar-city-page .radar-results-grid.radar-marketplace-carousel .marketplace-carousel-slide {
+    flex: 0 0 min(84vw, 318px) !important;
+    width: min(84vw, 318px) !important;
+    min-width: min(84vw, 318px) !important;
+    max-width: 318px;
+    scroll-snap-align: center;
+  }
+
+  .radar-city-page .radar-marketplace-carousel-track {
+    gap: 14px;
+  }
+
+  .radar-city-page .radar-marketplace-carousel .premium-profile-card .card-image {
+    max-height: 390px;
+  }
+}
