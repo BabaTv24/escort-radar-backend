@@ -195,7 +195,6 @@ export function Layout() {
             <Link to="/pricing">{t('nav.pricing')}</Link>
             <Link to="/app">{t('nav.installApp')}</Link>
             <Link to="/legal-notice">{t('nav.legalNotice')}</Link>
-            <Link to="/admin-access">{t('nav.admin')}</Link>
           </div>
         </footer>
       )}

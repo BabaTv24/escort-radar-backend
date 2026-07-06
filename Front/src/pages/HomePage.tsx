@@ -181,22 +181,22 @@ export function HomePage() {
       </section>
       </>}
 
-      <section className="landing-section trust-features-section quick-grid">
-        <Feature icon={<RadioTower />} title={t('home.features.available.title')} text={t('home.features.available.text')} />
-        <Feature icon={<EyeOff />} title={t('home.features.private.title')} text={t('home.features.private.text')} />
-        <Feature icon={<Smartphone />} title={t('home.features.mobile.title')} text={t('home.features.mobile.text')} />
-        <Feature icon={<Building2 />} title={t('home.features.clubs.title')} text={t('home.features.clubs.text')} />
-        <Feature icon={<BadgeCheck />} title={t('home.features.privacy.title')} text={t('home.features.privacy.text')} />
-        <Feature icon={<Map />} title={t('home.features.cities.title')} text={cities.map((city) => city.name).join(' / ')} />
-        <Feature icon={<BadgeCheck />} title={t('home.sections.vip')} text={t('home.sections.vipText')} />
-      </section>
-
-      <section className="landing-section tech-infrastructure-section baba-tech-section">
-        <div className="section-head compact">
-          <p className="eyebrow">{t('baba.homeEyebrow')}</p>
-          <h2>{t('baba.homeTitle')}</h2>
+      <section className="footer-presection premium-footer-info">
+        <div className="footer-info-grid">
+          <Feature icon={<RadioTower />} title={t('home.features.available.title')} text={t('home.features.available.text')} />
+          <Feature icon={<EyeOff />} title={t('home.features.private.title')} text={t('home.features.private.text')} />
+          <Feature icon={<Smartphone />} title={t('home.features.mobile.title')} text={t('home.features.mobile.text')} />
+          <Feature icon={<Building2 />} title={t('home.features.clubs.title')} text={t('home.features.clubs.text')} />
+          <Feature icon={<BadgeCheck />} title={t('home.features.privacy.title')} text={t('home.features.privacy.text')} />
+          <Feature icon={<Map />} title={t('home.features.cities.title')} text={cities.map((city) => city.name).join(' / ')} />
+          <Feature icon={<BadgeCheck />} title={t('home.sections.vip')} text={t('home.sections.vipText')} />
         </div>
-        <div className="baba-tech-grid">
+
+        <div className="footer-tech-strip">
+          <div>
+            <p className="eyebrow">{t('baba.homeEyebrow')}</p>
+            <h2>{t('baba.homeTitle')}</h2>
+          </div>
           <Feature icon={<Cpu />} title={t('baba.cards.moderation')} text={t('baba.cards.moderationText')} />
           <Feature icon={<ScanSearch />} title={t('baba.cards.geo')} text={t('baba.cards.geoText')} />
           <Feature icon={<Network />} title={t('baba.cards.marketplace')} text={t('baba.cards.marketplaceText')} />

@@ -9462,6 +9462,80 @@ textarea:focus {
   min-width: 0;
 }
 
+.footer-presection.premium-footer-info {
+  width: min(1500px, calc(100% - 24px));
+  margin: 1.25rem auto .75rem;
+  padding: 1rem;
+  border: 1px solid rgba(244,215,127,.12);
+  border-radius: var(--er-radius-md);
+  background:
+    radial-gradient(circle at 12% 0, rgba(244,215,127,.08), transparent 20rem),
+    radial-gradient(circle at 88% 20%, rgba(123,77,255,.10), transparent 24rem),
+    rgba(7,7,6,.66);
+  box-shadow: 0 18px 70px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.035);
+}
+
+.footer-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: .55rem;
+}
+
+.premium-footer-info .feature {
+  min-height: 0;
+  padding: .68rem;
+  border-radius: 10px;
+  background: rgba(255,255,255,.025);
+  box-shadow: none;
+}
+
+.premium-footer-info .feature-icon {
+  width: 1.9rem;
+  height: 1.9rem;
+  margin-bottom: .35rem;
+}
+
+.premium-footer-info .feature-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.premium-footer-info .feature h2 {
+  margin: 0 0 .18rem;
+  font-size: .92rem;
+  line-height: 1.15;
+}
+
+.premium-footer-info .feature p {
+  margin: 0;
+  font-size: .78rem;
+  line-height: 1.35;
+}
+
+.footer-tech-strip {
+  display: grid;
+  grid-template-columns: minmax(220px, .9fr) repeat(4, minmax(160px, 1fr));
+  gap: .55rem;
+  align-items: stretch;
+  margin-top: .75rem;
+  padding-top: .75rem;
+  border-top: 1px solid rgba(244,215,127,.10);
+}
+
+.footer-tech-strip > div:first-child {
+  display: grid;
+  align-content: center;
+  gap: .18rem;
+  padding: .68rem;
+}
+
+.footer-tech-strip h2 {
+  margin: 0;
+  color: var(--er-gold-light);
+  font-size: clamp(1rem, 1.5vw, 1.3rem);
+  line-height: 1.15;
+}
+
 @media (max-width: 1180px) {
   .radar-city-page {
     width: min(100%, calc(100% - 24px));
@@ -9508,6 +9582,14 @@ textarea:focus {
   .radar-city-page .radar-avatar-strip {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+
+  .footer-tech-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .footer-tech-strip > div:first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 720px) {
@@ -9548,6 +9630,16 @@ textarea:focus {
 
   .radar-city-page .radar-avatar-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .footer-presection.premium-footer-info {
+    width: min(100%, calc(100% - 12px));
+    padding: .75rem;
+  }
+
+  .footer-info-grid,
+  .footer-tech-strip {
+    grid-template-columns: 1fr;
   }
 }
 
