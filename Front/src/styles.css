@@ -10782,6 +10782,81 @@ textarea:focus {
   }
 }
 
+/* Mobile AppTopNav: prevent brand overlap with language/menu actions. */
+@media (max-width: 767px) {
+  .market-header {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    overflow: visible;
+  }
+
+  .brand-logo {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: min(172px, calc(100vw - 168px));
+    min-height: 44px;
+    gap: 6px;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .brand-logo-img {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+  }
+
+  .brand-wordmark-img {
+    width: 96px;
+    max-width: 96px;
+    height: 34px;
+    flex: 0 1 96px;
+    object-fit: contain;
+    object-position: left center;
+  }
+
+  .mobile-auth-actions {
+    position: relative;
+    z-index: 35;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .mobile-language-switcher {
+    flex: 0 0 auto;
+    max-width: 92px;
+  }
+
+  .mobile-menu-toggle {
+    position: relative;
+    z-index: 45;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 380px) {
+  .brand-logo {
+    max-width: 92px;
+  }
+
+  .brand-wordmark-img {
+    display: none;
+  }
+}
+
 @media (max-width: 767px) {
   .profile-carousel-slide,
   .marketplace-carousel-slide {
