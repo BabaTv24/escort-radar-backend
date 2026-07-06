@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { BadgeCheck, Building2, Cpu, EyeOff, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch } from 'lucide-react';
+import { BadgeCheck, Building2, ChevronLeft, ChevronRight, Cpu, EyeOff, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch } from 'lucide-react';
 import { cities } from '../data/cities';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GeoPoint } from '../lib/geo';
 import { getCityCenter, getSearcherLocationWithFallback } from '../lib/geo';
 import { activePublicCategoryOptions } from '../data/filterOptions';
@@ -23,10 +23,27 @@ export function HomePage() {
   const [radarStatus, setRadarStatus] = useState('all');
   const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter('berlin'), source: 'city_fallback' }));
   const [fallbackNotice, setFallbackNotice] = useState(false);
+  const [footerSlideIndex, setFooterSlideIndex] = useState(0);
+  const [isFooterCarouselPaused, setFooterCarouselPaused] = useState(false);
+  const footerCarouselRef = useRef<HTMLDivElement | null>(null);
   const sponsoredProfiles = profiles.filter((profile) => profile.is_sponsored || profile.acquisition_source === 'admin_sponsored' || profile.provider === 'manual_admin');
   const paidProfiles = profiles.filter((profile) => !sponsoredProfiles.some((sponsored) => sponsored.id === profile.id));
   const topProfiles = paidProfiles.slice(0, 8);
   const featured = (paidProfiles.length ? paidProfiles : profiles).slice(0, 8);
+  const footerSlides = [
+    { icon: <RadioTower />, title: t('home.features.available.title'), text: t('home.features.available.text') },
+    { icon: <EyeOff />, title: t('home.features.private.title'), text: t('home.features.private.text') },
+    { icon: <Smartphone />, title: t('home.features.mobile.title'), text: t('home.features.mobile.text') },
+    { icon: <Building2 />, title: t('home.features.clubs.title'), text: t('home.features.clubs.text') },
+    { icon: <BadgeCheck />, title: t('home.features.privacy.title'), text: t('home.features.privacy.text') },
+    { icon: <Map />, title: t('home.features.cities.title'), text: cities.map((city) => city.name).join(' / ') },
+    { icon: <BadgeCheck />, title: t('home.sections.vip'), text: t('home.sections.vipText') },
+    { icon: <Cpu />, title: t('baba.cards.moderation'), text: t('baba.cards.moderationText') },
+    { icon: <ScanSearch />, title: t('baba.cards.geo'), text: t('baba.cards.geoText') },
+    { icon: <Network />, title: t('baba.cards.marketplace'), text: t('baba.cards.marketplaceText') },
+    { icon: <ShieldCheck />, title: t('baba.cards.privacy'), text: t('baba.cards.privacyText') }
+  ];
+  const footerCarouselSlides = [...footerSlides, ...footerSlides.slice(0, 4)];
 
   const loadProfiles = useCallback(() => {
     setLoading(true);
@@ -43,10 +60,35 @@ export function HomePage() {
 
   useEffect(loadProfiles, [loadProfiles]);
 
+  useEffect(() => {
+    if (isFooterCarouselPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const id = window.setInterval(() => {
+      setFooterSlideIndex((current) => (current + 1) % footerSlides.length);
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [isFooterCarouselPaused, footerSlides.length]);
+
+  useEffect(() => {
+    const carousel = footerCarouselRef.current;
+    const target = carousel?.querySelector<HTMLElement>(`[data-footer-slide="${footerSlideIndex}"]`);
+    if (!carousel || !target) return;
+    carousel.scrollTo({ left: target.offsetLeft, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }, [footerSlideIndex]);
+
   async function useLocation() {
     const location = await getSearcherLocationWithFallback('berlin');
     setSearcherLocation(location);
     setFallbackNotice(location.source === 'city_fallback');
+  }
+
+  function goToPreviousFooterSlide() {
+    setFooterCarouselPaused(true);
+    setFooterSlideIndex((current) => (current === 0 ? footerSlides.length - 1 : current - 1));
+  }
+
+  function goToNextFooterSlide() {
+    setFooterCarouselPaused(true);
+    setFooterSlideIndex((current) => (current + 1) % footerSlides.length);
   }
 
   return (
@@ -181,26 +223,39 @@ export function HomePage() {
       </section>
       </>}
 
-      <section className="footer-presection premium-footer-info">
-        <div className="footer-info-grid">
-          <Feature icon={<RadioTower />} title={t('home.features.available.title')} text={t('home.features.available.text')} />
-          <Feature icon={<EyeOff />} title={t('home.features.private.title')} text={t('home.features.private.text')} />
-          <Feature icon={<Smartphone />} title={t('home.features.mobile.title')} text={t('home.features.mobile.text')} />
-          <Feature icon={<Building2 />} title={t('home.features.clubs.title')} text={t('home.features.clubs.text')} />
-          <Feature icon={<BadgeCheck />} title={t('home.features.privacy.title')} text={t('home.features.privacy.text')} />
-          <Feature icon={<Map />} title={t('home.features.cities.title')} text={cities.map((city) => city.name).join(' / ')} />
-          <Feature icon={<BadgeCheck />} title={t('home.sections.vip')} text={t('home.sections.vipText')} />
-        </div>
-
-        <div className="footer-tech-strip">
+      <section
+        className="footer-presection premium-footer-info"
+        onMouseEnter={() => setFooterCarouselPaused(true)}
+        onMouseLeave={() => setFooterCarouselPaused(false)}
+        onFocus={() => setFooterCarouselPaused(true)}
+        onBlur={() => setFooterCarouselPaused(false)}
+      >
+        <div className="footer-carousel-header">
           <div>
             <p className="eyebrow">{t('baba.homeEyebrow')}</p>
             <h2>{t('baba.homeTitle')}</h2>
           </div>
-          <Feature icon={<Cpu />} title={t('baba.cards.moderation')} text={t('baba.cards.moderationText')} />
-          <Feature icon={<ScanSearch />} title={t('baba.cards.geo')} text={t('baba.cards.geoText')} />
-          <Feature icon={<Network />} title={t('baba.cards.marketplace')} text={t('baba.cards.marketplaceText')} />
-          <Feature icon={<ShieldCheck />} title={t('baba.cards.privacy')} text={t('baba.cards.privacyText')} />
+
+          <div className="footer-carousel-controls">
+            <button className="footer-carousel-control" type="button" aria-label="Previous slide" onClick={goToPreviousFooterSlide}>
+              <ChevronLeft size={18} />
+            </button>
+            <button className="footer-carousel-control" type="button" aria-label="Next slide" onClick={goToNextFooterSlide}>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="footer-carousel" aria-live="polite" ref={footerCarouselRef}>
+          <div className="footer-carousel-track">
+            {footerCarouselSlides.map((slide, index) => (
+              <article className="footer-carousel-card" tabIndex={0} data-footer-slide={index} key={`${slide.title}-${index}`}>
+                <div className="feature-icon">{slide.icon}</div>
+                <h3>{slide.title}</h3>
+                <p>{slide.text}</p>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
     </div>
