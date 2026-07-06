@@ -401,20 +401,12 @@ export function ProfilePage() {
             </div>
           )}
           <div className="market-contact-actions">
-            {activated ? (
-              <>
-                <button className="button primary" type="button" onClick={() => setAccessMessage(profileAccess?.whatsapp || contactFallback)}><MessageCircle size={16} /> {t('nav.messages')}</button>
-                <button className="button" type="button" onClick={() => setAccessMessage(profileAccess?.phone_number || contactFallback)}><Phone size={16} /> {t('profile.call')}</button>
-                {canUsePremiumProfileFeatures && <a href="#booking" className="button"><CalendarDays size={16} /> {t('profile.book')}</a>}
-                <button className="button" type="button" disabled={favoriteSaved} onClick={toggleFavorite}><Heart size={16} /> {favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</button>
-                <button className="button" type="button" onClick={sendGift}><Gift size={16} /> {t('profile.gift')}</button>
-                <button className="button" type="button" onClick={() => setAccessMessage(t('profile.liveCamAvailable'))}><Video size={16} /> {t('profile.live')}</button>
-              </>
-            ) : (
-              <button className="button primary market-activation-action" type="button" onClick={startClientActivation}>
-                <LockKeyhole size={16} /> {t('profile.activateClient')}
-              </button>
-            )}
+            <button className="button primary" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><MessageCircle size={16} /> {t('nav.messages')}</button>
+            <button className="button" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><Phone size={16} /> {t('profile.call')}</button>
+            {canUsePremiumProfileFeatures && <a href="#booking" className="button"><CalendarDays size={16} /> {t('profile.book')}</a>}
+            <button className="button" type="button" disabled={activated && favoriteSaved} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}><Heart size={16} /> {favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</button>
+            <button className="button" type="button" onClick={() => activated ? sendGift() : setAccessMessage(t('profile.activateRevealContact'))}><Gift size={16} /> {t('profile.gift')}</button>
+            <button className="button" type="button" onClick={() => setAccessMessage(activated ? t('profile.liveCamAvailable') : t('profile.activateRevealContact'))}><Video size={16} /> {t('profile.live')}</button>
           </div>
           {accessMessage && <p className={accessMessage === t('favorites.notEnoughTokens') ? 'error-text' : activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
           {accessMessage === t('favorites.notEnoughTokens') && <Link className="button" to="/tokens">{t('favorites.buyTokens')}</Link>}
