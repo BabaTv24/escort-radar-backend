@@ -99,7 +99,6 @@ export function Layout() {
         {mobileMenuOpen && (
           <div className="mobile-menu-panel">
             <Link className="er-glass-btn er-glass-btn--purple er-glass-btn--sm" to={authPath(tokensPath)}><Coins size={16} /> <span>{t('nav.tokens')}</span></Link>
-            <Link className="er-glass-btn er-glass-btn--purple er-glass-btn--sm" to="/coins"><Coins size={16} /> <span>{t('coins.title')}</span></Link>
             {isSignedIn ? (
               <>
                 <span className="mobile-account-role">{t(`auth.${account.role}`)}</span>
@@ -109,9 +108,9 @@ export function Layout() {
               </>
             ) : (
               <>
-                <Link to="/register?type=client"><UserRound size={16} /> {t('buttons.register')}</Link>
-                <Link to="/register?type=escort"><Radar size={16} /> {t('buttons.addListing')}</Link>
-                <Link to="/login"><UserRound size={16} /> {t('buttons.login')}</Link>
+                <Link className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" to="/register?type=client"><UserRound size={16} /> <span>{t('buttons.register')}</span></Link>
+                <Link className="er-glass-btn er-glass-btn--pink er-glass-btn--sm" to="/register?type=escort"><Radar size={16} /> <span>{t('buttons.addListing')}</span></Link>
+                <Link className="er-glass-btn er-glass-btn--cyan er-glass-btn--sm" to="/login"><UserRound size={16} /> <span>{t('buttons.login')}</span></Link>
               </>
             )}
           </div>
@@ -129,10 +128,6 @@ export function Layout() {
               <span>{t('nav.tokens')}</span>
             </Link>
           )}
-          <Link to="/coins" className="radar-action er-glass-btn er-glass-btn--purple er-glass-btn--sm">
-            <Coins size={17} />
-            <span>{t('coins.title')}</span>
-          </Link>
           {account.loading ? <span className="account-loading-pill" aria-hidden="true" /> : isSignedIn ? (
             <div className="header-account-area">
               <Link to="/dashboard" className="account-pill">
@@ -149,9 +144,9 @@ export function Layout() {
             </div>
           ) : (
             <>
-              <Link to="/register?type=client" className="radar-action">{t('buttons.register')}</Link>
-              <Link to="/register?type=escort" className="radar-action">{t('buttons.addListing')}</Link>
-              <Link to="/login" className="radar-action">{t('buttons.login')}</Link>
+              <Link to="/register?type=client" className="radar-action er-glass-btn er-glass-btn--gold er-glass-btn--sm"><span>{t('buttons.register')}</span></Link>
+              <Link to="/register?type=escort" className="radar-action er-glass-btn er-glass-btn--pink er-glass-btn--sm"><span>{t('buttons.addListing')}</span></Link>
+              <Link to="/login" className="radar-action er-glass-btn er-glass-btn--cyan er-glass-btn--sm"><span>{t('buttons.login')}</span></Link>
               <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
                 <UserRound size={20} />
               </Link>

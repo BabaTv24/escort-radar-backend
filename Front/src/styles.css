@@ -11558,3 +11558,107 @@ button.er-glass-btn *,
     0 0 30px color-mix(in srgb, var(--er-btn-glow), transparent 22%),
     0 0 58px color-mix(in srgb, var(--er-btn-glow), transparent 38%) !important;
 }
+
+/* FINAL GLOBAL BUTTON CLEANUP - glass buttons cannot inherit legacy yellow CTA styles */
+html body a.er-glass-btn,
+html body button.er-glass-btn,
+html body .er-glass-btn {
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 56%), transparent 65%),
+    linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.018)) !important;
+  background-color: rgba(255, 255, 255, 0.032) !important;
+  background-image:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 56%), transparent 65%),
+    linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.018)) !important;
+  border-color: var(--er-btn-border) !important;
+  color: var(--er-btn-text) !important;
+  text-shadow: none !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.13),
+    inset 0 -1px 0 rgba(255,255,255,0.07),
+    0 12px 26px rgba(0,0,0,0.34) !important;
+}
+
+html body a.er-glass-btn:hover,
+html body button.er-glass-btn:hover,
+html body .er-glass-btn:hover {
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 46%), transparent 66%),
+    linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.024)) !important;
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--er-btn-border) !important;
+  color: var(--er-btn-text) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    inset 0 -1px 0 rgba(255,255,255,0.08),
+    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 42%),
+    0 0 22px color-mix(in srgb, var(--er-btn-glow), transparent 54%),
+    0 14px 30px rgba(0,0,0,0.38) !important;
+}
+
+html body .er-glass-btn.er-glass-btn--active,
+html body .er-glass-btn.active,
+html body .er-glass-btn.selected,
+html body .er-glass-btn[aria-pressed="true"],
+html body .er-glass-btn[aria-current="true"] {
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 34%), transparent 68%),
+    linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.028)) !important;
+  background-color: rgba(255,255,255,0.045) !important;
+  border-color: var(--er-btn-border) !important;
+  color: var(--er-btn-text) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 24%),
+    0 0 18px color-mix(in srgb, var(--er-btn-glow), transparent 38%),
+    0 0 42px color-mix(in srgb, var(--er-btn-glow), transparent 64%),
+    0 12px 28px rgba(0,0,0,0.34) !important;
+}
+
+html body .er-glass-btn::before,
+html body .er-glass-btn::after {
+  background: var(--er-btn-glow) !important;
+  border: 0 !important;
+  box-shadow:
+    0 0 5px var(--er-btn-glow),
+    0 0 15px var(--er-btn-glow),
+    0 0 30px color-mix(in srgb, var(--er-btn-glow), transparent 22%),
+    0 0 58px color-mix(in srgb, var(--er-btn-glow), transparent 38%) !important;
+}
+
+html body .er-glass-btn *,
+html body .er-glass-btn span,
+html body .er-glass-btn strong,
+html body .er-glass-btn svg {
+  color: inherit !important;
+  text-shadow: none !important;
+}
+
+html body .er-glass-btn svg {
+  stroke: currentColor;
+}
+
+/* If old CTA classes are combined with er-glass-btn, er-glass-btn always wins */
+html body .premium-header-cta.er-glass-btn,
+html body .premium-button.er-glass-btn,
+html body .gold-button.er-glass-btn,
+html body .primary-button.er-glass-btn,
+html body .button-primary.er-glass-btn,
+html body .btn-primary.er-glass-btn,
+html body .cta-button.er-glass-btn,
+html body .profile-card-button.er-glass-btn,
+html body .card-action.er-glass-btn,
+html body .hero-cta.er-glass-btn,
+html body .radar-cta.er-glass-btn,
+html body .save-button.er-glass-btn,
+html body .admin-save-button.er-glass-btn {
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 56%), transparent 65%),
+    linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.018)) !important;
+  background-color: rgba(255,255,255,0.032) !important;
+  background-image:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 56%), transparent 65%),
+    linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.018)) !important;
+  border-color: var(--er-btn-border) !important;
+  color: var(--er-btn-text) !important;
+}

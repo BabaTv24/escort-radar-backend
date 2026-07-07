@@ -12,12 +12,12 @@ const platformProducts = [
 ];
 
 const tokenProducts = [
-  ['tokens_120', 'token_package', '120 tokens', '18 EUR'],
-  ['tokens_520', 'token_package', '520 tokens', '78 EUR'],
-  ['tokens_1200', 'token_package', '1,200 tokens', '180 EUR'],
-  ['tokens_2560', 'token_package', '2,560 tokens', '384 EUR'],
-  ['tokens_5200', 'token_package', '5,200 tokens', '780 EUR'],
-  ['tokens_10200', 'token_package', '10,200 tokens', '1530 EUR']
+  ['tokens_120', 'token_package', '120 BC Coins', '18 EUR'],
+  ['tokens_520', 'token_package', '520 BC Coins', '78 EUR'],
+  ['tokens_1200', 'token_package', '1,200 BC Coins', '180 EUR'],
+  ['tokens_2560', 'token_package', '2,560 BC Coins', '384 EUR'],
+  ['tokens_5200', 'token_package', '5,200 BC Coins', '780 EUR'],
+  ['tokens_10200', 'token_package', '10,200 BC Coins', '1530 EUR']
 ];
 
 export function PricingPage() {
@@ -108,7 +108,7 @@ export function PricingPage() {
             </article>
           ))}
         </div>
-        <h2>Token packages</h2>
+        <h2>BC Coins packages</h2>
         <div className="pricing-list">
           {tokenProducts.map(([, , name, price]) => (
             <article className="feature" key={name}>
@@ -152,11 +152,11 @@ export function PricingPage() {
           </div>
           {!accessToken ? (
             <div className="hero-actions">
-              <Link className="button primary" to="/login">Login</Link>
-              <Link className="button" to="/register">Register</Link>
+              <Link className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login"><span>Login</span></Link>
+              <Link className="button er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/register"><span>Register</span></Link>
             </div>
           ) : (
-            <button className="button primary full" disabled={loading} onClick={createManualOrder}>{loading ? 'Creating...' : 'Create pending order'}</button>
+            <button className="button primary full er-glass-btn er-glass-btn--gold er-glass-btn--block" disabled={loading} onClick={createManualOrder}><span>{loading ? 'Creating...' : 'Create pending order'}</span></button>
           )}
           {error ? <p className="error-text">{error}</p> : null}
           {manualOrder ? (
