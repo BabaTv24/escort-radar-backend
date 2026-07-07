@@ -400,15 +400,25 @@ test('manual payment catalog contains current Escort Radar token packages', asyn
   process.env.SUPABASE_URL ||= 'https://example.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-role';
   process.env.SUPABASE_ANON_KEY ||= 'anon-key';
+  const tokenEconomyMigration = await readFile(new URL('../supabase/migrations/009_closed_token_economy.sql', import.meta.url), 'utf8');
+  const packageUpdateMigration = await readFile(new URL('../supabase/migrations/040_update_bc_coin_packages.sql', import.meta.url), 'utf8');
   const { manualPaymentProducts } = await import('../Back/src/manualPayments.ts');
-  assert.deepEqual(manualPaymentProducts.filter((item) => item.purpose === 'token_package').map((item) => [item.id, item.tokens, item.amount_cents]), [
-    ['tokens_120', 120, 1800],
-    ['tokens_520', 520, 7800],
-    ['tokens_1200', 1200, 18000],
-    ['tokens_2560', 2560, 38400],
-    ['tokens_5200', 5200, 78000],
-    ['tokens_10200', 10200, 153000]
+  assert.deepEqual(manualPaymentProducts.filter((item) => item.purpose === 'token_package').map((item) => [item.id, item.tokens, item.bonus_tokens, item.total_tokens, item.amount_cents]), [
+    ['bc_66', 66, 0, 66, 999],
+    ['bc_166', 166, 20, 186, 2499],
+    ['bc_666', 666, 150, 816, 9999],
+    ['bc_1200', 1200, 450, 1650, 18000],
+    ['bc_2560', 2560, 700, 3260, 38400],
+    ['bc_5200', 5200, 1500, 6700, 78000],
+    ['bc_10200', 10200, 3133, 13333, 153000]
   ]);
+  for (const source of [tokenEconomyMigration, packageUpdateMigration]) {
+    assert.match(source, /66 BC Coins/);
+    assert.match(source, /166 BC Coins/);
+    assert.match(source, /666 BC Coins/);
+    assert.match(source, /3133/);
+  }
+  assert.doesNotMatch(`${tokenEconomyMigration}\n${packageUpdateMigration}`, /120, 18\.00|520, 78\.00|1800, false, true/);
 });
 
 test('legacy Stripe webhook route is mounted but gated by Escort Radar flag', async () => {
@@ -457,6 +467,7 @@ test('admin revenue can still display legacy historical Stripe revenue', () => {
 test('admin client endpoints and coin actions exist', async () => {
   const adminSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
   const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+  const typesSource = await readFile(new URL('../Front/src/types.ts', import.meta.url), 'utf8');
   const pageSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
   assert.match(adminSource, /adminRouter\.get\('\/clients'/);
   assert.match(adminSource, /adminRouter\.patch\('\/clients\/:id\/coins'/);
@@ -464,6 +475,25 @@ test('admin client endpoints and coin actions exist', async () => {
   assert.match(apiSource, /adjustAdminClientCoins/);
   assert.match(pageSource, /\/admin\/clients/);
   assert.match(pageSource, /client-mobile-cards/);
+  for (const field of [
+    'bc_coin_package_revenue_eur',
+    'bc_coin_package_transactions',
+    'bc_coin_sold_amount',
+    'bc_coin_bonus_amount'
+  ]) {
+    assert.match(adminSource, new RegExp(field));
+    assert.match(typesSource, new RegExp(field));
+    assert.match(pageSource, new RegExp(field));
+  }
+  assert.match(adminSource, /buildBcCoinPackageStats/);
+  assert.match(adminSource, /manual_payment_orders'\)\.select\('purpose, status, amount_eur, amount_cents, tokens_amount, metadata'\)\.eq\('purpose', 'token_package'\)/);
+  assert.match(adminSource, /token_purchase_requests'\)\.select\('status, token_amount, eur_price, bonus_tokens'\)/);
+  assert.match(apiSource, /AdminStats/);
+  assert.match(pageSource, /admin\.dashboard\.bcCoinPackageRevenue/);
+  assert.match(pageSource, /admin\.dashboard\.bcCoinPackageSummary/);
+  const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
+  assert.match(plLocale, /"admin\.dashboard\.bcCoinPackageRevenue": "Przychód z pakietów BC Coins"/);
+  assert.match(plLocale, /"admin\.dashboard\.bcCoinPackageSummary": "\{\{packages\}\} pakietów · \{\{sold\}\} BC sprzedanych · \{\{bonus\}\} BC bonus"/);
 });
 
 test('merchant review footer exposes required public compliance links', async () => {
@@ -486,8 +516,8 @@ test('pricing page lists required platform products, token packages and complian
     '49.99 EUR',
     'Agency / Business Plan',
     '499.00 EUR',
-    '10,200 tokens',
-    '1530 EUR',
+    '10200 BC Coins',
+    '1530,00 EUR',
     'The platform does not process payments for physical meetings between users.',
     'discreet prepaid payment',
     'manual bank transfer',
@@ -528,12 +558,13 @@ test('manual payment products and reference instruction match CCBill review read
     ['client_activation', 99],
     ['advertiser_30d', 4999],
     ['agency_30d', 49900],
-    ['tokens_120', 1800],
-    ['tokens_520', 7800],
-    ['tokens_1200', 18000],
-    ['tokens_2560', 38400],
-    ['tokens_5200', 78000],
-    ['tokens_10200', 153000]
+    ['bc_66', 999],
+    ['bc_166', 2499],
+    ['bc_666', 9999],
+    ['bc_1200', 18000],
+    ['bc_2560', 38400],
+    ['bc_5200', 78000],
+    ['bc_10200', 153000]
   ]);
   assert.equal(buildPaymentReference('order-1', 'user@example.com', 'ER-{orderId}-{userEmail}'), 'ER-order-1-user@example.com');
   assert.match(paymentReferenceInstruction('order-1'), /Please include your account email and order number in the payment reference/);
@@ -766,9 +797,9 @@ test('client activation token bonus is 7 and favorites are token-gated', async (
   assert.match(tokenShopSource, /wallet\?\.escort_token_balance/);
   assert.match(adminPageSource, /'token_balance'/);
   assert.doesNotMatch(adminPageSource, /Coins: \{client\.coins/);
-  assert.match(plLocale, /"admin\.table\.token_balance": "Tokeny"/);
-  assert.match(enLocale, /"admin\.table\.token_balance": "Tokens"/);
-  assert.match(deLocale, /"admin\.table\.token_balance": "Token"/);
+  assert.match(plLocale, /"admin\.table\.token_balance": "BC Coins"/);
+  assert.match(enLocale, /"admin\.table\.token_balance": "BC Coins"/);
+  assert.match(deLocale, /"admin\.table\.token_balance": "BC Coins"/);
   assert.match(favoritesSource, /FAVORITE_TOKEN_COST = 1/);
   assert.match(favoritesSource, /add_client_favorite_with_token/);
   assert.match(favoritesSource, /code: 'NOT_ENOUGH_TOKENS'/);
@@ -1104,7 +1135,7 @@ test('premium client referral reward and live request contract stay client-only'
   assert.match(dashboardSource, /earnedReferralCoins/);
   assert.match(dashboardSource, /onCreateIntent\(\{ \.\.\.intentDraft, status: 'LOOKING_NOW' \}\)/);
   assert.doesNotMatch(dashboardSource, /\['LOOKING_NOW', 'LOOKING_TODAY', 'TRAVELING', 'BROWSING', 'OFFLINE'\]/);
-  assert.match(plLocale, /"clientOffice\.nextReward": "Następna nagroda: \{\{count\}\} BigCoins"/);
+  assert.match(plLocale, /"clientOffice\.nextReward": "Następna nagroda: \{\{count\}\} BC Coins"/);
   assert.match(plLocale, /"clientOffice\.createRequest": "Wyślij request"/);
 });
 

@@ -77,12 +77,13 @@ create table if not exists public.fan_club_memberships (
 
 insert into public.token_packages (name, token_amount, eur_price, bonus_tokens, featured, active)
 values
-  ('Starter', 120, 18.00, 0, false, true),
-  ('Radar', 520, 78.00, 20, false, true),
-  ('Premium', 1200, 180.00, 80, false, true),
-  ('Spotlight', 2560, 384.00, 260, true, true),
-  ('Elite', 5200, 780.00, 700, false, true),
-  ('Black Card', 10200, 1530.00, 1800, false, true)
+  ('66 BC Coins', 66, 9.99, 0, false, true),
+  ('166 BC Coins', 166, 24.99, 20, false, true),
+  ('666 BC Coins', 666, 99.99, 150, true, true),
+  ('1200 BC Coins', 1200, 180.00, 450, false, true),
+  ('2560 BC Coins', 2560, 384.00, 700, false, true),
+  ('5200 BC Coins', 5200, 780.00, 1500, false, true),
+  ('10200 BC Coins', 10200, 1530.00, 3133, false, true)
 on conflict do nothing;
 
 create index if not exists wallets_user_id_idx on public.wallets (user_id);

@@ -61,6 +61,52 @@ const adminImportUpload = multer({
 
 const premiumTiers = ['standard', 'gold', 'elite', 'diamond'];
 const operatorStatuses = ['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'];
+const soldManualPaymentStatuses = new Set(['paid', 'approved', 'completed']);
+const approvedTokenPurchaseStatuses = new Set(['approved', 'paid', 'completed']);
+
+function numericValue(value: unknown) {
+  const numeric = Number(value || 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function metadataNumber(row: Record<string, any>, key: string) {
+  return row.metadata && typeof row.metadata === 'object' ? numericValue(row.metadata[key]) : 0;
+}
+
+function buildBcCoinPackageStats(manualOrders: Record<string, any>[], purchaseRequests: Record<string, any>[]) {
+  const soldManualOrders = manualOrders.filter((order) =>
+    order.purpose === 'token_package' && soldManualPaymentStatuses.has(String(order.status || '').toLowerCase())
+  );
+  const approvedPurchaseRequests = purchaseRequests.filter((purchase) =>
+    approvedTokenPurchaseStatuses.has(String(purchase.status || '').toLowerCase())
+  );
+
+  const manualStats = soldManualOrders.reduce((totals, order) => {
+    const bonus = metadataNumber(order, 'bonus_tokens');
+    const total = metadataNumber(order, 'total_tokens') || numericValue(order.tokens_amount);
+    const base = metadataNumber(order, 'base_tokens') || Math.max(total - bonus, 0);
+    return {
+      revenue: totals.revenue + (numericValue(order.amount_eur) || numericValue(order.amount_cents) / 100),
+      transactions: totals.transactions + 1,
+      sold: totals.sold + base,
+      bonus: totals.bonus + bonus
+    };
+  }, { revenue: 0, transactions: 0, sold: 0, bonus: 0 });
+
+  const purchaseStats = approvedPurchaseRequests.reduce((totals, purchase) => ({
+    revenue: totals.revenue + numericValue(purchase.eur_price),
+    transactions: totals.transactions + 1,
+    sold: totals.sold + numericValue(purchase.token_amount),
+    bonus: totals.bonus + numericValue(purchase.bonus_tokens)
+  }), { revenue: 0, transactions: 0, sold: 0, bonus: 0 });
+
+  return {
+    bc_coin_package_revenue_eur: Number((manualStats.revenue + purchaseStats.revenue).toFixed(2)),
+    bc_coin_package_transactions: manualStats.transactions + purchaseStats.transactions,
+    bc_coin_sold_amount: manualStats.sold + purchaseStats.sold,
+    bc_coin_bonus_amount: manualStats.bonus + purchaseStats.bonus
+  };
+}
 
 adminRouter.post('/login', asyncHandler(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
@@ -153,19 +199,23 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   dayStart.setHours(0, 0, 0, 0);
   const monthStart = new Date(dayStart.getFullYear(), dayStart.getMonth(), 1);
 
-  const [profiles, reports, bookings, activity, activationPayments, activations] = await Promise.all([
+  const [profiles, reports, bookings, activity, activationPayments, activations, manualCoinOrders, coinPurchaseRequests] = await Promise.all([
     supabaseAdmin.from('profiles').select('id, display_name, city, category, status, verification_status, moderation_status, is_test_account, available_now, created_at').limit(1000),
     supabaseAdmin.from('reports').select('id, admin_status, status').limit(1000),
     supabaseAdmin.from('booking_requests').select('id, status, created_at').limit(1000),
     supabaseAdmin.from('admin_activity_logs').select('*').order('created_at', { ascending: false }).limit(12),
     supabaseAdmin.from('client_activation_payments').select('*').order('created_at', { ascending: false }).limit(1000),
-    supabaseAdmin.from('client_activations').select('id, state').limit(5000)
+    supabaseAdmin.from('client_activations').select('id, state').limit(5000),
+    supabaseAdmin.from('manual_payment_orders').select('purpose, status, amount_eur, amount_cents, tokens_amount, metadata').eq('purpose', 'token_package').limit(5000),
+    supabaseAdmin.from('token_purchase_requests').select('status, token_amount, eur_price, bonus_tokens').limit(5000)
   ]);
 
   if (profiles.error) return res.status(500).json({ error: profiles.error.message });
   if (reports.error) return res.status(500).json({ error: reports.error.message });
   if (bookings.error) return res.status(500).json({ error: bookings.error.message });
   if (activationPayments.error) return res.status(500).json({ error: activationPayments.error.message });
+  if (manualCoinOrders.error) return res.status(500).json({ error: manualCoinOrders.error.message });
+  if (coinPurchaseRequests.error) return res.status(500).json({ error: coinPurchaseRequests.error.message });
 
   const profileRows = profiles.data || [];
   const reportRows = reports.data || [];
@@ -181,6 +231,7 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   const activationRows = activations.data || [];
   const dailyClientActivationRevenue = sumRealRevenue(realActivationPaymentRows.filter((row) => new Date(row.created_at) >= dayStart));
   const monthlyClientActivationRevenue = sumRealRevenue(realActivationPaymentRows.filter((row) => new Date(row.created_at) >= monthStart));
+  const bcCoinPackageStats = buildBcCoinPackageStats(manualCoinOrders.data || [], coinPurchaseRequests.data || []);
   const activatedClientCount = activationRows.filter((activation) => activation.state === 'client_activated').length;
   const registeredClientCount = activationRows.length;
   const latestActivationPayments = realActivationPaymentRows.slice(0, 12).map((payment) => ({
@@ -212,6 +263,7 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
       monthly_revenue_eur: monthlyClientActivationRevenue,
       client_activation_revenue_eur: sumRealRevenue(realActivationPaymentRows),
       client_activation_transactions: realActivationPaymentRows.length,
+      ...bcCoinPackageStats,
       registered_clients: registeredClientCount,
       activated_clients: activatedClientCount,
       free_clients: Math.max(registeredClientCount - activatedClientCount, 0),
@@ -357,15 +409,19 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
   dayStart.setHours(0, 0, 0, 0);
   const monthStart = new Date(dayStart.getFullYear(), dayStart.getMonth(), 1);
 
-  const [activationPayments, subscriptions, stripeEvents] = await Promise.all([
+  const [activationPayments, subscriptions, stripeEvents, manualCoinOrders, coinPurchaseRequests] = await Promise.all([
     supabaseAdmin.from('client_activation_payments').select('*').order('created_at', { ascending: false }).limit(1000),
     supabaseAdmin.from('subscriptions').select('*').order('created_at', { ascending: false }).limit(1000),
-    supabaseAdmin.from('stripe_payment_events').select('*').order('created_at', { ascending: false }).limit(2000)
+    supabaseAdmin.from('stripe_payment_events').select('*').order('created_at', { ascending: false }).limit(2000),
+    supabaseAdmin.from('manual_payment_orders').select('purpose, status, amount_eur, amount_cents, tokens_amount, metadata').eq('purpose', 'token_package').limit(5000),
+    supabaseAdmin.from('token_purchase_requests').select('status, token_amount, eur_price, bonus_tokens').limit(5000)
   ]);
 
   if (activationPayments.error) return res.status(500).json({ error: activationPayments.error.message });
   if (subscriptions.error) return res.status(500).json({ error: subscriptions.error.message });
   if (stripeEvents.error && stripeEvents.error.code !== '42P01') return res.status(500).json({ error: stripeEvents.error.message });
+  if (manualCoinOrders.error) return res.status(500).json({ error: manualCoinOrders.error.message });
+  if (coinPurchaseRequests.error) return res.status(500).json({ error: coinPurchaseRequests.error.message });
 
   const activationRows = (activationPayments.data || []).map(normalizeClientPayment);
   const subscriptionRows = subscriptions.data || [];
@@ -432,6 +488,7 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
   const monthlyRevenue = realPaymentRows
     .filter((row) => row.created_at && new Date(row.created_at) >= monthStart)
     .reduce((sum, row) => sum + revenueAmount(row), 0);
+  const bcCoinPackageStats = buildBcCoinPackageStats(manualCoinOrders.data || [], coinPurchaseRequests.data || []);
 
   res.json({
     stats: {
@@ -442,6 +499,7 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
       escort_subscriptions_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'escort_subscription')),
       business_subscriptions_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'business_subscription')),
       coins_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'coins_purchase')),
+      ...bcCoinPackageStats,
       escort_subscriptions: realActiveSubscriptionRows.filter((row) => !isBusinessRole(row.role)).length,
       business_subscriptions: realActiveSubscriptionRows.filter((row) => isBusinessRole(row.role)).length,
       sponsored_profiles: sponsoredProfileCount,

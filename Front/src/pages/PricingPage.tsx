@@ -12,12 +12,13 @@ const platformProducts = [
 ];
 
 const tokenProducts = [
-  ['tokens_120', 'token_package', '120 BC Coins', '18 EUR'],
-  ['tokens_520', 'token_package', '520 BC Coins', '78 EUR'],
-  ['tokens_1200', 'token_package', '1,200 BC Coins', '180 EUR'],
-  ['tokens_2560', 'token_package', '2,560 BC Coins', '384 EUR'],
-  ['tokens_5200', 'token_package', '5,200 BC Coins', '780 EUR'],
-  ['tokens_10200', 'token_package', '10,200 BC Coins', '1530 EUR']
+  ['bc_66', 'token_package', '66 BC Coins', '9,99 EUR'],
+  ['bc_166', 'token_package', '166 BC Coins', '24,99 EUR'],
+  ['bc_666', 'token_package', '666 BC Coins', '99,99 EUR'],
+  ['bc_1200', 'token_package', '1200 BC Coins', '180,00 EUR'],
+  ['bc_2560', 'token_package', '2560 BC Coins', '384,00 EUR'],
+  ['bc_5200', 'token_package', '5200 BC Coins', '780,00 EUR'],
+  ['bc_10200', 'token_package', '10200 BC Coins', '1530,00 EUR']
 ];
 
 export function PricingPage() {

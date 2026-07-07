@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { api } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
-import type { AdminActivity, AdminReport, BookingRequest, ClientPersonalProfile, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, AdminStats, BookingRequest, ClientPersonalProfile, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
@@ -177,7 +177,7 @@ export function AdminPage() {
   const location = useLocation();
   const { t, option, lang, setLang } = useI18n();
 
-  const [stats, setStats] = useState<Record<string, number>>({});
+  const [stats, setStats] = useState<AdminStats>({});
   const [tokenStats, setTokenStats] = useState<Record<string, number>>({});
   const [subscriptionStats, setSubscriptionStats] = useState<Record<string, number>>({});
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -206,7 +206,7 @@ export function AdminPage() {
   const [clientReferrals, setClientReferrals] = useState<Record<string, any>[]>([]);
   const [activity, setActivity] = useState<AdminActivity[]>([]);
   const [revenueEvents, setRevenueEvents] = useState<Record<string, any>[]>([]);
-  const [revenueStats, setRevenueStats] = useState<Record<string, number>>({});
+  const [revenueStats, setRevenueStats] = useState<AdminStats>({});
   const [revenuePayments, setRevenuePayments] = useState<Record<string, any>[]>([]);
   const [topCities, setTopCities] = useState<Record<string, any>[]>([]);
   const [topCategories, setTopCategories] = useState<Record<string, any>[]>([]);
@@ -1554,9 +1554,15 @@ export function AdminPage() {
       const registeredClients = stats.registered_clients || users.filter((user) => user.account_type === 'client').length;
       const activatedClients = stats.activated_clients || 0;
       const sponsoredProfiles = profiles.filter((profile) => profile.is_sponsored || profile.acquisition_source === 'admin_sponsored').length;
+      const bcCoinPackageSummary = t('admin.dashboard.bcCoinPackageSummary', {
+        packages: stats.bc_coin_package_transactions || 0,
+        sold: stats.bc_coin_sold_amount || 0,
+        bonus: stats.bc_coin_bonus_amount || 0
+      });
       const cards = [
         { label: t('admin.dashboard.dailyRevenue'), value: formatEuro(stats.daily_revenue_eur), badge: Number(stats.daily_revenue_eur || 0) > 0 ? t('admin.status.active') : t('admin.dashboard.noPaymentsShort') },
         { label: t('admin.dashboard.monthlyRevenue'), value: formatEuro(stats.monthly_revenue_eur), badge: Number(stats.monthly_revenue_eur || 0) > 0 ? t('admin.dashboard.realRevenue') : t('admin.dashboard.noPaymentsShort') },
+        { label: t('admin.dashboard.bcCoinPackageRevenue'), value: formatEuro(stats.bc_coin_package_revenue_eur), badge: bcCoinPackageSummary },
         { label: t('admin.dashboard.clientActivations'), value: stats.client_activation_transactions || clientActivationPayments.length, badge: t('admin.dashboard.activatedClientsCount', { count: activatedClients }) },
         { label: t('admin.dashboard.activeUsers'), value: activatedClients || registeredClients, badge: t('admin.dashboard.registeredClientsCount', { count: registeredClients }) },
         { label: t('admin.dashboard.activeProfiles'), value: stats.active_profiles || profiles.filter((profile) => profile.status === 'active').length, badge: t('admin.dashboard.availableProfilesCount', { count: stats.available_profiles || profiles.filter((profile) => profile.available_now).length }) },
@@ -1942,12 +1948,18 @@ export function AdminPage() {
 
     if (view === 'revenue') {
       const realRevenuePayments = revenuePayments.filter(isRealRevenuePayment);
+      const bcCoinPackageSummary = t('admin.dashboard.bcCoinPackageSummary', {
+        packages: revenueStats.bc_coin_package_transactions || 0,
+        sold: revenueStats.bc_coin_sold_amount || 0,
+        bonus: revenueStats.bc_coin_bonus_amount || 0
+      });
       const cards = [
         { label: t('admin.revenue.today'), value: formatEuro(revenueStats.today_revenue), badge: Number(revenueStats.today_revenue || 0) > 0 ? t('admin.dashboard.realRevenue') : t('admin.dashboard.noPaymentsShort') },
         { label: t('admin.revenue.month'), value: formatEuro(revenueStats.monthly_revenue), badge: t('admin.dashboard.realRevenue') },
         { label: t('admin.revenue.clientActivationRevenue'), value: formatEuro(revenueStats.client_activation_revenue || revenueStats.client_activation_revenue_eur), badge: t('admin.revenue.clientActivation') },
         { label: t('admin.revenue.escortSubscriptionsRevenue'), value: formatEuro(revenueStats.escort_subscriptions_revenue || revenueStats.escort_revenue), badge: t('admin.revenue.escortSubscriptions') },
         { label: t('admin.revenue.businessSubscriptionsRevenue'), value: formatEuro(revenueStats.business_subscriptions_revenue || revenueStats.business_revenue), badge: t('admin.revenue.businessSubscriptions') },
+        { label: t('admin.dashboard.bcCoinPackageRevenue'), value: formatEuro(revenueStats.bc_coin_package_revenue_eur), badge: bcCoinPackageSummary },
         { label: t('admin.revenue.coinsRevenue'), value: formatEuro(revenueStats.coins_revenue), badge: 'Coins' },
         { label: t('admin.revenue.sponsoredProfiles'), value: revenueStats.sponsored_profiles || subscriptions.filter(isSponsoredSubscription).length, badge: t('admin.dashboard.notRevenue') }
       ];

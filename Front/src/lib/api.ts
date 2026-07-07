@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, AdminStats, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -100,7 +100,7 @@ export const api = {
     body: JSON.stringify(body)
   }),
   adminStats: (token: string) => request<{
-    stats: Record<string, number>;
+    stats: AdminStats;
     latest_activity: AdminActivity[];
     revenue_events?: Record<string, unknown>[];
     top_cities?: Record<string, unknown>[];
@@ -227,7 +227,7 @@ export const api = {
     body: JSON.stringify(body)
   }),
   adminActivityLogs: (token: string) => request<{ activity_logs: AdminActivity[] }>('/api/admin/activity-logs', { token }),
-  adminRevenue: (token: string) => request<{ stats: Record<string, number>; payments: Record<string, unknown>[] }>('/api/admin/revenue', { token }),
+  adminRevenue: (token: string) => request<{ stats: AdminStats; payments: Record<string, unknown>[] }>('/api/admin/revenue', { token }),
   adminBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/admin/bookings', { token }),
   adminSettings: (token: string) => request<{ settings: Record<string, unknown> }>('/api/admin/settings', { token }),
   setProfileStatus: (token: string, id: string, status: string) => request(`/api/admin/profiles/${id}/status`, {

@@ -2,18 +2,18 @@ import { Router } from 'express';
 import { verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler } from '../validation.js';
-import { manualPaymentProducts } from '../manualPayments.js';
+import { bcCoinPackages } from '../manualPayments.js';
 import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 
 export const tokensRouter = Router();
 
-const defaultPackages = manualPaymentProducts.filter((product) => product.purpose === 'token_package').map((tokenPackage, index) => ({
+const defaultPackages = bcCoinPackages.map((tokenPackage, index) => ({
   id: tokenPackage.id,
   name: tokenPackage.label,
-  token_amount: tokenPackage.tokens || 0,
-  eur_price: tokenPackage.amount_cents / 100,
-  bonus_tokens: 0,
-  featured: index === 2 || tokenPackage.id === 'tokens_1200',
+  token_amount: tokenPackage.coins,
+  eur_price: tokenPackage.priceEur,
+  bonus_tokens: tokenPackage.bonusCoins,
+  featured: index === 2 || tokenPackage.id === 'bc_666',
   active: true
 }));
 

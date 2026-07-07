@@ -7,13 +7,18 @@ import { useI18n } from '../i18n';
 
 const tokenUses = ['listing', 'boost', 'liveCam', 'chat', 'gallery', 'booking', 'tips', 'spotlight'];
 const tokenProductCodes: Record<number, string> = {
-  120: 'tokens_120',
-  520: 'tokens_520',
-  1200: 'tokens_1200',
-  2560: 'tokens_2560',
-  5200: 'tokens_5200',
-  10200: 'tokens_10200'
+  66: 'bc_66',
+  166: 'bc_166',
+  666: 'bc_666',
+  1200: 'bc_1200',
+  2560: 'bc_2560',
+  5200: 'bc_5200',
+  10200: 'bc_10200'
 };
+
+function formatEuro(value: number) {
+  return `${value.toFixed(2).replace('.', ',')} EUR`;
+}
 
 export function TokenShopPage() {
   const [packages, setPackages] = useState<TokenPackage[]>([]);
@@ -36,11 +41,11 @@ export function TokenShopPage() {
     if (!data.session?.access_token) return setMessage(t('tokens.loginRequired'));
     try {
       const order = await api.createManualPaymentOrder(data.session.access_token, {
-        productCode: tokenPackage.id?.startsWith('tokens_') ? tokenPackage.id : tokenProductCodes[tokenPackage.token_amount],
+        productCode: tokenPackage.id?.startsWith('bc_') ? tokenPackage.id : tokenProductCodes[tokenPackage.token_amount],
         provider: 'bank_transfer'
       });
       setOrderReference(order.payment_reference || '');
-      setMessage(`${tokenPackage.token_amount.toLocaleString()} ${t('tokens.short')}: ${order.instructions}`);
+      setMessage(`${tokenPackage.token_amount} ${t('tokens.short')}: ${order.instructions}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('tokens.checkoutPending'));
     }
@@ -64,8 +69,8 @@ export function TokenShopPage() {
           <article className={tokenPackage.featured ? 'token-package-card featured' : 'token-package-card'} key={tokenPackage.id || tokenPackage.name}>
             {tokenPackage.featured && <span className="best-value">{t('tokens.bestValue')}</span>}
             <Gem size={24} />
-            <h2>{tokenPackage.token_amount.toLocaleString()} {t('tokens.short')}</h2>
-            <strong>{tokenPackage.eur_price.toFixed(2)} EUR</strong>
+            <h2>{tokenPackage.token_amount} {t('tokens.short')}</h2>
+            <strong>{formatEuro(tokenPackage.eur_price)}</strong>
             <p>{tokenPackage.bonus_tokens ? t('tokens.bonus', { count: tokenPackage.bonus_tokens }) : t('tokens.noBonus')}</p>
             <button className="button primary full er-btn er-glass-btn er-glass-btn--purple er-glass-btn--block" onClick={() => selectPackage(tokenPackage)}><span>{t('tokens.selectPackage')}</span></button>
           </article>

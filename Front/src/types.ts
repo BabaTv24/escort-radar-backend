@@ -251,6 +251,13 @@ export type AdminActivity = {
   created_at: string;
 };
 
+export type AdminStats = Record<string, number> & {
+  bc_coin_package_revenue_eur?: number;
+  bc_coin_package_transactions?: number;
+  bc_coin_sold_amount?: number;
+  bc_coin_bonus_amount?: number;
+};
+
 export type Wallet = {
   id: string;
   user_id: string;

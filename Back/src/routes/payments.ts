@@ -147,14 +147,17 @@ async function createManualPaymentOrder(req: Request, res: Response) {
       amount_cents: product.amount_cents,
       amount_eur: product.amount_cents / 100,
       currency: product.currency,
-      tokens_amount: 'tokens' in product ? product.tokens : null,
+      tokens_amount: 'total_tokens' in product ? product.total_tokens : ('tokens' in product ? product.tokens : null),
       profile_id: null,
       business_id: null,
       status: 'pending',
       instructions: '',
       metadata: {
         payment_reference_template: config.manualBankTransferReferenceTemplate,
-        payment_reference: paymentReference
+        payment_reference: paymentReference,
+        base_tokens: 'tokens' in product ? product.tokens : null,
+        bonus_tokens: 'bonus_tokens' in product ? product.bonus_tokens : null,
+        total_tokens: 'total_tokens' in product ? product.total_tokens : null
       }
     })
     .select()

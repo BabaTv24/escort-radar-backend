@@ -7,16 +7,30 @@ export const manualPaymentPurposes = ['client_activation', 'advertiser_subscript
 
 export type ManualPaymentPurpose = typeof manualPaymentPurposes[number];
 
+export const bcCoinPackages = [
+  { id: 'bc_66', coins: 66, bonusCoins: 0, totalCoins: 66, priceEur: 9.99, label: '66 BC Coins' },
+  { id: 'bc_166', coins: 166, bonusCoins: 20, totalCoins: 186, priceEur: 24.99, label: '166 BC Coins' },
+  { id: 'bc_666', coins: 666, bonusCoins: 150, totalCoins: 816, priceEur: 99.99, label: '666 BC Coins' },
+  { id: 'bc_1200', coins: 1200, bonusCoins: 450, totalCoins: 1650, priceEur: 180, label: '1200 BC Coins' },
+  { id: 'bc_2560', coins: 2560, bonusCoins: 700, totalCoins: 3260, priceEur: 384, label: '2560 BC Coins' },
+  { id: 'bc_5200', coins: 5200, bonusCoins: 1500, totalCoins: 6700, priceEur: 780, label: '5200 BC Coins' },
+  { id: 'bc_10200', coins: 10200, bonusCoins: 3133, totalCoins: 13333, priceEur: 1530, label: '10200 BC Coins' }
+] as const;
+
 export const manualPaymentProducts = [
   { id: 'client_activation', purpose: 'client_activation', label: 'Client Activation', amount_cents: 99, currency: 'EUR' },
   { id: 'advertiser_30d', purpose: 'advertiser_subscription', label: 'Solo Advertiser Premium Listing', amount_cents: 4999, currency: 'EUR', days: 30 },
   { id: 'agency_30d', purpose: 'agency_subscription', label: 'Agency / Business Plan', amount_cents: 49900, currency: 'EUR', days: 30 },
-  { id: 'tokens_120', purpose: 'token_package', label: '120 tokens', amount_cents: 1800, currency: 'EUR', tokens: 120 },
-  { id: 'tokens_520', purpose: 'token_package', label: '520 tokens', amount_cents: 7800, currency: 'EUR', tokens: 520 },
-  { id: 'tokens_1200', purpose: 'token_package', label: '1,200 tokens', amount_cents: 18000, currency: 'EUR', tokens: 1200 },
-  { id: 'tokens_2560', purpose: 'token_package', label: '2,560 tokens', amount_cents: 38400, currency: 'EUR', tokens: 2560 },
-  { id: 'tokens_5200', purpose: 'token_package', label: '5,200 tokens', amount_cents: 78000, currency: 'EUR', tokens: 5200 },
-  { id: 'tokens_10200', purpose: 'token_package', label: '10,200 tokens', amount_cents: 153000, currency: 'EUR', tokens: 10200 }
+  ...bcCoinPackages.map((coinPackage) => ({
+    id: coinPackage.id,
+    purpose: 'token_package',
+    label: coinPackage.label,
+    amount_cents: Math.round(coinPackage.priceEur * 100),
+    currency: 'EUR',
+    tokens: coinPackage.coins,
+    bonus_tokens: coinPackage.bonusCoins,
+    total_tokens: coinPackage.totalCoins
+  }))
 ] as const;
 
 export function normalizeManualPaymentProvider(provider: string) {
@@ -127,11 +141,16 @@ async function applyManualSubscription(userId: string, order: Record<string, any
 }
 
 async function applyManualTokenPackage(userId: string, order: Record<string, any>, product: Record<string, any>, adminEmail?: string) {
-  const amount = Number(product.tokens || order.tokens_amount || 0);
+  const baseAmount = Number(product.tokens || order.tokens_amount || 0);
+  const bonusAmount = Number(product.bonus_tokens || 0);
+  const amount = Number(product.total_tokens || (baseAmount + bonusAmount));
   if (!amount) return;
   const wallet = await getOrCreateTokenWallet(userId);
   await adjustTokenWalletBalance(wallet.id, userId, amount, 'manual_payment_tokens', {
     manual_payment_order_id: order.id,
-    product_id: product.id
+    product_id: product.id,
+    base_tokens: baseAmount,
+    bonus_tokens: bonusAmount,
+    total_tokens: amount
   }, adminEmail);
 }
