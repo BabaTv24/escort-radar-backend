@@ -2,30 +2,14 @@ import { Router } from 'express';
 import { verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler } from '../validation.js';
-import { bcCoinPackages } from '../manualPayments.js';
+import { loadBcCoinPackages, toPublicTokenPackage } from '../bcCoinPackages.js';
 import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 
 export const tokensRouter = Router();
 
-const defaultPackages = bcCoinPackages.map((tokenPackage, index) => ({
-  id: tokenPackage.id,
-  name: tokenPackage.label,
-  token_amount: tokenPackage.coins,
-  eur_price: tokenPackage.priceEur,
-  bonus_tokens: tokenPackage.bonusCoins,
-  featured: index === 2 || tokenPackage.id === 'bc_666',
-  active: true
-}));
-
 tokensRouter.get('/packages', asyncHandler(async (_req, res) => {
-  const { data, error } = await supabaseAdmin
-    .from('token_packages')
-    .select('*')
-    .eq('active', true)
-    .order('token_amount', { ascending: true });
-
-  if (error) return res.json({ packages: defaultPackages });
-  res.json({ packages: data?.length ? data : defaultPackages });
+  const rows = await loadBcCoinPackages({ activeOnly: true });
+  res.json({ packages: rows.map(toPublicTokenPackage) });
 }));
 
 tokensRouter.get('/wallet/me', verifyUser, asyncHandler(async (req, res) => {
@@ -39,7 +23,8 @@ tokensRouter.post('/purchase-intent', verifyUser, asyncHandler(async (req, res) 
     ? await supabaseAdmin.from('token_packages').select('*').eq('id', packageId).single()
     : { data: null };
 
-  const selectedPackage = tokenPackage || defaultPackages[0];
+  const managedPackages = await loadBcCoinPackages({ activeOnly: true });
+  const selectedPackage = tokenPackage || managedPackages.map(toPublicTokenPackage).find((item) => item.id === packageId || item.package_key === packageId) || toPublicTokenPackage(managedPackages[0]);
   const wallet = await getOrCreateWallet(req.user!.id);
   const { data: purchaseRequest, error } = await supabaseAdmin
     .from('token_purchase_requests')

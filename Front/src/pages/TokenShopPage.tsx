@@ -20,11 +20,34 @@ function formatEuro(value: number) {
   return `${value.toFixed(2).replace('.', ',')} EUR`;
 }
 
+function isPromotionActive(tokenPackage: TokenPackage, now: number) {
+  const start = tokenPackage.promotion_starts_at ? new Date(tokenPackage.promotion_starts_at).getTime() : 0;
+  const end = tokenPackage.promotion_ends_at ? new Date(tokenPackage.promotion_ends_at).getTime() : 0;
+  if (!end || !Number.isFinite(end)) return false;
+  if (start && Number.isFinite(start) && now < start) return false;
+  return now < end;
+}
+
+function isPromotionExpired(tokenPackage: TokenPackage, now: number) {
+  const end = tokenPackage.promotion_ends_at ? new Date(tokenPackage.promotion_ends_at).getTime() : 0;
+  return Boolean(end && Number.isFinite(end) && now >= end);
+}
+
+function formatPromoCountdown(value: string, now: number) {
+  const end = new Date(value).getTime();
+  const totalMinutes = Math.max(0, Math.floor((end - now) / 60000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  return `${days}d ${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m`;
+}
+
 export function TokenShopPage() {
   const [packages, setPackages] = useState<TokenPackage[]>([]);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [message, setMessage] = useState('');
   const [orderReference, setOrderReference] = useState('');
+  const [now, setNow] = useState(Date.now());
   const { t } = useI18n();
 
   useEffect(() => {
@@ -34,6 +57,11 @@ export function TokenShopPage() {
         api.myWallet(data.session.access_token).then((walletData) => setWallet(walletData.wallet)).catch(() => undefined);
       }
     });
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60000);
+    return () => window.clearInterval(timer);
   }, []);
 
   async function selectPackage(tokenPackage: TokenPackage) {
@@ -65,16 +93,21 @@ export function TokenShopPage() {
       </section>
 
       <section className="token-package-grid">
-        {packages.map((tokenPackage) => (
-          <article className={tokenPackage.featured ? 'token-package-card featured' : 'token-package-card'} key={tokenPackage.id || tokenPackage.name}>
-            {tokenPackage.featured && <span className="best-value">{t('tokens.bestValue')}</span>}
-            <Gem size={24} />
-            <h2>{tokenPackage.token_amount} {t('tokens.short')}</h2>
-            <strong>{formatEuro(tokenPackage.eur_price)}</strong>
-            <p>{tokenPackage.bonus_tokens ? t('tokens.bonus', { count: tokenPackage.bonus_tokens }) : t('tokens.noBonus')}</p>
-            <button className="button primary full er-btn er-glass-btn er-glass-btn--purple er-glass-btn--block" onClick={() => selectPackage(tokenPackage)}><span>{t('tokens.selectPackage')}</span></button>
-          </article>
-        ))}
+        {packages.map((tokenPackage) => {
+          const promotionActive = isPromotionActive(tokenPackage, now);
+          const packageBadge = promotionActive || !isPromotionExpired(tokenPackage, now) ? tokenPackage.badge : '';
+          return (
+            <article className={tokenPackage.featured ? 'token-package-card featured' : 'token-package-card'} key={tokenPackage.id || tokenPackage.name}>
+              {(tokenPackage.featured || packageBadge) && <span className="best-value">{packageBadge || t('tokens.bestValue')}</span>}
+              <Gem size={24} />
+              <h2>{tokenPackage.token_amount} {t('tokens.short')}</h2>
+              <strong>{formatEuro(tokenPackage.eur_price)}</strong>
+              <p>{tokenPackage.bonus_tokens ? t('tokens.bonus', { count: tokenPackage.bonus_tokens }) : t('tokens.noBonus')}</p>
+              {promotionActive && tokenPackage.promotion_ends_at ? <small className="token-promo-countdown">{t('tokens.promoEndsIn')}: {formatPromoCountdown(tokenPackage.promotion_ends_at, now)}</small> : null}
+              <button className="button primary full er-btn er-glass-btn er-glass-btn--purple er-glass-btn--block" onClick={() => selectPackage(tokenPackage)}><span>{t('tokens.selectPackage')}</span></button>
+            </article>
+          );
+        })}
       </section>
 
       <section className="token-use-grid">

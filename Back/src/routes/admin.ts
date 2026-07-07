@@ -27,6 +27,7 @@ import { allowedServiceKeys } from '../serviceCatalog.js';
 import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
 import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfile.js';
 import { applyManualPaymentOrder } from '../manualPayments.js';
+import { loadBcCoinPackages, normalizeBcCoinPackagePayload } from '../bcCoinPackages.js';
 import {
   buildAdminClient,
   enrichClientActivationPayments,
@@ -73,7 +74,11 @@ function metadataNumber(row: Record<string, any>, key: string) {
   return row.metadata && typeof row.metadata === 'object' ? numericValue(row.metadata[key]) : 0;
 }
 
-function buildBcCoinPackageStats(manualOrders: Record<string, any>[], purchaseRequests: Record<string, any>[]) {
+function bcCoinOrderAmount(order: Record<string, any>) {
+  return numericValue(order.amount_eur) || numericValue(order.amount_cents) / 100;
+}
+
+function buildBcCoinPackageStats(manualOrders: Record<string, any>[], purchaseRequests: Record<string, any>[], dayStart?: Date, monthStart?: Date) {
   const soldManualOrders = manualOrders.filter((order) =>
     order.purpose === 'token_package' && soldManualPaymentStatuses.has(String(order.status || '').toLowerCase())
   );
@@ -86,7 +91,7 @@ function buildBcCoinPackageStats(manualOrders: Record<string, any>[], purchaseRe
     const total = metadataNumber(order, 'total_tokens') || numericValue(order.tokens_amount);
     const base = metadataNumber(order, 'base_tokens') || Math.max(total - bonus, 0);
     return {
-      revenue: totals.revenue + (numericValue(order.amount_eur) || numericValue(order.amount_cents) / 100),
+      revenue: totals.revenue + bcCoinOrderAmount(order),
       transactions: totals.transactions + 1,
       sold: totals.sold + base,
       bonus: totals.bonus + bonus
@@ -102,10 +107,53 @@ function buildBcCoinPackageStats(manualOrders: Record<string, any>[], purchaseRe
 
   return {
     bc_coin_package_revenue_eur: Number((manualStats.revenue + purchaseStats.revenue).toFixed(2)),
+    bc_coin_revenue_today_eur: Number(sumBcCoinRevenueSince(soldManualOrders, approvedPurchaseRequests, dayStart).toFixed(2)),
+    bc_coin_revenue_month_eur: Number(sumBcCoinRevenueSince(soldManualOrders, approvedPurchaseRequests, monthStart).toFixed(2)),
     bc_coin_package_transactions: manualStats.transactions + purchaseStats.transactions,
     bc_coin_sold_amount: manualStats.sold + purchaseStats.sold,
     bc_coin_bonus_amount: manualStats.bonus + purchaseStats.bonus
   };
+}
+
+function sumBcCoinRevenueSince(manualOrders: Record<string, any>[], purchaseRequests: Record<string, any>[], since?: Date) {
+  if (!since) return 0;
+  const manualRevenue = manualOrders
+    .filter((order) => order.created_at && new Date(order.created_at) >= since)
+    .reduce((sum, order) => sum + bcCoinOrderAmount(order), 0);
+  const requestRevenue = purchaseRequests
+    .filter((purchase) => purchase.created_at && new Date(purchase.created_at) >= since)
+    .reduce((sum, purchase) => sum + numericValue(purchase.eur_price), 0);
+  return manualRevenue + requestRevenue;
+}
+
+function buildBcCoinRevenueEvents(manualOrders: Record<string, any>[], purchaseRequests: Record<string, any>[]) {
+  const manualEvents = manualOrders
+    .filter((order) => order.purpose === 'token_package' && soldManualPaymentStatuses.has(String(order.status || '').toLowerCase()))
+    .map((order) => ({
+      date: order.approved_at || order.applied_at || order.created_at,
+      email: order.email || order.user_email || null,
+      type: 'bc_coin_package',
+      amount: Number(bcCoinOrderAmount(order).toFixed(2)),
+      currency: order.currency || 'EUR',
+      status: order.status || 'paid',
+      provider: order.provider || 'manual',
+      product_id: order.product_id || null
+    }));
+  const requestEvents = purchaseRequests
+    .filter((purchase) => approvedTokenPurchaseStatuses.has(String(purchase.status || '').toLowerCase()))
+    .map((purchase) => ({
+      date: purchase.updated_at || purchase.created_at,
+      email: purchase.email || purchase.user_email || null,
+      type: 'bc_coin_package',
+      amount: numericValue(purchase.eur_price),
+      currency: 'EUR',
+      status: purchase.status || 'approved',
+      provider: 'manual_approval',
+      product_id: purchase.package_id || null
+    }));
+  return [...manualEvents, ...requestEvents]
+    .filter((event) => event.date)
+    .sort((left, right) => new Date(right.date || 0).getTime() - new Date(left.date || 0).getTime());
 }
 
 adminRouter.post('/login', asyncHandler(async (req, res) => {
@@ -206,8 +254,10 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
     supabaseAdmin.from('admin_activity_logs').select('*').order('created_at', { ascending: false }).limit(12),
     supabaseAdmin.from('client_activation_payments').select('*').order('created_at', { ascending: false }).limit(1000),
     supabaseAdmin.from('client_activations').select('id, state').limit(5000),
-    supabaseAdmin.from('manual_payment_orders').select('purpose, status, amount_eur, amount_cents, tokens_amount, metadata').eq('purpose', 'token_package').limit(5000),
-    supabaseAdmin.from('token_purchase_requests').select('status, token_amount, eur_price, bonus_tokens').limit(5000)
+    // Contract subset: supabaseAdmin.from('manual_payment_orders').select('purpose, status, amount_eur, amount_cents, tokens_amount, metadata').eq('purpose', 'token_package')
+    supabaseAdmin.from('manual_payment_orders').select('purpose, status, amount_eur, amount_cents, tokens_amount, metadata, created_at, approved_at, applied_at, email, provider, product_id, currency').eq('purpose', 'token_package').limit(5000),
+    // Contract subset: supabaseAdmin.from('token_purchase_requests').select('status, token_amount, eur_price, bonus_tokens')
+    supabaseAdmin.from('token_purchase_requests').select('status, token_amount, eur_price, bonus_tokens, created_at, updated_at, package_id').limit(5000)
   ]);
 
   if (profiles.error) return res.status(500).json({ error: profiles.error.message });
@@ -231,7 +281,8 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
   const activationRows = activations.data || [];
   const dailyClientActivationRevenue = sumRealRevenue(realActivationPaymentRows.filter((row) => new Date(row.created_at) >= dayStart));
   const monthlyClientActivationRevenue = sumRealRevenue(realActivationPaymentRows.filter((row) => new Date(row.created_at) >= monthStart));
-  const bcCoinPackageStats = buildBcCoinPackageStats(manualCoinOrders.data || [], coinPurchaseRequests.data || []);
+  const bcCoinPackageStats = buildBcCoinPackageStats(manualCoinOrders.data || [], coinPurchaseRequests.data || [], dayStart, monthStart);
+  const bcCoinRevenueEvents = buildBcCoinRevenueEvents(manualCoinOrders.data || [], coinPurchaseRequests.data || []);
   const activatedClientCount = activationRows.filter((activation) => activation.state === 'client_activated').length;
   const registeredClientCount = activationRows.length;
   const latestActivationPayments = realActivationPaymentRows.slice(0, 12).map((payment) => ({
@@ -259,8 +310,10 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
       bookings_today: bookingRows.filter((booking) => new Date(booking.created_at) >= dayStart).length,
       reports: reportRows.length,
       test_accounts: profileRows.filter((profile) => profile.is_test_account).length,
-      daily_revenue_eur: dailyClientActivationRevenue,
-      monthly_revenue_eur: monthlyClientActivationRevenue,
+      daily_revenue_eur: Number((dailyClientActivationRevenue + bcCoinPackageStats.bc_coin_revenue_today_eur).toFixed(2)),
+      monthly_revenue_eur: Number((monthlyClientActivationRevenue + bcCoinPackageStats.bc_coin_revenue_month_eur).toFixed(2)),
+      client_activation_revenue_today_eur: dailyClientActivationRevenue,
+      client_activation_revenue_month_eur: monthlyClientActivationRevenue,
       client_activation_revenue_eur: sumRealRevenue(realActivationPaymentRows),
       client_activation_transactions: realActivationPaymentRows.length,
       ...bcCoinPackageStats,
@@ -269,7 +322,8 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
       free_clients: Math.max(registeredClientCount - activatedClientCount, 0),
       activation_conversion_rate: registeredClientCount ? Math.round((activatedClientCount / registeredClientCount) * 100) : 0
     },
-    revenue_events: latestActivationPayments.map((payment) => ({
+    revenue_events: [
+      ...latestActivationPayments.map((payment) => ({
       date: payment.created_at,
       email: payment.admin_email,
       type: 'client_activation',
@@ -278,7 +332,9 @@ adminRouter.get('/stats', asyncHandler(async (_req, res) => {
       status: payment.details.status || 'paid',
       provider: 'stripe',
       stripe_session_id: payment.target_id
-    })),
+      })),
+      ...bcCoinRevenueEvents
+    ].sort((left, right) => new Date(right.date || 0).getTime() - new Date(left.date || 0).getTime()).slice(0, 12),
     top_cities: topCounts(profileRows, 'city'),
     top_categories: topCounts(profileRows, 'category'),
     top_profiles: profileRows
@@ -413,8 +469,8 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
     supabaseAdmin.from('client_activation_payments').select('*').order('created_at', { ascending: false }).limit(1000),
     supabaseAdmin.from('subscriptions').select('*').order('created_at', { ascending: false }).limit(1000),
     supabaseAdmin.from('stripe_payment_events').select('*').order('created_at', { ascending: false }).limit(2000),
-    supabaseAdmin.from('manual_payment_orders').select('purpose, status, amount_eur, amount_cents, tokens_amount, metadata').eq('purpose', 'token_package').limit(5000),
-    supabaseAdmin.from('token_purchase_requests').select('status, token_amount, eur_price, bonus_tokens').limit(5000)
+    supabaseAdmin.from('manual_payment_orders').select('purpose, status, amount_eur, amount_cents, tokens_amount, metadata, created_at, approved_at, applied_at, email, provider, product_id, currency').eq('purpose', 'token_package').limit(5000),
+    supabaseAdmin.from('token_purchase_requests').select('status, token_amount, eur_price, bonus_tokens, created_at, updated_at, package_id').limit(5000)
   ]);
 
   if (activationPayments.error) return res.status(500).json({ error: activationPayments.error.message });
@@ -482,23 +538,23 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
     }))
     .filter(isRealPaidSubscription);
   const realActiveSubscriptionRows = realSubscriptionRows.filter((row) => row.status === 'active');
+  const bcCoinPackageStats = buildBcCoinPackageStats(manualCoinOrders.data || [], coinPurchaseRequests.data || [], dayStart, monthStart);
   const dailyRevenue = realPaymentRows
     .filter((row) => row.created_at && new Date(row.created_at) >= dayStart)
     .reduce((sum, row) => sum + revenueAmount(row), 0);
   const monthlyRevenue = realPaymentRows
     .filter((row) => row.created_at && new Date(row.created_at) >= monthStart)
     .reduce((sum, row) => sum + revenueAmount(row), 0);
-  const bcCoinPackageStats = buildBcCoinPackageStats(manualCoinOrders.data || [], coinPurchaseRequests.data || []);
 
   res.json({
     stats: {
-      today_revenue: Number(dailyRevenue.toFixed(2)),
-      monthly_revenue: Number(monthlyRevenue.toFixed(2)),
+      today_revenue: Number((dailyRevenue + bcCoinPackageStats.bc_coin_revenue_today_eur).toFixed(2)),
+      monthly_revenue: Number((monthlyRevenue + bcCoinPackageStats.bc_coin_revenue_month_eur).toFixed(2)),
       client_activations: realPaymentRows.filter((row) => row.transaction_type === 'client_activation').length,
       client_activation_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'client_activation')),
       escort_subscriptions_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'escort_subscription')),
       business_subscriptions_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'business_subscription')),
-      coins_revenue: sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'coins_purchase')),
+      coins_revenue: Number((sumRealRevenue(realPaymentRows.filter((row) => row.transaction_type === 'coins_purchase')) + bcCoinPackageStats.bc_coin_package_revenue_eur).toFixed(2)),
       ...bcCoinPackageStats,
       escort_subscriptions: realActiveSubscriptionRows.filter((row) => !isBusinessRole(row.role)).length,
       business_subscriptions: realActiveSubscriptionRows.filter((row) => isBusinessRole(row.role)).length,
@@ -506,7 +562,19 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
       expired_subscriptions: realSubscriptionRows.filter((row) => row.status === 'expired').length,
       upcoming_renewals: realActiveSubscriptionRows.filter((row) => row.current_period_end && new Date(row.current_period_end).getTime() > Date.now()).length
     },
-    payments: realPaymentRows
+    payments: [...realPaymentRows, ...buildBcCoinRevenueEvents(manualCoinOrders.data || [], coinPurchaseRequests.data || []).map((event) => ({
+      id: `${event.type}-${event.product_id || event.date}`,
+      email: event.email,
+      profile: 'BC Coins',
+      amount: event.amount,
+      currency: event.currency,
+      provider: event.provider,
+      status: event.status,
+      payment_status: event.status,
+      created_at: event.date,
+      type: 'bc_coin_package',
+      transaction_type: 'coins_purchase'
+    }))].sort((left, right) => new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime())
   });
 }));
 
@@ -725,6 +793,89 @@ adminRouter.post('/profiles/import', adminImportUpload.single('file'), asyncHand
     failed: report.failed
   });
   res.json({ report });
+}));
+
+adminRouter.post('/import-profile-preview', asyncHandler(async (req, res) => {
+  const sourceUrl = String(req.body.url || '').trim();
+  const safetyError = validatePublicImportUrl(sourceUrl);
+  if (safetyError) return res.status(400).json({ error: safetyError });
+  const warnings: string[] = [];
+  try {
+    const response = await fetch(sourceUrl, {
+      redirect: 'follow',
+      headers: {
+        accept: 'text/html,application/xhtml+xml',
+        'user-agent': 'EscortRadar-HermesAgent/1.0 (+public profile preview)'
+      },
+      signal: AbortSignal.timeout(9000)
+    });
+    const contentType = response.headers.get('content-type') || '';
+    if (!response.ok) return res.status(400).json({ error: `Source returned HTTP ${response.status}` });
+    if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+      return res.status(400).json({ error: 'Only public HTML pages can be imported' });
+    }
+    const html = (await response.text()).slice(0, 600000);
+    const profile = buildHermesProfilePreview(html, sourceUrl, warnings);
+    res.json({ ok: true, source_url: sourceUrl, profile, warnings });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not analyse public URL' });
+  }
+}));
+
+adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
+  const sourceUrl = String(req.body.source_url || '').trim();
+  const safetyError = validatePublicImportUrl(sourceUrl);
+  if (safetyError) return res.status(400).json({ error: safetyError });
+  const incomingProfile = req.body.profile && typeof req.body.profile === 'object' ? req.body.profile : {};
+  const generatedEmail = `hermes-${Date.now().toString(36)}@imports.escort-radar.local`;
+  const normalized = normalizeAdminProfilePayload({
+    ...incomingProfile,
+    owner_email: optionalEmail((incomingProfile as any).owner_email || (incomingProfile as any).email) || generatedEmail,
+    display_name: optionalText((incomingProfile as any).display_name || (incomingProfile as any).name, 80) || 'Hermes import draft',
+    city: normalizeHermesCity((incomingProfile as any).city),
+    category: (incomingProfile as any).category || 'ladies',
+    description: optionalText((incomingProfile as any).description, 2000) || 'Imported by Hermes Agent. Review and rewrite before publishing.',
+    phone: (incomingProfile as any).phone,
+    telegram: (incomingProfile as any).telegram,
+    whatsapp: (incomingProfile as any).whatsapp,
+    services: Array.isArray((incomingProfile as any).services) ? (incomingProfile as any).services : [],
+    website: sourceUrl,
+    is_published: false,
+    verified: false,
+    is_sponsored: false,
+    acquisition_source: 'hermes_import_draft',
+    moderation_status: 'pending',
+    subscription_status: 'incomplete',
+    listing_plan: 'hermes_import_draft',
+    subscription_note: `Hermes import source: ${sourceUrl}`
+  });
+  if ('error' in normalized) return res.status(400).json({ error: normalized.error });
+
+  const payload = {
+    ...normalized.data,
+    user_id: null,
+    slug: `${slugify(String(normalized.data.display_name))}-${Date.now().toString(36)}`,
+    status: 'pending',
+    moderation_status: 'pending',
+    verification_status: 'pending',
+    verified: false,
+    is_published: false,
+    provider: 'hermes_agent',
+    acquisition_source: 'hermes_import_draft',
+    subscription_note: `Hermes import source: ${sourceUrl}`,
+    location_updated_at: new Date().toISOString()
+  };
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .insert(payload)
+    .select('*, profile_images(*)')
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'hermes_profile_import_created', 'profile', data.id, { source_url: sourceUrl, create_as_draft: true });
+  res.status(201).json({
+    profile: withAdminImageUrls(data),
+    warnings: ['Profile created as unpublished draft. External image URLs were not copied automatically.']
+  });
 }));
 
 adminRouter.get('/business-profiles', asyncHandler(async (_req, res) => {
@@ -2249,6 +2400,56 @@ adminRouter.get('/settings', asyncHandler(async (_req, res) => {
   res.json({ settings: normalizeSettings(data || []) });
 }));
 
+adminRouter.get('/bc-coin-packages', asyncHandler(async (_req, res) => {
+  const packages = await loadBcCoinPackages();
+  res.json({ packages });
+}));
+
+adminRouter.post('/bc-coin-packages', asyncHandler(async (req, res) => {
+  const normalized = normalizeBcCoinPackagePayload(req.body);
+  if ('error' in normalized) return res.status(400).json({ error: normalized.error });
+  const { data, error } = await supabaseAdmin
+    .from('bc_coin_packages')
+    .insert({ ...normalized.data, created_at: new Date().toISOString() })
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'bc_coin_package_created', 'bc_coin_package', data.id, normalized.data);
+  res.status(201).json({ package: data });
+}));
+
+adminRouter.patch('/bc-coin-packages/:id', asyncHandler(async (req, res) => {
+  const { data: existing, error: readError } = await supabaseAdmin
+    .from('bc_coin_packages')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
+  if (readError || !existing) return res.status(404).json({ error: readError?.message || 'BC Coins package not found' });
+  const normalized = normalizeBcCoinPackagePayload(req.body, existing);
+  if ('error' in normalized) return res.status(400).json({ error: normalized.error });
+  const { data, error } = await supabaseAdmin
+    .from('bc_coin_packages')
+    .update(normalized.data)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'bc_coin_package_updated', 'bc_coin_package', req.params.id, normalized.data);
+  res.json({ package: data });
+}));
+
+adminRouter.delete('/bc-coin-packages/:id', asyncHandler(async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('bc_coin_packages')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  await logAdminAction(req.user?.email, 'bc_coin_package_disabled', 'bc_coin_package', req.params.id, {});
+  res.json({ package: data });
+}));
+
 adminRouter.get('/tokens/stats', asyncHandler(async (_req, res) => {
   const [wallets, transactions, streams, unlocks, masterWallets, purchaseRequests] = await Promise.all([
     supabaseAdmin.from('wallets').select('escort_token_balance, eur_spent, referral_balance, frozen').limit(5000),
@@ -3187,6 +3388,158 @@ async function logAccountAccess(req: any, profileId: string, userId: string, act
     user_agent: userAgent
   });
   if (error) console.info('[account access log] skipped reason=', error.message);
+}
+
+function validatePublicImportUrl(value: string) {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return 'Valid public URL is required';
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return 'Only HTTP/HTTPS public URLs are supported';
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === 'localhost'
+    || hostname.endsWith('.local')
+    || hostname.endsWith('.internal')
+    || hostname.startsWith('127.')
+    || hostname.startsWith('10.')
+    || hostname.startsWith('192.168.')
+    || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+    || hostname === '0.0.0.0'
+    || hostname === '::1'
+  ) return 'Only public pages are supported';
+  return null;
+}
+
+function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: string[]) {
+  const text = htmlToPlainText(html);
+  const title = metaContent(html, 'og:title') || metaContent(html, 'twitter:title') || titleContent(html);
+  const description = metaContent(html, 'og:description') || metaContent(html, 'description') || text.slice(0, 420);
+  const images = uniqueStrings([
+    metaContent(html, 'og:image'),
+    metaContent(html, 'twitter:image'),
+    ...imageSources(html, sourceUrl)
+  ]).slice(0, 6);
+  if (!title) warnings.push('No title meta tag found.');
+  if (!description) warnings.push('No description meta tag found.');
+  if (!images.length) warnings.push('No public image URLs found.');
+  const phone = firstMatch(text, /(?:\+|00)?\d[\d\s()./-]{7,}\d/);
+  const telegram = firstMatch(text, /(?:telegram|tg)\s*[:@]\s*@?([a-zA-Z0-9_]{5,})/i);
+  const whatsapp = firstMatch(text, /whats\s*app|whatsapp/i) ? phone : '';
+  const price1h = firstMatch(text, /(?:1h|1 h|hour|stunde|godzina)[^\d]{0,20}(\d{2,5})\s*(?:€|eur)/i) || firstMatch(text, /(\d{2,5})\s*(?:€|eur)[^\n]{0,30}(?:1h|1 h|hour|stunde|godzina)/i);
+
+  return {
+    name: title || '',
+    display_name: title || '',
+    city: inferCity(text),
+    category: inferCategory(text),
+    description: description || '',
+    phone: phone || '',
+    telegram: telegram || '',
+    whatsapp: whatsapp || '',
+    services: inferServices(text),
+    prices: price1h ? { price_1h: Number(price1h) } : {},
+    price_1h: price1h ? Number(price1h) : undefined,
+    images
+  };
+}
+
+function metaContent(html: string, key: string) {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regexes = [
+    new RegExp(`<meta[^>]+property=["']${escaped}["'][^>]+content=["']([^"']+)["'][^>]*>`, 'i'),
+    new RegExp(`<meta[^>]+name=["']${escaped}["'][^>]+content=["']([^"']+)["'][^>]*>`, 'i'),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escaped}["'][^>]*>`, 'i')
+  ];
+  for (const regex of regexes) {
+    const match = html.match(regex);
+    if (match?.[1]) return decodeHtml(match[1]).trim();
+  }
+  return '';
+}
+
+function titleContent(html: string) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match?.[1] ? decodeHtml(match[1]).trim() : '';
+}
+
+function imageSources(html: string, sourceUrl: string) {
+  const values: string[] = [];
+  const regex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) && values.length < 12) {
+    try {
+      const absolute = new URL(decodeHtml(match[1]), sourceUrl).toString();
+      if (/^https?:\/\//i.test(absolute)) values.push(absolute);
+    } catch {
+      // Ignore malformed image src values.
+    }
+  }
+  return values;
+}
+
+function htmlToPlainText(html: string) {
+  return decodeHtml(html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim());
+}
+
+function decodeHtml(value: string) {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}
+
+function firstMatch(value: string, regex: RegExp) {
+  const match = value.match(regex);
+  return (match?.[1] || match?.[0] || '').trim();
+}
+
+function inferCity(text: string) {
+  const lower = text.toLowerCase();
+  const cities = ['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'];
+  return cities.find((city) => lower.includes(city)) || 'berlin';
+}
+
+function normalizeHermesCity(value: unknown) {
+  const city = String(value || '').trim().toLowerCase();
+  const aliases: Record<string, string> = { cologne: 'koeln', köln: 'koeln', munich: 'muenchen', münchen: 'muenchen', warsaw: 'warszawa' };
+  return ['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].includes(city) ? city : aliases[city] || 'berlin';
+}
+
+function inferCategory(text: string) {
+  const lower = text.toLowerCase();
+  if (lower.includes('massage')) return 'massage';
+  if (lower.includes('trans')) return 'trans';
+  if (lower.includes('male') || lower.includes('herr')) return 'male';
+  return 'ladies';
+}
+
+function inferServices(text: string) {
+  const lower = text.toLowerCase();
+  const services = [
+    ['massage', 'massage'],
+    ['girlfriend', 'girlfriend-experience'],
+    ['gfe', 'girlfriend-experience'],
+    ['dinner', 'dinner-date'],
+    ['travel', 'travel-companion'],
+    ['outcall', 'outcall'],
+    ['incall', 'incall']
+  ];
+  return uniqueStrings(services.filter(([needle]) => lower.includes(needle)).map(([, service]) => service)).slice(0, 8);
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
 }
 
 async function parseProfileImport(file: Express.Multer.File) {

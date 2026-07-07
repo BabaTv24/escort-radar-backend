@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { api } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
-import type { AdminActivity, AdminReport, AdminStats, BookingRequest, ClientPersonalProfile, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientPersonalProfile, HermesProfilePreview, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
@@ -112,6 +112,34 @@ const emptyStudioForm = {
   subscription_note: ''
 };
 
+const emptyBcCoinPackageForm: Partial<BcCoinPackage> = {
+  package_key: 'bc_promo',
+  title: '',
+  coins: 100,
+  bonus_coins: 0,
+  price_eur: 19.99,
+  currency: 'EUR',
+  description: '',
+  badge: '',
+  is_best_value: false,
+  is_active: true,
+  sort_order: 100,
+  promotion_starts_at: '',
+  promotion_ends_at: ''
+};
+
+const emptyHermesPreview: HermesProfilePreview = {
+  display_name: '',
+  city: 'berlin',
+  category: 'ladies',
+  description: '',
+  phone: '',
+  telegram: '',
+  whatsapp: '',
+  services: [],
+  images: []
+};
+
 const sections = [
   {
     title: 'PRZEGLAD',
@@ -197,6 +225,9 @@ export function AdminPage() {
   const [clientActivationPayments, setClientActivationPayments] = useState<Record<string, any>[]>([]);
   const [manualPaymentOrders, setManualPaymentOrders] = useState<Record<string, any>[]>([]);
   const [manualPaymentFilters, setManualPaymentFilters] = useState({ query: '', provider: 'all', status: 'all' });
+  const [bcCoinPackages, setBcCoinPackages] = useState<BcCoinPackage[]>([]);
+  const [newBcCoinPackage, setNewBcCoinPackage] = useState<Partial<BcCoinPackage>>({ ...emptyBcCoinPackageForm });
+  const [editingBcCoinPackageId, setEditingBcCoinPackageId] = useState('');
   const [purchases, setPurchases] = useState<TokenPurchaseRequest[]>([]);
   const [masterWallets, setMasterWallets] = useState<MasterAdminWallet[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -218,6 +249,11 @@ export function AdminPage() {
   const [accountActionLoading, setAccountActionLoading] = useState<'create' | 'temp' | 'magic' | 'reset' | 'send-login' | 'send-reset' | 'security' | ''>('');
   const [profileImportFile, setProfileImportFile] = useState<File | null>(null);
   const [profileImportReport, setProfileImportReport] = useState<{ created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } | null>(null);
+  const [hermesOpen, setHermesOpen] = useState(false);
+  const [hermesUrl, setHermesUrl] = useState('');
+  const [hermesPreview, setHermesPreview] = useState<HermesProfilePreview | null>(null);
+  const [hermesWarnings, setHermesWarnings] = useState<string[]>([]);
+  const [hermesBusy, setHermesBusy] = useState(false);
   const [newLocationRow, setNewLocationRow] = useState<LocationCatalogRow>({
     country_code: 'DE',
     country_name: 'Germany',
@@ -470,7 +506,8 @@ export function AdminPage() {
         moderationResult,
         activityLogResult,
         revenueResult,
-        locationCatalogResult
+        locationCatalogResult,
+        bcCoinPackageResult
       ] = await Promise.allSettled([
         adminLoadRequest('adminStats', api.adminStats(accessToken)),
         adminLoadRequest('adminTokenStats', api.adminTokenStats(accessToken)),
@@ -493,7 +530,8 @@ export function AdminPage() {
         adminLoadRequest('adminModeration', api.adminModeration(accessToken)),
         adminLoadRequest('adminActivityLogs', api.adminActivityLogs(accessToken)),
         adminLoadRequest('adminRevenue', api.adminRevenue(accessToken)),
-        adminLoadRequest('adminLocationCatalog', api.adminLocationCatalog(accessToken))
+        adminLoadRequest('adminLocationCatalog', api.adminLocationCatalog(accessToken)),
+        adminLoadRequest('adminBcCoinPackages', api.adminBcCoinPackages(accessToken))
       ]);
 
       const statsData = settledValue(statsResult, { stats: {}, latest_activity: [], revenue_events: [], top_cities: [], top_categories: [], top_profiles: [] }, 'adminStats');
@@ -518,6 +556,7 @@ export function AdminPage() {
       const activityLogData = settledValue(activityLogResult, { activity_logs: [] }, 'adminActivityLogs');
       const revenueData = settledValue(revenueResult, { stats: {}, payments: [] }, 'adminRevenue');
       const adminLocationData = settledValue(locationCatalogResult, { locations: [] }, 'adminLocationCatalog');
+      const bcCoinPackageData = settledValue(bcCoinPackageResult, { packages: [] }, 'adminBcCoinPackages');
 
       setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
       setTokenStats(tokenData.stats);
@@ -549,6 +588,7 @@ export function AdminPage() {
       setTopCategories((statsData.top_categories || []) as Record<string, any>[]);
       setTopProfiles((statsData.top_profiles || []) as Record<string, any>[]);
       setAdminLocationRows((adminLocationData.locations || []) as LocationCatalogRow[]);
+      setBcCoinPackages((bcCoinPackageData.packages || []) as BcCoinPackage[]);
     } finally {
       setLoading(false);
     }
@@ -920,6 +960,85 @@ export function AdminPage() {
       setProfileImportReport(result.report);
       setMessage(t('admin.accounts.importFinished'));
       await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setStudioSaving(false);
+    }
+  }
+
+  async function analyseHermesLink() {
+    if (!hermesUrl.trim()) return;
+    setHermesBusy(true);
+    setMessage('');
+    try {
+      const result = await api.importProfilePreview(token, hermesUrl.trim());
+      setHermesPreview({ ...emptyHermesPreview, ...result.profile, display_name: result.profile.display_name || result.profile.name || '' });
+      setHermesWarnings(result.warnings || []);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setHermesBusy(false);
+    }
+  }
+
+  async function createHermesDraft() {
+    if (!hermesPreview || !hermesUrl.trim()) return;
+    setHermesBusy(true);
+    setMessage('');
+    try {
+      const result = await api.importProfileCreate(token, {
+        source_url: hermesUrl.trim(),
+        profile: hermesPreview,
+        create_as_draft: true
+      });
+      setProfiles((current) => [result.profile, ...current.filter((profile) => profile.id !== result.profile.id)]);
+      setHermesOpen(false);
+      setHermesPreview(null);
+      setHermesUrl('');
+      setHermesWarnings(result.warnings || []);
+      setMessage(t('admin.hermes.createdDraft'));
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setHermesBusy(false);
+    }
+  }
+
+  function updateHermesPreview(patch: Partial<HermesProfilePreview>) {
+    setHermesPreview((current) => ({ ...(current || emptyHermesPreview), ...patch }));
+  }
+
+  async function saveBcCoinPackage(row: Partial<BcCoinPackage>) {
+    setStudioSaving(true);
+    setMessage('');
+    try {
+      const payload = normalizeBcCoinPackageForm(row);
+      const result = row.id
+        ? await api.updateAdminBcCoinPackage(token, row.id, payload)
+        : await api.createAdminBcCoinPackage(token, payload);
+      setBcCoinPackages((current) => {
+        const exists = current.some((item) => item.id === result.package.id);
+        const next = exists ? current.map((item) => item.id === result.package.id ? result.package : item) : [...current, result.package];
+        return next.sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0));
+      });
+      if (!row.id) setNewBcCoinPackage({ ...emptyBcCoinPackageForm, package_key: `bc_${Date.now().toString(36)}` });
+      setEditingBcCoinPackageId('');
+      setMessage(t('admin.bcPackages.saved'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setStudioSaving(false);
+    }
+  }
+
+  async function disableBcCoinPackage(id: string) {
+    setStudioSaving(true);
+    try {
+      const result = await api.disableAdminBcCoinPackage(token, id);
+      setBcCoinPackages((current) => current.map((item) => item.id === id ? result.package : item));
+      setMessage(t('admin.bcPackages.disabled'));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     } finally {
@@ -1519,6 +1638,48 @@ export function AdminPage() {
           </article>
         </div>
       )}
+      {hermesOpen && (
+        <div className="admin-modal-backdrop" onClick={() => setHermesOpen(false)}>
+          <article className="admin-modal hermes-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-studio-head compact">
+              <div>
+                <p className="eyebrow">{t('admin.hermes.eyebrow')}</p>
+                <h2>{t('admin.hermes.title')}</h2>
+              </div>
+              <button className="button" onClick={() => setHermesOpen(false)}>{t('admin.buttons.cancel')}</button>
+            </div>
+            <p className="admin-muted">{t('admin.hermes.legalNotice')}</p>
+            <div className="admin-actions-row hermes-url-row">
+              <input placeholder={t('admin.hermes.pasteLink')} value={hermesUrl} onChange={(event) => setHermesUrl(event.target.value)} />
+              <button className="button primary" disabled={hermesBusy || !hermesUrl.trim()} onClick={analyseHermesLink}>{hermesBusy ? t('states.loading') : t('admin.hermes.analyseLink')}</button>
+            </div>
+            {hermesWarnings.length ? <ul className="admin-warning-list">{hermesWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
+            {hermesPreview && (
+              <>
+                <div className="admin-form-grid hermes-preview-grid">
+                  <AdminField label={t('admin.profileEditor.displayName')}><input value={hermesPreview.display_name || hermesPreview.name || ''} onChange={(event) => updateHermesPreview({ display_name: event.target.value, name: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.city')}><input value={hermesPreview.city || ''} onChange={(event) => updateHermesPreview({ city: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.category')}><input value={hermesPreview.category || ''} onChange={(event) => updateHermesPreview({ category: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.phone')}><input value={hermesPreview.phone || ''} onChange={(event) => updateHermesPreview({ phone: event.target.value })} /></AdminField>
+                  <AdminField label="Telegram"><input value={hermesPreview.telegram || ''} onChange={(event) => updateHermesPreview({ telegram: event.target.value })} /></AdminField>
+                  <AdminField label="WhatsApp"><input value={hermesPreview.whatsapp || ''} onChange={(event) => updateHermesPreview({ whatsapp: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={hermesPreview.price_1h || ''} onChange={(event) => updateHermesPreview({ price_1h: Number(event.target.value || 0) })} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.description')}><textarea value={hermesPreview.description || ''} onChange={(event) => updateHermesPreview({ description: event.target.value })} /></AdminField>
+                </div>
+                {hermesPreview.images?.length ? (
+                  <div className="hermes-image-preview">
+                    {hermesPreview.images.slice(0, 6).map((src) => <img src={src} alt="" key={src} />)}
+                  </div>
+                ) : null}
+                <div className="admin-actions-row">
+                  <button className="button primary" disabled={hermesBusy} onClick={createHermesDraft}>{t('admin.hermes.createDraft')}</button>
+                  <button className="button" onClick={() => setHermesOpen(false)}>{t('admin.buttons.cancel')}</button>
+                </div>
+              </>
+            )}
+          </article>
+        </div>
+      )}
       {subscriptionDateEditor && (
         <div className="admin-modal-backdrop" onClick={() => setSubscriptionDateEditor(null)}>
           <article className="admin-modal" onClick={(event) => event.stopPropagation()}>
@@ -1737,6 +1898,7 @@ export function AdminPage() {
                 <h2>{t('admin.profiles.allProfiles')}</h2>
               </div>
               <div className="admin-actions-row">
+                <button className="button primary" onClick={() => setHermesOpen(true)}><Sparkles size={15} /> {t('admin.hermes.importProfiles')}</button>
                 <label className="admin-action-btn">
                   {t('admin.accounts.importProfiles')}
                   <input hidden type="file" accept=".csv,.xlsx,.xls" onChange={(event) => setProfileImportFile(event.target.files?.[0] || null)} />
@@ -2176,6 +2338,66 @@ export function AdminPage() {
           <AdminStatCard label={t('admin.locations.source')} value={adminLocationRows.length ? t('admin.locations.database') : t('admin.locations.fallback')} />
           <AdminStatCard label={t('admin.settingsFields.frozenModules')} value={t('admin.settingsFields.frozenModulesValue')} />
         </section>
+        <section className="admin-card bc-package-admin-panel">
+          <div className="profile-studio-head compact">
+            <div>
+              <p className="eyebrow">{t('admin.bcPackages.eyebrow')}</p>
+              <h2>{t('admin.bcPackages.title')}</h2>
+            </div>
+            <button className="button primary" disabled={studioSaving} onClick={() => saveBcCoinPackage(newBcCoinPackage)}>{t('admin.bcPackages.addPackage')}</button>
+          </div>
+          <div className="admin-form-grid bc-package-form">
+            <AdminField label={t('admin.bcPackages.packageKey')}><input value={newBcCoinPackage.package_key || ''} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, package_key: event.target.value })} /></AdminField>
+            <AdminField label={t('admin.bcPackages.titleField')}><input value={newBcCoinPackage.title || ''} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, title: event.target.value })} /></AdminField>
+            <AdminField label={t('admin.bcPackages.coins')}><input type="number" min={1} value={newBcCoinPackage.coins || 0} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, coins: Number(event.target.value) })} /></AdminField>
+            <AdminField label={t('admin.bcPackages.bonusCoins')}><input type="number" min={0} value={newBcCoinPackage.bonus_coins || 0} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, bonus_coins: Number(event.target.value) })} /></AdminField>
+            <AdminField label={t('admin.bcPackages.priceEur')}><input type="number" min={0} step="0.01" value={newBcCoinPackage.price_eur || 0} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, price_eur: Number(event.target.value) })} /></AdminField>
+            <AdminField label={t('admin.bcPackages.badge')}><input value={newBcCoinPackage.badge || ''} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, badge: event.target.value })} /></AdminField>
+            <AdminField label={t('admin.bcPackages.sortOrder')}><input type="number" min={0} value={newBcCoinPackage.sort_order || 0} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, sort_order: Number(event.target.value) })} /></AdminField>
+            <AdminField label={t('admin.bcPackages.promotionStartsAt')}><input type="datetime-local" value={toDateTimeLocal(newBcCoinPackage.promotion_starts_at)} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, promotion_starts_at: event.target.value })} /></AdminField>
+            <AdminField label={t('admin.bcPackages.promotionEndsAt')}><input type="datetime-local" value={toDateTimeLocal(newBcCoinPackage.promotion_ends_at)} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, promotion_ends_at: event.target.value })} /></AdminField>
+            <label className="admin-check-row"><input type="checkbox" checked={Boolean(newBcCoinPackage.is_best_value)} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, is_best_value: event.target.checked })} /> {t('admin.bcPackages.bestValue')}</label>
+            <label className="admin-check-row"><input type="checkbox" checked={newBcCoinPackage.is_active !== false} onChange={(event) => setNewBcCoinPackage({ ...newBcCoinPackage, is_active: event.target.checked })} /> {t('admin.bcPackages.active')}</label>
+          </div>
+          <div className="bc-package-admin-list">
+            {bcCoinPackages.map((item) => {
+              const editing = editingBcCoinPackageId === item.id;
+              return (
+                <article className="bc-package-admin-row" key={item.id}>
+                  {editing ? (
+                    <div className="admin-form-grid bc-package-form">
+                      <AdminField label={t('admin.bcPackages.packageKey')}><input value={item.package_key} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, package_key: event.target.value } : row))} /></AdminField>
+                      <AdminField label={t('admin.bcPackages.titleField')}><input value={item.title} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, title: event.target.value } : row))} /></AdminField>
+                      <AdminField label={t('admin.bcPackages.coins')}><input type="number" min={1} value={item.coins} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, coins: Number(event.target.value) } : row))} /></AdminField>
+                      <AdminField label={t('admin.bcPackages.bonusCoins')}><input type="number" min={0} value={item.bonus_coins} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, bonus_coins: Number(event.target.value) } : row))} /></AdminField>
+                      <AdminField label={t('admin.bcPackages.priceEur')}><input type="number" min={0} step="0.01" value={item.price_eur} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, price_eur: Number(event.target.value) } : row))} /></AdminField>
+                      <AdminField label={t('admin.bcPackages.badge')}><input value={item.badge || ''} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, badge: event.target.value } : row))} /></AdminField>
+                      <AdminField label={t('admin.bcPackages.sortOrder')}><input type="number" min={0} value={item.sort_order || 0} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, sort_order: Number(event.target.value) } : row))} /></AdminField>
+                      <AdminField label={t('admin.bcPackages.promotionStartsAt')}><input type="datetime-local" value={toDateTimeLocal(item.promotion_starts_at)} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, promotion_starts_at: event.target.value } : row))} /></AdminField>
+                      <AdminField label={t('admin.bcPackages.promotionEndsAt')}><input type="datetime-local" value={toDateTimeLocal(item.promotion_ends_at)} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, promotion_ends_at: event.target.value } : row))} /></AdminField>
+                      <label className="admin-check-row"><input type="checkbox" checked={Boolean(item.is_best_value)} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, is_best_value: event.target.checked } : row))} /> {t('admin.bcPackages.bestValue')}</label>
+                      <label className="admin-check-row"><input type="checkbox" checked={Boolean(item.is_active)} onChange={(event) => setBcCoinPackages((current) => current.map((row) => row.id === item.id ? { ...row, is_active: event.target.checked } : row))} /> {t('admin.bcPackages.active')}</label>
+                    </div>
+                  ) : (
+                    <div className="bc-package-admin-summary">
+                      <div>
+                        <strong>{item.title}</strong>
+                        <small>{item.package_key} / {item.coins} + {item.bonus_coins} BC / {formatEuro(item.price_eur)}</small>
+                        {item.badge ? <small>{t('admin.bcPackages.badge')}: {item.badge}</small> : null}
+                      </div>
+                      <span className="admin-badge-stack"><StatusBadge value={item.is_active ? 'active' : 'disabled'} />{item.is_best_value ? <StatusBadge value="best" /> : null}</span>
+                    </div>
+                  )}
+                  <div className="admin-actions-row">
+                    {editing ? <Action onClick={() => saveBcCoinPackage(item)}>{t('admin.actions.save')}</Action> : <Action onClick={() => setEditingBcCoinPackageId(item.id)}>{t('admin.actions.edit')}</Action>}
+                    {editing ? <Action onClick={() => setEditingBcCoinPackageId('')}>{t('admin.buttons.cancel')}</Action> : null}
+                    <Action danger disabled={!item.is_active} onClick={() => disableBcCoinPackage(item.id)}>{t('admin.bcPackages.disable')}</Action>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
         <section className="admin-card admin-inline-form">
           <h2>{t('admin.locations.title')}</h2>
           <input placeholder={t('admin.locations.countryCode')} value={newLocationRow.country_code} onChange={(event) => setNewLocationRow({ ...newLocationRow, country_code: event.target.value.toUpperCase().slice(0, 2) })} />
@@ -2316,6 +2538,32 @@ function toggleStudioService(values: string[], key: string) {
 
 function mergeServices(values: string[], next: string[]) {
   return [...new Set([...values, ...next])];
+}
+
+function normalizeBcCoinPackageForm(row: Partial<BcCoinPackage>) {
+  return {
+    package_key: String(row.package_key || '').trim().toLowerCase(),
+    title: String(row.title || '').trim(),
+    coins: Number(row.coins || 0),
+    bonus_coins: Number(row.bonus_coins || 0),
+    price_eur: Number(row.price_eur || 0),
+    currency: String(row.currency || 'EUR').trim().toUpperCase(),
+    description: row.description || '',
+    badge: row.badge || '',
+    is_best_value: Boolean(row.is_best_value),
+    is_active: row.is_active !== false,
+    sort_order: Number(row.sort_order || 0),
+    promotion_starts_at: row.promotion_starts_at || null,
+    promotion_ends_at: row.promotion_ends_at || null
+  };
+}
+
+function toDateTimeLocal(value: unknown) {
+  if (!value) return '';
+  const date = new Date(String(value));
+  if (!Number.isFinite(date.getTime())) return String(value).slice(0, 16);
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function moveImageId(images: NonNullable<Profile['profile_images']>, index: number, direction: -1 | 1) {

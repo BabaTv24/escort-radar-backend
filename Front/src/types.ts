@@ -317,12 +317,53 @@ export type MasterAdminWallet = {
 
 export type TokenPackage = {
   id?: string;
+  package_key?: string;
   name: string;
   token_amount: number;
   eur_price: number;
   bonus_tokens: number;
   featured: boolean;
   active?: boolean;
+  description?: string | null;
+  badge?: string | null;
+  sort_order?: number;
+  promotion_starts_at?: string | null;
+  promotion_ends_at?: string | null;
+};
+
+export type BcCoinPackage = {
+  id: string;
+  package_key: string;
+  title: string;
+  coins: number;
+  bonus_coins: number;
+  price_eur: number;
+  currency: string;
+  description?: string | null;
+  badge?: string | null;
+  is_best_value: boolean;
+  is_active: boolean;
+  sort_order: number;
+  promotion_starts_at?: string | null;
+  promotion_ends_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type HermesProfilePreview = {
+  name?: string;
+  display_name?: string;
+  city?: string;
+  category?: string;
+  description?: string;
+  phone?: string;
+  telegram?: string;
+  whatsapp?: string;
+  services?: string[];
+  prices?: Record<string, number>;
+  price_1h?: number;
+  images?: string[];
+  owner_email?: string;
 };
 
 export type ClientActivation = {

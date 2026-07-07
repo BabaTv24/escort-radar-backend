@@ -4,7 +4,8 @@ import { config } from '../config.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler, optionalText } from '../validation.js';
 import { createStripeCheckoutSession, sendStripeError } from '../services/stripePayments.js';
-import { buildPaymentReference, findManualPaymentProduct, manualPaymentProducts, manualPaymentProviders, normalizeManualPaymentProvider, paymentReferenceInstruction } from '../manualPayments.js';
+import { buildPaymentReference, manualPaymentProducts, manualPaymentProviders, normalizeManualPaymentProvider, paymentReferenceInstruction, resolveManualPaymentProduct } from '../manualPayments.js';
+import { loadBcCoinPackages, toManualPaymentProduct } from '../bcCoinPackages.js';
 
 export const paymentsRouter = Router();
 
@@ -88,9 +89,14 @@ paymentsRouter.post('/coins/checkout', verifyUser, asyncHandler(async (req, res)
   }
 }));
 
-paymentsRouter.get('/manual-products', (_req, res) => {
+paymentsRouter.get('/manual-products', asyncHandler(async (_req, res) => {
+  const managedCoinProducts = (await loadBcCoinPackages({ activeOnly: true })).map(toManualPaymentProduct);
+  const products = [
+    ...manualPaymentProducts.filter((product) => product.purpose !== 'token_package'),
+    ...managedCoinProducts
+  ];
   res.json({
-    products: manualPaymentProducts,
+    products,
     providers: {
       manual: true,
       bank_transfer: config.manualBankTransferEnabled,
@@ -117,7 +123,7 @@ paymentsRouter.get('/manual-products', (_req, res) => {
     support_email: config.supportEmail,
     operator: config.legalOperatorName
   });
-});
+}));
 
 async function createManualPaymentOrder(req: Request, res: Response) {
   const email = String(req.user?.email || '').toLowerCase();
@@ -132,7 +138,7 @@ async function createManualPaymentOrder(req: Request, res: Response) {
   if (provider === 'bank_transfer' && !config.manualBankTransferEnabled) return res.status(400).json({ error: 'Bank transfer is currently disabled' });
   if (provider === 'crypto' && !config.manualCryptoEnabled) return res.status(400).json({ error: 'Crypto payment is currently disabled' });
 
-  const product = findManualPaymentProduct(productCode);
+  const product = await resolveManualPaymentProduct(productCode);
   if (!product) return res.status(400).json({ error: 'Unknown payment product' });
   const paymentReference = buildPaymentReference('pending', email);
   const { data, error } = await supabaseAdmin

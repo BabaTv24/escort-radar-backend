@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './supabase.js';
 import { config } from './config.js';
 import { activateClientAccount, adjustTokenWalletBalance, getOrCreateTokenWallet } from './services/clientActivation.js';
+import { resolveBcCoinManualPaymentProduct } from './bcCoinPackages.js';
 
 export const manualPaymentProviders = ['manual', 'bank_transfer', 'crypto', 'ccbill', 'paysafe', 'paysafecard'] as const;
 export const manualPaymentPurposes = ['client_activation', 'advertiser_subscription', 'agency_subscription', 'token_package'] as const;
@@ -43,6 +44,16 @@ export function findManualPaymentProduct(productId: string, purpose?: string) {
     || null;
 }
 
+export async function resolveManualPaymentProduct(productId: string, purpose?: string) {
+  if (productId.startsWith('bc_') || purpose === 'token_package') {
+    const dynamicProduct = productId ? await resolveBcCoinManualPaymentProduct(productId) : null;
+    if (dynamicProduct) return dynamicProduct;
+  }
+  const staticProduct = findManualPaymentProduct(productId, purpose);
+  if (staticProduct) return staticProduct;
+  return null;
+}
+
 export function paymentReferenceInstruction(orderId: string) {
   return `Please include your account email and order number in the payment reference. Your order will be activated after manual confirmation. Order number: ${orderId}`;
 }
@@ -75,7 +86,7 @@ export async function applyManualPaymentOrder(order: Record<string, any>, adminE
   try {
     const user = await resolveOrderUser(order);
     if (!user) throw new Error('User not found for manual payment order');
-    const product = findManualPaymentProduct(order.product_id || '', order.purpose);
+    const product = await resolveManualPaymentProduct(order.product_id || '', order.purpose);
     if (!product) throw new Error('Unknown manual payment product');
 
     if (order.purpose === 'client_activation') {

@@ -11543,6 +11543,15 @@ textarea:focus {
   hyphens: auto;
 }
 
+.token-page .token-promo-countdown {
+  min-height: 2.1em;
+  display: inline-flex;
+  align-items: center;
+  color: #fff1ba;
+  font-size: .76rem;
+  line-height: 1.2;
+}
+
 .token-page .token-package-card .er-glass-btn {
   min-height: 44px;
   margin-top: auto;
@@ -11621,6 +11630,106 @@ textarea:focus {
 
   .token-page .token-package-card {
     min-height: 232px;
+  }
+}
+
+.bc-package-admin-panel,
+.bc-package-admin-list {
+  display: grid;
+  gap: .85rem;
+}
+
+.bc-package-form {
+  align-items: end;
+}
+
+.admin-check-row {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  color: var(--er-text-soft);
+  font-size: .9rem;
+}
+
+.bc-package-admin-list {
+  margin-top: .4rem;
+}
+
+.bc-package-admin-row {
+  min-width: 0;
+  display: grid;
+  gap: .75rem;
+  padding: .85rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  background: rgba(255, 255, 255, .035);
+}
+
+.bc-package-admin-summary {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: .8rem;
+}
+
+.bc-package-admin-summary strong,
+.bc-package-admin-summary small {
+  display: block;
+}
+
+.bc-package-admin-summary small {
+  color: var(--er-text-soft);
+}
+
+.hermes-modal {
+  width: min(980px, calc(100vw - 1rem));
+  max-height: min(860px, calc(100vh - 1rem));
+  overflow: auto;
+}
+
+.hermes-url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.hermes-preview-grid textarea {
+  min-height: 120px;
+}
+
+.hermes-image-preview {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: .55rem;
+  margin: .85rem 0;
+}
+
+.hermes-image-preview img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+}
+
+.admin-muted {
+  color: var(--er-text-soft);
+}
+
+.admin-warning-list {
+  margin: .75rem 0;
+  color: #fff1ba;
+}
+
+@media (max-width: 767px) {
+  .hermes-url-row,
+  .bc-package-admin-summary {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .hermes-image-preview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

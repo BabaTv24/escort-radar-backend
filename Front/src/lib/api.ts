@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, AdminStats, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -270,6 +270,21 @@ export const api = {
     token,
     body: JSON.stringify({ settings })
   }),
+  adminBcCoinPackages: (token: string) => request<{ packages: BcCoinPackage[] }>('/api/admin/bc-coin-packages', { token }),
+  createAdminBcCoinPackage: (token: string, body: Partial<BcCoinPackage>) => request<{ package: BcCoinPackage }>('/api/admin/bc-coin-packages', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
+  }),
+  updateAdminBcCoinPackage: (token: string, id: string, body: Partial<BcCoinPackage>) => request<{ package: BcCoinPackage }>(`/api/admin/bc-coin-packages/${id}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
+  }),
+  disableAdminBcCoinPackage: (token: string, id: string) => request<{ package: BcCoinPackage }>(`/api/admin/bc-coin-packages/${id}`, {
+    method: 'DELETE',
+    token
+  }),
   tokenPackages: () => request<{ packages: TokenPackage[] }>('/api/tokens/packages'),
   myWallet: (token: string) => request<{ wallet: Wallet }>('/api/tokens/wallet/me', { token }),
   myFavorites: (token: string) => request<{ favorites: ClientFavorite[]; wallet: Wallet }>('/api/favorites', { token }),
@@ -317,6 +332,16 @@ export const api = {
     method: 'POST',
     token,
     body: JSON.stringify({ reason })
+  }),
+  importProfilePreview: (token: string, url: string) => request<{ ok: boolean; source_url: string; profile: HermesProfilePreview; warnings: string[] }>('/api/admin/import-profile-preview', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ url })
+  }),
+  importProfileCreate: (token: string, body: { source_url: string; profile: HermesProfilePreview; create_as_draft: boolean }) => request<{ profile: Profile; warnings: string[] }>('/api/admin/import-profile-create', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body)
   }),
   activateAdminSubscription: (token: string, id: string, body: Record<string, unknown>) => request<{ subscription: Record<string, unknown> }>(`/api/admin/subscriptions/${id}/activate`, {
     method: 'POST',
