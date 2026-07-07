@@ -11697,6 +11697,35 @@ textarea:focus {
   min-height: 120px;
 }
 
+.admin-hermes-status {
+  margin: .75rem 0 0;
+  padding: .65rem .75rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  color: var(--er-text-soft);
+  background: rgba(255, 255, 255, .035);
+}
+
+.admin-hermes-status.success {
+  color: #dfffe9;
+  border-color: rgba(50, 255, 156, .28);
+}
+
+.admin-hermes-status.error {
+  color: #ffe4e4;
+  border-color: rgba(255, 49, 88, .34);
+}
+
+.hermes-json-preview {
+  max-height: 180px;
+  overflow: auto;
+  padding: .75rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  color: var(--er-text-soft);
+  background: rgba(0, 0, 0, .25);
+}
+
 .hermes-image-preview {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

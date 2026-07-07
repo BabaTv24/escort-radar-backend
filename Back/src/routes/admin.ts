@@ -801,6 +801,10 @@ adminRouter.post('/import-profile-preview', asyncHandler(async (req, res) => {
   if (safetyError) return res.status(400).json({ error: safetyError });
   const warnings: string[] = [];
   try {
+    if (config.hermesAnalyzeProfileUrl) {
+      const hermes = await analyseProfileWithHermes(sourceUrl);
+      return res.json(hermes);
+    }
     const response = await fetch(sourceUrl, {
       redirect: 'follow',
       headers: {
@@ -816,7 +820,7 @@ adminRouter.post('/import-profile-preview', asyncHandler(async (req, res) => {
     }
     const html = (await response.text()).slice(0, 600000);
     const profile = buildHermesProfilePreview(html, sourceUrl, warnings);
-    res.json({ ok: true, source_url: sourceUrl, profile, warnings });
+    res.json({ ok: true, source_url: sourceUrl, profile: normalizeHermesPreviewProfile(profile, sourceUrl, 'local_parser'), warnings });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not analyse public URL' });
   }
@@ -836,14 +840,15 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     category: (incomingProfile as any).category || 'ladies',
     description: optionalText((incomingProfile as any).description, 2000) || 'Imported by Hermes Agent. Review and rewrite before publishing.',
     phone: (incomingProfile as any).phone,
+    email: (incomingProfile as any).email,
     telegram: (incomingProfile as any).telegram,
     whatsapp: (incomingProfile as any).whatsapp,
     services: Array.isArray((incomingProfile as any).services) ? (incomingProfile as any).services : [],
-    website: sourceUrl,
+    website: optionalText((incomingProfile as any).website, 240) || sourceUrl,
     is_published: false,
     verified: false,
-    is_sponsored: false,
-    acquisition_source: 'hermes_import_draft',
+    is_sponsored: true,
+    acquisition_source: 'hermes_import_sponsored',
     moderation_status: 'pending',
     subscription_status: 'incomplete',
     listing_plan: 'hermes_import_draft',
@@ -860,8 +865,13 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     verification_status: 'pending',
     verified: false,
     is_published: false,
+    is_seed_profile: false,
+    is_sponsored: true,
     provider: 'hermes_agent',
-    acquisition_source: 'hermes_import_draft',
+    acquisition_source: 'hermes_import_sponsored',
+    source_url: sourceUrl,
+    import_source: optionalText((incomingProfile as any).import_source, 60) || 'hermes',
+    imported_at: new Date().toISOString(),
     subscription_note: `Hermes import source: ${sourceUrl}`,
     location_updated_at: new Date().toISOString()
   };
@@ -3391,6 +3401,7 @@ async function logAccountAccess(req: any, profileId: string, userId: string, act
 }
 
 function validatePublicImportUrl(value: string) {
+  if (!value || value.length > 2000) return 'Valid public URL is required';
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -3409,8 +3420,82 @@ function validatePublicImportUrl(value: string) {
     || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
     || hostname === '0.0.0.0'
     || hostname === '::1'
+    || hostname.includes('..')
   ) return 'Only public pages are supported';
   return null;
+}
+
+async function analyseProfileWithHermes(sourceUrl: string) {
+  const webhookUrl = config.hermesAnalyzeProfileUrl.trim();
+  const webhookSafetyError = validateHermesWebhookUrl(webhookUrl);
+  if (webhookSafetyError) throw new Error(webhookSafetyError);
+  const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'application/json' };
+  if (config.hermesWebhookSecret) headers['x-hermes-secret'] = config.hermesWebhookSecret;
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ url: sourceUrl }),
+    signal: AbortSignal.timeout(45000)
+  });
+  if (!response.ok) throw new Error(`Hermes returned HTTP ${response.status}`);
+  let payload: Record<string, any>;
+  try {
+    payload = await response.json() as Record<string, any>;
+  } catch {
+    throw new Error('Hermes returned invalid JSON');
+  }
+  if (payload.success === false || payload.ok === false) {
+    throw new Error(String(payload.error || payload.message || 'Hermes could not analyse this link'));
+  }
+  const rawProfile = payload.profile || payload.data?.profile || payload.data;
+  if (!rawProfile || typeof rawProfile !== 'object') throw new Error('Hermes response did not include profile data');
+  const resolvedSourceUrl = String(payload.source_url || rawProfile.source_url || sourceUrl);
+  return {
+    ok: true,
+    source_url: resolvedSourceUrl,
+    profile: normalizeHermesPreviewProfile(rawProfile, resolvedSourceUrl, 'hermes'),
+    warnings: Array.isArray(payload.warnings) ? payload.warnings.map((item: unknown) => String(item)).slice(0, 20) : []
+  };
+}
+
+function validateHermesWebhookUrl(value: string) {
+  const publicError = validatePublicImportUrl(value);
+  if (publicError) return `Invalid Hermes webhook URL: ${publicError}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return 'Invalid Hermes webhook URL';
+  }
+  if (parsed.protocol !== 'https:' && config.nodeEnv === 'production') return 'Hermes webhook must use HTTPS in production';
+  return null;
+}
+
+function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUrl: string, importSource: 'hermes' | 'local_parser') {
+  const prices = rawProfile.prices && typeof rawProfile.prices === 'object' ? rawProfile.prices : {};
+  const price1h = numericValue(rawProfile.price_1h ?? prices.price_1h ?? prices.one_hour ?? prices.hour);
+  return {
+    name: optionalText(rawProfile.name || rawProfile.display_name || rawProfile.title, 120) || '',
+    display_name: optionalText(rawProfile.display_name || rawProfile.name || rawProfile.title, 120) || '',
+    city: normalizeHermesCity(rawProfile.city || rawProfile.location),
+    location: optionalText(rawProfile.location, 160),
+    category: optionalText(rawProfile.category, 80) || inferCategory(String(rawProfile.description || rawProfile.tags || '')),
+    age: rawProfile.age == null ? null : numericValue(rawProfile.age),
+    description: optionalText(rawProfile.description, 2000) || '',
+    phone: optionalText(rawProfile.phone, 80) || '',
+    email: optionalEmail(rawProfile.email) || '',
+    website: optionalText(rawProfile.website, 240) || sourceUrl,
+    telegram: optionalText(rawProfile.telegram, 80) || '',
+    whatsapp: optionalText(rawProfile.whatsapp, 80) || '',
+    services: Array.isArray(rawProfile.services) ? rawProfile.services.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 20) : [],
+    tags: Array.isArray(rawProfile.tags) ? rawProfile.tags.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 30) : [],
+    prices,
+    price_1h: price1h || undefined,
+    availability: optionalText(rawProfile.availability, 160) || '',
+    images: Array.isArray(rawProfile.images) ? uniqueStrings(rawProfile.images).slice(0, 6) : [],
+    source_url: sourceUrl,
+    import_source: importSource
+  };
 }
 
 function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: string[]) {
@@ -3442,7 +3527,9 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     services: inferServices(text),
     prices: price1h ? { price_1h: Number(price1h) } : {},
     price_1h: price1h ? Number(price1h) : undefined,
-    images
+    images,
+    source_url: sourceUrl,
+    import_source: 'local_parser'
   };
 }
 

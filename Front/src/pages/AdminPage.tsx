@@ -254,6 +254,7 @@ export function AdminPage() {
   const [hermesPreview, setHermesPreview] = useState<HermesProfilePreview | null>(null);
   const [hermesWarnings, setHermesWarnings] = useState<string[]>([]);
   const [hermesBusy, setHermesBusy] = useState(false);
+  const [hermesStatus, setHermesStatus] = useState<'idle' | 'analysing' | 'success' | 'error'>('idle');
   const [newLocationRow, setNewLocationRow] = useState<LocationCatalogRow>({
     country_code: 'DE',
     country_name: 'Germany',
@@ -970,12 +971,17 @@ export function AdminPage() {
   async function analyseHermesLink() {
     if (!hermesUrl.trim()) return;
     setHermesBusy(true);
+    setHermesStatus('analysing');
+    setHermesWarnings([]);
     setMessage('');
     try {
       const result = await api.importProfilePreview(token, hermesUrl.trim());
       setHermesPreview({ ...emptyHermesPreview, ...result.profile, display_name: result.profile.display_name || result.profile.name || '' });
       setHermesWarnings(result.warnings || []);
+      setHermesStatus('success');
     } catch (error) {
+      setHermesStatus('error');
+      setHermesPreview(null);
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     } finally {
       setHermesBusy(false);
@@ -988,7 +994,7 @@ export function AdminPage() {
     setMessage('');
     try {
       const result = await api.importProfileCreate(token, {
-        source_url: hermesUrl.trim(),
+        source_url: hermesPreview.source_url || hermesUrl.trim(),
         profile: hermesPreview,
         create_as_draft: true
       });
@@ -996,8 +1002,12 @@ export function AdminPage() {
       setHermesOpen(false);
       setHermesPreview(null);
       setHermesUrl('');
+      setHermesStatus('idle');
       setHermesWarnings(result.warnings || []);
       setMessage(t('admin.hermes.createdDraft'));
+      editStudioProfile(result.profile);
+      setProfilePanelMode('overview');
+      navigate(`/admin/profiles?profile=${encodeURIComponent(result.profile.id)}`, { replace: false });
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
@@ -1653,7 +1663,8 @@ export function AdminPage() {
               <input placeholder={t('admin.hermes.pasteLink')} value={hermesUrl} onChange={(event) => setHermesUrl(event.target.value)} />
               <button className="button primary" disabled={hermesBusy || !hermesUrl.trim()} onClick={analyseHermesLink}>{hermesBusy ? t('states.loading') : t('admin.hermes.analyseLink')}</button>
             </div>
-            {hermesWarnings.length ? <ul className="admin-warning-list">{hermesWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
+            {hermesStatus !== 'idle' ? <p className={`admin-hermes-status ${hermesStatus}`}>{t(`admin.hermes.status.${hermesStatus}`)}</p> : null}
+            {hermesWarnings.length ? <div><h3>{t('admin.hermes.warnings')}</h3><ul className="admin-warning-list">{hermesWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div> : null}
             {hermesPreview && (
               <>
                 <div className="admin-form-grid hermes-preview-grid">
@@ -1661,18 +1672,24 @@ export function AdminPage() {
                   <AdminField label={t('admin.profileEditor.city')}><input value={hermesPreview.city || ''} onChange={(event) => updateHermesPreview({ city: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.category')}><input value={hermesPreview.category || ''} onChange={(event) => updateHermesPreview({ category: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.phone')}><input value={hermesPreview.phone || ''} onChange={(event) => updateHermesPreview({ phone: event.target.value })} /></AdminField>
+                  <AdminField label={t('form.email')}><input value={hermesPreview.email || ''} onChange={(event) => updateHermesPreview({ email: event.target.value, owner_email: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.website')}><input value={hermesPreview.website || ''} onChange={(event) => updateHermesPreview({ website: event.target.value })} /></AdminField>
                   <AdminField label="Telegram"><input value={hermesPreview.telegram || ''} onChange={(event) => updateHermesPreview({ telegram: event.target.value })} /></AdminField>
                   <AdminField label="WhatsApp"><input value={hermesPreview.whatsapp || ''} onChange={(event) => updateHermesPreview({ whatsapp: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={hermesPreview.price_1h || ''} onChange={(event) => updateHermesPreview({ price_1h: Number(event.target.value || 0) })} /></AdminField>
+                  <AdminField label={t('admin.hermes.services')}><input value={(hermesPreview.services || []).join(', ')} onChange={(event) => updateHermesPreview({ services: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
+                  <AdminField label={t('admin.hermes.source')}><input value={hermesPreview.source_url || hermesUrl} onChange={(event) => updateHermesPreview({ source_url: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.importSource')}><input value={hermesPreview.import_source || ''} onChange={(event) => updateHermesPreview({ import_source: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.description')}><textarea value={hermesPreview.description || ''} onChange={(event) => updateHermesPreview({ description: event.target.value })} /></AdminField>
                 </div>
+                {hermesPreview.prices && Object.keys(hermesPreview.prices).length ? <pre className="hermes-json-preview">{JSON.stringify(hermesPreview.prices, null, 2)}</pre> : null}
                 {hermesPreview.images?.length ? (
                   <div className="hermes-image-preview">
                     {hermesPreview.images.slice(0, 6).map((src) => <img src={src} alt="" key={src} />)}
                   </div>
                 ) : null}
                 <div className="admin-actions-row">
-                  <button className="button primary" disabled={hermesBusy} onClick={createHermesDraft}>{t('admin.hermes.createDraft')}</button>
+                  <button className="button primary" disabled={hermesBusy} onClick={createHermesDraft}>{t('admin.hermes.createSponsoredDraft')}</button>
                   <button className="button" onClick={() => setHermesOpen(false)}>{t('admin.buttons.cancel')}</button>
                 </div>
               </>

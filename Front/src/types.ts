@@ -121,6 +121,9 @@ export type Profile = {
   is_seed_profile?: boolean;
   is_sponsored?: boolean;
   acquisition_source?: string | null;
+  source_url?: string | null;
+  import_source?: string | null;
+  imported_at?: string | null;
   provider?: string | null;
   revenue_amount?: number | null;
   is_published?: boolean;
@@ -354,16 +357,24 @@ export type HermesProfilePreview = {
   name?: string;
   display_name?: string;
   city?: string;
+  location?: string;
   category?: string;
+  age?: number | null;
   description?: string;
   phone?: string;
+  email?: string;
+  website?: string;
   telegram?: string;
   whatsapp?: string;
   services?: string[];
+  tags?: string[];
   prices?: Record<string, number>;
+  availability?: string;
   price_1h?: number;
   images?: string[];
   owner_email?: string;
+  source_url?: string;
+  import_source?: string;
 };
 
 export type ClientActivation = {

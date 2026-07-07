@@ -57,6 +57,8 @@ type Config = {
   manualBankTransferBankName: string;
   manualBankTransferReferenceTemplate: string;
   manualCryptoEnabled: boolean;
+  hermesAnalyzeProfileUrl: string;
+  hermesWebhookSecret: string;
 };
 
 function envNumber(key: string, fallback: number) {
@@ -118,5 +120,7 @@ export const config: Config = {
   manualBankTransferBic: process.env.MANUAL_BANK_TRANSFER_BIC || '',
   manualBankTransferBankName: process.env.MANUAL_BANK_TRANSFER_BANK_NAME || '',
   manualBankTransferReferenceTemplate: process.env.MANUAL_BANK_TRANSFER_REFERENCE_TEMPLATE || 'ER-{orderId}-{userEmail}',
-  manualCryptoEnabled: envBoolean('MANUAL_CRYPTO_ENABLED', true)
+  manualCryptoEnabled: envBoolean('MANUAL_CRYPTO_ENABLED', true),
+  hermesAnalyzeProfileUrl: process.env.HERMES_ANALYZE_PROFILE_URL || '',
+  hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET || ''
 };
