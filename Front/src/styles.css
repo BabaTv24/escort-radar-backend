@@ -10957,3 +10957,337 @@ textarea:focus {
     flex: 0 0 auto;
   }
 }
+
+.er-glass-btn {
+  --er-btn-glow: #d6a84f;
+  --er-btn-text: #fff2c2;
+  --er-btn-bg: rgba(255, 255, 255, .035);
+  --er-btn-border: rgba(255, 222, 150, .24);
+  position: relative;
+  isolation: isolate;
+  min-height: 46px;
+  padding: 0 20px;
+  border: 1px solid var(--er-btn-border);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--er-btn-text);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .015)),
+    var(--er-btn-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .13),
+    inset 0 -1px 0 rgba(255, 255, 255, .08),
+    0 14px 28px rgba(0, 0, 0, .28);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  text-decoration: none;
+  font-weight: 800;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 220ms ease, letter-spacing 220ms ease, filter 220ms ease, opacity 220ms ease;
+}
+
+.er-glass-btn::before,
+.er-glass-btn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 34px;
+  height: 10px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: var(--er-btn-glow);
+  box-shadow:
+    0 0 5px var(--er-btn-glow),
+    0 0 15px var(--er-btn-glow),
+    0 0 30px color-mix(in srgb, var(--er-btn-glow), transparent 20%),
+    0 0 55px color-mix(in srgb, var(--er-btn-glow), transparent 35%);
+  pointer-events: none;
+  opacity: .82;
+  z-index: -2;
+  transition: width 280ms ease, height 280ms ease, top 280ms ease, bottom 280ms ease, opacity 220ms ease;
+}
+
+.er-glass-btn::before {
+  bottom: -4px;
+}
+
+.er-glass-btn::after {
+  top: -4px;
+}
+
+.er-glass-btn .er-glass-btn__label,
+.er-glass-btn > span,
+.er-glass-btn > svg {
+  position: relative;
+  z-index: 1;
+}
+
+.er-glass-btn .er-glass-btn__label::before,
+.er-glass-btn > span::before {
+  content: "";
+  position: absolute;
+  inset: -120% auto -120% -45%;
+  width: 42%;
+  transform: skewX(-18deg) translateX(-140%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .28), transparent);
+  pointer-events: none;
+  transition: transform 520ms ease;
+}
+
+.er-glass-btn:hover {
+  transform: translateY(-1px);
+  letter-spacing: .055em;
+  filter: brightness(1.08);
+}
+
+.er-glass-btn:hover::before {
+  bottom: 0;
+  width: 82%;
+  height: 50%;
+  opacity: .95;
+}
+
+.er-glass-btn:hover::after {
+  top: 0;
+  width: 82%;
+  height: 50%;
+  opacity: .95;
+}
+
+.er-glass-btn:hover .er-glass-btn__label::before,
+.er-glass-btn:hover > span::before {
+  transform: skewX(-18deg) translateX(360%);
+}
+
+.er-glass-btn:active {
+  transform: translateY(0) scale(.985);
+}
+
+.er-glass-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--er-btn-glow), white 30%);
+  outline-offset: 3px;
+}
+
+.er-glass-btn[disabled],
+.er-glass-btn[aria-disabled="true"] {
+  opacity: .48;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.er-glass-btn--sm {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: .82rem;
+}
+
+.er-glass-btn--md {
+  min-height: 46px;
+  padding: 0 20px;
+  font-size: .95rem;
+}
+
+.er-glass-btn--lg {
+  min-height: 54px;
+  padding: 0 26px;
+  font-size: 1.05rem;
+}
+
+.er-glass-btn--block {
+  width: 100%;
+}
+
+.er-glass-btn--gold {
+  --er-btn-glow: #d6a84f;
+  --er-btn-text: #fff2c2;
+  --er-btn-border: rgba(255, 217, 138, .35);
+}
+
+.er-glass-btn--pink {
+  --er-btn-glow: #ff4fb8;
+  --er-btn-text: #ffe4f5;
+  --er-btn-border: rgba(255, 79, 184, .36);
+}
+
+.er-glass-btn--cyan {
+  --er-btn-glow: #2bd2ff;
+  --er-btn-text: #e5faff;
+  --er-btn-border: rgba(43, 210, 255, .34);
+}
+
+.er-glass-btn--green {
+  --er-btn-glow: #32ff9c;
+  --er-btn-text: #eafff4;
+  --er-btn-border: rgba(50, 255, 156, .32);
+}
+
+.er-glass-btn--red {
+  --er-btn-glow: #ff3158;
+  --er-btn-text: #ffe7ec;
+  --er-btn-border: rgba(255, 49, 88, .34);
+}
+
+.er-glass-btn--purple {
+  --er-btn-glow: #8d5bff;
+  --er-btn-text: #eee7ff;
+  --er-btn-border: rgba(141, 91, 255, .36);
+}
+
+.er-glass-btn--active {
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 35%), transparent 58%),
+    linear-gradient(135deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .03));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 30%),
+    0 0 24px color-mix(in srgb, var(--er-btn-glow), transparent 45%),
+    inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+
+@media (max-width: 720px) {
+  .er-glass-btn {
+    min-height: 44px;
+    padding-inline: 16px;
+    letter-spacing: .01em;
+  }
+
+  .er-glass-btn:hover {
+    letter-spacing: .025em;
+  }
+
+  .er-glass-btn--sm {
+    min-height: 38px;
+    padding-inline: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .er-glass-btn,
+  .er-glass-btn::before,
+  .er-glass-btn::after,
+  .er-glass-btn .er-glass-btn__label::before,
+  .er-glass-btn > span::before {
+    transition: none;
+  }
+}
+
+/* Escort Radar: glass buttons must not inherit old gold button glow */
+.er-glass-btn,
+.er-glass-btn:hover,
+.er-glass-btn:focus,
+.er-glass-btn:active,
+.er-glass-btn.er-glass-btn--active,
+.er-glass-btn.active,
+.er-glass-btn.selected,
+.er-glass-btn[aria-pressed="true"],
+.er-glass-btn[aria-current="true"] {
+  background-image:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 48%), transparent 62%),
+    linear-gradient(135deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .018)) !important;
+  background-color: rgba(255, 255, 255, .035) !important;
+  border-color: var(--er-btn-border) !important;
+  color: var(--er-btn-text) !important;
+}
+
+.er-glass-btn:not(.er-glass-btn--active):not(.active):not(.selected):not([aria-pressed="true"]):not([aria-current="true"]) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .12),
+    inset 0 -1px 0 rgba(255, 255, 255, .08),
+    0 14px 28px rgba(0, 0, 0, .28) !important;
+}
+
+.er-glass-btn.er-glass-btn--active,
+.er-glass-btn.active,
+.er-glass-btn.selected,
+.er-glass-btn[aria-pressed="true"],
+.er-glass-btn[aria-current="true"] {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 24%),
+    0 0 18px color-mix(in srgb, var(--er-btn-glow), transparent 42%),
+    0 0 38px color-mix(in srgb, var(--er-btn-glow), transparent 62%),
+    inset 0 1px 0 rgba(255, 255, 255, .18) !important;
+}
+
+.er-glass-btn::before,
+.er-glass-btn::after {
+  background: var(--er-btn-glow) !important;
+  box-shadow:
+    0 0 5px var(--er-btn-glow),
+    0 0 15px var(--er-btn-glow),
+    0 0 30px color-mix(in srgb, var(--er-btn-glow), transparent 20%),
+    0 0 60px color-mix(in srgb, var(--er-btn-glow), transparent 36%) !important;
+}
+
+.er-glass-btn.er-glass-btn--active::before,
+.er-glass-btn.er-glass-btn--active::after,
+.er-glass-btn.active::before,
+.er-glass-btn.active::after,
+.er-glass-btn.selected::before,
+.er-glass-btn.selected::after,
+.er-glass-btn[aria-pressed="true"]::before,
+.er-glass-btn[aria-pressed="true"]::after {
+  width: 82%;
+  height: 50%;
+  opacity: .95;
+}
+
+.er-glass-btn.er-glass-btn--active::before,
+.er-glass-btn.active::before,
+.er-glass-btn.selected::before,
+.er-glass-btn[aria-pressed="true"]::before {
+  bottom: 0;
+}
+
+.er-glass-btn.er-glass-btn--active::after,
+.er-glass-btn.active::after,
+.er-glass-btn.selected::after,
+.er-glass-btn[aria-pressed="true"]::after {
+  top: 0;
+}
+
+/* Escort Radar: empty radar message must not cover the radar view */
+.radar-empty-state,
+.radar-visual.with-map .radar-empty-state,
+.radar-visual.awaiting-location .radar-empty-state {
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  z-index: 4 !important;
+  width: min(82%, 360px) !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  transform: translate(-50%, -50%) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  color: rgba(255, 246, 223, .78) !important;
+  text-align: center !important;
+  pointer-events: none !important;
+}
+
+.radar-empty-state::before,
+.radar-empty-state::after {
+  display: none !important;
+}
+
+.radar-empty-state strong {
+  display: block !important;
+  margin-bottom: .25rem !important;
+  color: rgba(255, 242, 194, .88) !important;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, .72) !important;
+}
+
+.radar-empty-state small {
+  display: block !important;
+  color: rgba(255, 246, 223, .64) !important;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .72) !important;
+}
