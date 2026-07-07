@@ -109,8 +109,8 @@ export function HomePage() {
             <span><strong>100%</strong>{t('home.stats.discreet')}</span>
           </div>
           <div className="hero-actions">
-            <Link to="/city/berlin" className="button primary"><RadioTower size={18} /> {t('home.openRadar')}</Link>
-            <Link to="/dashboard" className="button"><PlusCircle size={18} /> {t('home.create')}</Link>
+            <Link to="/city/berlin" className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={18} /> <span>{t('home.openRadar')}</span></Link>
+            <Link to="/dashboard" className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md"><PlusCircle size={18} /> <span>{t('home.create')}</span></Link>
           </div>
         </div>
         <div className="hero-product-preview" aria-hidden="true">
@@ -151,7 +151,7 @@ export function HomePage() {
             <p className="eyebrow">{t('home.marketplaceEyebrow')}</p>
             <h2>{t('home.marketplaceTitle')}</h2>
           </div>
-          <Link to="/city/berlin" className="button primary"><RadioTower size={17} /> {t('home.openRadar')}</Link>
+          <Link to="/city/berlin" className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={17} /> <span>{t('home.openRadar')}</span></Link>
         </div>
         <div className="avatar-carousel">
           {topProfiles.slice(0, 10).map((profile) => {
@@ -331,9 +331,9 @@ function ProfileCarouselSection({
 
         <div className="profile-carousel-actions">
           {actionLabel ? (
-            <Link to="/city/berlin" className={actionVariant === 'text' ? 'text-link' : 'button primary'}>
+            <Link to="/city/berlin" className={actionVariant === 'text' ? 'text-link' : 'button primary er-glass-btn er-glass-btn--gold er-glass-btn--md'}>
               {actionVariant === 'button' ? <RadioTower size={17} /> : null}
-              {actionLabel}
+              <span>{actionLabel}</span>
             </Link>
           ) : null}
           <div className="profile-carousel-controls">

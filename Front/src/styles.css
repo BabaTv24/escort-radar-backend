@@ -11291,3 +11291,117 @@ textarea:focus {
   color: rgba(255, 246, 223, .64) !important;
   text-shadow: 0 2px 14px rgba(0, 0, 0, .72) !important;
 }
+
+/* Escort Radar: shared Live Radar status palette */
+:root {
+  --radar-status-online: #32ff9c;
+  --radar-status-available: #32ff9c;
+  --radar-status-busy: #ff9f2f;
+  --radar-status-appointment: #ff9f2f;
+  --radar-status-traveling: #ff9f2f;
+  --radar-status-offline: #9a9aa4;
+}
+
+.er-glass-btn--green {
+  --er-btn-glow: #32ff9c;
+  --er-btn-text: #eafff4;
+  --er-btn-border: rgba(50, 255, 156, .34);
+}
+
+.er-glass-btn--orange {
+  --er-btn-glow: #ff9f2f;
+  --er-btn-text: #fff1dd;
+  --er-btn-border: rgba(255, 159, 47, .36);
+}
+
+.er-glass-btn--gray {
+  --er-btn-glow: #9a9aa4;
+  --er-btn-text: #f0f0f4;
+  --er-btn-border: rgba(170, 170, 180, .30);
+}
+
+.status-select {
+  --status-select-glow: #d6a84f;
+  --status-select-text: #fff2c2;
+  --status-select-border: rgba(255, 217, 138, .35);
+  color: var(--status-select-text) !important;
+  border-color: var(--status-select-border) !important;
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--status-select-glow), transparent 72%), transparent 62%),
+    linear-gradient(135deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .02)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .12),
+    0 0 18px color-mix(in srgb, var(--status-select-glow), transparent 72%) !important;
+}
+
+.status-select-all {
+  --status-select-glow: #d6a84f;
+  --status-select-text: #fff2c2;
+  --status-select-border: rgba(255, 217, 138, .35);
+}
+
+.status-select-favorites {
+  --status-select-glow: #ff4fb8;
+  --status-select-text: #ffe4f5;
+  --status-select-border: rgba(255, 79, 184, .38);
+}
+
+.status-select-online {
+  --status-select-glow: #32ff9c;
+  --status-select-text: #eafff4;
+  --status-select-border: rgba(50, 255, 156, .36);
+}
+
+.status-select-busy {
+  --status-select-glow: #ff9f2f;
+  --status-select-text: #fff1dd;
+  --status-select-border: rgba(255, 159, 47, .38);
+}
+
+.status-select-offline {
+  --status-select-glow: #9a9aa4;
+  --status-select-text: #f0f0f4;
+  --status-select-border: rgba(170, 170, 180, .32);
+}
+
+.status-select option {
+  color: #111;
+  background: #f5f2ed;
+}
+
+.status-select option[value="all"] {
+  color: #8a5b10;
+}
+
+.status-select option[value="favorites"] {
+  color: #b31373;
+}
+
+.status-select option[value="online"] {
+  color: #047a42;
+}
+
+.status-select option[value="BUSY"] {
+  color: #9a5200;
+}
+
+.status-select option[value="OFFLINE"] {
+  color: #52525b;
+}
+
+.radar-avatar-point.online-now,
+.dot.online-now,
+.radar-avatar-point.available-today,
+.dot.available-today {
+  --radar-status-color: var(--radar-status-online) !important;
+}
+
+.radar-avatar-point.busy,
+.dot.busy {
+  --radar-status-color: var(--radar-status-busy) !important;
+}
+
+.radar-avatar-point.offline,
+.dot.offline {
+  --radar-status-color: var(--radar-status-offline) !important;
+}

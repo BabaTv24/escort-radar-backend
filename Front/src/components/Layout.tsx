@@ -98,14 +98,14 @@ export function Layout() {
         </div>
         {mobileMenuOpen && (
           <div className="mobile-menu-panel">
-            <Link to={authPath(tokensPath)}><Coins size={16} /> {t('nav.tokens')}</Link>
-            <Link to="/coins"><Coins size={16} /> {t('coins.title')}</Link>
+            <Link className="er-glass-btn er-glass-btn--purple er-glass-btn--sm" to={authPath(tokensPath)}><Coins size={16} /> <span>{t('nav.tokens')}</span></Link>
+            <Link className="er-glass-btn er-glass-btn--purple er-glass-btn--sm" to="/coins"><Coins size={16} /> <span>{t('coins.title')}</span></Link>
             {isSignedIn ? (
               <>
                 <span className="mobile-account-role">{t(`auth.${account.role}`)}</span>
-                <Link to="/dashboard"><UserRound size={16} /> {dashboardLabel}</Link>
-                <Link to={favoritesPath}><Heart size={16} /> {t('favorites.favorites')}</Link>
-                <button type="button" onClick={logout}><LogOut size={16} /> {t('auth.logout')}</button>
+                <Link className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" to="/dashboard"><UserRound size={16} /> <span>{dashboardLabel}</span></Link>
+                <Link className="er-glass-btn er-glass-btn--pink er-glass-btn--sm" to={favoritesPath}><Heart size={16} /> <span>{t('favorites.favorites')}</span></Link>
+                <button className="er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={logout}><LogOut size={16} /> <span>{t('auth.logout')}</span></button>
               </>
             ) : (
               <>
@@ -118,18 +118,18 @@ export function Layout() {
         )}
         <div className="header-actions">
           {!isAppRoute && (
-            <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action premium-header-cta">
+            <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action premium-header-cta er-glass-btn er-glass-btn--gold er-glass-btn--sm">
               <Radar size={17} />
               <span>{t('home.openRadar')}</span>
             </Link>
           )}
           {!isDashboardRoute && (
-            <Link to="/tokens" className="radar-action">
+            <Link to="/tokens" className="radar-action er-glass-btn er-glass-btn--purple er-glass-btn--sm">
               <Coins size={17} />
               <span>{t('nav.tokens')}</span>
             </Link>
           )}
-          <Link to="/coins" className="radar-action">
+          <Link to="/coins" className="radar-action er-glass-btn er-glass-btn--purple er-glass-btn--sm">
             <Coins size={17} />
             <span>{t('coins.title')}</span>
           </Link>
@@ -140,9 +140,9 @@ export function Layout() {
                 <span>{t('auth.loggedInAs')}: <strong>{t(`auth.${account.role}`)}</strong></span>
                 {account.email ? <small>{account.email}</small> : null}
               </Link>
-              {!isDashboardRoute && <Link to="/dashboard" className="radar-action account-dashboard-link">{dashboardLabel}</Link>}
-              {account.role === 'admin' ? <Link to="/admin" className="radar-action">{t('auth.admin')}</Link> : null}
-              <button className="radar-action account-logout" type="button" onClick={logout}>
+              {!isDashboardRoute && <Link to="/dashboard" className="radar-action account-dashboard-link er-glass-btn er-glass-btn--gold er-glass-btn--sm"><span>{dashboardLabel}</span></Link>}
+              {account.role === 'admin' ? <Link to="/admin" className="radar-action er-glass-btn er-glass-btn--gold er-glass-btn--sm"><span>{t('auth.admin')}</span></Link> : null}
+              <button className="radar-action account-logout er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={logout}>
                 <LogOut size={16} />
                 <span>{t('auth.logout')}</span>
               </button>

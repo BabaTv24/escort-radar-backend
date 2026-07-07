@@ -169,11 +169,11 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             ].map(([value, _statusClass, labelKey]) => (
               <button
                 key={value}
-                className={`status-chip ${value === 'favorites' ? 'status-chip-favorites' : ''} ${status === value ? 'selected' : ''}`.trim()}
+                className={`status-chip ${value === 'favorites' ? 'status-chip-favorites' : ''} er-glass-btn er-glass-btn--sm ${getRadarFilterButtonClass(value)} ${status === value ? 'selected er-glass-btn--active' : ''}`.trim()}
                 type="button"
                 onClick={() => onStatusChange(value)}
               >
-                {t(labelKey)}
+                <span>{t(labelKey)}</span>
               </button>
             ))}
           </div>
@@ -182,8 +182,8 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           <div className="radar-saved-location">
             <strong>{t('radar.savedLocation')}: {effectiveLocation.label || t('radar.locationFromManual')}</strong>
             <div>
-              <button className="button" type="button" onClick={editManualLocation}>{t('radar.changeLocation')}</button>
-              <button className="button ghost" type="button" onClick={clearManualLocation}>{t('radar.clearLocation')}</button>
+              <button className="button er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={editManualLocation}><span>{t('radar.changeLocation')}</span></button>
+              <button className="button ghost er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" onClick={clearManualLocation}><span>{t('radar.clearLocation')}</span></button>
             </div>
             {manualMessage && <small>{manualMessage}</small>}
           </div>
@@ -197,11 +197,11 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
                 setManualQuery(event.target.value);
                 if (manualError) setManualError('');
               }} />
-              <button className="button primary" type="submit">{t('radar.setLocation')}</button>
+              <button className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="submit"><span>{t('radar.setLocation')}</span></button>
             </div>
             <div className="radar-start-actions">
-              {onUseLocation && <button className="button" type="button" onClick={onUseLocation}>{t('radar.useGps')}</button>}
-              {hasRadarLocation && <button className="button ghost" type="button" onClick={() => setIsEditingLocation(false)}>{t('buttons.cancel')}</button>}
+              {onUseLocation && <button className="button er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={onUseLocation}><span>{t('radar.useGps')}</span></button>}
+              {hasRadarLocation && <button className="button ghost er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" onClick={() => setIsEditingLocation(false)}><span>{t('buttons.cancel')}</span></button>}
               {manualError && <small className="error-text">{manualError}</small>}
               {manualMessage && <small>{manualMessage}</small>}
               {fallbackNotice && <small>{t('radar.locationDenied')}</small>}
@@ -222,7 +222,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             <span key={value}><i className={`dot ${statusClass}`} /> {t(labelKey)}</span>
           ))}
         </div>
-        {compact && <Link to={`/city/${city}`} className="button primary">{t('radar.cta')}</Link>}
+        {compact && <Link to={`/city/${city}`} className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('radar.cta')}</span></Link>}
       </div>
       <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
         {mapApiKey && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
@@ -353,6 +353,14 @@ function matchesOperatorStatusFilter(profile: Profile, status: string) {
   if (status === 'busy') return operatorStatus === 'BUSY';
   if (status === 'unavailable') return operatorStatus === 'OFFLINE';
   return operatorStatus === status;
+}
+
+function getRadarFilterButtonClass(value: string) {
+  if (value === 'favorites') return 'er-glass-btn--pink';
+  if (value === 'online') return 'er-glass-btn--green';
+  if (value === 'BUSY') return 'er-glass-btn--orange';
+  if (value === 'OFFLINE') return 'er-glass-btn--gray';
+  return 'er-glass-btn--gold';
 }
 
 function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number) {

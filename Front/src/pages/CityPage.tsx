@@ -244,6 +244,17 @@ export function CityPage() {
     setAppliedFilters((current) => ({ ...current, [key]: value }));
   }
 
+  function getStatusSelectClass(status: string) {
+    const variants: Record<string, string> = {
+      all: 'status-select-all',
+      favorites: 'status-select-favorites',
+      online: 'status-select-online',
+      BUSY: 'status-select-busy',
+      OFFLINE: 'status-select-offline'
+    };
+    return `status-select ${variants[status] || 'status-select-all'}`;
+  }
+
   function handleFavoriteChange(profileId: string) {
     setFavoriteProfileIds((current) => new Set([...current, profileId]));
   }
@@ -389,7 +400,7 @@ export function CityPage() {
         <label className="premium-field compact-field">
           <span>{t('radar.status')}</span>
           <select
-            className={draftFilters.availability_status === 'favorites' ? 'status-select-favorites' : ''}
+            className={getStatusSelectClass(draftFilters.availability_status)}
             value={draftFilters.availability_status}
             onChange={(event) => updateRadarFilter('availability_status', event.target.value)}
           >
@@ -406,7 +417,7 @@ export function CityPage() {
             <div className="premium-filter-lock-panel">
               <strong>{t('clientOffice.activateTitle')}</strong>
               <span>{t('activation.activationTokenBonusDescription')}</span>
-              <Link className="button primary" to="/dashboard">{t('clientOffice.activateCta')}</Link>
+              <Link className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('clientOffice.activateCta')}</span></Link>
             </div>
           )}
 
@@ -435,8 +446,8 @@ export function CityPage() {
           onToggle={(value) => updateFilter('services', toggleArrayValue(draftFilters.services, value))}
         />
 
-        <button className="button ghost more-filter-button" type="button" disabled={advancedFiltersLocked} onClick={() => setShowAdvanced((value) => !value)}>
-          <SlidersHorizontal size={17} /> {t('city.moreFilters')}
+        <button className="button ghost more-filter-button er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" disabled={advancedFiltersLocked} onClick={() => setShowAdvanced((value) => !value)}>
+          <SlidersHorizontal size={17} /> <span>{t('city.moreFilters')}</span>
         </button>
 
         <div className={showAdvanced ? 'advanced-filters open compact-advanced-filters' : 'advanced-filters compact-advanced-filters'}>
@@ -446,8 +457,8 @@ export function CityPage() {
         </div>
 
         <div className="filter-actions">
-          <button className="button primary" type="button" onClick={applyDraftFilters}>{t('buttons.apply')}</button>
-          <button className="button" type="button" onClick={resetFilters}>{t('buttons.reset')}</button>
+          <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={applyDraftFilters}><span>{t('buttons.apply')}</span></button>
+          <button className="button er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={resetFilters}><span>{t('buttons.reset')}</span></button>
           <span>{t('radar.inRange', { count: radarProfiles.length })}</span>
         </div>
       </section>
@@ -466,8 +477,8 @@ export function CityPage() {
             Aktywuj konto klienta za 0,99 EUR, aby korzystać z promienia, statusu, kategorii, ceny, typu wizyty, usług i tagów premium.
           </p>
           <div className="premium-lock-actions">
-            <Link className="button primary" to="/dashboard">{t('clientOffice.activateCta')}</Link>
-            {!hasClientSession && <Link className="button secondary" to={loginTarget}>{t('buttons.login')}</Link>}
+            <Link className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('clientOffice.activateCta')}</span></Link>
+            {!hasClientSession && <Link className="button secondary er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={loginTarget}><span>{t('buttons.login')}</span></Link>}
           </div>
         </div>
 
@@ -507,8 +518,8 @@ export function CityPage() {
             showPlaceSearch={false}
             showPopularCities={false}
           />
-          <button className="button mobile-filter-trigger" type="button" onClick={() => setFiltersOpen(true)}>
-            <SlidersHorizontal size={17} /> {t('city.filter')}
+          <button className="button mobile-filter-trigger er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={() => setFiltersOpen(true)}>
+            <SlidersHorizontal size={17} /> <span>{t('city.filter')}</span>
           </button>
         </div>
         <div className="radar-search-stats">
@@ -536,13 +547,13 @@ export function CityPage() {
         {draftFilters.availability_status === 'favorites' && !hasClientSession && (
           <section className="state-panel">
             <p>{t('favorites.loginToSeeFavorites')}</p>
-            <Link className="button primary" to={`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`}>{t('favorites.openLogin')}</Link>
+            <Link className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`}><span>{t('favorites.openLogin')}</span></Link>
           </section>
         )}
         {draftFilters.availability_status === 'favorites' && hasClientSession && favoritesLoaded && !favoriteProfileIds.size && (
           <section className="state-panel">
             <p>{t('favorites.noFavoritesYet')}</p>
-            <Link className="button primary" to="/dashboard#favorites">{t('favorites.favorites')}</Link>
+            <Link className="button primary er-glass-btn er-glass-btn--pink er-glass-btn--md" to="/dashboard#favorites"><span>{t('favorites.favorites')}</span></Link>
           </section>
         )}
       </section>
@@ -625,7 +636,7 @@ export function CityPage() {
                   <RadioTower size={32} />
                   <h2>{t('city.firstProfileTitle', { city: cityLabel })}</h2>
                   <p>{t('city.firstProfileText')}</p>
-                  <Link className="button primary" to="/dashboard">{t('buttons.addListing')}</Link>
+                  <Link className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('buttons.addListing')}</span></Link>
                 </div>
               )}
             </>
@@ -633,7 +644,7 @@ export function CityPage() {
             <EmptyState
               title={t('search.noProfilesForCity')}
               message={t('city.emptySearchText')}
-              action={<button className="button primary" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}>{t('city.increaseRadius')}</button>}
+              action={<button className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}><span>{t('city.increaseRadius')}</span></button>}
             />
           )
         )}
