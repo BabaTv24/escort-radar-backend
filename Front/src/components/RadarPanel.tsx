@@ -169,7 +169,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             ].map(([value, _statusClass, labelKey]) => (
               <button
                 key={value}
-                className={`status-chip ${value === 'favorites' ? 'status-chip-favorites' : ''} er-glass-btn er-glass-btn--sm ${getRadarFilterButtonClass(value)} ${status === value ? 'selected er-glass-btn--active' : ''}`.trim()}
+                className={`status-chip ${value === 'favorites' ? 'status-chip-favorites' : ''} er-btn er-glass-btn er-glass-btn--sm ${getRadarFilterButtonClass(value)} ${status === value ? 'selected er-glass-btn--active' : ''}`.trim()}
                 type="button"
                 onClick={() => onStatusChange(value)}
               >
@@ -182,8 +182,8 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           <div className="radar-saved-location">
             <strong>{t('radar.savedLocation')}: {effectiveLocation.label || t('radar.locationFromManual')}</strong>
             <div>
-              <button className="button er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={editManualLocation}><span>{t('radar.changeLocation')}</span></button>
-              <button className="button ghost er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" onClick={clearManualLocation}><span>{t('radar.clearLocation')}</span></button>
+              <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={editManualLocation}><span>{t('radar.changeLocation')}</span></button>
+              <button className="button ghost er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" onClick={clearManualLocation}><span>{t('radar.clearLocation')}</span></button>
             </div>
             {manualMessage && <small>{manualMessage}</small>}
           </div>
@@ -197,11 +197,11 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
                 setManualQuery(event.target.value);
                 if (manualError) setManualError('');
               }} />
-              <button className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="submit"><span>{t('radar.setLocation')}</span></button>
+              <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="submit"><span>{t('radar.setLocation')}</span></button>
             </div>
             <div className="radar-start-actions">
-              {onUseLocation && <button className="button er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={onUseLocation}><span>{t('radar.useGps')}</span></button>}
-              {hasRadarLocation && <button className="button ghost er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" onClick={() => setIsEditingLocation(false)}><span>{t('buttons.cancel')}</span></button>}
+              {onUseLocation && <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={onUseLocation}><span>{t('radar.useGps')}</span></button>}
+              {hasRadarLocation && <button className="button ghost er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" onClick={() => setIsEditingLocation(false)}><span>{t('buttons.cancel')}</span></button>}
               {manualError && <small className="error-text">{manualError}</small>}
               {manualMessage && <small>{manualMessage}</small>}
               {fallbackNotice && <small>{t('radar.locationDenied')}</small>}
@@ -222,7 +222,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             <span key={value}><i className={`dot ${statusClass}`} /> {t(labelKey)}</span>
           ))}
         </div>
-        {compact && <Link to={`/city/${city}`} className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('radar.cta')}</span></Link>}
+        {compact && <Link to={`/city/${city}`} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('radar.cta')}</span></Link>}
       </div>
       <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
         {mapApiKey && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
@@ -431,3 +431,4 @@ function getPrice(profile: Profile, t: (key: string, vars?: Record<string, strin
   if (!prices.length) return t('profile.priceOnRequest');
   return t('profile.priceFrom', { amount: Math.min(...prices), currency: profile.currency || 'EUR' });
 }
+

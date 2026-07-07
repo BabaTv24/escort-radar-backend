@@ -109,8 +109,8 @@ export function HomePage() {
             <span><strong>100%</strong>{t('home.stats.discreet')}</span>
           </div>
           <div className="hero-actions">
-            <Link to="/city/berlin" className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={18} /> <span>{t('home.openRadar')}</span></Link>
-            <Link to="/dashboard" className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md"><PlusCircle size={18} /> <span>{t('home.create')}</span></Link>
+            <Link to="/city/berlin" className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={18} /> <span>{t('home.openRadar')}</span></Link>
+            <Link to="/dashboard" className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md"><PlusCircle size={18} /> <span>{t('home.create')}</span></Link>
           </div>
         </div>
         <div className="hero-product-preview" aria-hidden="true">
@@ -151,7 +151,7 @@ export function HomePage() {
             <p className="eyebrow">{t('home.marketplaceEyebrow')}</p>
             <h2>{t('home.marketplaceTitle')}</h2>
           </div>
-          <Link to="/city/berlin" className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={17} /> <span>{t('home.openRadar')}</span></Link>
+          <Link to="/city/berlin" className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={17} /> <span>{t('home.openRadar')}</span></Link>
         </div>
         <div className="avatar-carousel">
           {topProfiles.slice(0, 10).map((profile) => {
@@ -213,10 +213,10 @@ export function HomePage() {
           </div>
 
           <div className="footer-carousel-controls">
-            <button className="footer-carousel-control er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Previous slide" onClick={goToPreviousFooterSlide}>
+            <button className="footer-carousel-control er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Previous slide" onClick={goToPreviousFooterSlide}>
               <ChevronLeft size={18} />
             </button>
-            <button className="footer-carousel-control er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Next slide" onClick={goToNextFooterSlide}>
+            <button className="footer-carousel-control er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Next slide" onClick={goToNextFooterSlide}>
               <ChevronRight size={18} />
             </button>
           </div>
@@ -331,16 +331,16 @@ function ProfileCarouselSection({
 
         <div className="profile-carousel-actions">
           {actionLabel ? (
-            <Link to="/city/berlin" className={actionVariant === 'text' ? 'text-link' : 'button primary er-glass-btn er-glass-btn--gold er-glass-btn--md'}>
+            <Link to="/city/berlin" className={actionVariant === 'text' ? 'text-link' : 'button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md'}>
               {actionVariant === 'button' ? <RadioTower size={17} /> : null}
               <span>{actionLabel}</span>
             </Link>
           ) : null}
           <div className="profile-carousel-controls">
-            <button className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Poprzednie profile" onClick={goToPreviousSlide}>
+            <button className="er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Poprzednie profile" onClick={goToPreviousSlide}>
               <ChevronLeft size={18} />
             </button>
-            <button className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Następne profile" onClick={goToNextSlide}>
+            <button className="er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Następne profile" onClick={goToNextSlide}>
               <ChevronRight size={18} />
             </button>
           </div>
@@ -365,3 +365,4 @@ function ProfileCarouselSection({
     </section>
   );
 }
+

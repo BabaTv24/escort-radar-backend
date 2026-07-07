@@ -600,8 +600,8 @@ export function DashboardPage() {
               <span>{t('baba.manualModeration')}</span>
             </div>
             <div className="hero-actions">
-              <Link to="/register?type=client" className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('dashboard.client.createFree')}</span></Link>
-              <Link to="/register?type=escort" className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md"><span>{t('dashboard.creator.createPremium')}</span></Link>
+              <Link to="/register?type=client" className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('dashboard.client.createFree')}</span></Link>
+              <Link to="/register?type=escort" className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md"><span>{t('dashboard.creator.createPremium')}</span></Link>
             </div>
           </div>
         </section>
@@ -759,7 +759,7 @@ export function DashboardPage() {
         <h1>{savedProfile?.display_name || profile.display_name || 'Escort'} — Professional Profile</h1>
         <p>Status profilu: {profileStatusLabel(savedProfile)} · Plan: {advertiserPlanLabel(savedProfile)} · Radar: {savedProfile?.availability_status || profile.availability_status || 'incomplete'}</p>
         <div className="hero-actions">
-          {savedProfile && <Link className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>Zobacz publiczny profil</span></Link>}
+          {savedProfile && <Link className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>Zobacz publiczny profil</span></Link>}
           <button className="button" type="button" onClick={() => setCreatorTab('media')}>Upload zdjec</button>
           <button className="button" type="button" onClick={() => setCreatorTab('pricing')}>Cennik</button>
         </div>
@@ -798,7 +798,7 @@ export function DashboardPage() {
             <h2>{savedProfile?.availability_status === 'available' || profile.availability_status === 'available' ? 'Available Now' : 'Set availability'}</h2>
             <p>{savedProfile?.city || profile.city || 'Berlin'} · {profileStatusLabel(savedProfile)} · {advertiserPlanLabel(savedProfile)}</p>
           </div>
-          <button className="button primary er-glass-btn er-glass-btn--green er-glass-btn--sm" type="button" onClick={() => setProfile({ ...profile, availability_status: profile.availability_status === 'available' ? 'busy' : 'available', available_now: profile.availability_status !== 'available' })}><span>Toggle</span></button>
+          <button className="button primary er-btn er-glass-btn er-glass-btn--green er-glass-btn--sm" type="button" onClick={() => setProfile({ ...profile, availability_status: profile.availability_status === 'available' ? 'busy' : 'available', available_now: profile.availability_status !== 'available' })}><span>Toggle</span></button>
         </div>
         <div className="advertiser-quick-actions">
           <button type="button" onClick={() => setCreatorTab('media')}><UploadCloud size={18} /><span>Add Photo</span></button>
@@ -815,9 +815,9 @@ export function DashboardPage() {
           <span className={dashboardStatus === 'error' ? 'error-text' : 'success'}>{message || t('dashboard.profileLoaded')}</span>
         </div>
         <div className="creator-command-actions">
-          <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={(event) => saveProfile(event as unknown as FormEvent)} disabled={dashboardStatus === 'saving'}><span>{dashboardStatus === 'saving' ? t('dashboard.saving') : t('buttons.saveProfile')}</span></button>
-          {savedProfile && <Link className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
-          <button className="button danger er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={logout}><span>{t('buttons.logout')}</span></button>
+          <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={(event) => saveProfile(event as unknown as FormEvent)} disabled={dashboardStatus === 'saving'}><span>{dashboardStatus === 'saving' ? t('dashboard.saving') : t('buttons.saveProfile')}</span></button>
+          {savedProfile && <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
+          <button className="button danger er-btn er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={logout}><span>{t('buttons.logout')}</span></button>
         </div>
       </section>
 
@@ -856,7 +856,7 @@ export function DashboardPage() {
               <h2>{t('tokens.balance')}</h2>
             </div>
             <strong>{Math.round(Number(wallet?.escort_token_balance || 0))} {t('tokens.short')}</strong>
-            <Link className="button er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><span>{t('tokens.openShop')}</span></Link>
+            <Link className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><span>{t('tokens.openShop')}</span></Link>
           </section>
 
           <form className="stack" onSubmit={saveProfile}>
@@ -912,7 +912,7 @@ export function DashboardPage() {
                   {savedProfile?.is_test_account ? t('subscription.testNotice') : t('subscription.notice')}
                 </p>
               </div>
-              <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" disabled><span>{t('subscription.activate')}</span></button>
+              <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" disabled><span>{t('subscription.activate')}</span></button>
             </section>}
 
             {creatorTab === 'listing' && <section className="form-panel elevated">
@@ -1040,11 +1040,11 @@ export function DashboardPage() {
             </section>}
 
             <div className="dashboard-action-bar">
-              <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit" disabled={dashboardStatus === 'saving' || !token}>
+              <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit" disabled={dashboardStatus === 'saving' || !token}>
                 <span>{dashboardStatus === 'saving' ? t('dashboard.saving') : t('buttons.saveProfile')}</span>
               </button>
-              {savedProfile && <Link className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
-              <button className="button er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={resetChanges}><span>{t('dashboard.resetChanges')}</span></button>
+              {savedProfile && <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
+              <button className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={resetChanges}><span>{t('dashboard.resetChanges')}</span></button>
             </div>
           </form>
 
@@ -1164,8 +1164,8 @@ function UnknownAccountDashboard({ email, authAccountType, message, onLogout }: 
           <h1>{t('favorites.loginToSeeFavorites')}</h1>
           <p>{t('favorites.favoriteTokenNote')}</p>
           <div className="creator-command-actions">
-            <Link className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login?next=%2Fdashboard%23favorites"><span>{t('buttons.login')}</span></Link>
-            <Link className="button er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/register?type=client"><span>{t('buttons.register')}</span></Link>
+            <Link className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login?next=%2Fdashboard%23favorites"><span>{t('buttons.login')}</span></Link>
+            <Link className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/register?type=client"><span>{t('buttons.register')}</span></Link>
           </div>
         </section>
       </div>
@@ -1182,7 +1182,7 @@ function UnknownAccountDashboard({ email, authAccountType, message, onLogout }: 
           <p>Email: {email || '-'}</p>
           <p>auth_account_type: {authAccountType || '-'}</p>
         </div>
-        <button className="button danger er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={onLogout}><span>{t('auth.logout')}</span></button>
+        <button className="button danger er-btn er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={onLogout}><span>{t('auth.logout')}</span></button>
       </section>
     </div>
   );
@@ -1298,7 +1298,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
             )
           ))}
         </nav>
-        <button className="client-office-nav-item danger er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={onLogout}>
+        <button className="client-office-nav-item danger er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={onLogout}>
           <LogOut size={16} />
           <span>{t('buttons.logout')}</span>
         </button>
@@ -1314,7 +1314,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
             <RadioTower size={15} />
             <span>{t('clientOffice.profilesNearCity', { city })}</span>
           </div>
-          <Link className="client-office-credit-pill er-glass-btn er-glass-btn--purple er-glass-btn--sm" to="/coins">
+          <Link className="client-office-credit-pill er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" to="/coins">
             <Gem size={15} />
             <span>{bigCoinsBalance.toLocaleString()} {t('clientOffice.bigCoins')}</span>
           </Link>
@@ -1339,7 +1339,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
             <Metric label={t('clientOffice.availableNow')} value={availableProfiles || 0} />
           </div>
           <div className="client-office-hero-actions">
-            {!activated && <button className="button er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" disabled={activationBusy} onClick={onActivate}><span>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</span></button>}
+            {!activated && <button className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" disabled={activationBusy} onClick={onActivate}><span>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</span></button>}
           </div>
         </section>
 
@@ -1354,9 +1354,9 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
               </>
             );
             return href.startsWith('/') ? (
-              <Link className={`client-office-action er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#wallet' ? 'er-glass-btn--purple' : href.startsWith('/') ? 'er-glass-btn--gold' : 'er-glass-btn--cyan'}`} to={href} key={title}>{content}</Link>
+              <Link className={`client-office-action er-btn er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#wallet' ? 'er-glass-btn--purple' : href.startsWith('/') ? 'er-glass-btn--gold' : 'er-glass-btn--cyan'}`} to={href} key={title}>{content}</Link>
             ) : (
-              <a className={`client-office-action er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#wallet' ? 'er-glass-btn--purple' : 'er-glass-btn--cyan'}`} href={href} key={title}>{content}</a>
+              <a className={`client-office-action er-btn er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#wallet' ? 'er-glass-btn--purple' : 'er-glass-btn--cyan'}`} href={href} key={title}>{content}</a>
             );
           })}
         </section>
@@ -1369,7 +1369,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
                   <p className="eyebrow">{t('nav.radar')}</p>
                   <h2>{t('clientOffice.profilesNearCity', { city })}</h2>
                 </div>
-                <Link className="button er-glass-btn er-glass-btn--gold er-glass-btn--sm" to="/city/berlin"><span>{t('clientOffice.viewNearby')}</span></Link>
+                <Link className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" to="/city/berlin"><span>{t('clientOffice.viewNearby')}</span></Link>
               </div>
               <div className="client-office-radar-stage">
                 <div className="client-office-radar-filter">
@@ -1389,7 +1389,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
                       {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}
                     </select>
                   </label>
-                  <button className="button primary full er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" onClick={() => onCreateIntent({ ...intentDraft, status: 'LOOKING_NOW' })}><span>{t('clientOffice.createRequest')}</span></button>
+                  <button className="button primary full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" onClick={() => onCreateIntent({ ...intentDraft, status: 'LOOKING_NOW' })}><span>{t('clientOffice.createRequest')}</span></button>
                 </div>
                 <div className="client-office-radar-map">
                   <div className="client-office-radar-core"><RadioTower size={20} /></div>
@@ -1414,8 +1414,8 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
                       <p><MapPin size={14} /> {spotlightProfile.work_city || spotlightProfile.city}{spotlightProfile.age ? ` - ${spotlightProfile.age}` : ''}</p>
                     </div>
                     <div className="client-office-preview-actions">
-                      <Link className="button er-glass-btn er-glass-btn--cyan er-glass-btn--sm" to={`/profile/${spotlightProfile.id}`}><MessageCircle size={15} /> <span>{t('buttons.viewProfile')}</span></Link>
-                      <Link className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--sm" to={`/profile/${spotlightProfile.id}`}><span>{t('booking.bookNow')}</span></Link>
+                      <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" to={`/profile/${spotlightProfile.id}`}><MessageCircle size={15} /> <span>{t('buttons.viewProfile')}</span></Link>
+                      <Link className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" to={`/profile/${spotlightProfile.id}`}><span>{t('booking.bookNow')}</span></Link>
                     </div>
                   </article>
                 )}
@@ -1456,7 +1456,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
                 <div className="market-empty-state">
                   <Heart size={18} />
                   <p>{t('favorites.noFavoritesYet')}</p>
-                  <Link className="button er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/city/berlin"><span>{t('clientOffice.viewNearby')}</span></Link>
+                  <Link className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/city/berlin"><span>{t('clientOffice.viewNearby')}</span></Link>
                 </div>
               )}
             </section>
@@ -1497,7 +1497,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
                 <input hidden type="file" accept="image/*" onChange={onAvatarUpload} />
               </label>
               {activation?.activated_at && <p className="muted">{t('clientOffice.activatedAt', { date: new Date(activation.activated_at).toLocaleDateString() })}</p>}
-              {!activated && <button className="button primary full er-glass-btn er-glass-btn--gold er-glass-btn--block" type="button" disabled={activationBusy} onClick={onActivate}><span>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</span></button>}
+              {!activated && <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" type="button" disabled={activationBusy} onClick={onActivate}><span>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</span></button>}
             </section>
 
             <section className="client-office-card client-office-wallet client-bigcoins-wallet-card" id="wallet">
@@ -1512,7 +1512,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
                 <Metric label={t('clientOffice.coinBalance')} value={bigCoinsBalance} />
                 <Metric label={t('clientOffice.earnedCoins')} value={earnedReferralCoins} />
               </div>
-              <Link className="button primary full er-glass-btn er-glass-btn--purple er-glass-btn--block" to="/coins"><span>{t('clientOffice.addCoins')}</span></Link>
+              <Link className="button primary full er-btn er-glass-btn er-glass-btn--purple er-glass-btn--block" to="/coins"><span>{t('clientOffice.addCoins')}</span></Link>
             </section>
 
             <section className="client-office-card referral-studio client-referral-card">
@@ -1525,7 +1525,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
               </div>
               {referralQrImageUrl ? <img className="client-qr-image" src={referralQrImageUrl} alt="Referral QR" /> : <QrVisual seed="CLIENT-FREE" />}
               <p className="muted">{referralLink || t('clientOffice.referralLocked')}</p>
-              {referralLink && <button className="button full er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" onClick={() => navigator.clipboard?.writeText(referralLink)}><Copy size={14} /> <span>{t('clientOffice.copyInvite')}</span></button>}
+              {referralLink && <button className="button full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" onClick={() => navigator.clipboard?.writeText(referralLink)}><Copy size={14} /> <span>{t('clientOffice.copyInvite')}</span></button>}
               <div className="client-referral-progress">
                 <strong>{t('clientOffice.nextRewardProgress', { count: referralActivations ? 1 : 0 })}</strong>
                 <span>{t('clientOffice.nextReward', { count: CLIENT_REFERRAL_REWARD_COINS })}</span>
@@ -1551,7 +1551,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
                 <label className="premium-field"><span>{t('clientOffice.personal.city')}</span><input value={personalDraft.city || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, city: event.target.value })} /></label>
                 <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_home_service_contact} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_home_service_contact: event.target.checked })} /> {t('clientOffice.settings.notifications')}</label>
                 <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_verified_client_badge} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_verified_client_badge: event.target.checked })} /> {t('clientOffice.settings.privacy')}</label>
-                <button className="button primary full er-glass-btn er-glass-btn--gold er-glass-btn--block" type="submit"><span>{t('clientOffice.settings.save')}</span></button>
+                <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" type="submit"><span>{t('clientOffice.settings.save')}</span></button>
               </form>
             </section>
           </div>
@@ -1577,8 +1577,8 @@ function ClientOfficeFavoriteItem({ favorite, onRemoveFavorite }: { favorite: Cl
         <p>{profile.work_city || profile.city} · {option(profile.category || 'other')}</p>
       </div>
       <div className="client-office-favorite-actions">
-        <Link className="button er-glass-btn er-glass-btn--cyan er-glass-btn--sm" to={`/profile/${profile.id}`}><span>{t('buttons.viewProfile')}</span></Link>
-        <button className="button er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}><span>{t('favorites.removeFromFavorites')}</span></button>
+        <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" to={`/profile/${profile.id}`}><span>{t('buttons.viewProfile')}</span></Link>
+        <button className="button er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}><span>{t('favorites.removeFromFavorites')}</span></button>
       </div>
     </article>
   );
@@ -1602,7 +1602,7 @@ function ClientFavoriteCard({ favorite, onRemoveFavorite }: { favorite: ClientFa
         <span>{option(profile.category || 'other')}</span>
         <div className="client-favorite-actions">
           <Link className="button primary" to={`/profile/${profile.id}`}>{t('buttons.viewProfile')}</Link>
-          <button className="button er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}><span>{t('favorites.removeFromFavorites')}</span></button>
+          <button className="button er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}><span>{t('favorites.removeFromFavorites')}</span></button>
         </div>
       </div>
     </article>
@@ -1640,9 +1640,9 @@ function BusinessDashboard({ userEmail, message, onActivateSubscription, onLogou
           <span className="success">{message || t('dashboard.business.ready')}</span>
         </div>
         <div className="creator-command-actions">
-          <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> <span>Aktywuj pakiet agencyjny 499,99 €/miesiąc</span></button>
-          <Link className="button primary er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><Gem size={16} /> <span>{t('dashboard.business.premiumCta')}</span></Link>
-          <button className="button danger er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={onLogout}><span>{t('buttons.logout')}</span></button>
+          <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> <span>Aktywuj pakiet agencyjny 499,99 €/miesiąc</span></button>
+          <Link className="button primary er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><Gem size={16} /> <span>{t('dashboard.business.premiumCta')}</span></Link>
+          <button className="button danger er-btn er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={onLogout}><span>{t('buttons.logout')}</span></button>
         </div>
       </section>
 
@@ -1704,12 +1704,12 @@ function CreatorHeroPanel({ profile, savedProfile, wallet, userEmail, onUpload, 
         <button className="admin-action-btn" type="button" onClick={() => navigator.clipboard?.writeText(referralUrl)}><Copy size={13} /> {t('referral.copy')}</button>
       </div>
       <div className="creator-quick-actions">
-        <button className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button"><Video size={16} /> <span>{t('creator.goLive')}</span></button>
-        <button className="button er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onUpload}><UploadCloud size={16} /> <span>{t('creator.uploadMedia')}</span></button>
-        <button className="button er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button"><Flame size={16} /> <span>{t('creator.promoteProfile')}</span></button>
-        <Link className="button er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><Gem size={16} /> <span>{t('creator.buyTokens')}</span></Link>
-        {savedProfile && <Link className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
-        <button className="button danger er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={onLogout}><LogOut size={16} /> <span>{t('buttons.logout')}</span></button>
+        <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button"><Video size={16} /> <span>{t('creator.goLive')}</span></button>
+        <button className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onUpload}><UploadCloud size={16} /> <span>{t('creator.uploadMedia')}</span></button>
+        <button className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button"><Flame size={16} /> <span>{t('creator.promoteProfile')}</span></button>
+        <Link className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><Gem size={16} /> <span>{t('creator.buyTokens')}</span></Link>
+        {savedProfile && <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
+        <button className="button danger er-btn er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={onLogout}><LogOut size={16} /> <span>{t('buttons.logout')}</span></button>
       </div>
     </section>
   );
@@ -1790,7 +1790,7 @@ function LivePreviewCard({ profile }: { profile: Profile }) {
       <ProfileCard profile={profile} />
       <div className="locked-preview-strip">
         <div><Lock size={16} /> {t('creator.lockedMedia')}</div>
-        <button className="button primary er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button"><span>{t('creator.unlockWithTokens')}</span></button>
+        <button className="button primary er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button"><span>{t('creator.unlockWithTokens')}</span></button>
       </div>
       <div className="creator-preview-actions">
         <button className="button" type="button"><Video size={15} /> {t('creator.liveCamCta')}</button>
@@ -1839,7 +1839,7 @@ function CreatorContentManager({ tab, onTab, savedProfile, uploadImage, uploadSt
               <button type="button" onClick={() => setCoverImage(image.id)}>{image.is_cover || image.is_primary ? t('creator.coverImage') : t('creator.cover')}</button>
               <button>{t('creator.locked')}</button>
               <button>{t('creator.blur')}</button>
-              <button className="danger er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => deleteImage(image.id)}><span>{t('buttons.delete')}</span></button>
+              <button className="danger er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => deleteImage(image.id)}><span>{t('buttons.delete')}</span></button>
             </div>
           </article>
         ))}
@@ -1927,7 +1927,7 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
     <nav className="mobile-creator-dock">
       <button type="button"><Video size={17} />{t('creator.goLive')}</button>
       <button type="button" onClick={onUpload}><UploadCloud size={17} />{t('creator.uploadMedia')}</button>
-      <Link className="er-glass-btn er-glass-btn--purple er-glass-btn--sm" to="/tokens"><Gem size={17} /><span>{t('tokens.short')}</span></Link>
+      <Link className="er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" to="/tokens"><Gem size={17} /><span>{t('tokens.short')}</span></Link>
       {savedProfile ? <Link to={`/profile/${savedProfile.id}`}>{t('nav.profile')}</Link> : <button type="button">{t('nav.profile')}</button>}
       <button type="button" onClick={onLogout}><LogOut size={17} />{t('buttons.logout')}</button>
     </nav>
@@ -2200,8 +2200,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <h1>{displayName}</h1>
           <p><MapPin size={14} /> {workLocationLabel}</p>
         </div>
-        <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> <span>Aktywuj ogłoszenie 49,99 €/miesiąc</span></button>
-        <button className="one-hand-logout er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={onLogout}><LogOut size={18} /></button>
+        <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> <span>Aktywuj ogłoszenie 49,99 €/miesiąc</span></button>
+        <button className="one-hand-logout er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={onLogout}><LogOut size={18} /></button>
       </section>
 
       <section className="one-hand-status-toggle" aria-label={t('dashboard.advertiser.availabilityStatus')}>
@@ -2215,7 +2215,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
         ].map((status) => (
           <button
             key={status}
-            className={`er-glass-btn er-glass-btn--sm ${getOperatorStatusButtonClass(status)} ${currentOperatorStatus === status ? `active er-glass-btn--active ${operatorToAvailability(status as NonNullable<Profile['operator_status']>)}` : ''}`.trim()}
+            className={`er-btn er-glass-btn er-glass-btn--sm ${getOperatorStatusButtonClass(status)} ${currentOperatorStatus === status ? `active er-glass-btn--active ${operatorToAvailability(status as NonNullable<Profile['operator_status']>)}` : ''}`.trim()}
             type="button"
             onClick={() => setOperatorStatus(status as NonNullable<Profile['operator_status']>)}
           >
@@ -2289,8 +2289,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               {(savedProfile?.profile_images || []).map((image) => (
                 <div className="one-hand-photo-item" key={image.id}>
                   <img src={image.public_url} alt="" />
-                  <button className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" onClick={() => onSetCoverImage(image.id)}><span>{image.is_cover || image.is_primary ? t('creator.coverImage') : t('creator.cover')}</span></button>
-                  <button className="er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => onDeleteImage(image.id)}><span>{t('buttons.delete')}</span></button>
+                  <button className="er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" onClick={() => onSetCoverImage(image.id)}><span>{image.is_cover || image.is_primary ? t('creator.coverImage') : t('creator.cover')}</span></button>
+                  <button className="er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => onDeleteImage(image.id)}><span>{t('buttons.delete')}</span></button>
                 </div>
               ))}
               {!imageCount && <p>{t('dashboard.advertiser.noPhotos')}</p>}
@@ -2345,7 +2345,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               ))}
               {!nearbyClients.length && <p className="muted">{t('dashboard.advertiser.noNearbyClients')}</p>}
             </div>
-            <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit"><span>{t('dashboard.advertiser.saveOperator')}</span></button>
+            <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit"><span>{t('dashboard.advertiser.saveOperator')}</span></button>
           </section>
         )}
 
@@ -2407,7 +2407,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             </div>
             <div className="place-search-panel">
               <input placeholder={googleMapsKey ? t('dashboard.advertiser.searchPlacePlaceholder') : t('dashboard.advertiser.googleMissingPlaceholder')} value={placeQuery} onChange={(event) => setPlaceQuery(event.target.value)} />
-              <button className="button er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={searchPlace} disabled={placeLoading}><span>{placeLoading ? t('dashboard.advertiser.searching') : t('dashboard.advertiser.searchPlace')}</span></button>
+              <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={searchPlace} disabled={placeLoading}><span>{placeLoading ? t('dashboard.advertiser.searching') : t('dashboard.advertiser.searchPlace')}</span></button>
               {placeSuggestions.length ? (
                 <div className="place-suggestions">
                   {placeSuggestions.map((suggestion) => (
@@ -2423,9 +2423,9 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <label><input type="checkbox" checked={Boolean(profile.auto_location_while_online)} onChange={(event) => onProfileChange({ ...profile, auto_location_while_online: event.target.checked })} /> {t('dashboard.advertiser.autoGpsOnline')}</label>
             </div>
             <div className="one-hand-location-actions">
-              <button className="button er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={useCurrentGps}><span>{t('dashboard.advertiser.useGps')}</span></button>
-              <button className="button er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" onClick={clearGps}><span>{t('dashboard.advertiser.clearGps')}</span></button>
-              <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit"><span>{t('dashboard.advertiser.saveLocation')}</span></button>
+              <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={useCurrentGps}><span>{t('dashboard.advertiser.useGps')}</span></button>
+              <button className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" onClick={clearGps}><span>{t('dashboard.advertiser.clearGps')}</span></button>
+              <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit"><span>{t('dashboard.advertiser.saveLocation')}</span></button>
             </div>
             <p className="muted">{t('dashboard.advertiser.locationPrivacy')}</p>
             {geoMessage && <p className={geoMessage.includes('denied') || geoMessage.includes('not available') ? 'error-text' : 'success'}>{geoMessage}</p>}
@@ -2467,7 +2467,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               ))}
             </div>
             <p className="muted">{t('dashboard.advertiser.servicesSafety')}</p>
-            <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit"><span>{t('dashboard.advertiser.saveServices')}</span></button>
+            <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit"><span>{t('dashboard.advertiser.saveServices')}</span></button>
           </section>
         )}
 
@@ -2570,9 +2570,9 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             </div>
             <p className="muted">{t('dashboard.account.passwordHelp')}</p>
             <div className="admin-actions-row">
-              <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" disabled={passwordSaving} onClick={changePassword}><span>{passwordSaving ? t('states.loading') : t('dashboard.account.changePassword')}</span></button>
-              <button className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={requestPasswordReset}><span>{t('dashboard.account.resetPassword')}</span></button>
-              <button className="button er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={onLogout}><span>{t('buttons.logout')}</span></button>
+              <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" disabled={passwordSaving} onClick={changePassword}><span>{passwordSaving ? t('states.loading') : t('dashboard.account.changePassword')}</span></button>
+              <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={requestPasswordReset}><span>{t('dashboard.account.resetPassword')}</span></button>
+              <button className="button er-btn er-glass-btn er-glass-btn--red er-glass-btn--md" type="button" onClick={onLogout}><span>{t('buttons.logout')}</span></button>
             </div>
             {accountMessage && <p className={accountMessageError ? 'error-text' : 'success'}>{accountMessage}</p>}
           </section>
@@ -2592,15 +2592,15 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <dt>{t('dashboard.visibility.subscription')}</dt><dd>{t(`admin.status.${savedProfile?.subscription_status || 'free'}`)}</dd>
               <dt>{t('dashboard.visibility.premiumTier')}</dt><dd>{t(`admin.status.${savedProfile?.premium_tier || 'standard'}`)}</dd>
             </dl>
-            {savedProfile && <Link className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
+            {savedProfile && <Link className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
           </section>
         )}
 
         <div className="one-hand-save">
-          <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit" disabled={dashboardStatus === 'saving'}>
+          <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit" disabled={dashboardStatus === 'saving'}>
             <span>{dashboardStatus === 'saving' ? t('dashboard.saving') : t('dashboard.advertiser.saveChanges')}</span>
           </button>
-          {savedProfile && <Link className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
+          {savedProfile && <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/profile/${savedProfile.id}`}><span>{t('dashboard.viewPublicProfile')}</span></Link>}
         </div>
         {message && <p className={dashboardStatus === 'error' ? 'error-text' : 'success'}>{message}</p>}
       </form>
@@ -2623,7 +2623,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
 
 function ActionButton({ icon, label, badge, active, onClick }: { icon: ReactNode; label: string; badge?: number; active?: boolean; onClick: () => void }) {
   return (
-    <button className={`er-glass-btn er-glass-btn--sm ${active ? 'active er-glass-btn--active er-glass-btn--gold' : 'er-glass-btn--cyan'}`} type="button" onClick={onClick}>
+    <button className={`er-btn er-glass-btn er-glass-btn--sm ${active ? 'active er-glass-btn--active er-glass-btn--gold' : 'er-glass-btn--cyan'}`} type="button" onClick={onClick}>
       {badge ? <span className="one-hand-badge">{badge}</span> : null}
       {icon}
       <span>{label}</span>
@@ -3118,3 +3118,4 @@ function DashboardTagPicker({ tags, selected, onToggle }: { tags: Tag[]; selecte
     </fieldset>
   );
 }
+

@@ -93,7 +93,7 @@ h1 { margin: 0; gap: .5rem; font-size: clamp(2.8rem, 12vw, 6.8rem); line-height:
   outline: 2px solid #f4d77f;
   outline-offset: 3px;
 }
-.btn-primary, .button.primary { background: linear-gradient(135deg, #f7d46b, #d59826 52%, #f4d77f); color: #120d05; border: 0; font-weight: 900; box-shadow: 0 14px 42px rgba(247,212,107,.18), 0 0 24px rgba(244,215,127,.1); }
+.btn-primary, .button.primary { background: linear-gradient(135deg, rgba(255,255,255,.095), rgba(255,255,255,.025)); color: #fff8e6; border: 1px solid rgba(255,255,255,.16); font-weight: 900; box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.24); }
 .btn-secondary, .button.secondary { background: linear-gradient(135deg, rgba(247,212,107,.13), rgba(244,215,127,.09)); color: #fff8e6; border-color: rgba(244,215,127,.28); }
 .btn-ghost, .button.ghost { background: rgba(255,255,255,.025); border-color: rgba(247,212,107,.16); color: #e9dfc9; }
 .btn-danger, .button.danger, .admin-action-btn.danger { border-color: rgba(255,74,105,.42); color: #ffb0bb; background: linear-gradient(135deg, rgba(255,74,105,.16), rgba(255,255,255,.025)); box-shadow: 0 12px 36px rgba(255,74,105,.09); }
@@ -881,12 +881,10 @@ body::before {
   box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 16px 48px rgba(0,0,0,.36);
 }
 .btn-primary, .button.primary {
-  border: 1px solid rgba(244,215,127,.58);
-  background:
-    radial-gradient(circle at 18% 15%, rgba(255,255,255,.28), transparent 28%),
-    linear-gradient(135deg, #fff0a6 0%, #d4af37 45%, #6f4912 100%);
-  color: #100c05;
-  box-shadow: 0 18px 58px rgba(212,175,55,.3), 0 0 28px rgba(128,34,69,.14);
+  border: 1px solid rgba(255,255,255,.16);
+  background: linear-gradient(135deg, rgba(255,255,255,.095), rgba(255,255,255,.025));
+  color: #fff8e6;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.24);
 }
 .btn-token, .btn-live {
   box-shadow: 0 18px 58px rgba(123,77,255,.24), 0 0 34px rgba(123,77,255,.1);
@@ -1179,9 +1177,10 @@ body::before {
 .premium-header-cta,
 .sort-tabs .selected,
 .sort-tabs button.selected {
-  background: linear-gradient(135deg, #d6b08c, #e8d8b5);
-  color: #090909;
-  box-shadow: 0 16px 46px rgba(214,176,140,.16);
+  background: linear-gradient(135deg, rgba(255,255,255,.095), rgba(255,255,255,.025));
+  color: #fff8e6;
+  border-color: rgba(255,255,255,.16);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.24);
 }
 .radar-action,
 .chip.selected,
@@ -1888,9 +1887,9 @@ body::before {
     inset 0 1px 0 rgba(255,255,255,.16);
 }
 .button.primary:hover, .btn-primary:hover {
-  background: linear-gradient(135deg, #fff1a8 0%, #d4af37 42%, #8b5e16 100%);
-  color: #100c05;
-  box-shadow: 0 20px 78px rgba(212,175,55,.38), 0 0 28px rgba(128,34,69,.18);
+  background: linear-gradient(135deg, rgba(255,255,255,.13), rgba(255,255,255,.035));
+  color: #fff8e6;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 16px 42px rgba(0,0,0,.32);
 }
 
 .baba-image-badge {
@@ -2122,9 +2121,10 @@ body {
 .creator-tabs button.active,
 .sort-tabs .selected,
 .sort-tabs button.selected {
-  background: linear-gradient(135deg, #d6b08c, #e8d8b5) !important;
-  color: #080808 !important;
-  box-shadow: 0 12px 36px rgba(214,176,140,.14) !important;
+  background: linear-gradient(135deg, rgba(255,255,255,.095), rgba(255,255,255,.025)) !important;
+  color: #fff8e6 !important;
+  border-color: rgba(255,255,255,.16) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.24) !important;
 }
 .radar-action,
 .chip.selected,
@@ -2360,12 +2360,10 @@ textarea {
 .sort-tabs button.selected,
 .creator-tabs button.active,
 .admin-tabs button.active {
-  background:
-    radial-gradient(circle at 20% 12%, rgba(255, 255, 255, .32), transparent 26%),
-    linear-gradient(135deg, #fff4b8 0%, var(--er-gold) 36%, var(--er-gold-strong) 68%, #9d6216 100%) !important;
-  color: #120806 !important;
-  border: 1px solid rgba(255, 244, 214, .46) !important;
-  box-shadow: 0 16px 48px rgba(247, 215, 123, .28), 0 0 30px rgba(123, 77, 255, .12) !important;
+  background: linear-gradient(135deg, rgba(255,255,255,.095), rgba(255,255,255,.025)) !important;
+  color: #fff8e6 !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.24) !important;
   font-weight: 900;
 }
 
@@ -6150,9 +6148,10 @@ body {
 .button.primary,
 .btn-primary,
 .admin-action-btn.primary {
-  color: #171007;
-  background: linear-gradient(180deg, #fff1ba, #d8a54b 58%, #b87c2c);
-  box-shadow: 0 12px 34px rgba(216,165,75,.22), inset 0 1px 0 rgba(255,255,255,.55);
+  color: #fff8e6;
+  background: linear-gradient(135deg, rgba(255,255,255,.095), rgba(255,255,255,.025));
+  border-color: rgba(255,255,255,.16);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.24);
 }
 
 .feature,
@@ -7532,10 +7531,10 @@ button:active {
 .button.primary,
 .premium-header-cta,
 .client-office-credit-pill {
-  border-color: rgba(244,215,127,.42) !important;
-  color: #171007 !important;
-  background: linear-gradient(180deg, var(--er-gold-light), var(--er-gold-strong)) !important;
-  box-shadow: 0 12px 34px rgba(217,168,78,.20);
+  border-color: rgba(255,255,255,.16) !important;
+  color: #fff8e6 !important;
+  background: linear-gradient(135deg, rgba(255,255,255,.095), rgba(255,255,255,.025)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.24) !important;
 }
 
 .button:focus-visible,
@@ -8312,10 +8311,10 @@ body {
 .btn-primary,
 .premium-header-cta,
 .client-office-credit-pill {
-  border-color: rgba(244,215,127,.5) !important;
-  color: #171006 !important;
-  background: linear-gradient(180deg, #f6d987, #d9a84e 58%, #b9792b) !important;
-  box-shadow: var(--er-shadow-gold);
+  border-color: rgba(255,255,255,.16) !important;
+  color: #fff8e6 !important;
+  background: linear-gradient(135deg, rgba(255,255,255,.095), rgba(255,255,255,.025)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.24) !important;
 }
 
 input,
@@ -8996,9 +8995,10 @@ textarea:focus {
 .premium-header-cta,
 .profile-card .button.primary,
 .hero-actions .button.primary {
-  color: #171007 !important;
-  background: linear-gradient(180deg, #f7dc8b, #d9a84e 58%, #b77a2c) !important;
-  box-shadow: 0 12px 28px rgba(217,168,78,.18);
+  color: #fff8e6 !important;
+  background: linear-gradient(135deg, rgba(255,255,255,.095), rgba(255,255,255,.025)) !important;
+  border-color: rgba(255,255,255,.16) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.24) !important;
 }
 
 .button.secondary,
@@ -10958,298 +10958,6 @@ textarea:focus {
   }
 }
 
-.er-glass-btn {
-  --er-btn-glow: #d6a84f;
-  --er-btn-text: #fff2c2;
-  --er-btn-bg: rgba(255, 255, 255, .035);
-  --er-btn-border: rgba(255, 222, 150, .24);
-  position: relative;
-  isolation: isolate;
-  min-height: 46px;
-  padding: 0 20px;
-  border: 1px solid var(--er-btn-border);
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  overflow: hidden;
-  color: var(--er-btn-text);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .015)),
-    var(--er-btn-bg);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .13),
-    inset 0 -1px 0 rgba(255, 255, 255, .08),
-    0 14px 28px rgba(0, 0, 0, .28);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-  text-decoration: none;
-  font-weight: 800;
-  letter-spacing: .02em;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: transform 220ms ease, letter-spacing 220ms ease, filter 220ms ease, opacity 220ms ease;
-}
-
-.er-glass-btn::before,
-.er-glass-btn::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  width: 34px;
-  height: 10px;
-  border-radius: 999px;
-  transform: translateX(-50%);
-  background: var(--er-btn-glow);
-  box-shadow:
-    0 0 5px var(--er-btn-glow),
-    0 0 15px var(--er-btn-glow),
-    0 0 30px color-mix(in srgb, var(--er-btn-glow), transparent 20%),
-    0 0 55px color-mix(in srgb, var(--er-btn-glow), transparent 35%);
-  pointer-events: none;
-  opacity: .82;
-  z-index: -2;
-  transition: width 280ms ease, height 280ms ease, top 280ms ease, bottom 280ms ease, opacity 220ms ease;
-}
-
-.er-glass-btn::before {
-  bottom: -4px;
-}
-
-.er-glass-btn::after {
-  top: -4px;
-}
-
-.er-glass-btn .er-glass-btn__label,
-.er-glass-btn > span,
-.er-glass-btn > svg {
-  position: relative;
-  z-index: 1;
-}
-
-.er-glass-btn .er-glass-btn__label::before,
-.er-glass-btn > span::before {
-  content: "";
-  position: absolute;
-  inset: -120% auto -120% -45%;
-  width: 42%;
-  transform: skewX(-18deg) translateX(-140%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .28), transparent);
-  pointer-events: none;
-  transition: transform 520ms ease;
-}
-
-.er-glass-btn:hover {
-  transform: translateY(-1px);
-  letter-spacing: .055em;
-  filter: brightness(1.08);
-}
-
-.er-glass-btn:hover::before {
-  bottom: 0;
-  width: 82%;
-  height: 50%;
-  opacity: .95;
-}
-
-.er-glass-btn:hover::after {
-  top: 0;
-  width: 82%;
-  height: 50%;
-  opacity: .95;
-}
-
-.er-glass-btn:hover .er-glass-btn__label::before,
-.er-glass-btn:hover > span::before {
-  transform: skewX(-18deg) translateX(360%);
-}
-
-.er-glass-btn:active {
-  transform: translateY(0) scale(.985);
-}
-
-.er-glass-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--er-btn-glow), white 30%);
-  outline-offset: 3px;
-}
-
-.er-glass-btn[disabled],
-.er-glass-btn[aria-disabled="true"] {
-  opacity: .48;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.er-glass-btn--sm {
-  min-height: 38px;
-  padding: 0 14px;
-  font-size: .82rem;
-}
-
-.er-glass-btn--md {
-  min-height: 46px;
-  padding: 0 20px;
-  font-size: .95rem;
-}
-
-.er-glass-btn--lg {
-  min-height: 54px;
-  padding: 0 26px;
-  font-size: 1.05rem;
-}
-
-.er-glass-btn--block {
-  width: 100%;
-}
-
-.er-glass-btn--gold {
-  --er-btn-glow: #d6a84f;
-  --er-btn-text: #fff2c2;
-  --er-btn-border: rgba(255, 217, 138, .35);
-}
-
-.er-glass-btn--pink {
-  --er-btn-glow: #ff4fb8;
-  --er-btn-text: #ffe4f5;
-  --er-btn-border: rgba(255, 79, 184, .36);
-}
-
-.er-glass-btn--cyan {
-  --er-btn-glow: #2bd2ff;
-  --er-btn-text: #e5faff;
-  --er-btn-border: rgba(43, 210, 255, .34);
-}
-
-.er-glass-btn--green {
-  --er-btn-glow: #32ff9c;
-  --er-btn-text: #eafff4;
-  --er-btn-border: rgba(50, 255, 156, .32);
-}
-
-.er-glass-btn--red {
-  --er-btn-glow: #ff3158;
-  --er-btn-text: #ffe7ec;
-  --er-btn-border: rgba(255, 49, 88, .34);
-}
-
-.er-glass-btn--purple {
-  --er-btn-glow: #8d5bff;
-  --er-btn-text: #eee7ff;
-  --er-btn-border: rgba(141, 91, 255, .36);
-}
-
-.er-glass-btn--active {
-  background:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 35%), transparent 58%),
-    linear-gradient(135deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .03));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 30%),
-    0 0 24px color-mix(in srgb, var(--er-btn-glow), transparent 45%),
-    inset 0 1px 0 rgba(255, 255, 255, .16);
-}
-
-@media (max-width: 720px) {
-  .er-glass-btn {
-    min-height: 44px;
-    padding-inline: 16px;
-    letter-spacing: .01em;
-  }
-
-  .er-glass-btn:hover {
-    letter-spacing: .025em;
-  }
-
-  .er-glass-btn--sm {
-    min-height: 38px;
-    padding-inline: 12px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .er-glass-btn,
-  .er-glass-btn::before,
-  .er-glass-btn::after,
-  .er-glass-btn .er-glass-btn__label::before,
-  .er-glass-btn > span::before {
-    transition: none;
-  }
-}
-
-/* Escort Radar: glass buttons must not inherit old gold button glow */
-.er-glass-btn,
-.er-glass-btn:hover,
-.er-glass-btn:focus,
-.er-glass-btn:active,
-.er-glass-btn.er-glass-btn--active,
-.er-glass-btn.active,
-.er-glass-btn.selected,
-.er-glass-btn[aria-pressed="true"],
-.er-glass-btn[aria-current="true"] {
-  background-image:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 48%), transparent 62%),
-    linear-gradient(135deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .018)) !important;
-  background-color: rgba(255, 255, 255, .035) !important;
-  border-color: var(--er-btn-border) !important;
-  color: var(--er-btn-text) !important;
-}
-
-.er-glass-btn:not(.er-glass-btn--active):not(.active):not(.selected):not([aria-pressed="true"]):not([aria-current="true"]) {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .12),
-    inset 0 -1px 0 rgba(255, 255, 255, .08),
-    0 14px 28px rgba(0, 0, 0, .28) !important;
-}
-
-.er-glass-btn.er-glass-btn--active,
-.er-glass-btn.active,
-.er-glass-btn.selected,
-.er-glass-btn[aria-pressed="true"],
-.er-glass-btn[aria-current="true"] {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 24%),
-    0 0 18px color-mix(in srgb, var(--er-btn-glow), transparent 42%),
-    0 0 38px color-mix(in srgb, var(--er-btn-glow), transparent 62%),
-    inset 0 1px 0 rgba(255, 255, 255, .18) !important;
-}
-
-.er-glass-btn::before,
-.er-glass-btn::after {
-  background: var(--er-btn-glow) !important;
-  box-shadow:
-    0 0 5px var(--er-btn-glow),
-    0 0 15px var(--er-btn-glow),
-    0 0 30px color-mix(in srgb, var(--er-btn-glow), transparent 20%),
-    0 0 60px color-mix(in srgb, var(--er-btn-glow), transparent 36%) !important;
-}
-
-.er-glass-btn.er-glass-btn--active::before,
-.er-glass-btn.er-glass-btn--active::after,
-.er-glass-btn.active::before,
-.er-glass-btn.active::after,
-.er-glass-btn.selected::before,
-.er-glass-btn.selected::after,
-.er-glass-btn[aria-pressed="true"]::before,
-.er-glass-btn[aria-pressed="true"]::after {
-  width: 82%;
-  height: 50%;
-  opacity: .95;
-}
-
-.er-glass-btn.er-glass-btn--active::before,
-.er-glass-btn.active::before,
-.er-glass-btn.selected::before,
-.er-glass-btn[aria-pressed="true"]::before {
-  bottom: 0;
-}
-
-.er-glass-btn.er-glass-btn--active::after,
-.er-glass-btn.active::after,
-.er-glass-btn.selected::after,
-.er-glass-btn[aria-pressed="true"]::after {
-  top: 0;
-}
-
 /* Escort Radar: empty radar message must not cover the radar view */
 .radar-empty-state,
 .radar-visual.with-map .radar-empty-state,
@@ -11464,48 +11172,106 @@ textarea:focus {
   min-height: 44px;
   font-weight: 800;
 }
+/* =========================================================
+   Escort Radar unified button system
+   This is the only visual button system used across the app.
+   ========================================================= */
 
-/* FINAL OVERRIDE: prevent legacy gold CTA styles from leaking into glass buttons */
-a.er-glass-btn,
-button.er-glass-btn,
-.er-glass-btn,
-.er-glass-btn:link,
-.er-glass-btn:visited,
-.er-glass-btn:hover,
-.er-glass-btn:focus,
-.er-glass-btn:focus-visible,
-.er-glass-btn:active,
-.er-glass-btn.active,
-.er-glass-btn.selected,
-.er-glass-btn[aria-pressed="true"],
-.er-glass-btn[aria-current="true"] {
-  background:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 54%), transparent 64%),
-    linear-gradient(135deg, rgba(255,255,255,0.105), rgba(255,255,255,0.018)) !important;
-  background-color: rgba(255, 255, 255, 0.032) !important;
-  background-image:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 54%), transparent 64%),
-    linear-gradient(135deg, rgba(255,255,255,0.105), rgba(255,255,255,0.018)) !important;
+.er-btn,
+.er-glass-btn {
+  --er-btn-glow: #d6a84f;
+  --er-btn-text: #fff2c2;
+  --er-btn-border: rgba(255, 217, 138, 0.34);
+  --er-btn-bg-a: rgba(255,255,255,0.10);
+  --er-btn-bg-b: rgba(255,255,255,0.018);
+
+  position: relative;
+  isolation: isolate;
+  min-height: 44px;
+  padding: 0 18px;
   border: 1px solid var(--er-btn-border) !important;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
   color: var(--er-btn-text) !important;
+  background:
+    radial-gradient(circle at 50% 125%, color-mix(in srgb, var(--er-btn-glow), transparent 58%), transparent 66%),
+    linear-gradient(135deg, var(--er-btn-bg-a), var(--er-btn-bg-b)) !important;
+  background-color: rgba(255,255,255,0.032) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.13),
+    inset 0 -1px 0 rgba(255,255,255,0.07),
+    0 12px 26px rgba(0,0,0,0.34) !important;
+  text-decoration: none;
   text-shadow: none !important;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.015em;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    filter 180ms ease;
 }
 
-a.er-glass-btn *,
-button.er-glass-btn *,
+.er-btn *,
 .er-glass-btn * {
   color: inherit !important;
   text-shadow: none !important;
 }
 
-.er-glass-btn {
+.er-btn::before,
+.er-btn::after,
+.er-glass-btn::before,
+.er-glass-btn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 34px;
+  height: 8px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: var(--er-btn-glow) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.13),
-    inset 0 -1px 0 rgba(255,255,255,0.07),
-    0 12px 26px rgba(0,0,0,0.34) !important;
+    0 0 5px var(--er-btn-glow),
+    0 0 14px var(--er-btn-glow),
+    0 0 28px color-mix(in srgb, var(--er-btn-glow), transparent 22%),
+    0 0 52px color-mix(in srgb, var(--er-btn-glow), transparent 42%) !important;
+  opacity: 0.82;
+  pointer-events: none;
+  z-index: -1;
+  transition:
+    width 180ms ease,
+    height 180ms ease,
+    top 180ms ease,
+    bottom 180ms ease,
+    opacity 180ms ease;
 }
 
+.er-btn::before,
+.er-glass-btn::before {
+  bottom: -4px;
+}
+
+.er-btn::after,
+.er-glass-btn::after {
+  top: -4px;
+}
+
+.er-btn:hover,
 .er-glass-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  background:
+    radial-gradient(circle at 50% 125%, color-mix(in srgb, var(--er-btn-glow), transparent 46%), transparent 68%),
+    linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.024)) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.16),
     inset 0 -1px 0 rgba(255,255,255,0.08),
@@ -11514,99 +11280,55 @@ button.er-glass-btn *,
     0 14px 30px rgba(0,0,0,0.38) !important;
 }
 
-.er-glass-btn.er-glass-btn--active,
+.er-btn:hover::before,
+.er-glass-btn:hover::before {
+  bottom: 0;
+  width: 82%;
+  height: 50%;
+  opacity: 0.95;
+}
+
+.er-btn:hover::after,
+.er-glass-btn:hover::after {
+  top: 0;
+  width: 82%;
+  height: 50%;
+  opacity: 0.95;
+}
+
+.er-btn:active,
+.er-glass-btn:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.er-btn:focus-visible,
+.er-glass-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--er-btn-glow), white 28%);
+  outline-offset: 3px;
+}
+
+.er-btn[disabled],
+.er-btn[aria-disabled="true"],
+.er-glass-btn[disabled],
+.er-glass-btn[aria-disabled="true"] {
+  opacity: 0.48;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.er-btn--active,
+.er-btn.active,
+.er-btn.selected,
+.er-btn[aria-pressed="true"],
+.er-btn[aria-current="true"],
+.er-glass-btn--active,
 .er-glass-btn.active,
 .er-glass-btn.selected,
 .er-glass-btn[aria-pressed="true"],
 .er-glass-btn[aria-current="true"] {
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.18),
-    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 24%),
-    0 0 18px color-mix(in srgb, var(--er-btn-glow), transparent 38%),
-    0 0 42px color-mix(in srgb, var(--er-btn-glow), transparent 64%),
-    0 12px 28px rgba(0,0,0,0.34) !important;
-}
-
-.er-glass-btn::before,
-.er-glass-btn::after {
-  background: var(--er-btn-glow) !important;
-  border: 0 !important;
-  box-shadow:
-    0 0 5px var(--er-btn-glow),
-    0 0 15px var(--er-btn-glow),
-    0 0 30px color-mix(in srgb, var(--er-btn-glow), transparent 22%),
-    0 0 58px color-mix(in srgb, var(--er-btn-glow), transparent 38%) !important;
-}
-
-/* Neutralize legacy yellow pseudo-elements when old classes are combined with er-glass-btn */
-.er-glass-btn[class*="primary"]::before,
-.er-glass-btn[class*="primary"]::after,
-.er-glass-btn[class*="premium"]::before,
-.er-glass-btn[class*="premium"]::after,
-.er-glass-btn[class*="gold"]::before,
-.er-glass-btn[class*="gold"]::after,
-.er-glass-btn[class*="cta"]::before,
-.er-glass-btn[class*="cta"]::after,
-.er-glass-btn[class*="button"]::before,
-.er-glass-btn[class*="button"]::after,
-.er-glass-btn[class*="btn"]::before,
-.er-glass-btn[class*="btn"]::after {
-  background: var(--er-btn-glow) !important;
-  box-shadow:
-    0 0 5px var(--er-btn-glow),
-    0 0 15px var(--er-btn-glow),
-    0 0 30px color-mix(in srgb, var(--er-btn-glow), transparent 22%),
-    0 0 58px color-mix(in srgb, var(--er-btn-glow), transparent 38%) !important;
-}
-
-/* FINAL GLOBAL BUTTON CLEANUP - glass buttons cannot inherit legacy yellow CTA styles */
-html body a.er-glass-btn,
-html body button.er-glass-btn,
-html body .er-glass-btn {
   background:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 56%), transparent 65%),
-    linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.018)) !important;
-  background-color: rgba(255, 255, 255, 0.032) !important;
-  background-image:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 56%), transparent 65%),
-    linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.018)) !important;
-  border-color: var(--er-btn-border) !important;
-  color: var(--er-btn-text) !important;
-  text-shadow: none !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.13),
-    inset 0 -1px 0 rgba(255,255,255,0.07),
-    0 12px 26px rgba(0,0,0,0.34) !important;
-}
-
-html body a.er-glass-btn:hover,
-html body button.er-glass-btn:hover,
-html body .er-glass-btn:hover {
-  background:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 46%), transparent 66%),
-    linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.024)) !important;
-  background-color: rgba(255, 255, 255, 0.04) !important;
-  border-color: var(--er-btn-border) !important;
-  color: var(--er-btn-text) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.16),
-    inset 0 -1px 0 rgba(255,255,255,0.08),
-    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 42%),
-    0 0 22px color-mix(in srgb, var(--er-btn-glow), transparent 54%),
-    0 14px 30px rgba(0,0,0,0.38) !important;
-}
-
-html body .er-glass-btn.er-glass-btn--active,
-html body .er-glass-btn.active,
-html body .er-glass-btn.selected,
-html body .er-glass-btn[aria-pressed="true"],
-html body .er-glass-btn[aria-current="true"] {
-  background:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 34%), transparent 68%),
+    radial-gradient(circle at 50% 125%, color-mix(in srgb, var(--er-btn-glow), transparent 34%), transparent 68%),
     linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.028)) !important;
-  background-color: rgba(255,255,255,0.045) !important;
-  border-color: var(--er-btn-border) !important;
-  color: var(--er-btn-text) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.18),
     0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 24%),
@@ -11615,50 +11337,133 @@ html body .er-glass-btn[aria-current="true"] {
     0 12px 28px rgba(0,0,0,0.34) !important;
 }
 
-html body .er-glass-btn::before,
-html body .er-glass-btn::after {
-  background: var(--er-btn-glow) !important;
-  border: 0 !important;
-  box-shadow:
-    0 0 5px var(--er-btn-glow),
-    0 0 15px var(--er-btn-glow),
-    0 0 30px color-mix(in srgb, var(--er-btn-glow), transparent 22%),
-    0 0 58px color-mix(in srgb, var(--er-btn-glow), transparent 38%) !important;
+.er-btn--active::before,
+.er-btn.active::before,
+.er-btn.selected::before,
+.er-btn[aria-pressed="true"]::before,
+.er-glass-btn--active::before,
+.er-glass-btn.active::before,
+.er-glass-btn.selected::before,
+.er-glass-btn[aria-pressed="true"]::before {
+  bottom: 0;
+  width: 82%;
+  height: 50%;
+  opacity: 0.95;
 }
 
-html body .er-glass-btn *,
-html body .er-glass-btn span,
-html body .er-glass-btn strong,
-html body .er-glass-btn svg {
-  color: inherit !important;
-  text-shadow: none !important;
+.er-btn--active::after,
+.er-btn.active::after,
+.er-btn.selected::after,
+.er-btn[aria-pressed="true"]::after,
+.er-glass-btn--active::after,
+.er-glass-btn.active::after,
+.er-glass-btn.selected::after,
+.er-glass-btn[aria-pressed="true"]::after {
+  top: 0;
+  width: 82%;
+  height: 50%;
+  opacity: 0.95;
 }
 
-html body .er-glass-btn svg {
-  stroke: currentColor;
+.er-btn--sm,
+.er-glass-btn--sm {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 0.82rem;
 }
 
-/* If old CTA classes are combined with er-glass-btn, er-glass-btn always wins */
-html body .premium-header-cta.er-glass-btn,
-html body .premium-button.er-glass-btn,
-html body .gold-button.er-glass-btn,
-html body .primary-button.er-glass-btn,
-html body .button-primary.er-glass-btn,
-html body .btn-primary.er-glass-btn,
-html body .cta-button.er-glass-btn,
-html body .profile-card-button.er-glass-btn,
-html body .card-action.er-glass-btn,
-html body .hero-cta.er-glass-btn,
-html body .radar-cta.er-glass-btn,
-html body .save-button.er-glass-btn,
-html body .admin-save-button.er-glass-btn {
-  background:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 56%), transparent 65%),
-    linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.018)) !important;
-  background-color: rgba(255,255,255,0.032) !important;
-  background-image:
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--er-btn-glow), transparent 56%), transparent 65%),
-    linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.018)) !important;
-  border-color: var(--er-btn-border) !important;
-  color: var(--er-btn-text) !important;
+.er-btn--md,
+.er-glass-btn--md {
+  min-height: 46px;
+  padding: 0 20px;
+  font-size: 0.94rem;
 }
+
+.er-btn--lg,
+.er-glass-btn--lg {
+  min-height: 54px;
+  padding: 0 26px;
+  font-size: 1.05rem;
+}
+
+.er-btn--block,
+.er-glass-btn--block {
+  width: 100%;
+}
+
+.er-btn--gold,
+.er-glass-btn--gold {
+  --er-btn-glow: #d6a84f;
+  --er-btn-text: #fff2c2;
+  --er-btn-border: rgba(255, 217, 138, 0.36);
+}
+
+.er-btn--pink,
+.er-glass-btn--pink {
+  --er-btn-glow: #ff4fb8;
+  --er-btn-text: #ffe4f5;
+  --er-btn-border: rgba(255, 79, 184, 0.38);
+}
+
+.er-btn--purple,
+.er-glass-btn--purple {
+  --er-btn-glow: #8d5bff;
+  --er-btn-text: #eee7ff;
+  --er-btn-border: rgba(141, 91, 255, 0.38);
+}
+
+.er-btn--cyan,
+.er-glass-btn--cyan {
+  --er-btn-glow: #2bd2ff;
+  --er-btn-text: #e5faff;
+  --er-btn-border: rgba(43, 210, 255, 0.36);
+}
+
+.er-btn--green,
+.er-glass-btn--green {
+  --er-btn-glow: #32ff9c;
+  --er-btn-text: #eafff4;
+  --er-btn-border: rgba(50, 255, 156, 0.36);
+}
+
+.er-btn--orange,
+.er-glass-btn--orange {
+  --er-btn-glow: #ff9f2f;
+  --er-btn-text: #fff1dd;
+  --er-btn-border: rgba(255, 159, 47, 0.38);
+}
+
+.er-btn--gray,
+.er-glass-btn--gray {
+  --er-btn-glow: #9a9aa4;
+  --er-btn-text: #f0f0f4;
+  --er-btn-border: rgba(170, 170, 180, 0.32);
+}
+
+.er-btn--red,
+.er-glass-btn--red {
+  --er-btn-glow: #ff3158;
+  --er-btn-text: #ffe7ec;
+  --er-btn-border: rgba(255, 49, 88, 0.38);
+}
+
+.er-btn--neutral,
+.er-glass-btn--neutral,
+.er-btn--dark,
+.er-glass-btn--dark {
+  --er-btn-glow: #7a7488;
+  --er-btn-text: #f3edf8;
+  --er-btn-border: rgba(180, 170, 200, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .er-btn,
+  .er-btn::before,
+  .er-btn::after,
+  .er-glass-btn,
+  .er-glass-btn::before,
+  .er-glass-btn::after {
+    transition: none !important;
+  }
+}
+

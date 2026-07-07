@@ -417,7 +417,7 @@ export function CityPage() {
             <div className="premium-filter-lock-panel">
               <strong>{t('clientOffice.activateTitle')}</strong>
               <span>{t('activation.activationTokenBonusDescription')}</span>
-              <Link className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('clientOffice.activateCta')}</span></Link>
+              <Link className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('clientOffice.activateCta')}</span></Link>
             </div>
           )}
 
@@ -446,7 +446,7 @@ export function CityPage() {
           onToggle={(value) => updateFilter('services', toggleArrayValue(draftFilters.services, value))}
         />
 
-        <button className="button ghost more-filter-button er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" disabled={advancedFiltersLocked} onClick={() => setShowAdvanced((value) => !value)}>
+        <button className="button ghost more-filter-button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" disabled={advancedFiltersLocked} onClick={() => setShowAdvanced((value) => !value)}>
           <SlidersHorizontal size={17} /> <span>{t('city.moreFilters')}</span>
         </button>
 
@@ -457,8 +457,8 @@ export function CityPage() {
         </div>
 
         <div className="filter-actions">
-          <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={applyDraftFilters}><span>{t('buttons.apply')}</span></button>
-          <button className="button er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={resetFilters}><span>{t('buttons.reset')}</span></button>
+          <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={applyDraftFilters}><span>{t('buttons.apply')}</span></button>
+          <button className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={resetFilters}><span>{t('buttons.reset')}</span></button>
           <span>{t('radar.inRange', { count: radarProfiles.length })}</span>
         </div>
       </section>
@@ -477,8 +477,8 @@ export function CityPage() {
             Aktywuj konto klienta za 0,99 EUR, aby korzystać z promienia, statusu, kategorii, ceny, typu wizyty, usług i tagów premium.
           </p>
           <div className="premium-lock-actions">
-            <Link className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('clientOffice.activateCta')}</span></Link>
-            {!hasClientSession && <Link className="button secondary er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={loginTarget}><span>{t('buttons.login')}</span></Link>}
+            <Link className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('clientOffice.activateCta')}</span></Link>
+            {!hasClientSession && <Link className="button secondary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={loginTarget}><span>{t('buttons.login')}</span></Link>}
           </div>
         </div>
 
@@ -518,7 +518,7 @@ export function CityPage() {
             showPlaceSearch={false}
             showPopularCities={false}
           />
-          <button className="button mobile-filter-trigger er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={() => setFiltersOpen(true)}>
+          <button className="button mobile-filter-trigger er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={() => setFiltersOpen(true)}>
             <SlidersHorizontal size={17} /> <span>{t('city.filter')}</span>
           </button>
         </div>
@@ -547,13 +547,13 @@ export function CityPage() {
         {draftFilters.availability_status === 'favorites' && !hasClientSession && (
           <section className="state-panel">
             <p>{t('favorites.loginToSeeFavorites')}</p>
-            <Link className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`}><span>{t('favorites.openLogin')}</span></Link>
+            <Link className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`}><span>{t('favorites.openLogin')}</span></Link>
           </section>
         )}
         {draftFilters.availability_status === 'favorites' && hasClientSession && favoritesLoaded && !favoriteProfileIds.size && (
           <section className="state-panel">
             <p>{t('favorites.noFavoritesYet')}</p>
-            <Link className="button primary er-glass-btn er-glass-btn--pink er-glass-btn--md" to="/dashboard#favorites"><span>{t('favorites.favorites')}</span></Link>
+            <Link className="button primary er-btn er-glass-btn er-glass-btn--pink er-glass-btn--md" to="/dashboard#favorites"><span>{t('favorites.favorites')}</span></Link>
           </section>
         )}
       </section>
@@ -604,10 +604,10 @@ export function CityPage() {
           sortedProfiles.length ? (
             <>
               <div className="radar-marketplace-carousel-controls profile-carousel-controls">
-                <button className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Poprzednie profile marketplace" onClick={goToPreviousMarketplaceSlide}>
+                <button className="er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Poprzednie profile marketplace" onClick={goToPreviousMarketplaceSlide}>
                   <ChevronLeft size={18} />
                 </button>
-                <button className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Następne profile marketplace" onClick={goToNextMarketplaceSlide}>
+                <button className="er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Następne profile marketplace" onClick={goToNextMarketplaceSlide}>
                   <ChevronRight size={18} />
                 </button>
               </div>
@@ -636,7 +636,7 @@ export function CityPage() {
                   <RadioTower size={32} />
                   <h2>{t('city.firstProfileTitle', { city: cityLabel })}</h2>
                   <p>{t('city.firstProfileText')}</p>
-                  <Link className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('buttons.addListing')}</span></Link>
+                  <Link className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('buttons.addListing')}</span></Link>
                 </div>
               )}
             </>
@@ -644,7 +644,7 @@ export function CityPage() {
             <EmptyState
               title={t('search.noProfilesForCity')}
               message={t('city.emptySearchText')}
-              action={<button className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}><span>{t('city.increaseRadius')}</span></button>}
+              action={<button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}><span>{t('city.increaseRadius')}</span></button>}
             />
           )
         )}
@@ -840,3 +840,4 @@ function getInitials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return `${parts[0]?.[0] || 'P'}${parts[1]?.[0] || ''}`;
 }
+

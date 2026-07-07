@@ -152,11 +152,11 @@ export function PricingPage() {
           </div>
           {!accessToken ? (
             <div className="hero-actions">
-              <Link className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login"><span>Login</span></Link>
-              <Link className="button er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/register"><span>Register</span></Link>
+              <Link className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login"><span>Login</span></Link>
+              <Link className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/register"><span>Register</span></Link>
             </div>
           ) : (
-            <button className="button primary full er-glass-btn er-glass-btn--gold er-glass-btn--block" disabled={loading} onClick={createManualOrder}><span>{loading ? 'Creating...' : 'Create pending order'}</span></button>
+            <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" disabled={loading} onClick={createManualOrder}><span>{loading ? 'Creating...' : 'Create pending order'}</span></button>
           )}
           {error ? <p className="error-text">{error}</p> : null}
           {manualOrder ? (
@@ -183,3 +183,4 @@ export function PricingPage() {
     </div>
   );
 }
+

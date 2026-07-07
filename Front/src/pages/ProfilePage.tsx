@@ -227,7 +227,7 @@ export function ProfilePage() {
                     <strong>{t('profileDetails.profileDetails')}</strong>
                     <p>{t('profileDetails.premiumDetailsLocked')}</p>
                   </div>
-                  <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={startClientActivation}><span>{t('profile.activateClient')}</span></button>
+                  <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={startClientActivation}><span>{t('profile.activateClient')}</span></button>
                 </div>
               )}
             </MarketSection>
@@ -267,7 +267,7 @@ export function ProfilePage() {
                   <strong>{t('pricing.servicePricing')}</strong>
                   <p>{t('profileDetails.premiumDetailsLocked')}</p>
                 </div>
-                <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={startClientActivation}><span>{t('profile.activateClient')}</span></button>
+                <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={startClientActivation}><span>{t('profile.activateClient')}</span></button>
               </div>
             ) : null}
           </MarketSection>
@@ -307,7 +307,7 @@ export function ProfilePage() {
                   <strong>{t('profile.privateGallery')}</strong>
                   <p>{t('profile.unlockGalleryText')}</p>
                 </div>
-                <button className="button primary er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={activated ? unlockVipGallery : startClientActivation}><span>{activated ? t('profile.unlockWithCoins') : t('profile.activateClient')}</span></button>
+                <button className="button primary er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={activated ? unlockVipGallery : startClientActivation}><span>{activated ? t('profile.unlockWithCoins') : t('profile.activateClient')}</span></button>
               </div>
             )}
           </section>
@@ -329,7 +329,7 @@ export function ProfilePage() {
                     <option value="240">240 min</option>
                   </select>
                   <textarea name="message" placeholder={t('form.message')} />
-                  <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit"><span>{t('buttons.sendBooking')}</span></button>
+                  <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit"><span>{t('buttons.sendBooking')}</span></button>
                   {bookingMessage && <p className="success">{bookingMessage}</p>}
                 </form>
               </section>
@@ -377,7 +377,7 @@ export function ProfilePage() {
                   <strong>{t('profile.premiumFeaturesLockedTitle')}</strong>
                   <p>{t('profile.premiumFeaturesLockedText')}</p>
                 </div>
-                <button className="button primary er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={startClientActivation}><span>{t('profile.activateClient')}</span></button>
+                <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={startClientActivation}><span>{t('profile.activateClient')}</span></button>
               </div>
             </section>
           ) : null}
@@ -401,16 +401,16 @@ export function ProfilePage() {
             </div>
           )}
           <div className="market-contact-actions">
-            <button className="button primary er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><MessageCircle size={16} /> <span>{t('nav.messages')}</span></button>
-            <button className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><Phone size={16} /> <span>{t('profile.call')}</span></button>
-            {canUsePremiumProfileFeatures && <a href="#booking" className="button er-glass-btn er-glass-btn--gold er-glass-btn--md"><CalendarDays size={16} /> <span>{t('profile.book')}</span></a>}
-            <button className="button er-glass-btn er-glass-btn--pink er-glass-btn--md" type="button" disabled={activated && favoriteSaved} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}><Heart size={16} /> <span>{favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</span></button>
-            <button className="button er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={() => activated ? sendGift() : setAccessMessage(t('profile.activateRevealContact'))}><Gift size={16} /> <span>{t('profile.gift')}</span></button>
-            <button className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => setAccessMessage(activated ? t('profile.liveCamAvailable') : t('profile.activateRevealContact'))}><Video size={16} /> <span>{t('profile.live')}</span></button>
+            <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><MessageCircle size={16} /> <span>{t('nav.messages')}</span></button>
+            <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><Phone size={16} /> <span>{t('profile.call')}</span></button>
+            {canUsePremiumProfileFeatures && <a href="#booking" className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><CalendarDays size={16} /> <span>{t('profile.book')}</span></a>}
+            <button className="button er-btn er-glass-btn er-glass-btn--pink er-glass-btn--md" type="button" disabled={activated && favoriteSaved} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}><Heart size={16} /> <span>{favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</span></button>
+            <button className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={() => activated ? sendGift() : setAccessMessage(t('profile.activateRevealContact'))}><Gift size={16} /> <span>{t('profile.gift')}</span></button>
+            <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => setAccessMessage(activated ? t('profile.liveCamAvailable') : t('profile.activateRevealContact'))}><Video size={16} /> <span>{t('profile.live')}</span></button>
           </div>
           {accessMessage && <p className={accessMessage === t('favorites.notEnoughTokens') ? 'error-text' : activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
-          {accessMessage === t('favorites.notEnoughTokens') && <Link className="button er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><span>{t('favorites.buyTokens')}</span></Link>}
-          {accessMessage === t('favorites.loginToSeeFavorites') && <Link className="button er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login"><span>{t('buttons.login')}</span></Link>}
+          {accessMessage === t('favorites.notEnoughTokens') && <Link className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><span>{t('favorites.buyTokens')}</span></Link>}
+          {accessMessage === t('favorites.loginToSeeFavorites') && <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login"><span>{t('buttons.login')}</span></Link>}
           <div className="market-contact-facts">
             <MarketFact icon={<BadgeCheck size={16} />} label={t('profile.verified')} value={profile.verified ? t('profile.yes') : t('profile.pending')} />
             <MarketFact icon={<Languages size={16} />} label={t('profile.languages')} value={languages.join(', ')} />
@@ -733,3 +733,4 @@ function ServicePricingList({ rows, currency }: { rows: ReturnType<typeof getSer
     </div>
   );
 }
+

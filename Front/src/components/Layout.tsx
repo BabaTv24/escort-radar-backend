@@ -98,32 +98,32 @@ export function Layout() {
         </div>
         {mobileMenuOpen && (
           <div className="mobile-menu-panel">
-            <Link className="er-glass-btn er-glass-btn--purple er-glass-btn--sm" to={authPath(tokensPath)}><Coins size={16} /> <span>{t('nav.tokens')}</span></Link>
+            <Link className="er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" to={authPath(tokensPath)}><Coins size={16} /> <span>{t('nav.tokens')}</span></Link>
             {isSignedIn ? (
               <>
                 <span className="mobile-account-role">{t(`auth.${account.role}`)}</span>
-                <Link className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" to="/dashboard"><UserRound size={16} /> <span>{dashboardLabel}</span></Link>
-                <Link className="er-glass-btn er-glass-btn--pink er-glass-btn--sm" to={favoritesPath}><Heart size={16} /> <span>{t('favorites.favorites')}</span></Link>
-                <button className="er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={logout}><LogOut size={16} /> <span>{t('auth.logout')}</span></button>
+                <Link className="er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" to="/dashboard"><UserRound size={16} /> <span>{dashboardLabel}</span></Link>
+                <Link className="er-btn er-glass-btn er-glass-btn--pink er-glass-btn--sm" to={favoritesPath}><Heart size={16} /> <span>{t('favorites.favorites')}</span></Link>
+                <button className="er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={logout}><LogOut size={16} /> <span>{t('auth.logout')}</span></button>
               </>
             ) : (
               <>
-                <Link className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" to="/register?type=client"><UserRound size={16} /> <span>{t('buttons.register')}</span></Link>
-                <Link className="er-glass-btn er-glass-btn--pink er-glass-btn--sm" to="/register?type=escort"><Radar size={16} /> <span>{t('buttons.addListing')}</span></Link>
-                <Link className="er-glass-btn er-glass-btn--cyan er-glass-btn--sm" to="/login"><UserRound size={16} /> <span>{t('buttons.login')}</span></Link>
+                <Link className="er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" to="/register?type=client"><UserRound size={16} /> <span>{t('buttons.register')}</span></Link>
+                <Link className="er-btn er-glass-btn er-glass-btn--pink er-glass-btn--sm" to="/register?type=escort"><Radar size={16} /> <span>{t('buttons.addListing')}</span></Link>
+                <Link className="er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" to="/login"><UserRound size={16} /> <span>{t('buttons.login')}</span></Link>
               </>
             )}
           </div>
         )}
         <div className="header-actions">
           {!isAppRoute && (
-            <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action premium-header-cta er-glass-btn er-glass-btn--gold er-glass-btn--sm">
+            <Link to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`} className="radar-action premium-header-cta er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm">
               <Radar size={17} />
               <span>{t('home.openRadar')}</span>
             </Link>
           )}
           {!isDashboardRoute && (
-            <Link to="/tokens" className="radar-action er-glass-btn er-glass-btn--purple er-glass-btn--sm">
+            <Link to="/tokens" className="radar-action er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm">
               <Coins size={17} />
               <span>{t('nav.tokens')}</span>
             </Link>
@@ -135,18 +135,18 @@ export function Layout() {
                 <span>{t('auth.loggedInAs')}: <strong>{t(`auth.${account.role}`)}</strong></span>
                 {account.email ? <small>{account.email}</small> : null}
               </Link>
-              {!isDashboardRoute && <Link to="/dashboard" className="radar-action account-dashboard-link er-glass-btn er-glass-btn--gold er-glass-btn--sm"><span>{dashboardLabel}</span></Link>}
-              {account.role === 'admin' ? <Link to="/admin" className="radar-action er-glass-btn er-glass-btn--gold er-glass-btn--sm"><span>{t('auth.admin')}</span></Link> : null}
-              <button className="radar-action account-logout er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={logout}>
+              {!isDashboardRoute && <Link to="/dashboard" className="radar-action account-dashboard-link er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm"><span>{dashboardLabel}</span></Link>}
+              {account.role === 'admin' ? <Link to="/admin" className="radar-action er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm"><span>{t('auth.admin')}</span></Link> : null}
+              <button className="radar-action account-logout er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={logout}>
                 <LogOut size={16} />
                 <span>{t('auth.logout')}</span>
               </button>
             </div>
           ) : (
             <>
-              <Link to="/register?type=client" className="radar-action er-glass-btn er-glass-btn--gold er-glass-btn--sm"><span>{t('buttons.register')}</span></Link>
-              <Link to="/register?type=escort" className="radar-action er-glass-btn er-glass-btn--pink er-glass-btn--sm"><span>{t('buttons.addListing')}</span></Link>
-              <Link to="/login" className="radar-action er-glass-btn er-glass-btn--cyan er-glass-btn--sm"><span>{t('buttons.login')}</span></Link>
+              <Link to="/register?type=client" className="radar-action er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm"><span>{t('buttons.register')}</span></Link>
+              <Link to="/register?type=escort" className="radar-action er-btn er-glass-btn er-glass-btn--pink er-glass-btn--sm"><span>{t('buttons.addListing')}</span></Link>
+              <Link to="/login" className="radar-action er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm"><span>{t('buttons.login')}</span></Link>
               <Link to="/dashboard" className="icon-link" aria-label={t('nav.dashboard')}>
                 <UserRound size={20} />
               </Link>
@@ -260,3 +260,4 @@ function normalizeHeaderRole(value: unknown): HeaderAccountRole | null {
   if (role === 'escort' || role === 'advertiser' || role === 'private') return 'advertiser';
   return null;
 }
+

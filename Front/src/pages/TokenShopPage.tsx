@@ -67,7 +67,7 @@ export function TokenShopPage() {
             <h2>{tokenPackage.token_amount.toLocaleString()} {t('tokens.short')}</h2>
             <strong>{tokenPackage.eur_price.toFixed(2)} EUR</strong>
             <p>{tokenPackage.bonus_tokens ? t('tokens.bonus', { count: tokenPackage.bonus_tokens }) : t('tokens.noBonus')}</p>
-            <button className="button primary full er-glass-btn er-glass-btn--purple er-glass-btn--block" onClick={() => selectPackage(tokenPackage)}><span>{t('tokens.selectPackage')}</span></button>
+            <button className="button primary full er-btn er-glass-btn er-glass-btn--purple er-glass-btn--block" onClick={() => selectPackage(tokenPackage)}><span>{t('tokens.selectPackage')}</span></button>
           </article>
         ))}
       </section>
@@ -89,3 +89,4 @@ export function TokenShopPage() {
     </div>
   );
 }
+

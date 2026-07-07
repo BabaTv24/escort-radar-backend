@@ -82,14 +82,14 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
         {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
         <div className="premium-card-actions">
-          <button className="button icon-favorite-action er-glass-btn er-glass-btn--pink er-glass-btn--sm" type="button" disabled={favoriteState === 'saved'} onClick={toggleFavorite} aria-label={favoriteState === 'saved' ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}>
+          <button className="button icon-favorite-action er-btn er-glass-btn er-glass-btn--pink er-glass-btn--sm" type="button" disabled={favoriteState === 'saved'} onClick={toggleFavorite} aria-label={favoriteState === 'saved' ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}>
             <HeartHandshake size={16} />
           </button>
-          <Link to={`/profile/${profile.id}`} className="button primary full er-glass-btn er-glass-btn--cyan er-glass-btn--block"><span>{t('buttons.viewProfile')}</span></Link>
+          <Link to={`/profile/${profile.id}`} className="button primary full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block"><span>{t('buttons.viewProfile')}</span></Link>
         </div>
         {favoriteMessage && <p className={favoriteMessage === t('favorites.notEnoughTokens') ? 'error-text' : 'success'}>{favoriteMessage}</p>}
-        {favoriteMessage === t('favorites.notEnoughTokens') && <Link className="button full er-glass-btn er-glass-btn--purple er-glass-btn--block" to="/tokens"><span>{t('favorites.buyTokens')}</span></Link>}
-        {favoriteMessage === t('favorites.loginToSeeFavorites') && <Link className="button full er-glass-btn er-glass-btn--cyan er-glass-btn--block" to="/login"><span>{t('buttons.login')}</span></Link>}
+        {favoriteMessage === t('favorites.notEnoughTokens') && <Link className="button full er-btn er-glass-btn er-glass-btn--purple er-glass-btn--block" to="/tokens"><span>{t('favorites.buyTokens')}</span></Link>}
+        {favoriteMessage === t('favorites.loginToSeeFavorites') && <Link className="button full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block" to="/login"><span>{t('buttons.login')}</span></Link>}
       </div>
     </article>
   );
@@ -150,3 +150,4 @@ function getPriceFrom(profile: Profile, t: (key: string) => string) {
   if (!prices.length) return t('profile.priceOnRequest');
   return `ab ${Math.min(...prices)} ${profile.currency || 'EUR'} / h`;
 }
+

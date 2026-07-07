@@ -177,16 +177,16 @@ export function LoginPage() {
               <span>{t('auth.rememberEmail')}</span>
             </label>
             <input type="password" required placeholder={t('form.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
-            <button className="button primary full er-glass-btn er-glass-btn--gold er-glass-btn--block" type="submit" disabled={loading}>
+            <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" type="submit" disabled={loading}>
               <LogIn size={17} /> <span>{loading ? t('states.loading') : t('auth.loginSubmit')}</span>
             </button>
             {showSlowLoginHelp && (
-              <button className="button full er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="submit" disabled={loading}>
+              <button className="button full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="submit" disabled={loading}>
                 <span>{t('auth.tryAgain')}</span>
               </button>
             )}
           </form>
-          <button className="button full er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" disabled={loading} onClick={signInWithGoogle}><span>{t('auth.continueWithGoogle')}</span></button>
+          <button className="button full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" disabled={loading} onClick={signInWithGoogle}><span>{t('auth.continueWithGoogle')}</span></button>
           <Link className="text-link" to="/register">{t('auth.needAccount')}</Link>
           {message && <p className="error-text">{message}</p>}
         </div>
@@ -194,3 +194,4 @@ export function LoginPage() {
     </div>
   );
 }
+
