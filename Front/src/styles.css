@@ -11467,3 +11467,160 @@ textarea:focus {
   }
 }
 
+/* BC Coins shop: controlled premium pricing grid */
+.token-page {
+  width: min(1480px, calc(100% - 1.5rem));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.token-page .token-package-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: stretch;
+  margin: 1rem 0 1.15rem;
+}
+
+.token-page .token-package-card {
+  min-width: 0;
+  min-height: 252px;
+  display: flex;
+  flex-direction: column;
+  gap: .62rem;
+  height: 100%;
+  padding: 1rem;
+  overflow: hidden;
+  border-color: rgba(244, 215, 127, .28) !important;
+  background:
+    radial-gradient(circle at 14% 0, rgba(244, 215, 127, .18), transparent 9rem),
+    radial-gradient(circle at 96% 8%, rgba(141, 91, 255, .18), transparent 9rem),
+    linear-gradient(145deg, rgba(255, 255, 255, .082), rgba(255, 255, 255, .024)),
+    rgba(9, 8, 12, .82) !important;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, .46), inset 0 1px 0 rgba(255, 255, 255, .08) !important;
+  backdrop-filter: blur(18px) saturate(1.14);
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+.token-page .token-package-card.featured {
+  border-color: rgba(244, 215, 127, .52) !important;
+  box-shadow: 0 28px 86px rgba(0, 0, 0, .52), 0 0 42px rgba(141, 91, 255, .14), inset 0 1px 0 rgba(255, 255, 255, .1) !important;
+}
+
+.token-page .token-package-card svg {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  color: var(--er-gold-light);
+  filter: drop-shadow(0 0 16px rgba(244, 215, 127, .24));
+}
+
+.token-page .token-package-card h2 {
+  margin: 0;
+  min-height: 2.55em;
+  color: #fff8e6;
+  font-size: clamp(1rem, 1.05vw, 1.28rem);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.token-page .token-package-card strong {
+  display: block;
+  color: var(--er-gold-light);
+  font-size: clamp(1.05rem, 1vw, 1.22rem);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.token-page .token-package-card p {
+  margin: 0;
+  min-height: 2.6em;
+  color: var(--er-text-soft);
+  font-size: .86rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.token-page .token-package-card .er-glass-btn {
+  min-height: 44px;
+  margin-top: auto;
+  padding-inline: .65rem;
+}
+
+.token-page .token-package-card .er-glass-btn span {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.token-page .best-value {
+  top: .72rem;
+  right: .72rem;
+  max-width: calc(100% - 1.44rem);
+  padding: .28rem .48rem;
+  border-color: rgba(244, 215, 127, .36) !important;
+  color: #fff2c2 !important;
+  background: linear-gradient(135deg, rgba(244, 215, 127, .18), rgba(141, 91, 255, .22)) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 255, 255, .1) !important;
+  font-size: .68rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+@media (min-width: 560px) {
+  .token-page .token-package-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .token-page .token-package-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .token-page .token-package-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .token-page .token-package-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .token-page .token-package-card {
+    min-height: 268px;
+    padding: .95rem;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .token-page .token-package-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(244, 215, 127, .54) !important;
+    box-shadow: 0 34px 98px rgba(0, 0, 0, .58), 0 0 48px rgba(244, 215, 127, .13), inset 0 1px 0 rgba(255, 255, 255, .11) !important;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .token-page .token-package-card:hover {
+    transform: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .token-page {
+    width: min(100%, calc(100% - 1rem));
+  }
+
+  .token-page .token-package-card {
+    min-height: 232px;
+  }
+}
+
