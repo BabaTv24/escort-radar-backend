@@ -11405,3 +11405,62 @@ textarea:focus {
 .dot.offline {
   --radar-status-color: var(--radar-status-offline) !important;
 }
+
+/* Escort Radar: Admin Dashboard status badges use the same palette as Live Radar */
+.status-badge {
+  display: inline-flex !important;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px !important;
+  border: 1px solid var(--admin-status-border, rgba(255, 217, 138, .35)) !important;
+  color: var(--admin-status-text, #fff2c2) !important;
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--admin-status-glow, #d6a84f), transparent 78%), transparent 62%),
+    linear-gradient(135deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .018)) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--admin-status-glow, #d6a84f), transparent 82%),
+    0 0 16px color-mix(in srgb, var(--admin-status-glow, #d6a84f), transparent 74%),
+    inset 0 1px 0 rgba(255, 255, 255, .12) !important;
+  font-weight: 850;
+}
+
+.status-badge--online {
+  --admin-status-glow: #32ff9c;
+  --admin-status-text: #eafff4;
+  --admin-status-border: rgba(50, 255, 156, .34);
+}
+
+.status-badge--busy {
+  --admin-status-glow: #ff9f2f;
+  --admin-status-text: #fff1dd;
+  --admin-status-border: rgba(255, 159, 47, .36);
+}
+
+.status-badge--offline {
+  --admin-status-glow: #9a9aa4;
+  --admin-status-text: #f0f0f4;
+  --admin-status-border: rgba(170, 170, 180, .30);
+}
+
+.status-badge--danger {
+  --admin-status-glow: #ff3158;
+  --admin-status-text: #ffe7ec;
+  --admin-status-border: rgba(255, 49, 88, .36);
+}
+
+.status-badge--favorite {
+  --admin-status-glow: #ff4fb8;
+  --admin-status-text: #ffe4f5;
+  --admin-status-border: rgba(255, 79, 184, .36);
+}
+
+.status-badge--gold {
+  --admin-status-glow: #d6a84f;
+  --admin-status-text: #fff2c2;
+  --admin-status-border: rgba(255, 217, 138, .35);
+}
+
+.admin-status-select {
+  min-height: 44px;
+  font-weight: 800;
+}

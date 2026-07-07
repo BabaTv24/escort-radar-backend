@@ -1195,7 +1195,7 @@ export function AdminPage() {
         <section className="admin-card">
           <h3>{t('admin.profileEditor.publicProfileStatus')}</h3>
           <div className="admin-form-grid">
-            <AdminField label={t('admin.profileEditor.operatorStatus')}><select value={studioForm.operator_status} onChange={(event) => setStudioForm({ ...studioForm, operator_status: event.target.value })}>{adminAvailabilityStatusOptions.map((status) => <option key={status} value={status}>{t(`admin.operatorStatus.${status}`)}</option>)}</select></AdminField>
+            <AdminField label={t('admin.profileEditor.operatorStatus')}><select className={getAdminOperatorStatusSelectClass(studioForm.operator_status)} value={studioForm.operator_status} onChange={(event) => setStudioForm({ ...studioForm, operator_status: event.target.value })}>{adminAvailabilityStatusOptions.map((status) => <option key={status} value={status}>{t(`admin.operatorStatus.${status}`)}</option>)}</select></AdminField>
             <AdminField label={t('admin.profileEditor.published')} help={t('admin.profileEditor.publishedHelp')}><label><input type="checkbox" checked={studioForm.is_published} onChange={(event) => setStudioForm({ ...studioForm, is_published: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
             <AdminField label={t('admin.profileEditor.verified')}><label><input type="checkbox" checked={studioForm.verified} onChange={(event) => setStudioForm({ ...studioForm, verified: event.target.checked })} /> {t('admin.common.enabled')}</label></AdminField>
             <AdminField label={t('admin.profileEditor.moderationStatus')} help={t('admin.profileEditor.moderationStatusHelp')}><select value={studioForm.moderation_status} onChange={(event) => setStudioForm({ ...studioForm, moderation_status: event.target.value })}>{['pending', 'approved', 'rejected', 'suspended'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}</select></AdminField>
@@ -2561,14 +2561,20 @@ function isRealRevenuePayment(row: Record<string, any>) {
 }
 
 function ProfileStatusBadges({ profile }: { profile: Profile }) {
-  const online = profile.operator_status === 'ONLINE_NOW' || profile.available_now;
   return (
     <span className="admin-badge-stack">
-      <StatusBadge value={online ? 'online' : 'offline'} />
+      <StatusBadge value={getAdminOperatorStatusValue(profile)} />
       {profile.is_published === false ? <StatusBadge value="hidden" /> : null}
       <StatusBadge value={profile.moderation_status || profile.verification_status || profile.status || 'pending'} />
     </span>
   );
+}
+
+function getAdminOperatorStatusValue(profile: Profile) {
+  const status = String(profile.operator_status || '').toUpperCase();
+  if (status === 'ONLINE_NOW' || status === 'AVAILABLE_TODAY' || profile.available_now) return 'online';
+  if (status === 'BUSY' || status === 'APPOINTMENT_ONLY' || status === 'TRAVELING') return 'busy';
+  return 'offline';
 }
 
 function ProfileVisibilityAudit({ audit, compact = false }: { audit?: Profile['visibility_audit']; compact?: boolean }) {
@@ -2776,7 +2782,26 @@ function adminStatusLabel(value: unknown, t: (key: string, vars?: Record<string,
 function StatusBadge({ value }: { value: string }) {
   const { t } = useI18n();
   const safeValue = String(value || 'unknown').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-  return <span className={`admin-status ${safeValue}`}>{adminStatusLabel(value, t)}</span>;
+  return <span className={`admin-status status-badge status-badge--${getAdminStatusBadgeVariant(value)} ${safeValue}`}>{adminStatusLabel(value, t)}</span>;
+}
+
+function getAdminStatusBadgeVariant(value: unknown) {
+  const status = String(value || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (['online', 'online_now', 'available_today', 'approved', 'verified', 'yes', 'active', 'paid', 'live', 'published'].includes(status)) return 'online';
+  if (['busy', 'appointment_only', 'traveling', 'pending', 'requested', 'trial', 'incomplete', 'warning'].includes(status)) return 'busy';
+  if (['offline', 'hidden', 'unpublished', 'unavailable', 'expired', 'cancelled', 'unknown', 'no', 'free'].includes(status)) return 'offline';
+  if (['rejected', 'suspended', 'blocked', 'failed', 'conflict'].includes(status)) return 'danger';
+  if (['favorite', 'favorites'].includes(status)) return 'favorite';
+  if (['visible', 'gold', 'standard', 'elite', 'diamond', 'sponsored', 'test'].includes(status)) return 'gold';
+  return 'gold';
+}
+
+function getAdminOperatorStatusSelectClass(value: unknown) {
+  const status = String(value || '').toUpperCase();
+  if (status === 'ONLINE_NOW' || status === 'AVAILABLE_TODAY') return 'status-select status-select-online admin-status-select';
+  if (status === 'BUSY' || status === 'APPOINTMENT_ONLY' || status === 'TRAVELING') return 'status-select status-select-busy admin-status-select';
+  if (status === 'OFFLINE') return 'status-select status-select-offline admin-status-select';
+  return 'status-select status-select-all admin-status-select';
 }
 
 function Action({ children, onClick, danger = false, disabled = false, title }: { children: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; title?: string }) {
