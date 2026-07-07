@@ -213,10 +213,10 @@ export function HomePage() {
           </div>
 
           <div className="footer-carousel-controls">
-            <button className="footer-carousel-control" type="button" aria-label="Previous slide" onClick={goToPreviousFooterSlide}>
+            <button className="footer-carousel-control er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Previous slide" onClick={goToPreviousFooterSlide}>
               <ChevronLeft size={18} />
             </button>
-            <button className="footer-carousel-control" type="button" aria-label="Next slide" onClick={goToNextFooterSlide}>
+            <button className="footer-carousel-control er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Next slide" onClick={goToNextFooterSlide}>
               <ChevronRight size={18} />
             </button>
           </div>
@@ -337,10 +337,10 @@ function ProfileCarouselSection({
             </Link>
           ) : null}
           <div className="profile-carousel-controls">
-            <button type="button" aria-label="Poprzednie profile" onClick={goToPreviousSlide}>
+            <button className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Poprzednie profile" onClick={goToPreviousSlide}>
               <ChevronLeft size={18} />
             </button>
-            <button type="button" aria-label="Następne profile" onClick={goToNextSlide}>
+            <button className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Następne profile" onClick={goToNextSlide}>
               <ChevronRight size={18} />
             </button>
           </div>

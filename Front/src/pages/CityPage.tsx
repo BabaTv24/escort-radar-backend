@@ -604,10 +604,10 @@ export function CityPage() {
           sortedProfiles.length ? (
             <>
               <div className="radar-marketplace-carousel-controls profile-carousel-controls">
-                <button type="button" aria-label="Poprzednie profile marketplace" onClick={goToPreviousMarketplaceSlide}>
+                <button className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Poprzednie profile marketplace" onClick={goToPreviousMarketplaceSlide}>
                   <ChevronLeft size={18} />
                 </button>
-                <button type="button" aria-label="Następne profile marketplace" onClick={goToNextMarketplaceSlide}>
+                <button className="er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Następne profile marketplace" onClick={goToNextMarketplaceSlide}>
                   <ChevronRight size={18} />
                 </button>
               </div>
