@@ -338,7 +338,7 @@ export const api = {
     token,
     body: JSON.stringify({ url })
   }),
-  importProfileCreate: (token: string, body: { source_url: string; profile: HermesProfilePreview; create_as_draft: boolean }) => request<{ profile: Profile; warnings: string[] }>('/api/admin/import-profile-create', {
+  importProfileCreate: (token: string, body: { source_url: string; profile: HermesProfilePreview; create_as_draft: boolean; password?: string; confirmPassword?: string }) => request<{ profile: Profile; warnings: string[] }>('/api/admin/import-profile-create', {
     method: 'POST',
     token,
     body: JSON.stringify(body)

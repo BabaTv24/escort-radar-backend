@@ -820,6 +820,7 @@ adminRouter.post('/import-profile-preview', asyncHandler(async (req, res) => {
     }
     const html = (await response.text()).slice(0, 600000);
     const profile = buildHermesProfilePreview(html, sourceUrl, warnings);
+    (profile as Record<string, any>).suggested_owner_email = await nextSponsoredImportEmail();
     res.json({ ok: true, source_url: sourceUrl, profile: normalizeHermesPreviewProfile(profile, sourceUrl, 'local_parser'), warnings });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not analyse public URL' });
@@ -831,10 +832,18 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
   const safetyError = validatePublicImportUrl(sourceUrl);
   if (safetyError) return res.status(400).json({ error: safetyError });
   const incomingProfile = req.body.profile && typeof req.body.profile === 'object' ? req.body.profile : {};
-  const generatedEmail = `hermes-${Date.now().toString(36)}@imports.escort-radar.local`;
+  const password = optionalText(req.body.password, 200);
+  const confirmPassword = optionalText(req.body.confirmPassword || req.body.confirm_password, 200);
+  if (!password || password.length < 8) return res.status(400).json({ error: 'Password must contain at least 8 characters' });
+  if (password !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match' });
+  const ownerEmail = optionalEmail((incomingProfile as any).owner_email || (incomingProfile as any).email) || await nextSponsoredImportEmail();
+  const combinedWarnings = uniqueStrings([
+    ...((incomingProfile as any).admin_warnings || []),
+    ...((incomingProfile as any).warnings || [])
+  ].map((item: unknown) => String(item || '')).filter(Boolean));
   const normalized = normalizeAdminProfilePayload({
     ...incomingProfile,
-    owner_email: optionalEmail((incomingProfile as any).owner_email || (incomingProfile as any).email) || generatedEmail,
+    owner_email: ownerEmail,
     display_name: optionalText((incomingProfile as any).display_name || (incomingProfile as any).name, 80) || 'Hermes import draft',
     city: normalizeHermesCity((incomingProfile as any).city),
     category: (incomingProfile as any).category || 'ladies',
@@ -845,6 +854,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     whatsapp: (incomingProfile as any).whatsapp,
     services: Array.isArray((incomingProfile as any).services) ? (incomingProfile as any).services : [],
     website: optionalText((incomingProfile as any).website, 240) || sourceUrl,
+    price_1h: numericValue((incomingProfile as any).price_1h || (incomingProfile as any).prices?.price_1h || 180) || 180,
     is_published: false,
     verified: false,
     is_sponsored: true,
@@ -855,10 +865,25 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     subscription_note: `Hermes import source: ${sourceUrl}`
   });
   if ('error' in normalized) return res.status(400).json({ error: normalized.error });
+  let authUser: any = null;
+  let authUserCreated = false;
+  try {
+    const account = await resolveAdminProfileUser({
+      email: ownerEmail,
+      password,
+      accountType: 'advertiser',
+      plan: 'hermes_import_draft',
+      subscriptionStatus: 'incomplete'
+    });
+    authUser = account.user;
+    authUserCreated = account.created;
+  } catch (error) {
+    return res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create login account' });
+  }
 
   const payload = {
     ...normalized.data,
-    user_id: null,
+    user_id: authUser?.id || null,
     slug: `${slugify(String(normalized.data.display_name))}-${Date.now().toString(36)}`,
     status: 'pending',
     moderation_status: 'pending',
@@ -872,7 +897,8 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     source_url: sourceUrl,
     import_source: optionalText((incomingProfile as any).import_source, 60) || 'hermes',
     imported_at: new Date().toISOString(),
-    subscription_note: `Hermes import source: ${sourceUrl}`,
+    admin_note: adminImportNote(sourceUrl, incomingProfile as Record<string, any>, combinedWarnings),
+    subscription_note: adminImportNote(sourceUrl, incomingProfile as Record<string, any>, combinedWarnings),
     location_updated_at: new Date().toISOString()
   };
   const { data, error } = await supabaseAdmin
@@ -880,11 +906,25 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     .insert(payload)
     .select('*, profile_images(*)')
     .single();
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    if (authUserCreated && authUser?.id) await supabaseAdmin.auth.admin.deleteUser(authUser.id);
+    return res.status(400).json({ error: error.message });
+  }
+  await logAccountAccess(req, data.id, authUser.id, authUserCreated ? 'hermes_import_account_created' : 'hermes_import_user_linked');
+  if (combinedWarnings.length) {
+    try {
+      await supabaseAdmin.from('admin_notes').insert({
+        profile_id: data.id,
+        note: combinedWarnings.join('\n')
+      });
+    } catch {
+      // Optional admin note; profile creation should not fail because of note logging.
+    }
+  }
   await logAdminAction(req.user?.email, 'hermes_profile_import_created', 'profile', data.id, { source_url: sourceUrl, create_as_draft: true });
   res.status(201).json({
     profile: withAdminImageUrls(data),
-    warnings: ['Profile created as unpublished draft. External image URLs were not copied automatically.']
+    warnings: uniqueStrings([...combinedWarnings, 'Profile created as unpublished draft. External image URLs were not copied automatically.'])
   });
 }));
 
@@ -3450,11 +3490,18 @@ async function analyseProfileWithHermes(sourceUrl: string) {
   const rawProfile = payload.profile || payload.data?.profile || payload.data;
   if (!rawProfile || typeof rawProfile !== 'object') throw new Error('Hermes response did not include profile data');
   const resolvedSourceUrl = String(payload.source_url || rawProfile.source_url || sourceUrl);
+  const normalizedProfile = normalizeHermesPreviewProfile(rawProfile, resolvedSourceUrl, 'hermes') as Record<string, any>;
   return {
     ok: true,
     source_url: resolvedSourceUrl,
-    profile: normalizeHermesPreviewProfile(rawProfile, resolvedSourceUrl, 'hermes'),
-    warnings: Array.isArray(payload.warnings) ? payload.warnings.map((item: unknown) => String(item)).slice(0, 20) : []
+    profile: {
+      ...normalizedProfile,
+      suggested_owner_email: await nextSponsoredImportEmail()
+    },
+    warnings: uniqueStrings([
+      ...(Array.isArray(payload.warnings) ? payload.warnings.map((item: unknown) => String(item)).slice(0, 20) : []),
+      ...(normalizedProfile.admin_warnings || [])
+    ])
   };
 }
 
@@ -3474,6 +3521,21 @@ function validateHermesWebhookUrl(value: string) {
 function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUrl: string, importSource: 'hermes' | 'local_parser') {
   const prices = rawProfile.prices && typeof rawProfile.prices === 'object' ? rawProfile.prices : {};
   const price1h = numericValue(rawProfile.price_1h ?? prices.price_1h ?? prices.one_hour ?? prices.hour);
+  const serviceGroups = rawProfile.service_groups && typeof rawProfile.service_groups === 'object' ? rawProfile.service_groups : {};
+  const rawServices = Array.isArray(rawProfile.raw_services) ? rawProfile.raw_services.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 100) : [];
+  const importedServices = [
+    ...(Array.isArray(rawProfile.services) ? rawProfile.services : []),
+    ...rawServices,
+    ...Object.values(serviceGroups).flatMap((value: any) => Array.isArray(value) ? value : [])
+  ];
+  const mappedServices = mapImportedServices(importedServices);
+  const moderation = moderationWarningsForText([
+    rawProfile.description,
+    rawProfile.about_text,
+    rawProfile.raw_visible_text,
+    rawServices.join('\n'),
+    Array.isArray(rawProfile.taboos) ? rawProfile.taboos.join('\n') : ''
+  ].filter(Boolean).join('\n'));
   return {
     name: optionalText(rawProfile.name || rawProfile.display_name || rawProfile.title, 120) || '',
     display_name: optionalText(rawProfile.display_name || rawProfile.name || rawProfile.title, 120) || '',
@@ -3481,35 +3543,50 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     location: optionalText(rawProfile.location, 160),
     category: optionalText(rawProfile.category, 80) || inferCategory(String(rawProfile.description || rawProfile.tags || '')),
     age: rawProfile.age == null ? null : numericValue(rawProfile.age),
-    description: optionalText(rawProfile.description, 2000) || '',
+    description: optionalText(sanitizeImportedDescription(rawProfile.description || rawProfile.about_text || '', moderation.blockedLines), 2000) || '',
+    raw_about_text: optionalText(rawProfile.about_text || rawProfile.raw_about_text, 8000) || '',
+    raw_visible_text: optionalText(rawProfile.raw_visible_text || rawProfile.visible_text, 30000) || '',
     phone: optionalText(rawProfile.phone, 80) || '',
     email: optionalEmail(rawProfile.email) || '',
     website: optionalText(rawProfile.website, 240) || sourceUrl,
     telegram: optionalText(rawProfile.telegram, 80) || '',
     whatsapp: optionalText(rawProfile.whatsapp, 80) || '',
-    services: Array.isArray(rawProfile.services) ? rawProfile.services.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 20) : [],
+    services: mappedServices.mapped,
+    raw_services: uniqueStrings(rawServices.length ? rawServices : mappedServices.raw).slice(0, 100),
+    service_groups: serviceGroups,
+    taboos: Array.isArray(rawProfile.taboos) ? rawProfile.taboos.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 80) : [],
     tags: Array.isArray(rawProfile.tags) ? rawProfile.tags.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 30) : [],
     prices,
     price_1h: price1h || undefined,
     availability: optionalText(rawProfile.availability, 160) || '',
-    images: Array.isArray(rawProfile.images) ? uniqueStrings(rawProfile.images).slice(0, 6) : [],
+    images: Array.isArray(rawProfile.images) ? uniqueStrings(rawProfile.images).filter(isLikelyProfileImage).slice(0, 12) : [],
+    admin_warnings: moderation.warnings,
+    suggested_owner_email: optionalEmail(rawProfile.suggested_owner_email) || '',
     source_url: sourceUrl,
     import_source: importSource
   };
 }
 
 function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: string[]) {
-  const text = htmlToPlainText(html);
+  const text = extractVisibleProfileText(html);
   const title = metaContent(html, 'og:title') || metaContent(html, 'twitter:title') || titleContent(html);
-  const description = metaContent(html, 'og:description') || metaContent(html, 'description') || text.slice(0, 420);
+  const sections = extractProfileSections(text);
+  const moderation = moderationWarningsForText(text);
+  warnings.push(...moderation.warnings);
+  const aboutText = sections.about || '';
+  const description = sanitizeImportedDescription(aboutText, moderation.blockedLines)
+    || metaContent(html, 'og:description')
+    || metaContent(html, 'description')
+    || text.slice(0, 420);
   const images = uniqueStrings([
     metaContent(html, 'og:image'),
     metaContent(html, 'twitter:image'),
     ...imageSources(html, sourceUrl)
-  ]).slice(0, 6);
+  ]).filter(isLikelyProfileImage).slice(0, 12);
   if (!title) warnings.push('No title meta tag found.');
   if (!description) warnings.push('No description meta tag found.');
   if (!images.length) warnings.push('No public image URLs found.');
+  const mappedServices = mapImportedServices(sections.services);
   const phone = firstMatch(text, /(?:\+|00)?\d[\d\s()./-]{7,}\d/);
   const telegram = firstMatch(text, /(?:telegram|tg)\s*[:@]\s*@?([a-zA-Z0-9_]{5,})/i);
   const whatsapp = firstMatch(text, /whats\s*app|whatsapp/i) ? phone : '';
@@ -3521,13 +3598,20 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     city: inferCity(text),
     category: inferCategory(text),
     description: description || '',
+    raw_about_text: aboutText,
+    raw_visible_text: text,
     phone: phone || '',
     telegram: telegram || '',
     whatsapp: whatsapp || '',
-    services: inferServices(text),
+    services: mappedServices.mapped,
+    raw_services: mappedServices.raw,
+    service_groups: sections.serviceGroups,
+    taboos: sections.taboos,
     prices: price1h ? { price_1h: Number(price1h) } : {},
     price_1h: price1h ? Number(price1h) : undefined,
+    availability: sections.availability,
     images,
+    admin_warnings: moderation.warnings,
     source_url: sourceUrl,
     import_source: 'local_parser'
   };
@@ -3554,17 +3638,185 @@ function titleContent(html: string) {
 
 function imageSources(html: string, sourceUrl: string) {
   const values: string[] = [];
-  const regex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  const attrRegex = /<(?:img|source)[^>]+(?:src|data-src|data-lazy-src|data-original|srcset)=["']([^"']+)["'][^>]*>/gi;
+  const backgroundRegex = /background-image\s*:\s*url\((["']?)([^"')]+)\1\)/gi;
   let match: RegExpExecArray | null;
-  while ((match = regex.exec(html)) && values.length < 12) {
-    try {
-      const absolute = new URL(decodeHtml(match[1]), sourceUrl).toString();
-      if (/^https?:\/\//i.test(absolute)) values.push(absolute);
-    } catch {
-      // Ignore malformed image src values.
-    }
+  while ((match = attrRegex.exec(html)) && values.length < 48) {
+    const candidates = String(match[1]).split(',').map((item) => item.trim().split(/\s+/)[0]).filter(Boolean);
+    for (const candidate of candidates) values.push(resolveImportImageUrl(candidate, sourceUrl));
   }
-  return values;
+  while ((match = backgroundRegex.exec(html)) && values.length < 60) {
+    values.push(resolveImportImageUrl(match[2], sourceUrl));
+  }
+  return values.filter(Boolean);
+}
+
+function resolveImportImageUrl(value: string, sourceUrl: string) {
+  try {
+    const absolute = new URL(decodeHtml(value), sourceUrl).toString();
+    return /^https?:\/\//i.test(absolute) ? absolute : '';
+  } catch {
+    return '';
+  }
+}
+
+function isLikelyProfileImage(value: string) {
+  const lower = value.toLowerCase();
+  return Boolean(value)
+    && !lower.includes('favicon')
+    && !lower.includes('logo')
+    && !lower.includes('icon')
+    && !lower.includes('placeholder')
+    && !lower.includes('sprite')
+    && !lower.includes('pixel')
+    && !lower.includes('tracking')
+    && !lower.endsWith('.svg');
+}
+
+function extractVisibleProfileText(html: string) {
+  const cleaned = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<(header|footer|nav|aside)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]*(cookie|consent|banner|tracking)[^>]*>[\s\S]*?<\/[^>]+>/gi, ' ')
+    .replace(/<(h[1-6]|p|li|br|div|section|article|tr|td|dt|dd)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ');
+  const seen = new Set<string>();
+  const lines = decodeHtml(cleaned)
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => line.length > 1)
+    .filter((line) => {
+      const key = line.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  return lines.join('\n').slice(0, 30000);
+}
+
+function extractProfileSections(text: string) {
+  const headings = [
+    'Was ist Dein Haupt-Service auf Kaufmich?', 'Offline-Dates', 'Escort-Service', 'Softcore', 'Hardcore',
+    'Sexy Bekleidung', 'Fetisch & BDSM', 'Tabus', 'Über mich', 'About me', 'Beschreibung',
+    'Preise', 'Verfügbarkeit', 'Ort', 'Besuchbar', 'Mobil', 'Bei dir', 'Hotel'
+  ];
+  const serviceHeadings = new Set(['Offline-Dates', 'Escort-Service', 'Softcore', 'Hardcore', 'Sexy Bekleidung', 'Fetisch & BDSM']);
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  const serviceGroups: Record<string, string[]> = {};
+  const taboos: string[] = [];
+  const aboutLines: string[] = [];
+  const availabilityLines: string[] = [];
+  let current = '';
+  for (const line of lines) {
+    const heading = headings.find((item) => normalizeImportLine(item) === normalizeImportLine(line));
+    if (heading) {
+      current = heading;
+      continue;
+    }
+    if (serviceHeadings.has(current)) {
+      (serviceGroups[current] ||= []).push(line);
+    } else if (current === 'Tabus') {
+      taboos.push(line);
+    } else if (['Über mich', 'About me', 'Beschreibung'].includes(current)) {
+      if (!headings.some((item) => normalizeImportLine(item) === normalizeImportLine(line))) aboutLines.push(line);
+    }
+    if (/(bei dir|hotel|besuchbar|nicht besuchbar|mobil|outcall|incall)/i.test(line)) availabilityLines.push(line);
+  }
+  const services = uniqueStrings(Object.values(serviceGroups).flat()).filter((item) => item.length <= 80);
+  return {
+    services,
+    serviceGroups: Object.fromEntries(Object.entries(serviceGroups).map(([key, values]) => [key, uniqueStrings(values).slice(0, 80)])),
+    taboos: uniqueStrings(taboos).slice(0, 80),
+    about: aboutLines.join('\n').slice(0, 8000),
+    availability: uniqueStrings(availabilityLines).slice(0, 8).join(' / ')
+  };
+}
+
+function normalizeImportLine(value: string) {
+  return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function mapImportedServices(values: unknown[]) {
+  const mappings: Array<[RegExp, string]> = [
+    [/erotische massage|massage/i, 'masaz'],
+    [/girlfriend|gfe|girlfriendsex/i, 'klimat_gfe'],
+    [/abendbegleitung|abendessen|partybegleitung|geschaftsbegleitung|geschäftsbegleitung/i, 'wspolne_wyjscia'],
+    [/reisebegleitung/i, 'wspolne_wyjazdy'],
+    [/oralverkehr/i, 'seks_oralny'],
+    [/handjob/i, 'handjob'],
+    [/striptease|striptiz/i, 'striptiz'],
+    [/zungenkusse|zungenküsse|kuss|kusse|küsse/i, 'namietne_pocalunki'],
+    [/kuscheln/i, 'przytulanie'],
+    [/vaginal|klassisch/i, 'seks_klasyczny'],
+    [/analverkehr/i, 'seks_analny'],
+    [/facesitting/i, 'facesitting'],
+    [/deepthroat|deep throat/i, 'deep_throat'],
+    [/rimming/i, 'rimming'],
+    [/highheels/i, 'szpilki'],
+    [/strapse|reizwasche|reizwäsche/i, 'seksowna_bielizna'],
+    [/natursekt|pissing/i, 'pissing']
+  ];
+  const raw = uniqueStrings(values.map((value) => String(value || '').trim()).filter(Boolean));
+  const mapped = uniqueStrings(raw.map((value) => mappings.find(([pattern]) => pattern.test(value))?.[1] || '').filter(Boolean))
+    .filter((key) => allowedServiceKeys.has(key));
+  return { mapped, raw };
+}
+
+function moderationWarningsForText(text: string) {
+  const warnings: string[] = [];
+  const blockedLines: string[] = [];
+  const risky = /(ohne schutz|\bAO\b|vergewaltigung|rape|zwang|minderjahr|kinder|keine\s+(auslander|ausländer|schwarze|juden|muslime|araber|t[üu]rken)|no\s+(black|muslim|jew|arab|foreign))/i;
+  for (const line of text.split('\n')) {
+    if (risky.test(line)) blockedLines.push(line.trim());
+  }
+  if (blockedLines.length) warnings.push('Niektóre fragmenty wymagają ręcznej moderacji przed publikacją.');
+  return { warnings, blockedLines };
+}
+
+function sanitizeImportedDescription(value: unknown, blockedLines: string[]) {
+  const blocked = new Set(blockedLines.map((line) => line.toLowerCase()));
+  return String(value || '')
+    .split('\n')
+    .filter((line) => !blocked.has(line.trim().toLowerCase()))
+    .join('\n')
+    .trim();
+}
+
+async function nextSponsoredImportEmail() {
+  const base = 'bussines@support.escort-radar.fun';
+  const prefix = 'bussines+sponsoring';
+  const domain = '@support.escort-radar.fun';
+  const { data } = await supabaseAdmin
+    .from('profiles')
+    .select('owner_email')
+    .or(`owner_email.eq.${base},owner_email.ilike.${prefix}%${domain}`)
+    .limit(1000);
+  const used = new Set((data || []).map((row) => String(row.owner_email || '').toLowerCase()));
+  const users = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }).catch(() => ({ data: { users: [] } } as any));
+  (users.data?.users || []).forEach((user: any) => {
+    const email = String(user.email || '').toLowerCase();
+    if (email === base || email.startsWith(prefix)) used.add(email);
+  });
+  if (!used.has(base)) return base;
+  for (let index = 1; index < 10000; index += 1) {
+    const candidate = `${prefix}${index}${domain}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return `${prefix}${Date.now().toString(36)}${domain}`;
+}
+
+function adminImportNote(sourceUrl: string, profile: Record<string, any>, warnings: string[]) {
+  return [
+    `Hermes import source: ${sourceUrl}`,
+    `Import source: ${profile.import_source || 'hermes'}`,
+    warnings.length ? `Warnings: ${warnings.join(' | ')}` : '',
+    profile.raw_services?.length ? `Raw services: ${profile.raw_services.join(', ')}` : '',
+    profile.taboos?.length ? `Taboos: ${profile.taboos.join(', ')}` : '',
+    profile.raw_visible_text ? `Visible text excerpt: ${String(profile.raw_visible_text).slice(0, 1500)}` : ''
+  ].filter(Boolean).join('\n');
 }
 
 function htmlToPlainText(html: string) {
@@ -3625,7 +3877,7 @@ function inferServices(text: string) {
   return uniqueStrings(services.filter(([needle]) => lower.includes(needle)).map(([, service]) => service)).slice(0, 8);
 }
 
-function uniqueStrings(values: Array<string | null | undefined>) {
+function uniqueStrings(values: Array<unknown>) {
   return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
 }
 
