@@ -7,6 +7,7 @@ import { useI18n } from '../i18n';
 import { getSafeNextPath, withTimeout } from '../lib/authRedirect';
 
 const rememberedEmailStorageKey = 'escortRadar.rememberedEmail';
+const loginJustCompletedStorageKey = 'escortRadar:loginJustCompleted';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -147,6 +148,7 @@ export function LoginPage() {
           hasSession: Boolean(session)
         });
       }
+      sessionStorage.setItem(loginJustCompletedStorageKey, String(Date.now()));
       didRedirect = true;
       didRedirectRef.current = true;
       navigate(nextPath, { replace: true });

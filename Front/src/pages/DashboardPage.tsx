@@ -128,6 +128,8 @@ const emptyProfile: Partial<Profile> = {
 };
 
 const authIntentStorageKey = 'escortRadar.authIntent';
+const loginJustCompletedStorageKey = 'escortRadar:loginJustCompleted';
+const recentLoginGraceMs = 30_000;
 const DEFAULT_PROFILE_PHOTO_LIMIT = 12;
 const allowedAuthAccountTypes = ['client', 'escort', 'business'] as const;
 const allowedIdentities = ['male', 'female', 'trans'];
@@ -188,6 +190,7 @@ export function DashboardPage() {
   const [advertiserNotifications, setAdvertiserNotifications] = useState<RadarNotification[]>([]);
   const [activationBusy, setActivationBusy] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const sessionActivatedRef = useRef(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -197,14 +200,23 @@ export function DashboardPage() {
     let mounted = true;
     api.tags().then((data) => setPlatformTags(data.tags)).catch(() => setPlatformTags([]));
     setAuthResolved(false);
-    waitForSupabaseSession(20, 250).then(async (session) => {
+    const recentLogin = getRecentLoginJustCompletedAt();
+    const sessionAttempts = recentLogin ? 60 : 20;
+    waitForSupabaseSession(sessionAttempts, 250).then(async (session) => {
       if (!mounted) return;
       if (session) {
-        if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session', { hasSession: true, email: session.user.email || null });
+        sessionActivatedRef.current = true;
+        clearLoginJustCompletedMarker();
+        if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session', { hasSession: true, email: session.user.email || null, recentLogin: Boolean(recentLogin) });
         await activateSession(session);
         return;
       }
-      if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session', { hasSession: false, redirect: `/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}` });
+      if (sessionActivatedRef.current) {
+        if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session-null-ignored', { reason: 'session-already-activated' });
+        return;
+      }
+      if (recentLogin) clearLoginJustCompletedMarker();
+      if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session', { hasSession: false, recentLogin: Boolean(recentLogin), redirect: `/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}` });
       setToken('');
       setUserEmail('');
       setAuthAccountType('unknown');
@@ -222,6 +234,14 @@ export function DashboardPage() {
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (import.meta.env.DEV) console.log('[DashboardAuth] auth-state', { event, hasSession: Boolean(session), email: session?.user?.email || null });
+      if (!session && isLoginJustCompletedRecent()) {
+        if (import.meta.env.DEV) console.log('[DashboardAuth] auth-state-null-ignored', { event });
+        return;
+      }
+      if (session) {
+        sessionActivatedRef.current = true;
+        clearLoginJustCompletedMarker();
+      }
       await activateSession(session);
     });
 
@@ -1172,6 +1192,26 @@ function resolveAccountMode(
   if (allowedAuthAccountTypes.includes(value as AuthAccountType)) return value as AuthAccountType;
   if (clientProfile) return 'client';
   return 'client';
+}
+
+function getRecentLoginJustCompletedAt() {
+  if (typeof window === 'undefined') return 0;
+  const timestamp = Number(window.sessionStorage.getItem(loginJustCompletedStorageKey));
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return 0;
+  if (Date.now() - timestamp > recentLoginGraceMs) {
+    clearLoginJustCompletedMarker();
+    return 0;
+  }
+  return timestamp;
+}
+
+function isLoginJustCompletedRecent() {
+  return Boolean(getRecentLoginJustCompletedAt());
+}
+
+function clearLoginJustCompletedMarker() {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.removeItem(loginJustCompletedStorageKey);
 }
 
 function isAdvertiserAccount(accountType: DashboardAccountType) {
