@@ -197,12 +197,22 @@ export function DashboardPage() {
     let mounted = true;
     api.tags().then((data) => setPlatformTags(data.tags)).catch(() => setPlatformTags([]));
     setAuthResolved(false);
-    waitForSupabaseSession(5, 200).then(async (session) => {
+    waitForSupabaseSession(20, 250).then(async (session) => {
       if (!mounted) return;
       if (session) {
+        if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session', { hasSession: true, email: session.user.email || null });
         await activateSession(session);
         return;
       }
+      if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session', { hasSession: false, redirect: `/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}` });
+      setToken('');
+      setUserEmail('');
+      setAuthAccountType('unknown');
+      setAuthResolved(true);
+      navigate(`/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}`, { replace: true });
+    }).catch((error) => {
+      if (!mounted) return;
+      if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session-error', { message: error instanceof Error ? error.message : String(error) });
       setToken('');
       setUserEmail('');
       setAuthAccountType('unknown');
@@ -210,7 +220,8 @@ export function DashboardPage() {
       navigate(`/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}`, { replace: true });
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (import.meta.env.DEV) console.log('[DashboardAuth] auth-state', { event, hasSession: Boolean(session), email: session?.user?.email || null });
       await activateSession(session);
     });
 
@@ -238,6 +249,7 @@ export function DashboardPage() {
     }
 
     const role = await resolveBackendAuthAccountType(session.access_token);
+    if (import.meta.env.DEV) console.log('[DashboardAuth] resolved-role', { role, email: session.user.email || null });
     setAuthAccountType(role);
     setAuthResolved(true);
 

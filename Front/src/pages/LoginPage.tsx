@@ -40,6 +40,19 @@ export function LoginPage() {
   }, []);
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[Login] auth-state', {
+        event,
+        hasSession: Boolean(session),
+        email: session?.user?.email || null,
+        next: nextPath
+      });
+    });
+    return () => listener.subscription.unsubscribe();
+  }, [nextPath]);
+
+  useEffect(() => {
     if (!loading) return;
 
     const currentRun = loginRunId.current;
@@ -78,6 +91,7 @@ export function LoginPage() {
     const currentRun = loginRunId.current;
     didRedirectRef.current = false;
     if (import.meta.env.DEV) {
+      console.log('[Login] submit', { email: normalizedEmail, next: nextPath });
       console.debug('[LoginFlow]', {
         emailPresent: Boolean(normalizedEmail),
         submitFired: true,
@@ -99,22 +113,45 @@ export function LoginPage() {
 
       if (result.error) {
         if (mountedRef.current && loginRunId.current === currentRun) setMessage(t('auth.loginFailed', { message: result.error.message }));
+        if (import.meta.env.DEV) console.log('[Login] signInWithPassword', { ok: false, error: result.error.message, next: nextPath });
         if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: result.error.message, nextParam, finalTarget: nextPath, hasSession: false });
         return;
       }
 
       let session: Session | null = result.data.session;
+      if (session?.access_token && session.refresh_token) {
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token
+        });
+        if (import.meta.env.DEV) console.log('[Login] setSession', { ok: !setSessionError, error: setSessionError?.message || null, next: nextPath });
+      }
       if (import.meta.env.DEV) console.debug('[MobileLogin] signIn success', { hasDirectSession: Boolean(session), nextParam, finalTarget: nextPath });
       if (!session) {
         session = await withTimeout(
-          waitForSupabaseSession(5, 200),
+          waitForSupabaseSession(20, 250),
           15000,
           t('auth.loginSessionTimeout')
         );
       }
+      const storedSession = await withTimeout(
+        waitForSupabaseSession(8, 150),
+        8000,
+        t('auth.loginSessionTimeout')
+      ).catch(() => null);
+      session = storedSession || session;
+      if (import.meta.env.DEV) {
+        console.log('[Login] signInWithPassword', {
+          ok: true,
+          hasDirectSession: Boolean(result.data.session),
+          hasStoredSession: Boolean(storedSession),
+          next: nextPath
+        });
+      }
       if (import.meta.env.DEV) console.debug('[MobileLogin] session after signIn', { hasSession: Boolean(session), nextParam, finalTarget: nextPath });
       if (!session) {
         if (mountedRef.current && loginRunId.current === currentRun) setMessage(t('auth.loginFailed', { message: t('auth.loginNoSession') }));
+        if (import.meta.env.DEV) console.log('[Login] session', { ok: false, next: nextPath });
         return;
       }
 
@@ -125,6 +162,7 @@ export function LoginPage() {
       }
 
       if (import.meta.env.DEV) {
+        console.log('[Login] redirect', { next: nextPath, hasSession: Boolean(session) });
         console.debug('[MobileLogin] final redirect', {
           nextParam,
           finalTarget: nextPath,
@@ -137,6 +175,7 @@ export function LoginPage() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('states.requestFailed');
       if (mountedRef.current && loginRunId.current === currentRun) setMessage(t('auth.loginFailed', { message: errorMessage }));
+      if (import.meta.env.DEV) console.log('[Login] error', { message: errorMessage, next: nextPath });
       if (import.meta.env.DEV) console.debug('[LoginFlow]', { signIn: 'fail', error: errorMessage, nextParam, finalTarget: nextPath, hasSession: false });
     } finally {
       if (mountedRef.current && !didRedirect && loginRunId.current === currentRun) setLoading(false);
