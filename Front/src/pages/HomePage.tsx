@@ -188,6 +188,7 @@ export function HomePage() {
           fallbackNotice={fallbackNotice}
           compact
           mapApiKey={googleMapsApiKey}
+          showFavoritesFilter={false}
         />
       </div>
 

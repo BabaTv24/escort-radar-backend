@@ -22,6 +22,7 @@ type RadarPanelProps = {
   fallbackNotice?: boolean;
   compact?: boolean;
   mapApiKey?: string;
+  showFavoritesFilter?: boolean;
 };
 
 const statusClassByOperator: Record<string, string> = {
@@ -41,7 +42,9 @@ const radarStatuses = [
   ['OFFLINE', 'offline', 'status.offline']
 ] as const;
 
-export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false, mapApiKey = '' }: RadarPanelProps) {
+const allStatus = ['all', 'all', 'status.all'] as const;
+
+export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false, mapApiKey = '', showFavoritesFilter = true }: RadarPanelProps) {
   const { t } = useI18n();
   const [manualQuery, setManualQuery] = useState('');
   const [manualError, setManualError] = useState('');
@@ -52,6 +55,8 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
   const effectiveLocation = searcherLocation.source === 'browser' ? searcherLocation : localManualLocation || searcherLocation;
   const hasRadarLocation = (effectiveLocation.source === 'browser' || effectiveLocation.source === 'manual' || effectiveLocation.source === 'manual_saved') && isValidLatLng(effectiveLocation.lat, effectiveLocation.lng);
   const showManualForm = !hasRadarLocation || isEditingLocation;
+  const visibleRadarStatuses = showFavoritesFilter ? radarStatuses : radarStatuses.filter(([value]) => value !== 'favorites');
+  const radarLegendStatuses = showFavoritesFilter ? radarStatuses : [allStatus, ...visibleRadarStatuses];
   const radarProfiles = hasRadarLocation
     ? profiles
       .map((profile) => getRadarProfile(profile, effectiveLocation, radius))
@@ -171,12 +176,12 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           <span>{t('radar.status')}</span>
           <div className="segmented-pills">
             {[
-              ['all', '', 'status.all'],
-              ...radarStatuses
+              allStatus,
+              ...visibleRadarStatuses
             ].map(([value, _statusClass, labelKey]) => (
               <button
                 key={value}
-                className={`status-chip ${value === 'favorites' ? 'status-chip-favorites' : ''} er-btn er-glass-btn er-glass-btn--sm ${getRadarFilterButtonClass(value)} ${status === value ? 'selected er-glass-btn--active' : ''}`.trim()}
+                className={`status-chip radar-filter-chip radar-filter-${value} ${value === 'favorites' ? 'status-chip-favorites' : ''} er-btn er-glass-btn er-glass-btn--sm ${getRadarFilterButtonClass(value)} ${status === value ? 'selected is-active er-glass-btn--active' : ''}`.trim()}
                 type="button"
                 onClick={() => onStatusChange(value)}
               >
@@ -225,7 +230,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           {hasRadarLocation ? (radarProfiles.length ? `${radarProfiles.length} ${t('radar.profilesInRadarRange')}` : t('radar.noProfilesInRadius')) : t('radar.locationRequired')}
         </p>
         <div className="radar-legend">
-          {radarStatuses.map(([value, statusClass, labelKey]) => (
+          {radarLegendStatuses.map(([value, statusClass, labelKey]) => (
             <span key={value}><i className={`dot ${statusClass}`} /> {t(labelKey)}</span>
           ))}
         </div>
@@ -394,7 +399,7 @@ function getRadarFilterButtonClass(value: string) {
   if (value === 'online') return 'er-glass-btn--green';
   if (value === 'BUSY') return 'er-glass-btn--orange';
   if (value === 'OFFLINE') return 'er-glass-btn--gray';
-  return 'er-glass-btn--gold';
+  return 'er-glass-btn--purple';
 }
 
 function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number) {

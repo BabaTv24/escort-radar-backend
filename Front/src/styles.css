@@ -9664,6 +9664,23 @@ textarea:focus {
   box-shadow: 0 0 28px rgba(255,58,212,.28), 0 0 18px rgba(244,215,127,.16);
 }
 
+.segmented-pills .radar-filter-chip.radar-filter-all.is-active {
+  border-color: rgba(168, 85, 247, .8) !important;
+  background:
+    linear-gradient(135deg, rgba(168, 85, 247, .28), rgba(255,255,255,.05)),
+    rgba(18, 8, 28, .9) !important;
+  color: rgba(246, 232, 255, .98) !important;
+  box-shadow:
+    0 0 16px rgba(168, 85, 247, .32),
+    0 0 34px rgba(168, 85, 247, .14),
+    inset 0 1px 0 rgba(255,255,255,.14) !important;
+}
+
+.dot.all {
+  background: #a855f7;
+  box-shadow: 0 0 18px rgba(168,85,247,.58);
+}
+
 .dot.favorites {
   background: #ff3ad4;
   box-shadow: 0 0 18px rgba(255,58,212,.64);
