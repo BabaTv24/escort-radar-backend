@@ -2492,7 +2492,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             <input placeholder={t('dashboard.advertiser.searchServices')} value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} />
             <div className="selected-service-strip">
               {selectedServices.length ? selectedServices.map((key) => (
-                <button key={key} type="button" onClick={() => toggleService(key)}>{serviceLabel(key)}</button>
+                <button key={key} className="service-chip is-selected" type="button" aria-pressed="true" onClick={() => toggleService(key)}>{serviceLabel(key)}</button>
               )) : <p>{t('dashboard.advertiser.noServices')}</p>}
             </div>
             <div className="service-checklist">
@@ -2504,7 +2504,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
                       <button
                         key={service.key}
                         type="button"
-                        className={selectedServices.includes(service.key) ? 'selected' : ''}
+                        className={selectedServices.includes(service.key) ? 'service-chip selected is-selected' : 'service-chip'}
+                        aria-pressed={selectedServices.includes(service.key)}
                         onClick={() => toggleService(service.key)}
                       >
                         {service.label}
@@ -2944,12 +2945,27 @@ function ServicePricingEditor({ selectedServices, servicePricing, currency, onCh
       <p className="muted">{t('pricing.selectedServicesPricingHelp')}</p>
       {services.length ? services.map((service) => {
         const item = servicePricing?.[service.key] || { mode: 'included', extra_price: null };
-        return <div className="service-pricing-row" key={service.key}>
+        const priceMode = item.mode === 'extra' ? 'extra' : 'included';
+        return <div className={`service-pricing-row is-${priceMode}`} key={service.key}>
           <strong>{service.label}</strong>
-          <select value={item.mode || 'included'} onChange={(event) => update(service.key, { mode: event.target.value, extra_price: event.target.value === 'included' ? null : item.extra_price || 0 })}>
-            <option value="included">{t('pricing.includedInPrice')}</option>
-            <option value="extra">{t('pricing.extraPaid')}</option>
-          </select>
+          <div className="price-chip-group" role="group" aria-label={t('pricing.servicePricing')}>
+            <button
+              type="button"
+              className={`price-chip ${priceMode === 'included' ? 'is-included' : ''}`}
+              aria-pressed={priceMode === 'included'}
+              onClick={() => update(service.key, { mode: 'included', extra_price: null })}
+            >
+              {t('pricing.includedInPrice')}
+            </button>
+            <button
+              type="button"
+              className={`price-chip ${priceMode === 'extra' ? 'is-extra' : ''}`}
+              aria-pressed={priceMode === 'extra'}
+              onClick={() => update(service.key, { mode: 'extra', extra_price: item.extra_price || 0 })}
+            >
+              {t('pricing.extraPaid')}
+            </button>
+          </div>
           {item.mode === 'extra' && <input type="number" min="0" placeholder={`${t('pricing.extraPrice')} (${currency})`} value={item.extra_price ?? ''} onChange={(event) => update(service.key, { extra_price: event.target.value ? Number(event.target.value) : null })} />}
         </div>;
       }) : <p className="muted">{t('admin.services.noneSelected')}</p>}
