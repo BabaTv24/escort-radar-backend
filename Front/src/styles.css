@@ -3419,6 +3419,14 @@ textarea::placeholder {
   position: absolute;
   inset: 0;
   opacity: 0;
+  cursor: pointer;
+}
+.one-hand-upload.disabled {
+  cursor: not-allowed;
+  opacity: .68;
+}
+.one-hand-upload.disabled input {
+  cursor: not-allowed;
 }
 .one-hand-upload span,
 .one-hand-list p,

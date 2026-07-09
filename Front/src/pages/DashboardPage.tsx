@@ -430,31 +430,59 @@ export function DashboardPage() {
   }
 
   async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file || !token || !savedProfile) return;
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) {
+      setDashboardStatus('error');
+      setUploadStatus('error');
+      setMessage('Nie wybrano pliku.');
+      input.value = '';
+      return;
+    }
+    if (!token) {
+      setDashboardStatus('error');
+      setUploadStatus('error');
+      setMessage(t('dashboard.signInFirst'));
+      input.value = '';
+      return;
+    }
+    if (!savedProfile) {
+      setDashboardStatus('error');
+      setUploadStatus('error');
+      setMessage(t('dashboard.advertiser.createProfileFirst'));
+      input.value = '';
+      return;
+    }
     if (!isAdvertiserAccount(authAccountType)) {
       setDashboardStatus('error');
       setUploadStatus('error');
+      input.value = '';
       return setMessage('To jest funkcja dla ogłoszeniodawców. Utwórz konto Escort lub Business.');
     }
     setAuthStatus('idle');
     setDashboardStatus('saving');
     setUploadStatus('uploading');
-    setMessage('');
+    setMessage(t('photos.uploading'));
     if (file.size > 8 * 1024 * 1024) {
       setDashboardStatus('error');
       setUploadStatus('error');
-      return setMessage(t('photos.fileTooLarge'));
+      setMessage(t('photos.fileTooLarge'));
+      input.value = '';
+      return;
     }
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       setDashboardStatus('error');
       setUploadStatus('error');
-      return setMessage(t('photos.unsupportedFormat'));
+      setMessage(t('photos.unsupportedFormat'));
+      input.value = '';
+      return;
     }
     if ((savedProfile.profile_images?.length || 0) >= getProfilePhotoLimit(savedProfile)) {
       setDashboardStatus('error');
       setUploadStatus('error');
-      return setMessage(t('photos.maxReached'));
+      setMessage(t('photos.maxReached'));
+      input.value = '';
+      return;
     }
     const form = new FormData();
     form.set('profile_id', savedProfile.id);
@@ -472,7 +500,6 @@ export function DashboardPage() {
       setMessage(t('dashboard.imageUploaded'));
       setLastApiError('');
       await loadDashboard(token);
-      event.target.value = '';
     } catch (error) {
       setDashboardStatus('error');
       setUploadStatus('error');
@@ -480,7 +507,7 @@ export function DashboardPage() {
       setMessage(nextError);
       setLastApiError(nextError);
     } finally {
-      event.target.value = '';
+      input.value = '';
     }
   }
 
@@ -1970,6 +1997,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const autoLocationRan = useRef(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const primaryImage = savedProfile?.profile_images?.[0]?.public_url;
   const currentOperatorStatus = profile.operator_status || savedProfile?.operator_status || 'OFFLINE';
@@ -1979,6 +2007,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   const displayName = profile.display_name || savedProfile?.display_name || 'Your profile';
   const imageCount = savedProfile?.profile_images?.length || 0;
   const photoLimit = getProfilePhotoLimit(savedProfile);
+  const photoInputDisabled = !savedProfile || imageCount >= photoLimit || uploadStatus === 'uploading';
 
   useEffect(() => {
     if (savedProfile && panel === 'setup') setPanel('photos');
@@ -2284,12 +2313,26 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               </div>
               <span>{imageCount}/{photoLimit}</span>
             </div>
-            <label className="one-hand-upload">
-              <input type="file" accept="image/*" onChange={onUploadImage} disabled={!savedProfile || imageCount >= photoLimit} />
+            <div
+              className={`one-hand-upload${photoInputDisabled ? ' disabled' : ''}`}
+              role="button"
+              tabIndex={photoInputDisabled ? -1 : 0}
+              onClick={() => {
+                if (!photoInputDisabled) photoInputRef.current?.click();
+              }}
+              onKeyDown={(event) => {
+                if (photoInputDisabled) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  photoInputRef.current?.click();
+                }
+              }}
+            >
+              <input ref={photoInputRef} type="file" accept="image/*" onClick={(event) => event.stopPropagation()} onChange={onUploadImage} disabled={photoInputDisabled} />
               <UploadCloud size={24} />
               <strong>{savedProfile ? t('dashboard.advertiser.cameraOrGallery') : t('dashboard.advertiser.createProfileFirst')}</strong>
               <span>{savedProfile ? (uploadStatus === 'uploading' ? t('dashboard.advertiser.uploading') : t('dashboard.advertiser.photoUploadHint')) : t('dashboard.advertiser.photoLockedHint')}</span>
-            </label>
+            </div>
             <div className="one-hand-photo-strip">
               {(savedProfile?.profile_images || []).map((image) => (
                 <div className="one-hand-photo-item" key={image.id}>
