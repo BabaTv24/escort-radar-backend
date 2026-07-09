@@ -15,13 +15,76 @@ export type ProfileRadarLocation = {
   precision: 'exact' | 'postal_area' | 'area' | 'city_fallback' | 'approximate';
 };
 
+export const clientSearchLocationStorageKey = 'escortRadar.clientSearchLocation';
+
 const cityCenters: Record<string, { lat: number; lng: number }> = {
   berlin: { lat: 52.52, lng: 13.405 },
   hamburg: { lat: 53.5511, lng: 9.9937 },
   hannover: { lat: 52.3759, lng: 9.732 },
   koeln: { lat: 50.9375, lng: 6.9603 },
   muenchen: { lat: 48.1351, lng: 11.582 },
-  warszawa: { lat: 52.2297, lng: 21.0122 }
+  warszawa: { lat: 52.2297, lng: 21.0122 },
+  poznan: { lat: 52.4064, lng: 16.9252 },
+  krakow: { lat: 50.0647, lng: 19.945 },
+  wroclaw: { lat: 51.1079, lng: 17.0385 },
+  gdansk: { lat: 54.352, lng: 18.6466 },
+  lodz: { lat: 51.7592, lng: 19.456 },
+  szczecin: { lat: 53.4285, lng: 14.5528 },
+  katowice: { lat: 50.2649, lng: 19.0238 },
+  lublin: { lat: 51.2465, lng: 22.5684 },
+  bydgoszcz: { lat: 53.1235, lng: 18.0084 },
+  'frankfurt am main': { lat: 50.1109, lng: 8.6821 },
+  duesseldorf: { lat: 51.2277, lng: 6.7735 },
+  dusseldorf: { lat: 51.2277, lng: 6.7735 },
+  stuttgart: { lat: 48.7758, lng: 9.1829 },
+  dortmund: { lat: 51.5136, lng: 7.4653 },
+  leipzig: { lat: 51.3397, lng: 12.3731 },
+  bremen: { lat: 53.0793, lng: 8.8017 },
+  nuernberg: { lat: 49.4521, lng: 11.0767 },
+  nurnberg: { lat: 49.4521, lng: 11.0767 },
+  dresden: { lat: 51.0504, lng: 13.7373 },
+  essen: { lat: 51.4556, lng: 7.0116 },
+  duisburg: { lat: 51.4344, lng: 6.7623 },
+  bochum: { lat: 51.4818, lng: 7.2162 },
+  amsterdam: { lat: 52.3676, lng: 4.9041 },
+  rotterdam: { lat: 51.9244, lng: 4.4777 },
+  'den haag': { lat: 52.0705, lng: 4.3007 },
+  utrecht: { lat: 52.0907, lng: 5.1214 },
+  eindhoven: { lat: 51.4416, lng: 5.4697 },
+  brussels: { lat: 50.8503, lng: 4.3517 },
+  antwerp: { lat: 51.2194, lng: 4.4025 },
+  gent: { lat: 51.0543, lng: 3.7174 },
+  liege: { lat: 50.6326, lng: 5.5797 },
+  luxembourg: { lat: 49.6116, lng: 6.1319 },
+  wien: { lat: 48.2082, lng: 16.3738 },
+  graz: { lat: 47.0707, lng: 15.4395 },
+  linz: { lat: 48.3069, lng: 14.2858 },
+  salzburg: { lat: 47.8095, lng: 13.055 },
+  zuerich: { lat: 47.3769, lng: 8.5417 },
+  zurich: { lat: 47.3769, lng: 8.5417 },
+  basel: { lat: 47.5596, lng: 7.5886 },
+  bern: { lat: 46.948, lng: 7.4474 },
+  geneve: { lat: 46.2044, lng: 6.1432 },
+  geneva: { lat: 46.2044, lng: 6.1432 },
+  lausanne: { lat: 46.5197, lng: 6.6323 },
+  praha: { lat: 50.0755, lng: 14.4378 },
+  brno: { lat: 49.1951, lng: 16.6068 },
+  ostrava: { lat: 49.8209, lng: 18.2625 },
+  madrid: { lat: 40.4168, lng: -3.7038 },
+  barcelona: { lat: 41.3874, lng: 2.1686 },
+  valencia: { lat: 39.4699, lng: -0.3763 },
+  sevilla: { lat: 37.3891, lng: -5.9845 },
+  malaga: { lat: 36.7213, lng: -4.4214 },
+  paris: { lat: 48.8566, lng: 2.3522 },
+  lyon: { lat: 45.764, lng: 4.8357 },
+  marseille: { lat: 43.2965, lng: 5.3698 },
+  nice: { lat: 43.7102, lng: 7.262 },
+  toulouse: { lat: 43.6047, lng: 1.4442 },
+  roma: { lat: 41.9028, lng: 12.4964 },
+  milano: { lat: 45.4642, lng: 9.19 },
+  napoli: { lat: 40.8518, lng: 14.2681 },
+  torino: { lat: 45.0703, lng: 7.6869 },
+  firenze: { lat: 43.7696, lng: 11.2558 }
 };
 
 export const berlinDistrictOptions = [
@@ -279,6 +342,26 @@ export function resolveManualSearcherLocation(input: string): GeoPoint | null {
   return location ? { ...location, source: 'manual' } : null;
 }
 
+export function readSavedSearchLocation(): GeoPoint | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(clientSearchLocationStorageKey) || 'null') as GeoPoint | null;
+    return saved && isValidLatLng(saved.lat, saved.lng) ? { ...saved, source: 'manual_saved' } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSearchLocationToStorage(location: GeoPoint) {
+  if (typeof window === 'undefined' || !isValidLatLng(location.lat, location.lng)) return;
+  window.localStorage.setItem(clientSearchLocationStorageKey, JSON.stringify({ ...location, source: 'manual_saved' }));
+}
+
+export function clearSavedSearchLocation() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(clientSearchLocationStorageKey);
+}
+
 export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocation | null {
   if (profile.location_visibility === 'hidden') return null;
   if (profile.location_mode === 'exact_hidden' || profile.location_mode === 'hidden') return null;
@@ -342,13 +425,49 @@ function resolveKnownLocation(input: string) {
   const direct = manualLocationCenters[normalized];
   if (direct) return direct;
 
+  const postalKey = normalizePostalCode(input);
+  if (postalKey) {
+    const postal = manualLocationCenters[postalKey] || resolveApproximatePostalLocation(postalKey);
+    if (postal) return postal;
+  }
+
+  const city = cityCenters[normalized];
+  if (city) return { ...city, label: getCityLabel(normalized) };
+
   const postalMatch = normalized.match(/\b\d{5}\b/);
   if (postalMatch && manualLocationCenters[postalMatch[0]]) return manualLocationCenters[postalMatch[0]];
 
   const matchedKey = Object.keys(manualLocationCenters)
     .sort((left, right) => right.length - left.length)
     .find((key) => normalized.includes(key));
-  return matchedKey ? manualLocationCenters[matchedKey] : null;
+  if (matchedKey) return manualLocationCenters[matchedKey];
+
+  const matchedCityKey = Object.keys(cityCenters)
+    .sort((left, right) => right.length - left.length)
+    .find((key) => normalized.includes(key));
+  return matchedCityKey ? { ...cityCenters[matchedCityKey], label: getCityLabel(matchedCityKey) } : null;
+}
+
+function normalizePostalCode(value: string) {
+  const compact = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const digits = compact.replace(/\D/g, '');
+  if (digits.length === 5) return digits;
+  return compact.length >= 3 ? compact : '';
+}
+
+function resolveApproximatePostalLocation(postalCode: string) {
+  if (/^6[01]\d{3}$/.test(postalCode)) {
+    return { lat: 52.4064, lng: 16.9252, label: `${formatPolishPostalCode(postalCode)} Poznan` };
+  }
+  if (/^0[0-5]\d{3}$/.test(postalCode)) return { lat: 52.2297, lng: 21.0122, label: `${formatPolishPostalCode(postalCode)} Warszawa` };
+  if (/^3[01]\d{3}$/.test(postalCode)) return { lat: 50.0647, lng: 19.945, label: `${formatPolishPostalCode(postalCode)} Krakow` };
+  if (/^5[0-4]\d{3}$/.test(postalCode)) return { lat: 51.1079, lng: 17.0385, label: `${formatPolishPostalCode(postalCode)} Wroclaw` };
+  if (/^8[0-4]\d{3}$/.test(postalCode)) return { lat: 54.352, lng: 18.6466, label: `${formatPolishPostalCode(postalCode)} Gdansk` };
+  return null;
+}
+
+function formatPolishPostalCode(postalCode: string) {
+  return /^\d{5}$/.test(postalCode) ? `${postalCode.slice(0, 2)}-${postalCode.slice(2)}` : postalCode;
 }
 
 function toRad(value: number) {

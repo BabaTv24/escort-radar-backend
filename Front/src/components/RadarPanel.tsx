@@ -4,7 +4,7 @@ import type { FormEvent } from 'react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { formatDistanceKm, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm } from '../lib/geo';
+import { clearSavedSearchLocation, formatDistanceKm, isValidLatLng, readSavedSearchLocation, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
 import { getPublicLocationLabel } from '../lib/locationLabels';
 import './RadarPanel.css';
 
@@ -47,7 +47,8 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
   const [manualError, setManualError] = useState('');
   const [manualMessage, setManualMessage] = useState('');
   const [isEditingLocation, setIsEditingLocation] = useState(false);
-  const [localManualLocation, setLocalManualLocation] = useState<GeoPoint | null>(null);
+  const [manualBusy, setManualBusy] = useState(false);
+  const [localManualLocation, setLocalManualLocation] = useState<GeoPoint | null>(() => readSavedSearchLocation());
   const effectiveLocation = searcherLocation.source === 'browser' ? searcherLocation : localManualLocation || searcherLocation;
   const hasRadarLocation = (effectiveLocation.source === 'browser' || effectiveLocation.source === 'manual' || effectiveLocation.source === 'manual_saved') && isValidLatLng(effectiveLocation.lat, effectiveLocation.lng);
   const showManualForm = !hasRadarLocation || isEditingLocation;
@@ -90,19 +91,24 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
     });
   }
 
-  function submitManualLocation(event: FormEvent<HTMLFormElement>) {
+  async function submitManualLocation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const location = resolveManualSearcherLocation(manualQuery);
+    if (manualBusy) return;
+    setManualBusy(true);
+    const location = resolveManualSearcherLocation(manualQuery) || await geocodeManualSearcherLocation(manualQuery, mapApiKey);
     if (import.meta.env.DEV) console.debug('[RadarPanel] manual input', { manualQuery, resolved: location });
     if (!location) {
       setManualError(t('radar.manualLocationNotFound'));
+      setManualBusy(false);
       return;
     }
     setManualError('');
     setManualMessage(t('radar.locationUpdated'));
     setIsEditingLocation(false);
     setLocalManualLocation(location);
+    saveSearchLocationToStorage(location);
     onSetManualLocation?.(location);
+    setManualBusy(false);
   }
 
   function editManualLocation() {
@@ -118,6 +124,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
     setManualMessage(t('radar.locationCleared'));
     setIsEditingLocation(true);
     setLocalManualLocation(null);
+    clearSavedSearchLocation();
     onClearManualLocation?.();
   }
 
@@ -197,7 +204,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
                 setManualQuery(event.target.value);
                 if (manualError) setManualError('');
               }} />
-              <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="submit"><span>{t('radar.setLocation')}</span></button>
+              <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="submit" disabled={manualBusy}><span>{manualBusy ? t('states.loading') : t('radar.setLocation')}</span></button>
             </div>
             <div className="radar-start-actions">
               {onUseLocation && <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={onUseLocation}><span>{t('radar.useGps')}</span></button>}
@@ -306,6 +313,29 @@ function RadarMapBackground({ apiKey, center }: { apiKey: string; center: GeoPoi
   return <div ref={mapNode} className="radar-google-map" aria-hidden="true" />;
 }
 
+async function geocodeManualSearcherLocation(input: string, apiKey: string): Promise<GeoPoint | null> {
+  const query = normalizeLocationQuery(input);
+  if (!query || !apiKey) return null;
+  try {
+    const google = await loadRadarGoogleMaps(apiKey);
+    const geocoder = new google.maps.Geocoder();
+    const result = await geocoder.geocode({ address: query });
+    const place = result.results?.[0];
+    const point = place?.geometry?.location;
+    const lat = typeof point?.lat === 'function' ? point.lat() : Number.NaN;
+    const lng = typeof point?.lng === 'function' ? point.lng() : Number.NaN;
+    if (!isValidLatLng(lat, lng)) return null;
+    return {
+      lat,
+      lng,
+      source: 'manual',
+      label: place.formatted_address || query
+    };
+  } catch {
+    return null;
+  }
+}
+
 function loadRadarGoogleMaps(apiKey: string) {
   const existing = (window as any).google;
   if (existing?.maps) return Promise.resolve(existing);
@@ -325,6 +355,10 @@ function loadRadarGoogleMaps(apiKey: string) {
   });
 
   return radarGoogleMapsPromise;
+}
+
+function normalizeLocationQuery(value: string) {
+  return value.trim().replace(/\s+/g, ' ');
 }
 
 const radarMapStyles = [

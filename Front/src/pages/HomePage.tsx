@@ -24,6 +24,7 @@ export function HomePage() {
   const [footerSlideIndex, setFooterSlideIndex] = useState(0);
   const [isFooterCarouselPaused, setFooterCarouselPaused] = useState(false);
   const footerCarouselRef = useRef<HTMLDivElement | null>(null);
+  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const sponsoredProfiles = profiles.filter((profile) => profile.is_sponsored || profile.acquisition_source === 'admin_sponsored' || profile.provider === 'manual_admin');
   const paidProfiles = profiles.filter((profile) => !sponsoredProfiles.some((sponsored) => sponsored.id === profile.id));
   const topProfiles = paidProfiles.slice(0, 8);
@@ -186,6 +187,7 @@ export function HomePage() {
           onUseLocation={useLocation}
           fallbackNotice={fallbackNotice}
           compact
+          mapApiKey={googleMapsApiKey}
         />
       </div>
 

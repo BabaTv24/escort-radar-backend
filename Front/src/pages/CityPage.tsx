@@ -9,15 +9,13 @@ import { activePublicCategoryOptions, categoryOptions, defaultServiceMenuNames, 
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
-import { getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange, resolveProfileRadarLocation, safeDistanceKm } from '../lib/geo';
+import { clearSavedSearchLocation, getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange, readSavedSearchLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { normalizeCategoryKey } from '../lib/categories';
 import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
 import { getCityLabel, normalizeCity, normalizeCountry } from '../lib/globalLocations';
 import { supabase } from '../lib/supabase';
 import { Seo } from '../components/Seo';
-
-const clientSearchLocationStorageKey = 'escortRadar.clientSearchLocation';
 
 type SearchFilters = {
   city: string;
@@ -65,7 +63,7 @@ export function CityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
-  const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel }));
+  const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => readSavedSearchLocation() || ({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel }));
   const [fallbackNotice, setFallbackNotice] = useState(false);
   const [favoriteProfileIds, setFavoriteProfileIds] = useState<Set<string>>(new Set());
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
@@ -87,7 +85,7 @@ export function CityPage() {
     setDraftFilters(next);
     setAppliedFilters(next);
     setProfiles([]);
-    setSearcherLocation({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel });
+    setSearcherLocation(readSavedSearchLocation() || { ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel });
   }, [urlCitySlug, cityLabel, urlCategory, countryCode]);
 
   useEffect(() => {
@@ -140,7 +138,11 @@ export function CityPage() {
           setFallbackNotice(false);
         }
       } catch {
-        // Saved search location is optional; keep the city fallback when it is unavailable.
+        const saved = readSavedSearchLocation();
+        if (!cancelled && saved) {
+          setSearcherLocation(saved);
+          setFallbackNotice(false);
+        }
       }
     });
     return () => {
@@ -346,7 +348,7 @@ export function CityPage() {
   }
 
   function clearManualLocation() {
-    window.localStorage.removeItem(clientSearchLocationStorageKey);
+    clearSavedSearchLocation();
     setSearcherLocation({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel });
     setFallbackNotice(false);
     supabase.auth.getSession().then(({ data }) => {
@@ -782,19 +784,6 @@ function normalizeCityValue(value: unknown) {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '');
-}
-
-function readSavedSearchLocation(): GeoPoint | null {
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(clientSearchLocationStorageKey) || 'null') as GeoPoint | null;
-    return saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lng) ? { ...saved, source: 'manual_saved' } : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveSearchLocationToStorage(location: GeoPoint) {
-  window.localStorage.setItem(clientSearchLocationStorageKey, JSON.stringify({ ...location, source: 'manual_saved' }));
 }
 
 function cityName(slug: string) {
