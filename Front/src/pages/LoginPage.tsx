@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { Session } from '@supabase/supabase-js';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LogIn, Radar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useI18n } from '../i18n';
-import { getSafeNextPath, waitForSupabaseSession, withTimeout } from '../lib/authRedirect';
+import { getSafeNextPath, withTimeout } from '../lib/authRedirect';
 
 const rememberedEmailStorageKey = 'escortRadar.rememberedEmail';
 
@@ -118,41 +117,20 @@ export function LoginPage() {
         return;
       }
 
-      let session: Session | null = result.data.session;
-      if (session?.access_token && session.refresh_token) {
-        const { error: setSessionError } = await supabase.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token
-        });
-        if (import.meta.env.DEV) console.log('[Login] setSession', { ok: !setSessionError, error: setSessionError?.message || null, next: nextPath });
-      }
-      if (import.meta.env.DEV) console.debug('[MobileLogin] signIn success', { hasDirectSession: Boolean(session), nextParam, finalTarget: nextPath });
-      if (!session) {
-        session = await withTimeout(
-          waitForSupabaseSession(20, 250),
-          15000,
-          t('auth.loginSessionTimeout')
-        );
-      }
-      const storedSession = await withTimeout(
-        waitForSupabaseSession(8, 150),
-        8000,
-        t('auth.loginSessionTimeout')
-      ).catch(() => null);
-      session = storedSession || session;
+      const session = result.data.session;
       if (import.meta.env.DEV) {
         console.log('[Login] signInWithPassword', {
           ok: true,
-          hasDirectSession: Boolean(result.data.session),
-          hasStoredSession: Boolean(storedSession),
+          hasSession: Boolean(session),
+          hasAccessToken: Boolean(session?.access_token),
+          hasRefreshToken: Boolean(session?.refresh_token),
+          hasUser: Boolean(session?.user),
           next: nextPath
         });
       }
-      if (import.meta.env.DEV) console.debug('[MobileLogin] session after signIn', { hasSession: Boolean(session), nextParam, finalTarget: nextPath });
-      if (!session) {
-        if (mountedRef.current && loginRunId.current === currentRun) setMessage(t('auth.loginFailed', { message: t('auth.loginNoSession') }));
-        if (import.meta.env.DEV) console.log('[Login] session', { ok: false, next: nextPath });
-        return;
+      if (import.meta.env.DEV) console.debug('[MobileLogin] signIn success', { hasDirectSession: Boolean(session), nextParam, finalTarget: nextPath });
+      if (!session?.access_token || !session.refresh_token || !session.user) {
+        throw new Error(t('auth.loginNoSession'));
       }
 
       if (rememberEmail) {
