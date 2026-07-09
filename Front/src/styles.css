@@ -580,6 +580,34 @@ textarea { min-height: 8rem; resize: vertical; }
   .stats { grid-template-columns: repeat(4, 1fr); }
 }
 
+@media (min-width: 980px) {
+  .onboarding-hero {
+    position: relative;
+    min-height: calc(100vh - 120px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .onboarding-copy {
+    position: relative;
+    z-index: 1;
+    max-width: 560px;
+    padding-left: clamp(24px, 4vw, 72px);
+  }
+
+  .onboarding-card {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    left: 50%;
+    width: min(430px, calc(100vw - 48px));
+    margin: 0;
+    justify-self: auto;
+    transform: translate(-50%, -50%);
+  }
+}
+
 @media (min-width: 1040px) {
   .marketplace-grid { grid-template-columns: repeat(4, 1fr); }
   .home-category-grid { grid-template-columns: repeat(5, 1fr); }
@@ -11783,6 +11811,50 @@ textarea:focus {
 .admin-warning-list {
   margin: .75rem 0;
   color: #fff1ba;
+}
+
+/* Advertiser dashboard: cyan interaction states, centered tile controls. */
+.one-hand-dashboard,
+.one-hand-dashboard *,
+.one-hand-bottom-nav,
+.one-hand-bottom-nav * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.one-hand-actions button {
+  align-content: center !important;
+  justify-items: center !important;
+  text-align: center !important;
+}
+
+.one-hand-actions button svg,
+.one-hand-bottom-nav button svg {
+  display: block;
+  margin-inline: auto;
+  color: #2bd2ff !important;
+}
+
+.one-hand-actions button.active,
+.one-hand-bottom-nav button.active {
+  border-color: rgba(43, 210, 255, .42) !important;
+  color: #e5faff !important;
+  background: rgba(43, 210, 255, .10) !important;
+  box-shadow: 0 0 22px rgba(43, 210, 255, .18), inset 0 1px 0 rgba(255,255,255,.12) !important;
+}
+
+.one-hand-dashboard button:active,
+.one-hand-bottom-nav button:active {
+  background-color: rgba(43, 210, 255, .08) !important;
+  box-shadow: 0 0 18px rgba(43, 210, 255, .16) !important;
+}
+
+.one-hand-dashboard button:focus,
+.one-hand-dashboard button:focus-visible,
+.one-hand-bottom-nav button:focus,
+.one-hand-bottom-nav button:focus-visible,
+.one-hand-upload:focus-within {
+  outline: 0 !important;
+  box-shadow: 0 0 0 2px rgba(43, 210, 255, .32), 0 0 24px rgba(43, 210, 255, .18) !important;
 }
 
 @media (max-width: 767px) {

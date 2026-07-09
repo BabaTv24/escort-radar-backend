@@ -90,7 +90,7 @@ export function getAdvertiserAccess(user?: AuthUser): AdvertiserAccess | null {
     plan: requiredPlan,
     subscriptionStatus: 'active',
     onboarding: false,
-    maxOnboardingPhotos: 6
+    maxOnboardingPhotos: 12
   };
 }
 
@@ -108,7 +108,7 @@ export function getAdvertiserOnboardingAccess(user?: AuthUser): AdvertiserAccess
     plan: requiredPlan,
     subscriptionStatus: active ? 'active' : subscriptionStatus,
     onboarding: !active,
-    maxOnboardingPhotos: 6
+    maxOnboardingPhotos: 12
   };
 }
 

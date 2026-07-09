@@ -128,6 +128,7 @@ const emptyProfile: Partial<Profile> = {
 };
 
 const authIntentStorageKey = 'escortRadar.authIntent';
+const DEFAULT_PROFILE_PHOTO_LIMIT = 12;
 const allowedAuthAccountTypes = ['client', 'escort', 'business'] as const;
 const allowedIdentities = ['male', 'female', 'trans'];
 type AuthAccountType = typeof allowedAuthAccountTypes[number];
@@ -450,8 +451,9 @@ export function DashboardPage() {
       setUploadStatus('error');
       return setMessage(t('photos.unsupportedFormat'));
     }
-    if ((savedProfile.profile_images?.length || 0) >= (savedProfile.max_photos || 6)) {
+    if ((savedProfile.profile_images?.length || 0) >= getProfilePhotoLimit(savedProfile)) {
       setDashboardStatus('error');
+      setUploadStatus('error');
       return setMessage(t('photos.maxReached'));
     }
     const form = new FormData();
@@ -465,11 +467,11 @@ export function DashboardPage() {
       };
       setSavedProfile(nextProfile);
       setProfile(profileToForm(nextProfile));
-      await loadDashboard(token);
       setDashboardStatus('success');
       setUploadStatus('success');
       setMessage(t('dashboard.imageUploaded'));
       setLastApiError('');
+      await loadDashboard(token);
       event.target.value = '';
     } catch (error) {
       setDashboardStatus('error');
@@ -477,6 +479,8 @@ export function DashboardPage() {
       const nextError = error instanceof Error ? error.message : t('photos.uploadFailed');
       setMessage(nextError);
       setLastApiError(nextError);
+    } finally {
+      event.target.value = '';
     }
   }
 
@@ -1050,9 +1054,9 @@ export function DashboardPage() {
 
           {creatorTab === 'media' && <section className="form-panel elevated">
             <h2><ImagePlus size={18} /> {t('dashboard.photos')}</h2>
-            <p className="safety-line">{t('photos.counter', { count: savedProfile?.profile_images?.length || 0, max: savedProfile?.max_photos || 6 })}</p>
+            <p className="safety-line">{t('photos.counter', { count: savedProfile?.profile_images?.length || 0, max: getProfilePhotoLimit(savedProfile) })}</p>
             <div className="photo-drop">
-              <input type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= (savedProfile.max_photos || 6)} />
+              <input type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= getProfilePhotoLimit(savedProfile)} />
               <button className="button" disabled type="button"><Sparkles size={16} /> {t('photos.blurSoon')}</button>
             </div>
             <div className="photo-preview-grid">
@@ -1822,10 +1826,10 @@ function CreatorContentManager({ tab, onTab, savedProfile, uploadImage, uploadSt
         {tabs.map((item) => <button key={item} className={tab === item ? 'active' : ''} onClick={() => onTab(item)}>{t(`creator.tabs.${item}`)}</button>)}
       </nav>
       <div className="media-dropzone">
-        <input id="creator-media-upload" type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= (savedProfile.max_photos || 6)} />
+        <input id="creator-media-upload" type="file" accept="image/*" onChange={uploadImage} disabled={!savedProfile || (savedProfile.profile_images?.length || 0) >= getProfilePhotoLimit(savedProfile)} />
         <UploadCloud size={28} />
         <h3>{t('creator.dragDrop')}</h3>
-        <p>{uploadStatus === 'uploading' ? t('photos.uploading') : t('photos.counter', { count: savedProfile?.profile_images?.length || 0, max: savedProfile?.max_photos || 6 })}</p>
+        <p>{uploadStatus === 'uploading' ? t('photos.uploading') : t('photos.counter', { count: savedProfile?.profile_images?.length || 0, max: getProfilePhotoLimit(savedProfile) })}</p>
       </div>
       <div className="creator-gallery-grid">
         {(savedProfile?.profile_images || []).map((image, index) => (
@@ -1974,6 +1978,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   const workLocationLabel = profile.work_place_label || savedProfile?.work_place_label || `${city}${area ? `, ${area}` : ''}`;
   const displayName = profile.display_name || savedProfile?.display_name || 'Your profile';
   const imageCount = savedProfile?.profile_images?.length || 0;
+  const photoLimit = getProfilePhotoLimit(savedProfile);
 
   useEffect(() => {
     if (savedProfile && panel === 'setup') setPanel('photos');
@@ -2277,10 +2282,10 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
                 <p className="eyebrow">{t('dashboard.advertiser.photoManagement')}</p>
                 <h2>{t('dashboard.advertiser.addPhoto')}</h2>
               </div>
-              <span>{imageCount}/{savedProfile?.max_photos || 6}</span>
+              <span>{imageCount}/{photoLimit}</span>
             </div>
             <label className="one-hand-upload">
-              <input type="file" accept="image/*" onChange={onUploadImage} disabled={!savedProfile} />
+              <input type="file" accept="image/*" onChange={onUploadImage} disabled={!savedProfile || imageCount >= photoLimit} />
               <UploadCloud size={24} />
               <strong>{savedProfile ? t('dashboard.advertiser.cameraOrGallery') : t('dashboard.advertiser.createProfileFirst')}</strong>
               <span>{savedProfile ? (uploadStatus === 'uploading' ? t('dashboard.advertiser.uploading') : t('dashboard.advertiser.photoUploadHint')) : t('dashboard.advertiser.photoLockedHint')}</span>
@@ -2623,7 +2628,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
 
 function ActionButton({ icon, label, badge, active, onClick }: { icon: ReactNode; label: string; badge?: number; active?: boolean; onClick: () => void }) {
   return (
-    <button className={`er-btn er-glass-btn er-glass-btn--sm ${active ? 'active er-glass-btn--active er-glass-btn--gold' : 'er-glass-btn--cyan'}`} type="button" onClick={onClick}>
+    <button className={`er-btn er-glass-btn er-glass-btn--sm ${active ? 'active er-glass-btn--active er-glass-btn--cyan' : 'er-glass-btn--cyan'}`} type="button" onClick={onClick}>
       {badge ? <span className="one-hand-badge">{badge}</span> : null}
       {icon}
       <span>{label}</span>
@@ -2825,6 +2830,10 @@ function profileToForm(profile: Profile): Partial<Profile> {
     service_pricing: profile.service_pricing || {},
     profile_images: profile.profile_images || []
   };
+}
+
+function getProfilePhotoLimit(profile: Profile | null | undefined) {
+  return Math.max(Number(profile?.max_photos || 0), DEFAULT_PROFILE_PHOTO_LIMIT);
 }
 
 function prepareProfilePayload(profile: Partial<Profile>, savedProfile: Profile | null): Partial<Profile> {

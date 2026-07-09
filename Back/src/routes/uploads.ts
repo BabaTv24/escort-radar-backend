@@ -101,7 +101,7 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
     return res.status(403).json({ error: 'Not your profile', reason: 'profile_owner_mismatch', details: 'The profile_id belongs to another user.' });
   }
 
-  const profileMaxPhotos = Number(profile.max_photos || 6);
+  const profileMaxPhotos = Math.max(Number(profile.max_photos || 12), 12);
   const maxPhotos = advertiserAccess.onboarding ? Math.min(profileMaxPhotos, advertiserAccess.maxOnboardingPhotos) : profileMaxPhotos;
   const { data: existingImages, count, error: countError } = await supabaseAdmin
     .from('profile_images')
