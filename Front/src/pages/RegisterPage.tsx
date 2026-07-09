@@ -120,10 +120,10 @@ export function RegisterPage() {
           <input type="password" placeholder={t('form.repeatPassword')} value={repeatPassword} onChange={(event) => setRepeatPassword(event.target.value)} />
           <label className="premium-check"><input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} /> {t('onboarding.acceptTerms')}</label>
           <label className="premium-check"><input type="checkbox" checked={confirmedAdult} onChange={(event) => setConfirmedAdult(event.target.checked)} /> {t('onboarding.confirm18')}</label>
-          <button className="button primary full" disabled={loading} onClick={register}>
+          <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" disabled={loading} onClick={register}>
             {loading ? t('states.loading') : requiresVerification ? t('onboarding.createPremiumAccount') : t('auth.createFreeClientAccount')}
           </button>
-          <button className="button full" type="button" disabled={loading} onClick={signInWithGoogle}>{t('auth.continueWithGoogle')}</button>
+          <button className="button full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" disabled={loading} onClick={signInWithGoogle}>{t('auth.continueWithGoogle')}</button>
           <Link className="text-link" to="/login">{t('auth.alreadyHaveAccount')}</Link>
           {message && <p className="error-text">{message}</p>}
         </div>
