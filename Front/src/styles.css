@@ -11999,3 +11999,183 @@ textarea:focus {
   }
 }
 
+/* Mobile advertiser dashboard emergency polish: keep one app nav, tighten cards, expose subscription timer. */
+.one-hand-subscription-progress {
+  margin: .75rem 0;
+  padding: .85rem;
+  min-width: 0;
+  border: 1px solid rgba(43, 210, 255, .18);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(43, 210, 255, .08), rgba(255,255,255,.025)), rgba(8, 14, 18, .92);
+  box-shadow: 0 16px 52px rgba(0,0,0,.28), 0 0 28px rgba(43, 210, 255, .08);
+}
+
+.one-hand-subscription-progress.subscription-progress i {
+  background: linear-gradient(90deg, #15b8ff, #67e8f9);
+}
+
+.one-hand-subscription-progress.subscription-progress.ending i {
+  background: linear-gradient(90deg, #f59e0b, #67e8f9);
+}
+
+.one-hand-subscription-progress.subscription-progress span {
+  color: #e5faff;
+}
+
+.luxury-bottom-nav {
+  border-color: rgba(43, 210, 255, .34) !important;
+  background: linear-gradient(180deg, rgba(6, 20, 31, .94), rgba(3, 10, 18, .94)) !important;
+  box-shadow: 0 18px 70px rgba(0,0,0,.58), 0 0 34px rgba(43, 210, 255, .16) !important;
+}
+
+.luxury-bottom-nav a {
+  color: rgba(214, 245, 255, .76) !important;
+}
+
+.luxury-bottom-nav a svg {
+  color: #67e8f9 !important;
+}
+
+.luxury-bottom-nav a.active {
+  color: #031018 !important;
+  background: linear-gradient(135deg, #15b8ff, #67e8f9) !important;
+  box-shadow: 0 0 24px rgba(43, 210, 255, .28) !important;
+}
+
+.luxury-bottom-nav a.active svg {
+  color: #031018 !important;
+}
+
+@media (max-width: 767px) {
+  .one-hand-dashboard {
+    width: min(100%, calc(100% - .75rem));
+    padding-top: .45rem;
+    padding-bottom: calc(var(--er-mobile-nav-height, 76px) + env(safe-area-inset-bottom) + 1rem) !important;
+  }
+
+  .one-hand-status {
+    grid-template-columns: 56px minmax(0, 1fr) 42px;
+    gap: .65rem;
+    padding: .68rem;
+    border-radius: 1rem;
+  }
+
+  .one-hand-photo {
+    width: 56px;
+    height: 56px;
+    border-radius: .85rem;
+  }
+
+  .one-hand-identity h1 {
+    font-size: clamp(1.2rem, 6vw, 1.65rem);
+    line-height: 1.05;
+  }
+
+  .one-hand-identity p {
+    font-size: .78rem;
+  }
+
+  .one-hand-status > .button {
+    grid-column: 1 / -1;
+    min-height: 2.85rem;
+    width: 100%;
+  }
+
+  .one-hand-logout {
+    width: 42px;
+    height: 42px;
+  }
+
+  .one-hand-subscription-progress {
+    margin: .55rem 0;
+    padding: .72rem;
+    gap: .24rem;
+  }
+
+  .one-hand-status-toggle {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .38rem;
+    margin: .55rem 0;
+  }
+
+  .one-hand-status-toggle button {
+    min-height: 2.65rem;
+    border-radius: .78rem;
+    font-size: .76rem;
+  }
+
+  .one-hand-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .42rem;
+  }
+
+  .one-hand-actions button {
+    min-height: 4.2rem !important;
+    padding: .55rem .35rem !important;
+    border-radius: .9rem;
+    font-size: .72rem;
+    line-height: 1.05;
+  }
+
+  .one-hand-actions button svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .one-hand-panel {
+    gap: .55rem;
+    margin-top: .55rem;
+  }
+
+  .one-hand-card {
+    gap: .65rem;
+    padding: .72rem;
+    border-radius: 1rem;
+  }
+
+  .one-hand-section-head {
+    align-items: start;
+    gap: .65rem;
+  }
+
+  .one-hand-section-head h2 {
+    font-size: 1.18rem;
+    line-height: 1.12;
+  }
+
+  .one-hand-inline-fields,
+  .one-hand-price-grid,
+  .one-hand-stat-grid,
+  .one-hand-more-grid,
+  .one-hand-location-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .one-hand-photo-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .operator-analytics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .45rem;
+  }
+
+  .one-hand-save {
+    bottom: calc(var(--er-mobile-nav-height, 76px) + env(safe-area-inset-bottom) + .65rem);
+    grid-template-columns: 1fr;
+    padding: .45rem;
+    border-radius: .95rem;
+  }
+
+  .one-hand-bottom-nav,
+  .mobile-creator-dock {
+    display: none !important;
+  }
+
+  .luxury-bottom-nav {
+    background: linear-gradient(180deg, rgba(8, 30, 46, .96), rgba(3, 13, 24, .96)) !important;
+    border-color: rgba(43, 210, 255, .42) !important;
+    box-shadow: 0 14px 48px rgba(0,0,0,.62), 0 0 30px rgba(43, 210, 255, .18) !important;
+  }
+}
+

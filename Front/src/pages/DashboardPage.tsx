@@ -2318,9 +2318,11 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <h1>{displayName}</h1>
           <p><MapPin size={14} /> {workLocationLabel}</p>
         </div>
-        <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> <span>Aktywuj ogłoszenie 49,99 €/miesiąc</span></button>
+        <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> <span>Aktywuj 30 dni 333 BC</span></button>
         <button className="one-hand-logout er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={onLogout}><LogOut size={18} /></button>
       </section>
+
+      <AdvertiserSubscriptionProgress profile={savedProfile || profile} />
 
       <section className="one-hand-status-toggle" aria-label={t('dashboard.advertiser.availabilityStatus')}>
         {[
@@ -2754,6 +2756,36 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   );
 }
 
+function AdvertiserSubscriptionProgress({ profile }: { profile: Partial<Profile> | Profile | null }) {
+  const { t } = useI18n();
+  const start = readDashboardSubscriptionStart(profile);
+  const end = readDashboardSubscriptionEnd(profile);
+  const status = String(profile?.subscription_status || 'free');
+  const info = dashboardSubscriptionProgressInfo(start, end);
+
+  if (info.state === 'inactive') {
+    return (
+      <section className="one-hand-subscription-progress subscription-progress inactive" aria-label={t('dashboard.visibility.subscription')}>
+        <span>{t('admin.subscriptions.timerInactive')}</span>
+        <div><i style={{ width: '0%' }} /></div>
+        <small>{t('admin.subscriptions.progressPercent', { percent: 0 })} / {t('admin.subscriptions.timelineInactive')}</small>
+      </section>
+    );
+  }
+
+  return (
+    <section className={`one-hand-subscription-progress subscription-progress ${info.state}`} aria-label={t('dashboard.visibility.subscription')}>
+      <span>{info.state === 'expired' ? t('admin.status.expired') : t('admin.subscriptions.timerActive')}</span>
+      <div><i style={{ width: `${info.percent}%` }} /></div>
+      <small>
+        {t('admin.subscriptions.progressPercent', { percent: info.percent })} / {formatDashboardDateInput(start) || '-'} - {formatDashboardDateInput(end) || '-'}
+      </small>
+      <small>{info.daysLeft > 0 ? t('admin.subscriptions.daysLeftValue', { count: info.daysLeft }) : t('admin.status.expired')}</small>
+      <small>{t('admin.subscriptions.timeline', { status: t(`admin.status.${status || info.state}`) })}</small>
+    </section>
+  );
+}
+
 function ActionButton({ icon, label, badge, active, onClick }: { icon: ReactNode; label: string; badge?: number; active?: boolean; onClick: () => void }) {
   return (
     <button className={`er-btn er-glass-btn er-glass-btn--sm ${active ? 'active er-glass-btn--active er-glass-btn--cyan' : 'er-glass-btn--cyan'}`} type="button" onClick={onClick}>
@@ -2771,6 +2803,36 @@ function PriceEditor({ label, value, onChange }: { label: string; value?: number
       <input inputMode="numeric" type="number" value={value || ''} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
+}
+
+function readDashboardSubscriptionStart(profile: Partial<Profile> | Profile | null | undefined) {
+  return profile?.subscription_start || profile?.subscription_started_at || null;
+}
+
+function readDashboardSubscriptionEnd(profile: Partial<Profile> | Profile | null | undefined) {
+  return profile?.subscription_end || profile?.subscription_expires_at || profile?.trial_ends_at || null;
+}
+
+function formatDashboardDateInput(value: unknown) {
+  if (!value) return '';
+  const date = new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : '';
+}
+
+function dashboardSubscriptionProgressInfo(startValue: unknown, endValue: unknown) {
+  const start = startValue ? new Date(String(startValue)).getTime() : NaN;
+  const end = endValue ? new Date(String(endValue)).getTime() : NaN;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return { totalDays: 0, daysUsed: 0, daysLeft: 0, percent: 0, state: 'inactive' };
+  }
+  const now = Date.now();
+  const totalDays = Math.max(1, Math.ceil((end - start) / 86400000));
+  if (now < start) return { totalDays, daysUsed: 0, daysLeft: Math.ceil((end - now) / 86400000), percent: 0, state: 'future' };
+  const daysUsed = Math.max(0, Math.ceil((Math.min(now, end) - start) / 86400000));
+  const left = Math.max(0, Math.ceil((end - now) / 86400000));
+  const percent = Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
+  const state = now >= end ? 'expired' : left < 3 ? 'ending' : 'active';
+  return { totalDays, daysUsed, daysLeft: left, percent, state };
 }
 
 function VisibilityChecklist({ profile }: { profile: Profile | null }) {
