@@ -3,7 +3,7 @@ import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Heart, IdCard, ImagePlus, Link as LinkIcon, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Settings, ShieldCheck, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { clearLoginSessionHandoff, restoreLoginSessionHandoff, supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { waitForSupabaseSession } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
@@ -207,8 +207,19 @@ export function DashboardPage() {
       if (session) {
         sessionActivatedRef.current = true;
         clearLoginJustCompletedMarker();
+        clearLoginSessionHandoff();
         if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session', { hasSession: true, email: session.user.email || null, recentLogin: Boolean(recentLogin) });
         await activateSession(session);
+        return;
+      }
+      const handoffSession = await restoreLoginSessionHandoff();
+      if (!mounted) return;
+      if (handoffSession) {
+        sessionActivatedRef.current = true;
+        clearLoginJustCompletedMarker();
+        clearLoginSessionHandoff();
+        if (import.meta.env.DEV) console.log('[DashboardAuth] handoff-session-restored', { hasSession: true, email: handoffSession.user.email || null, recentLogin: Boolean(recentLogin) });
+        await activateSession(handoffSession);
         return;
       }
       if (sessionActivatedRef.current) {
@@ -225,22 +236,43 @@ export function DashboardPage() {
     }).catch((error) => {
       if (!mounted) return;
       if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session-error', { message: error instanceof Error ? error.message : String(error) });
-      setToken('');
-      setUserEmail('');
-      setAuthAccountType('unknown');
-      setAuthResolved(true);
-      navigate(`/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}`, { replace: true });
+      restoreLoginSessionHandoff().then(async (handoffSession) => {
+        if (!mounted) return;
+        if (handoffSession) {
+          sessionActivatedRef.current = true;
+          clearLoginJustCompletedMarker();
+          clearLoginSessionHandoff();
+          if (import.meta.env.DEV) console.log('[DashboardAuth] error-handoff-restored', { hasSession: true, email: handoffSession.user.email || null, recentLogin: Boolean(recentLogin) });
+          await activateSession(handoffSession);
+          return;
+        }
+        setToken('');
+        setUserEmail('');
+        setAuthAccountType('unknown');
+        setAuthResolved(true);
+        navigate(`/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}`, { replace: true });
+      });
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (import.meta.env.DEV) console.log('[DashboardAuth] auth-state', { event, hasSession: Boolean(session), email: session?.user?.email || null });
       if (!session && isLoginJustCompletedRecent()) {
+        const handoffSession = await restoreLoginSessionHandoff();
+        if (handoffSession) {
+          sessionActivatedRef.current = true;
+          clearLoginJustCompletedMarker();
+          clearLoginSessionHandoff();
+          if (import.meta.env.DEV) console.log('[DashboardAuth] auth-state-handoff-restored', { event, hasSession: true, email: handoffSession.user.email || null });
+          await activateSession(handoffSession);
+          return;
+        }
         if (import.meta.env.DEV) console.log('[DashboardAuth] auth-state-null-ignored', { event });
         return;
       }
       if (session) {
         sessionActivatedRef.current = true;
         clearLoginJustCompletedMarker();
+        clearLoginSessionHandoff();
       }
       await activateSession(session);
     });

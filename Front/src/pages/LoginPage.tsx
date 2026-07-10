@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LogIn, Radar } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { saveLoginSessionHandoff, supabase } from '../lib/supabase';
 import { useI18n } from '../i18n';
 import { getSafeNextPath, withTimeout } from '../lib/authRedirect';
 
@@ -149,6 +149,7 @@ export function LoginPage() {
         });
       }
       sessionStorage.setItem(loginJustCompletedStorageKey, String(Date.now()));
+      saveLoginSessionHandoff(session);
       didRedirect = true;
       didRedirectRef.current = true;
       navigate(nextPath, { replace: true });
