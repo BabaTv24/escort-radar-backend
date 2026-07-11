@@ -163,6 +163,10 @@ export async function getOrCreateBcuWalletForUser(userId: string): Promise<BcuWa
     .insert({ user_id: userId })
     .select()
     .single();
+  if (error?.code === '23505') {
+    const concurrent = await getBcuWalletForUser(userId);
+    if (concurrent) return concurrent;
+  }
   if (error) throw error;
   return data as BcuWallet;
 }

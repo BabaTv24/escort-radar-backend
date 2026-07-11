@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -409,6 +409,21 @@ export const api = {
     gifts_sent: Gift[];
     gifts_received: Gift[];
   }>('/api/client-activation/me', { token }),
+  clientPremiumDashboardMe: (token: string) => request<({
+    wallet_system: 'bcu';
+    activation: Pick<ClientActivation, 'state' | 'activated_at'>;
+    wallet: BcuWallet | null;
+    premium_entitlement: BcuEntitlement | null;
+    ledger: BcuLedgerEntry[];
+    referral: Pick<ClientActivation, 'referral_code' | 'referral_link' | 'qr_image_url' | 'clicks' | 'registrations' | 'activations' | 'earned_rewards'>;
+  } | {
+    activation: ClientActivation;
+    wallet_system: 'legacy';
+    wallet: CoinWallet;
+    transactions: CoinTransaction[];
+    gifts_sent: Gift[];
+    gifts_received: Gift[];
+  })>('/api/client-activation/dashboard', { token }),
   trackReferralClick: (referral_code: string, landing_path = window.location.pathname) => request<{ ok: boolean }>('/api/client-activation/referral-click', {
     method: 'POST',
     body: JSON.stringify({ referral_code, landing_path })

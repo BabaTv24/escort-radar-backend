@@ -1303,13 +1303,14 @@ test('premium client office removes gift stats and uses real wallet fallback', a
   assert.doesNotMatch(dashboardSource, /clientOffice\.giftsReceived/);
   assert.doesNotMatch(dashboardSource, /coinWallet\?\.balance \|\| 100/);
   assert.doesNotMatch(dashboardSource, /defaultCoins\s*=\s*100/);
-  assert.match(dashboardSource, /Number\(coinWallet\?\.balance \?\? 0\)/);
+  assert.match(dashboardSource, /walletSystem === 'bcu'[\s\S]*bcuWallet\?\.balance_bc \?\? '0'/);
+  assert.doesNotMatch(dashboardSource, /Number\(bcuWallet\?\.balance_bc/);
 });
 
 test('premium client referral reward and live request contract stay client-only', async () => {
   const dashboardSource = await readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8');
   const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
-  assert.match(dashboardSource, /CLIENT_REFERRAL_REWARD_COINS = 5/);
+  assert.match(dashboardSource, /CLIENT_REFERRAL_REWARD_COINS = 10/);
   assert.match(dashboardSource, /referralActivations \* CLIENT_REFERRAL_REWARD_COINS/);
   assert.match(dashboardSource, /earnedReferralCoins/);
   assert.match(dashboardSource, /onCreateIntent\(\{ \.\.\.intentDraft, status: 'LOOKING_NOW' \}\)/);

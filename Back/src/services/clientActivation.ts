@@ -1,6 +1,8 @@
 import { config } from '../config.js';
 import { supabaseAdmin } from '../supabase.js';
 import { getOrCreateWalletForUser } from './tokenWallet.js';
+import { activateClientPremiumBcu } from './clientPremiumBcu.js';
+import { selectClientPremiumWalletFlow } from './clientPremiumBcuFlow.js';
 
 export type ClientActivationSummary = {
   state: 'client_free' | 'client_activated';
@@ -79,7 +81,10 @@ export async function activateClientAccount(userId: string, payment: {
   const referralCode = await getOrCreateReferralCode(userId);
   const referralLink = `${getPublicFrontendUrl()}/r/${encodeURIComponent(referralCode)}`;
   const qrImageUrl = getQrServiceUrl(referralLink);
-  const referredByCode = payment.referred_by_code || await getStoredReferredByCode(userId);
+  const storedReferredByCode = await getStoredReferredByCode(userId);
+  const referredByCode = config.bcuWalletEnabled
+    ? storedReferredByCode
+    : payment.referred_by_code || storedReferredByCode;
 
   const { data: activation, error: activationError } = await supabaseAdmin
     .from('client_activations')
@@ -121,13 +126,17 @@ export async function activateClientAccount(userId: string, payment: {
       updated_at: new Date().toISOString()
     }, { onConflict: 'referral_code' });
 
-  const wallet = await getOrCreateTokenWallet(userId);
-  await adjustTokenWalletBalance(wallet.id, userId, config.clientActivationWelcomeCoins, 'client_activation_bonus', {
-    activation_id: activation.id,
-    stripe_checkout_session_id: payment.stripe_checkout_session_id || null
-  });
-
-  await applyReferralReward(userId, referredByCode);
+  const walletFlow = selectClientPremiumWalletFlow(config.bcuWalletEnabled);
+  const wallet = walletFlow === 'bcu'
+    ? (await activateClientPremiumBcu(userId, activation.id, referredByCode)).wallet
+    : await getOrCreateTokenWallet(userId);
+  if (walletFlow === 'legacy') {
+    await adjustTokenWalletBalance(wallet.id, userId, config.clientActivationWelcomeCoins, 'client_activation_bonus', {
+      activation_id: activation.id,
+      stripe_checkout_session_id: payment.stripe_checkout_session_id || null
+    });
+    await applyReferralReward(userId, referredByCode);
+  }
   await syncClientAppMetadata(userId, 'client_activated', referralCode);
 
   return { activation, referral, wallet };
@@ -289,6 +298,25 @@ async function applyReferralReward(activatedUserId: string, referredByCode: stri
 }
 
 async function getStoredReferredByCode(userId: string) {
+  const { data: referral } = await supabaseAdmin
+    .from('client_referrals')
+    .select('referred_by_code')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (referral?.referred_by_code) return String(referral.referred_by_code).trim();
+
+  const { data: registrationMarker } = await supabaseAdmin
+    .from('client_rewards')
+    .select('metadata')
+    .eq('referred_user_id', userId)
+    .eq('reward_type', 'client_registration_referral')
+    .eq('status', 'granted')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const attributedCode = String(registrationMarker?.metadata?.referral_code || '').trim();
+  if (attributedCode) return attributedCode;
+
   const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
   const metadata = authUser.user?.user_metadata as Record<string, unknown> | undefined;
   return String(metadata?.referred_by_code || metadata?.referral_code || '').trim() || null;

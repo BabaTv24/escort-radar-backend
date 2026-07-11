@@ -510,6 +510,40 @@ export type CoinTransaction = {
   created_at: string;
 };
 
+export type BcuWallet = {
+  public_wallet_id: string;
+  balance_bcu: string;
+  balance_bc: string;
+  lifetime_credit_bcu: string;
+  lifetime_credit_bc: string;
+  lifetime_debit_bcu: string;
+  lifetime_debit_bc: string;
+  frozen: boolean;
+  migration_status?: string;
+  migrated_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BcuLedgerEntry = {
+  amount_bcu: string;
+  amount_bc: string;
+  direction: 'credit' | 'debit' | 'transfer';
+  transaction_type: string;
+  status: string;
+  reference_type?: string | null;
+  reference_id?: string | null;
+  created_at: string;
+};
+
+export type BcuEntitlement = {
+  entitlement_type: 'client_premium' | 'advertiser' | 'small_business' | 'vip_business' | 'communication_plus';
+  status: 'active' | 'expired' | 'revoked' | 'pending';
+  starts_at: string;
+  ends_at?: string | null;
+  product_code?: string | null;
+};
+
 export type Gift = {
   id: string;
   sender_user_id: string;

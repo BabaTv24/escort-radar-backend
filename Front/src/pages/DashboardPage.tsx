@@ -7,7 +7,7 @@ import { clearLoginSessionHandoff, restoreLoginSessionHandoff, supabase } from '
 import { api } from '../lib/api';
 import { waitForSupabaseSession } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
-import type { BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, Tag } from '../types';
+import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
@@ -181,6 +181,10 @@ export function DashboardPage() {
   const [clientPersonalProfile, setClientPersonalProfile] = useState<ClientPersonalProfile | null>(null);
   const [coinWallet, setCoinWallet] = useState<CoinWallet | null>(null);
   const [coinTransactions, setCoinTransactions] = useState<CoinTransaction[]>([]);
+  const [bcuWallet, setBcuWallet] = useState<BcuWallet | null>(null);
+  const [bcuLedger, setBcuLedger] = useState<BcuLedgerEntry[]>([]);
+  const [bcuEntitlements, setBcuEntitlements] = useState<BcuEntitlement[]>([]);
+  const [clientWalletSystem, setClientWalletSystem] = useState<'legacy' | 'bcu'>('legacy');
   const [marketProfiles, setMarketProfiles] = useState<Profile[]>([]);
   const [clientIntent, setClientIntent] = useState<ClientIntent | null>(null);
   const [clientFavorites, setClientFavorites] = useState<ClientFavorite[]>([]);
@@ -385,13 +389,29 @@ export function DashboardPage() {
   async function loadClientDashboard(accessToken: string) {
     setDashboardStatus('loading');
     try {
-      await api.myWallet(accessToken).then((data) => setWallet(data.wallet)).catch(() => setWallet(null));
-      await api.myFavorites(accessToken).then((data) => {
-        setClientFavorites(data.favorites);
-        setWallet(data.wallet);
-      }).catch(() => setClientFavorites([]));
+      const clientData = await api.clientPremiumDashboardMe(accessToken);
+      setClientWalletSystem(clientData.wallet_system);
+      if (clientData.wallet_system === 'bcu') {
+        setBcuWallet(clientData.wallet);
+        setBcuLedger(clientData.ledger);
+        setBcuEntitlements(clientData.premium_entitlement ? [clientData.premium_entitlement] : []);
+        setCoinWallet(null);
+        setCoinTransactions([]);
+        setWallet(null);
+        setClientFavorites([]);
+      } else {
+        setBcuWallet(null);
+        setBcuLedger([]);
+        setBcuEntitlements([]);
+        setCoinWallet(clientData.wallet);
+        setCoinTransactions(clientData.transactions);
+        await api.myWallet(accessToken).then((data) => setWallet(data.wallet)).catch(() => setWallet(null));
+        await api.myFavorites(accessToken).then((data) => {
+          setClientFavorites(data.favorites);
+          setWallet(data.wallet);
+        }).catch(() => setClientFavorites([]));
+      }
       await api.profiles('?city=berlin').then((data) => setMarketProfiles(data.profiles)).catch(() => setMarketProfiles([]));
-      const clientData = await api.clientActivationMe(accessToken);
       await api.clientIntentMe(accessToken).then((data) => {
         setClientIntent(data.intent);
         setClientMatches(data.nearby_advertisers);
@@ -404,9 +424,9 @@ export function DashboardPage() {
       await api.clientPersonalProfile(accessToken).then((data) => {
         setClientPersonalProfile(data.personal_profile);
       }).catch(() => setClientPersonalProfile(null));
-      setClientActivation(clientData.activation);
-      setCoinWallet(clientData.wallet);
-      setCoinTransactions(clientData.transactions);
+      setClientActivation(clientData.wallet_system === 'bcu'
+        ? { ...clientData.activation, ...clientData.referral }
+        : clientData.activation);
       if (searchParams.get('activation_session_id')) setSearchParams({});
       setSavedProfile(null);
       setProfile({ ...emptyProfile });
@@ -628,6 +648,10 @@ export function DashboardPage() {
     setProfile({ ...emptyProfile });
     setWallet(null);
     setCoinWallet(null);
+    setBcuWallet(null);
+    setBcuLedger([]);
+    setBcuEntitlements([]);
+    setClientWalletSystem('legacy');
     setClientActivation(null);
     setClientProfile(null);
     setClientPersonalProfile(null);
@@ -777,16 +801,21 @@ export function DashboardPage() {
       <ClientDashboard
         userEmail={userEmail}
         coinWallet={coinWallet}
+        bcuWallet={bcuWallet}
+        bcuEntitlements={bcuEntitlements}
+        walletSystem={clientWalletSystem}
+        dashboardStatus={dashboardStatus}
         clientProfile={clientProfile}
         activation={clientActivation}
         personalProfile={clientPersonalProfile}
-        transactions={coinTransactions}
+        transactions={bcuWallet ? bcuLedger : coinTransactions}
         message={message}
         activationBusy={activationBusy}
         avatarUploading={avatarUploading}
         onActivate={startClientActivation}
         onAvatarUpload={uploadClientAvatar}
         onLogout={logout}
+        onRetry={() => loadClientDashboard(token)}
         marketProfiles={marketProfiles}
         intent={clientIntent}
         matches={clientMatches}
@@ -1309,21 +1338,26 @@ function getPublicReferralLink(activation: ClientActivation | null) {
   return `${origin}/r/${encodeURIComponent(activation.referral_code)}`;
 }
 
-const CLIENT_REFERRAL_REWARD_COINS = 5;
+const CLIENT_REFERRAL_REWARD_COINS = 10;
 
-function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
+function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, walletSystem, dashboardStatus, clientProfile, activation, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, onRetry, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
   userEmail: string;
   coinWallet: CoinWallet | null;
+  bcuWallet: BcuWallet | null;
+  bcuEntitlements: BcuEntitlement[];
+  walletSystem: 'legacy' | 'bcu';
+  dashboardStatus: 'idle' | 'loading' | 'saving' | 'success' | 'error';
   clientProfile: ClientProfile | null;
   activation: ClientActivation | null;
   personalProfile: ClientPersonalProfile | null;
-  transactions: CoinTransaction[];
+  transactions: Array<CoinTransaction | BcuLedgerEntry>;
   message: string;
   activationBusy: boolean;
   avatarUploading: boolean;
   onActivate: () => void;
   onAvatarUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onLogout: () => void;
+  onRetry: () => void;
   marketProfiles: Profile[];
   intent: ClientIntent | null;
   matches: Profile[];
@@ -1334,7 +1368,9 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
   onRemoveFavorite: (profileId: string) => void;
 }) {
   const { t, option } = useI18n();
-  const activated = activation?.state === 'client_activated';
+  const activated = walletSystem === 'bcu'
+    ? bcuEntitlements.some((item) => item.entitlement_type === 'client_premium' && item.status === 'active')
+    : activation?.state === 'client_activated';
   const personalVerificationStatus = personalProfile?.verification_status || 'incomplete';
   const isVerifiedClient = personalVerificationStatus === 'verified';
   const referralLink = getPublicReferralLink(activation);
@@ -1372,7 +1408,9 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
     t('clientOffice.unlock.referral'),
     t('activation.activationTokenBonus')
   ];
-  const bigCoinsBalance = Math.round(Number(coinWallet?.balance ?? 0));
+  const bigCoinsBalance = walletSystem === 'bcu'
+    ? (bcuWallet?.balance_bc ?? '0')
+    : Number(coinWallet?.balance ?? 0);
   const quickActions = [
     [t('nav.radar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin'],
     [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '#favorites'],
@@ -1459,6 +1497,7 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
         </section>
 
         {message && <p className={activated ? 'success' : 'subscription-notice'}>{message}</p>}
+        {dashboardStatus === 'error' && <button className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onRetry}><span>{t('states.retry')}</span></button>}
 
         <section className="client-office-quick-actions client-quick-actions" aria-label={t('clientOffice.tools')}>
           {quickActions.map(([title, copy, Icon, href]) => {
@@ -1586,9 +1625,9 @@ function ClientDashboard({ userEmail, coinWallet, clientProfile, activation, per
               </div>
               <div className="client-office-row-list">
                 {transactions.slice(0, 5).map((transaction) => (
-                  <div className="client-office-row" key={transaction.id}>
+                  <div className="client-office-row" key={'id' in transaction ? transaction.id : `${transaction.created_at}:${transaction.transaction_type}:${transaction.amount_bcu}`}>
                     <div><strong>{transaction.transaction_type}</strong><p>{new Date(transaction.created_at).toLocaleString()}</p></div>
-                    <span>{transaction.direction === 'credit' ? '+' : '-'}{transaction.amount} {t('clientOffice.bigCoins')}</span>
+                    <span>{transaction.direction === 'credit' ? '+' : '-'}{'amount_bc' in transaction ? transaction.amount_bc : transaction.amount} {t('clientOffice.bigCoins')}</span>
                   </div>
                 ))}
                 {!transactions.length && <p className="muted">{t('clientOffice.noActivity')}</p>}

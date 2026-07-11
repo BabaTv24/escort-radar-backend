@@ -12,6 +12,7 @@ import {
   recordClientRegistrationAttribution
 } from '../services/clientActivation.js';
 import { createStripeCheckoutSession, sendStripeError } from '../services/stripePayments.js';
+import { bcuToBc, getBcuLedgerForUser, getBcuWalletForUser, getUserEntitlements } from '../services/bcuWallet.js';
 
 export const clientActivationRouter = Router();
 
@@ -45,39 +46,103 @@ clientActivationRouter.post('/referral-click', asyncHandler(async (req, res) => 
 
 clientActivationRouter.use(verifyUser);
 
+clientActivationRouter.get('/dashboard', asyncHandler(async (req, res) => {
+  await recordClientRegistrationAttribution(req.user!.id);
+  if (config.bcuWalletEnabled) {
+    const [activation, wallet, entitlements, ledger] = await Promise.all([
+      getClientActivationSummary(req.user!.id),
+      getBcuWalletForUser(req.user!.id),
+      getUserEntitlements(req.user!.id),
+      getBcuLedgerForUser(req.user!.id, 100, 0)
+    ]);
+    const premiumEntitlement = entitlements.find((item) => item.entitlement_type === 'client_premium') || null;
+    return res.json({
+      wallet_system: 'bcu',
+      activation: {
+        state: activation.state,
+        activated_at: activation.activated_at
+      },
+      premium_entitlement: premiumEntitlement ? {
+        entitlement_type: premiumEntitlement.entitlement_type,
+        status: premiumEntitlement.status,
+        starts_at: premiumEntitlement.starts_at,
+        ends_at: premiumEntitlement.ends_at,
+        product_code: premiumEntitlement.product_code
+      } : null,
+      wallet: wallet ? {
+        public_wallet_id: wallet.public_wallet_id,
+        balance_bcu: wallet.balance_bcu,
+        balance_bc: bcuToBc(wallet.balance_bcu),
+        lifetime_credit_bcu: wallet.lifetime_credit_bcu,
+        lifetime_credit_bc: bcuToBc(wallet.lifetime_credit_bcu),
+        lifetime_debit_bcu: wallet.lifetime_debit_bcu,
+        lifetime_debit_bc: bcuToBc(wallet.lifetime_debit_bcu),
+        frozen: wallet.frozen,
+        created_at: wallet.created_at,
+        updated_at: wallet.updated_at
+      } : null,
+      ledger: ledger.map((entry) => ({
+        amount_bcu: entry.amount_bcu,
+        amount_bc: bcuToBc(entry.amount_bcu),
+        direction: entry.direction,
+        transaction_type: entry.transaction_type,
+        status: entry.status,
+        created_at: entry.created_at
+      })),
+      referral: {
+        referral_code: activation.referral_code,
+        referral_link: activation.referral_link,
+        qr_image_url: activation.qr_image_url,
+        clicks: activation.clicks,
+        registrations: activation.registrations,
+        activations: activation.activations,
+        earned_rewards: activation.earned_rewards
+      }
+    });
+  }
+
+  const legacy = await loadLegacyClientActivationDashboard(req.user!.id);
+  return res.json({ wallet_system: 'legacy', ...legacy });
+}));
+
 clientActivationRouter.get('/me', asyncHandler(async (req, res) => {
   await recordClientRegistrationAttribution(req.user!.id);
+  const legacy = await loadLegacyClientActivationDashboard(req.user!.id);
+  res.json(legacy);
+}));
+
+async function loadLegacyClientActivationDashboard(userId: string) {
   const [activation, wallet, transactions, sentGifts, receivedGifts] = await Promise.all([
-    getClientActivationSummary(req.user!.id),
-    getOrCreateCoinWallet(req.user!.id),
+    getClientActivationSummary(userId),
+    getOrCreateCoinWallet(userId),
     supabaseAdmin
       .from('coin_transactions')
       .select('*')
-      .eq('user_id', req.user!.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(100),
     supabaseAdmin
       .from('gifts')
       .select('*, profiles(display_name)')
-      .eq('sender_user_id', req.user!.id)
+      .eq('sender_user_id', userId)
       .order('created_at', { ascending: false })
       .limit(50),
     supabaseAdmin
       .from('gifts')
       .select('*, profiles(display_name)')
-      .eq('receiver_user_id', req.user!.id)
+      .eq('receiver_user_id', userId)
       .order('created_at', { ascending: false })
       .limit(50)
   ]);
 
-  res.json({
+  return {
     activation,
     wallet,
     transactions: transactions.data || [],
     gifts_sent: sentGifts.data || [],
     gifts_received: receivedGifts.data || []
-  });
-}));
+  };
+}
 
 clientActivationRouter.post('/checkout', asyncHandler(async (req, res) => {
   if (!config.stripeEnabled || !config.stripeEscortRadarEnabled) return res.status(410).json({ error: 'Stripe checkout is disabled for Escort Radar. Use manual payment orders.' });
@@ -118,6 +183,13 @@ clientActivationRouter.post('/confirm', asyncHandler(async (req, res) => {
     .maybeSingle();
 
   if (existingPayment) {
+    if (config.bcuWalletEnabled) {
+      await activateClientAccount(req.user!.id, {
+        stripe_checkout_session_id: stripeSessionId,
+        stripe_payment_intent_id: session.payment_intent ? String(session.payment_intent) : null,
+        referred_by_code: optionalText(session.metadata?.referred_by_code, 80)
+      });
+    }
     return res.json({ activation: await getClientActivationSummary(req.user!.id) });
   }
 
