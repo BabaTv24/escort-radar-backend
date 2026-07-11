@@ -57,6 +57,7 @@ type Config = {
   manualBankTransferBankName: string;
   manualBankTransferReferenceTemplate: string;
   manualCryptoEnabled: boolean;
+  bcuWalletEnabled: boolean;
   hermesAnalyzeProfileUrl: string;
   hermesWebhookSecret: string;
 };
@@ -121,6 +122,7 @@ export const config: Config = {
   manualBankTransferBankName: process.env.MANUAL_BANK_TRANSFER_BANK_NAME || '',
   manualBankTransferReferenceTemplate: process.env.MANUAL_BANK_TRANSFER_REFERENCE_TEMPLATE || 'ER-{orderId}-{userEmail}',
   manualCryptoEnabled: envBoolean('MANUAL_CRYPTO_ENABLED', true),
+  bcuWalletEnabled: envBoolean('BCU_WALLET_ENABLED', false),
   hermesAnalyzeProfileUrl: process.env.HERMES_ANALYZE_PROFILE_URL || '',
   hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET || ''
 };

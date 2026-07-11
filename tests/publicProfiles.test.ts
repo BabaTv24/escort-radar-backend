@@ -421,6 +421,177 @@ test('manual payment catalog contains current Escort Radar token packages', asyn
   assert.doesNotMatch(`${tokenEconomyMigration}\n${packageUpdateMigration}`, /120, 18\.00|520, 78\.00|1800, false, true/);
 });
 
+test('BCU wallet architecture is isolated from historical wallet tables', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/043_bcu_authoritative_wallet.sql', import.meta.url), 'utf8');
+  const serviceSource = await readFile(new URL('../Back/src/services/bcuWallet.ts', import.meta.url), 'utf8');
+
+  assert.match(migration, /1 BC = 10 000 BCU/);
+  assert.match(migration, /create table if not exists public\.bcu_wallets/);
+  assert.match(migration, /create table if not exists public\.bcu_ledger_entries/);
+  assert.match(migration, /create table if not exists public\.bcu_migration_reconciliation/);
+  assert.match(migration, /balance_bcu bigint not null default 0 check \(balance_bcu >= 0\)/);
+  assert.match(migration, /amount_bcu bigint not null check \(amount_bcu > 0\)/);
+  assert.match(migration, /direction text not null check \(direction in \('credit', 'debit'\)\)/);
+  assert.match(migration, /idempotency_key text unique/);
+  assert.match(migration, /foreign key \(wallet_id, user_id\) references public\.bcu_wallets\(id, user_id\)/);
+  assert.match(migration, /create or replace function public\.bc_to_bcu/);
+  assert.match(migration, /p_bc <> round\(p_bc, 4\)/);
+  assert.match(migration, /return \(p_bc \* 10000\)::bigint/);
+  assert.match(migration, /create or replace function public\.apply_bcu_ledger_entry/);
+  assert.match(migration, /security definer/);
+  assert.match(migration, /set search_path = public/);
+  assert.match(migration, /for update/);
+  assert.match(migration, /BCU_INSUFFICIENT_BALANCE/);
+  assert.match(migration, /where idempotency_key = p_idempotency_key/);
+  assert.match(migration, /return v_existing/);
+  assert.match(migration, /BCU_IDEMPOTENCY_CONFLICT/);
+  assert.match(migration, /v_existing\.wallet_id is not distinct from v_wallet\.id/);
+  assert.match(migration, /v_existing\.source_user_id is not distinct from p_source_user_id/);
+  assert.match(migration, /v_existing\.target_user_id is not distinct from p_target_user_id/);
+  assert.match(migration, /v_existing\.profile_id is not distinct from p_profile_id/);
+  assert.match(migration, /v_existing\.business_id is not distinct from p_business_id/);
+  assert.match(migration, /v_existing\.subscription_id is not distinct from p_subscription_id/);
+  assert.match(migration, /v_existing\.booking_id is not distinct from p_booking_id/);
+  assert.match(migration, /BCU_IDEMPOTENCY_KEY_REQUIRED/);
+  assert.match(migration, /BCU_DIRECTION_INVALID/);
+  assert.match(migration, /BCU_TRANSACTION_TYPE_INVALID/);
+  assert.match(migration, /v_wallet\.user_id/);
+  assert.match(migration, /create or replace function public\.prevent_bcu_ledger_mutation/);
+  assert.match(migration, /before update or delete on public\.bcu_ledger_entries/);
+  assert.match(migration, /BCU_LEDGER_IMMUTABLE/);
+  assert.match(migration, /test_account_manual_reconciliation/);
+  assert.match(migration, /manual_balance_bcu bigint/);
+  assert.match(migration, /approved_balance_bcu bigint/);
+  assert.match(migration, /approved_by uuid references auth\.users\(id\)/);
+  assert.match(migration, /approved_at timestamptz/);
+  assert.match(migration, /applied_ledger_entry_id uuid references public\.bcu_ledger_entries/);
+  assert.match(migration, /source_system in \('bcu', 'legacy_wallet', 'coin_wallet', 'manual_admin', 'migration'\)/);
+  assert.match(migration, /bcu_ledger_entries_reference_idx/);
+  assert.match(migration, /bcu_ledger_entries_source_idx/);
+  assert.match(migration, /revoke all on public\.bcu_wallets from anon, authenticated/);
+  assert.match(migration, /grant select on public\.bcu_wallets to authenticated/);
+  assert.match(migration, /revoke execute on function public\.apply_bcu_ledger_entry/);
+  assert.match(migration, /from public, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.apply_bcu_ledger_entry[\s\S]*to service_role/);
+  assert.doesNotMatch(migration, /create policy "Users can read own BCU migration reconciliation"/);
+  assert.doesNotMatch(migration, /(update|delete from|insert into)\s+public\.(wallets|token_transactions|coin_wallets|coin_transactions)\b/i);
+
+  assert.match(serviceSource, /export const BCU_PER_BC = 10000n/);
+  assert.match(serviceSource, /BigInt\(wholePart\) \* BCU_PER_BC/);
+  assert.match(serviceSource, /supabaseAdmin\.rpc\('apply_bcu_ledger_entry'/);
+  assert.match(serviceSource, /p_amount_bcu: input\.amountBcu\.trim\(\)/);
+  assert.match(serviceSource, /p_direction: input\.direction/);
+  assert.match(serviceSource, /if \(!input\.idempotencyKey\.trim\(\)\) throw new Error\('BCU idempotency key is required'\)/);
+  assert.match(serviceSource, /BCU amount must be a positive integer string/);
+  assert.doesNotMatch(serviceSource, /Number\(|parseInt|parseFloat|Math\.round/);
+  assert.doesNotMatch(serviceSource, /\.from\('wallets'\)|\.from\('token_transactions'\)|\.from\('coin_wallets'\)|\.from\('coin_transactions'\)/);
+});
+
+test('BCU conversion and validation helpers are bigint-safe', async () => {
+  process.env.SUPABASE_URL ||= 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-role';
+  process.env.SUPABASE_ANON_KEY ||= 'anon-key';
+  const { bcToBcu, bcuToBc, assertPositiveBcuAmount, assertBcuTransactionType } = await import('../Back/src/services/bcuWallet.ts');
+
+  assert.equal(bcToBcu('1'), '10000');
+  assert.equal(bcToBcu('7'), '70000');
+  assert.equal(bcToBcu('333.2666'), '3332666');
+  assert.equal(bcToBcu('3326.6666'), '33266666');
+  assert.equal(bcToBcu('11993.3333'), '119933333');
+  assert.equal(bcuToBc('10000'), '1');
+  assert.equal(bcuToBc('3332666'), '333.2666');
+
+  assert.throws(() => bcToBcu('0.00001'), /max 4 places/);
+  assert.throws(() => bcToBcu('-1'), /max 4 places/);
+  assert.throws(() => bcToBcu('not-a-number'), /max 4 places/);
+  assert.throws(() => assertPositiveBcuAmount('0'), /positive integer string/);
+  assert.throws(() => assertPositiveBcuAmount('-1'), /positive integer string/);
+  assert.throws(() => assertPositiveBcuAmount('1.5'), /positive integer string/);
+  assert.throws(() => assertBcuTransactionType('x'), /transaction type is invalid/);
+  assert.throws(() => assertBcuTransactionType('bad type'), /transaction type is invalid/);
+});
+
+test('BCU products entitlements and routes are feature-flagged and backend-priced', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/044_bcu_products_and_entitlements.sql', import.meta.url), 'utf8');
+  const serviceSource = await readFile(new URL('../Back/src/services/bcuWallet.ts', import.meta.url), 'utf8');
+  const routeSource = await readFile(new URL('../Back/src/routes/bcu.ts', import.meta.url), 'utf8');
+  const serverSource = await readFile(new URL('../Back/src/server.ts', import.meta.url), 'utf8');
+  const configSource = await readFile(new URL('../Back/src/config.ts', import.meta.url), 'utf8');
+  const favoritesSource = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');
+  const clientActivationSource = await readFile(new URL('../Back/src/routes/clientActivation.ts', import.meta.url), 'utf8');
+  const paymentsSource = await readFile(new URL('../Back/src/routes/payments.ts', import.meta.url), 'utf8');
+
+  for (const snippet of [
+    'create table if not exists public.system_bcu_products',
+    'create table if not exists public.user_entitlements',
+    "operation_type text not null check (operation_type in ('credit', 'debit', 'transfer'))",
+    "entitlement_type text not null check (entitlement_type in ('client_premium', 'advertiser', 'small_business', 'vip_business', 'communication_plus'))",
+    'create unique index if not exists user_entitlements_one_active_type_idx',
+    "where status = 'active'",
+    "('premium_activation_bonus', 'Premium activation bonus', 70000, 'credit'",
+    "('favorite_profile', 'Favorite profile', 50000, 'transfer'",
+    "('referral_reward', 'Referral reward', 100000, 'credit'",
+    "('communication_plus', 'Communication Plus', 1000000, 'debit', 'communication_plus'",
+    "('advertiser_30_days', 'Advertiser 30 days', 3332666, 'debit', 'advertiser', 30",
+    "('small_business_30_days', 'Small Business 30 days', 33266666, 'debit', 'small_business', 30",
+    "('vip_business_30_days', 'VIP Business 30 days', 119933333, 'debit', 'vip_business', 30",
+    'create or replace function public.activate_bcu_product',
+    'security definer',
+    'set search_path = public',
+    "where product_code = p_product_code",
+    'and active = true',
+    "not public.has_active_user_entitlement(p_user_id, 'client_premium')",
+    "raise exception 'BCU_CLIENT_PREMIUM_REQUIRED'",
+    'pg_advisory_xact_lock',
+    "where user_id = p_user_id",
+    "and entitlement_type = 'communication_plus'",
+    "charged', false",
+    'v_product.amount_bcu',
+    'from public.apply_bcu_ledger_entry',
+    'BCU_LEDGER_PRODUCT_MISMATCH',
+    "'bcu_product'",
+    'on conflict (user_id, entitlement_type) where status = \'active\'',
+    'revoke execute on function public.activate_bcu_product(uuid, text, text, jsonb) from public, anon, authenticated',
+    'grant execute on function public.activate_bcu_product(uuid, text, text, jsonb) to service_role'
+  ]) {
+    assert.match(migration, new RegExp(snippet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+
+  assert.doesNotMatch(migration, /500\s*(profiles|profile|limit)/i);
+  assert.match(migration, /- 'amount_bcu'[\s\S]*- 'user_id'[\s\S]*- 'status'[\s\S]*- 'starts_at'[\s\S]*- 'ends_at'/);
+  assert.match(serviceSource, /getBcuLedgerForUser/);
+  assert.match(serviceSource, /getActiveBcuProducts/);
+  assert.match(serviceSource, /getUserEntitlements/);
+  assert.match(serviceSource, /hasActiveEntitlement/);
+  assert.match(serviceSource, /activateBcuProduct/);
+  assert.match(serviceSource, /p_product_code: input\.productCode\.trim\(\)/);
+  assert.match(serviceSource, /p_idempotency_key: input\.idempotencyKey\.trim\(\)/);
+  assert.doesNotMatch(serviceSource, /amount_bcu:\s*Number|balance_bcu:\s*number|parseInt|parseFloat|Math\.round/);
+
+  assert.match(configSource, /bcuWalletEnabled: boolean/);
+  assert.match(configSource, /bcuWalletEnabled: envBoolean\('BCU_WALLET_ENABLED', false\)/);
+  assert.match(routeSource, /bcuRouter\.use\(verifyUser\)/);
+  assert.match(routeSource, /!config\.bcuWalletEnabled/);
+  assert.match(routeSource, /status\(404\)\.json\(\{ error: 'BCU wallet is not available' \}\)/);
+  assert.match(routeSource, /bcuRouter\.get\('\/wallet'/);
+  assert.match(routeSource, /bcuRouter\.get\('\/ledger'/);
+  assert.match(routeSource, /Math\.min\(100/);
+  assert.match(routeSource, /bcuRouter\.get\('\/products'/);
+  assert.match(routeSource, /bcuRouter\.get\('\/entitlements'/);
+  assert.match(routeSource, /bcuRouter\.post\('\/products\/:productCode\/activate'/);
+  assert.match(routeSource, /productCode !== 'communication_plus'/);
+  assert.doesNotMatch(routeSource, /req\.body\?\.(amount_bcu|amountBcu|price|price_bcu|priceBcu)/);
+  assert.doesNotMatch(routeSource, /\.\.\.entry|\.\.\.entitlement|\.\.\.result/);
+  assert.doesNotMatch(routeSource, /metadata: entry\.metadata|metadata: entitlement\.metadata|created_by: entry\.created_by/);
+  assert.match(routeSource, /function serializeLedgerEntry/);
+  assert.match(routeSource, /function serializeEntitlement/);
+  assert.match(routeSource, /products: products\.map\(serializeProduct\)/);
+  assert.match(routeSource, /entitlements: entitlements\.map\(serializeEntitlement\)/);
+  assert.match(serverSource, /app\.use\('\/api\/bcu', bcuRouter\)/);
+
+  assert.doesNotMatch(`${favoritesSource}\n${clientActivationSource}\n${paymentsSource}`, /activateBcuProduct|getActiveBcuProducts|system_bcu_products/);
+});
+
 test('legacy Stripe webhook route is mounted but gated by Escort Radar flag', async () => {
   const serverSource = await readFile(new URL('../Back/src/server.ts', import.meta.url), 'utf8');
   const webhookRouteSource = await readFile(new URL('../Back/src/routes/stripeWebhook.ts', import.meta.url), 'utf8');
@@ -588,6 +759,7 @@ test('environment example includes legal and manual payment readiness variables'
     'MANUAL_BANK_TRANSFER_BANK_NAME=',
     'MANUAL_BANK_TRANSFER_REFERENCE_TEMPLATE="ER-{orderId}-{userEmail}"',
     'MANUAL_CRYPTO_ENABLED=true',
+    'BCU_WALLET_ENABLED=false',
     'STRIPE_ESCORT_RADAR_ENABLED=false',
     'VITE_SUPPORT_EMAIL=',
     'VITE_LEGAL_OPERATOR_NAME=BABA AI',
@@ -596,7 +768,8 @@ test('environment example includes legal and manual payment readiness variables'
     'VITE_MANUAL_BANK_TRANSFER_IBAN=',
     'VITE_MANUAL_BANK_TRANSFER_BIC=',
     'VITE_MANUAL_BANK_TRANSFER_BANK_NAME=',
-    'VITE_STRIPE_ESCORT_RADAR_ENABLED=false'
+    'VITE_STRIPE_ESCORT_RADAR_ENABLED=false',
+    'VITE_BCU_WALLET_ENABLED=false'
   ]) {
     assert.match(source, new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
@@ -1006,9 +1179,10 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(loginSource, /setLoading\(false\)/);
   assert.match(loginSource, /showSlowLoginHelp &&/);
   assert.match(loginSource, /t\('auth\.tryAgain'\)/);
-  assert.match(loginSource, /let session: Session \| null = result\.data\.session/);
-  assert.match(loginSource, /if \(!session\) \{\s*session = await withTimeout\(/);
-  assert.match(loginSource, /waitForSupabaseSession\(5, 200\)/);
+  assert.match(loginSource, /const session = result\.data\.session/);
+  assert.match(loginSource, /if \(!session\?\.access_token \|\| !session\.refresh_token \|\| !session\.user\)/);
+  assert.match(loginSource, /sessionStorage\.setItem\(loginJustCompletedStorageKey, String\(Date\.now\(\)\)\)/);
+  assert.match(loginSource, /saveLoginSessionHandoff\(session\)/);
   assert.match(loginSource, /navigate\(nextPath, \{ replace: true \}\)/);
   assert.match(authRedirectSource, /export async function withTimeout/);
   assert.match(authRedirectSource, /Promise\.race/);
@@ -1019,14 +1193,16 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(authRedirectSource, /startsWith\('https:\/\/'\)/);
   assert.match(authRedirectSource, /decodeURIComponent/);
   assert.match(loginSource, /email\.trim\(\)\.toLowerCase\(\)/);
-  assert.match(loginSource, /waitForSupabaseSession\(5, 200\)/);
   assert.match(loginSource, /escortRadar\.rememberedEmail/);
   assert.match(loginSource, /localStorage\.setItem\(rememberedEmailStorageKey, normalizedEmail\)/);
   assert.match(loginSource, /localStorage\.removeItem\(rememberedEmailStorageKey\)/);
   assert.doesNotMatch(loginSource, /localStorage\.setItem\([^)]*password/i);
   assert.match(loginSource, /\[MobileLogin\] signIn success/);
-  assert.match(loginSource, /\[MobileLogin\] session after signIn/);
   assert.match(loginSource, /\[MobileLogin\] final redirect/);
+  assert.match(supabaseSource, /LOGIN_HANDOFF_KEY = 'escortRadar:loginSessionHandoff'/);
+  assert.match(supabaseSource, /export function saveLoginSessionHandoff/);
+  assert.match(supabaseSource, /export async function restoreLoginSessionHandoff/);
+  assert.match(supabaseSource, /supabase\.auth\.setSession/);
   assert.match(supabaseSource, /persistSession: true/);
   assert.match(supabaseSource, /autoRefreshToken: true/);
   assert.match(supabaseSource, /detectSessionInUrl: true/);
@@ -1034,7 +1210,10 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(favoritesSource, /new_balance/);
   assert.match(apiSource, /already_exists\?: boolean/);
   assert.match(dashboardSource, /id="favorites"/);
-  assert.match(dashboardSource, /waitForSupabaseSession\(5, 200\)/);
+  assert.match(dashboardSource, /const sessionAttempts = recentLogin \? 60 : 20/);
+  assert.match(dashboardSource, /waitForSupabaseSession\(sessionAttempts, 250\)/);
+  assert.match(dashboardSource, /restoreLoginSessionHandoff\(\)/);
+  assert.match(dashboardSource, /handoff-session-restored/);
   assert.doesNotMatch(dashboardSource, /coinWallet\?\.balance \|\| 100/);
   assert.doesNotMatch(dashboardSource, /defaultCoins\s*=\s*100/);
   assert.doesNotMatch(dashboardSource, /receive welcome coins/);
@@ -1055,7 +1234,7 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(stylesSource, /Fixed app chrome hotfix/);
   assert.match(stylesSource, /\.market-header \{\s*position: fixed !important/);
   assert.match(stylesSource, /\.app-shell > main \{\s*padding-top:/);
-  assert.match(serviceWorkerSource, /escort-radar-v5/);
+  assert.match(serviceWorkerSource, /escort-radar-v\d+/);
   assert.match(serviceWorkerSource, /cache: 'no-store'/);
   assert.match(plLocale, /"auth\.logout": "Wyloguj"/);
   assert.match(plLocale, /"auth\.rememberEmail": "Zapami/);
@@ -1206,12 +1385,19 @@ test('client search location can be updated cleared and edited from radar', asyn
   const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
   const cityPageSource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
   const radarPanelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
+  const geoSource = await readFile(new URL('../Front/src/lib/geo.ts', import.meta.url), 'utf8');
   const plLocale = await readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8');
 
   assert.match(routeSource, /clientPreferencesRouter\.delete\('\/location'/);
   assert.match(routeSource, /if \(value === null \|\| value === undefined \|\| value === ''\) return null/);
   assert.match(apiSource, /clearClientSearchLocation/);
-  assert.match(cityPageSource, /clientSearchLocationStorageKey/);
+  assert.match(geoSource, /export const clientSearchLocationStorageKey/);
+  assert.match(geoSource, /localStorage\.getItem\(clientSearchLocationStorageKey\)/);
+  assert.match(geoSource, /localStorage\.setItem\(clientSearchLocationStorageKey/);
+  assert.match(geoSource, /localStorage\.removeItem\(clientSearchLocationStorageKey\)/);
+  assert.match(cityPageSource, /readSavedSearchLocation\(\)/);
+  assert.match(cityPageSource, /saveSearchLocationToStorage\(location\)/);
+  assert.match(cityPageSource, /clearSavedSearchLocation\(\)/);
   assert.match(cityPageSource, /onClearManualLocation=\{clearManualLocation\}/);
   assert.match(cityPageSource, /client_search_postal_code: null/);
   assert.match(radarPanelSource, /isEditingLocation/);
@@ -1220,4 +1406,41 @@ test('client search location can be updated cleared and edited from radar', asyn
   assert.match(radarPanelSource, /radar\.clearLocation/);
   assert.match(plLocale, /Lokalizacja zapisana/);
   assert.match(plLocale, /Lokalizacja została wyczyszczona/);
+});
+
+test('Hermes profile import preview returns raw services, groups and image candidates', async () => {
+  const adminRouteSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  const adminPageSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  assert.match(adminRouteSource, /raw_services/);
+  assert.match(adminRouteSource, /service_groups/);
+  assert.match(adminRouteSource, /raw_visible_text/);
+  assert.match(adminRouteSource, /linkRegex/);
+  assert.match(adminRouteSource, /background-image/);
+  assert.match(adminRouteSource, /slice\(0, 12\)/);
+  assert.match(adminPageSource, /hermesPreview\.images\.slice\(0, 12\)/);
+});
+
+test('Hermes sponsored create requires password and keeps profile unpublished', async () => {
+  const adminRouteSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
+  assert.match(adminRouteSource, /Password must contain at least 8 characters/);
+  assert.match(adminRouteSource, /Passwords do not match/);
+  assert.match(adminRouteSource, /nextSponsoredImportEmail/);
+  assert.match(adminRouteSource, /bussines\+sponsoring/);
+  assert.match(adminRouteSource, /is_published: false/);
+  assert.match(adminRouteSource, /moderation_status: 'pending'/);
+  assert.match(adminRouteSource, /is_sponsored: true/);
+  assert.match(apiSource, /sponsored\?: boolean/);
+});
+
+test('Hermes sponsored create copies images with partial failure warnings and public URL validation', async () => {
+  const adminRouteSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  assert.match(adminRouteSource, /function importProfileImagesToStorage/);
+  assert.match(adminRouteSource, /validatePublicImportUrl\(imageUrl\)/);
+  assert.match(adminRouteSource, /AbortSignal\.timeout\(15000\)/);
+  assert.match(adminRouteSource, /12 \* 1024 \* 1024/);
+  assert.match(adminRouteSource, /image\/jpeg', 'image\/png', 'image\/webp/);
+  assert.match(adminRouteSource, /imported\/\$\{options\.profileId\}/);
+  assert.match(adminRouteSource, /Image upload failed partial/);
+  assert.match(adminRouteSource, /No images were copied to storage/);
 });
