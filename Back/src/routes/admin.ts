@@ -841,11 +841,18 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     ...((incomingProfile as any).admin_warnings || []),
     ...((incomingProfile as any).warnings || [])
   ].map((item: unknown) => String(item || '')).filter(Boolean));
+  const imageUrls = uniqueStrings([
+    ...(Array.isArray(req.body.imageUrls) ? req.body.imageUrls : []),
+    ...(Array.isArray(req.body.image_urls) ? req.body.image_urls : []),
+    ...(Array.isArray((incomingProfile as any).images) ? (incomingProfile as any).images : [])
+  ]).slice(0, 12);
   const normalized = normalizeAdminProfilePayload({
     ...incomingProfile,
     owner_email: ownerEmail,
     display_name: optionalText((incomingProfile as any).display_name || (incomingProfile as any).name, 80) || 'Hermes import draft',
     city: normalizeHermesCity((incomingProfile as any).city),
+    area: optionalText((incomingProfile as any).location || (incomingProfile as any).area, 80),
+    work_area: optionalText((incomingProfile as any).location || (incomingProfile as any).work_area, 120),
     category: (incomingProfile as any).category || 'ladies',
     description: optionalText((incomingProfile as any).description, 2000) || 'Imported by Hermes Agent. Review and rewrite before publishing.',
     phone: (incomingProfile as any).phone,
@@ -892,6 +899,8 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     is_published: false,
     is_seed_profile: false,
     is_sponsored: true,
+    featured: true,
+    max_photos: 12,
     provider: 'hermes_agent',
     acquisition_source: 'hermes_import_sponsored',
     source_url: sourceUrl,
@@ -911,20 +920,38 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
   await logAccountAccess(req, data.id, authUser.id, authUserCreated ? 'hermes_import_account_created' : 'hermes_import_user_linked');
-  if (combinedWarnings.length) {
-    try {
-      await supabaseAdmin.from('admin_notes').insert({
-        profile_id: data.id,
-        note: combinedWarnings.join('\n')
-      });
-    } catch {
-      // Optional admin note; profile creation should not fail because of note logging.
-    }
+  const imageImport = await importProfileImagesToStorage({
+    profileId: data.id,
+    imageUrls,
+    sourceUrl,
+    maxImages: 12
+  });
+  const responseWarnings = uniqueStrings([
+    ...combinedWarnings,
+    ...imageImport.warnings,
+    'Profile created as unpublished draft for manual moderation.'
+  ]);
+  try {
+    await supabaseAdmin.from('admin_notes').insert({
+      profile_id: data.id,
+      note: adminImportNote(sourceUrl, incomingProfile as Record<string, any>, responseWarnings)
+    });
+  } catch {
+    // Optional admin note; profile creation should not fail because of note logging.
   }
   await logAdminAction(req.user?.email, 'hermes_profile_import_created', 'profile', data.id, { source_url: sourceUrl, create_as_draft: true });
+  const { data: createdProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('*, profile_images(*)')
+    .eq('id', data.id)
+    .single();
   res.status(201).json({
-    profile: withAdminImageUrls(data),
-    warnings: uniqueStrings([...combinedWarnings, 'Profile created as unpublished draft. External image URLs were not copied automatically.'])
+    ok: true,
+    profile_id: data.id,
+    profile: withAdminImageUrls(createdProfile || data),
+    imported_images: imageImport.imported,
+    failed_images: imageImport.failed,
+    warnings: responseWarnings
   });
 }));
 
@@ -2993,7 +3020,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
       listing_plan: listingPlan,
       listing_price: isSponsored ? 0 : optionalMoney(body.listing_price) ?? optionalMoney(body.price_1h) ?? 0,
       listing_currency: currency,
-      max_photos: 6,
+      max_photos: 12,
       latitude: optionalCoordinate(body.latitude, -90, 90),
       longitude: optionalCoordinate(body.longitude, -180, 180),
       location_mode: ['exact_hidden', 'approximate', 'city_only'].includes(String(body.location_mode || 'city_only')) ? String(body.location_mode || 'city_only') : 'city_only',
@@ -3559,7 +3586,9 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     prices,
     price_1h: price1h || undefined,
     availability: optionalText(rawProfile.availability, 160) || '',
-    images: Array.isArray(rawProfile.images) ? uniqueStrings(rawProfile.images).filter(isLikelyProfileImage).slice(0, 12) : [],
+    images: Array.isArray(rawProfile.images)
+      ? uniqueStrings(rawProfile.images.map((value: unknown) => resolveImportImageUrl(value, sourceUrl))).filter(isLikelyProfileImage).sort((left, right) => imageCandidateScore(right) - imageCandidateScore(left)).slice(0, 12)
+      : [],
     admin_warnings: moderation.warnings,
     suggested_owner_email: optionalEmail(rawProfile.suggested_owner_email) || '',
     source_url: sourceUrl,
@@ -3582,7 +3611,7 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     metaContent(html, 'og:image'),
     metaContent(html, 'twitter:image'),
     ...imageSources(html, sourceUrl)
-  ]).filter(isLikelyProfileImage).slice(0, 12);
+  ].map((value) => resolveImportImageUrl(value, sourceUrl))).filter(isLikelyProfileImage).sort((left, right) => imageCandidateScore(right) - imageCandidateScore(left)).slice(0, 12);
   if (!title) warnings.push('No title meta tag found.');
   if (!description) warnings.push('No description meta tag found.');
   if (!images.length) warnings.push('No public image URLs found.');
@@ -3639,21 +3668,25 @@ function titleContent(html: string) {
 function imageSources(html: string, sourceUrl: string) {
   const values: string[] = [];
   const attrRegex = /<(?:img|source)[^>]+(?:src|data-src|data-lazy-src|data-original|srcset)=["']([^"']+)["'][^>]*>/gi;
+  const linkRegex = /<link[^>]+rel=["'][^"']*image_src[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/gi;
   const backgroundRegex = /background-image\s*:\s*url\((["']?)([^"')]+)\1\)/gi;
   let match: RegExpExecArray | null;
   while ((match = attrRegex.exec(html)) && values.length < 48) {
     const candidates = String(match[1]).split(',').map((item) => item.trim().split(/\s+/)[0]).filter(Boolean);
     for (const candidate of candidates) values.push(resolveImportImageUrl(candidate, sourceUrl));
   }
+  while ((match = linkRegex.exec(html)) && values.length < 56) {
+    values.push(resolveImportImageUrl(match[1], sourceUrl));
+  }
   while ((match = backgroundRegex.exec(html)) && values.length < 60) {
     values.push(resolveImportImageUrl(match[2], sourceUrl));
   }
-  return values.filter(Boolean);
+  return uniqueStrings(values.filter(Boolean)).sort((left, right) => imageCandidateScore(right) - imageCandidateScore(left));
 }
 
-function resolveImportImageUrl(value: string, sourceUrl: string) {
+function resolveImportImageUrl(value: unknown, sourceUrl: string) {
   try {
-    const absolute = new URL(decodeHtml(value), sourceUrl).toString();
+    const absolute = new URL(decodeHtml(String(value || '')), sourceUrl).toString();
     return /^https?:\/\//i.test(absolute) ? absolute : '';
   } catch {
     return '';
@@ -3667,10 +3700,119 @@ function isLikelyProfileImage(value: string) {
     && !lower.includes('logo')
     && !lower.includes('icon')
     && !lower.includes('placeholder')
+    && !lower.includes('avatar-placeholder')
+    && !lower.includes('blank')
     && !lower.includes('sprite')
     && !lower.includes('pixel')
     && !lower.includes('tracking')
+    && !lower.includes('consent')
+    && !lower.includes('cookie')
+    && !lower.includes('banner')
     && !lower.endsWith('.svg');
+}
+
+function imageCandidateScore(value: string) {
+  const lower = value.toLowerCase();
+  let score = 0;
+  if (/\b(profile|photo|gallery|media|upload|image|escort|kaufmich)\b/.test(lower)) score += 8;
+  if (/\b(large|big|full|original|xl|xxl)\b/.test(lower)) score += 6;
+  if (/\d{3,4}x\d{3,4}|[?&](w|width)=([8-9]\d{2}|[1-9]\d{3,})/.test(lower)) score += 5;
+  if (/\.(jpe?g|png|webp)(?:[?#]|$)/.test(lower)) score += 4;
+  if (/\b(thumb|small|preview|crop)\b/.test(lower)) score -= 4;
+  if (/\b(ui|asset|layout|banner|button|badge)\b/.test(lower)) score -= 8;
+  return score;
+}
+
+async function importProfileImagesToStorage(options: { profileId: string; imageUrls: unknown[]; sourceUrl: string; maxImages?: number }) {
+  const maxImages = Math.min(Math.max(Number(options.maxImages || 12), 1), 12);
+  const warnings: string[] = [];
+  let imported = 0;
+  let failed = 0;
+  const urls = uniqueStrings(options.imageUrls)
+    .map((value) => resolveImportImageUrl(value, options.sourceUrl))
+    .filter(Boolean)
+    .filter(isLikelyProfileImage)
+    .sort((left, right) => imageCandidateScore(right) - imageCandidateScore(left))
+    .slice(0, maxImages);
+
+  if (!urls.length) {
+    warnings.push('No profile images were available to import.');
+    return { imported, failed, warnings };
+  }
+
+  const { count } = await supabaseAdmin
+    .from('profile_images')
+    .select('id', { count: 'exact' })
+    .eq('profile_id', options.profileId);
+  let sortOrder = count || 0;
+
+  for (const [index, imageUrl] of urls.entries()) {
+    const publicError = validatePublicImportUrl(imageUrl);
+    if (publicError) {
+      failed += 1;
+      warnings.push(`Image skipped: ${publicError}`);
+      continue;
+    }
+    try {
+      const response = await fetch(imageUrl, {
+        redirect: 'follow',
+        headers: {
+          accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
+          'user-agent': 'EscortRadar-HermesAgent/1.0 (+public profile image import)'
+        },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
+        throw new Error(`unsupported image type ${contentType || 'unknown'}`);
+      }
+      const declaredLength = Number(response.headers.get('content-length') || 0);
+      if (declaredLength > 12 * 1024 * 1024) throw new Error('image is larger than 12 MB');
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > 12 * 1024 * 1024) throw new Error('image is larger than 12 MB');
+      if (buffer.length < 1024) throw new Error('image is too small');
+
+      const processed = await sharp(buffer)
+        .rotate()
+        .resize({ width: 1600, height: 2200, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 84, mozjpeg: true })
+        .toBuffer();
+      const storagePath = `imported/${options.profileId}/${index + 1}-${Date.now()}-${crypto.randomUUID()}.jpg`;
+      const uploadResult = await supabaseAdmin.storage
+        .from(config.storageBucket)
+        .upload(storagePath, processed, { contentType: 'image/jpeg' });
+      if (uploadResult.error) {
+        const message = uploadResult.error.message.toLowerCase().includes('bucket')
+          ? `Storage bucket "${config.storageBucket}" is missing or not accessible.`
+          : uploadResult.error.message;
+        throw new Error(message);
+      }
+      const { error } = await supabaseAdmin
+        .from('profile_images')
+        .insert({
+          profile_id: options.profileId,
+          storage_path: storagePath,
+          is_primary: sortOrder === 0 && imported === 0,
+          moderation_status: 'pending',
+          sort_order: sortOrder,
+          admin_note: `Imported from ${imageUrl}`
+        });
+      if (error) {
+        await supabaseAdmin.storage.from(config.storageBucket).remove([storagePath]).catch(() => undefined);
+        throw new Error(error.message);
+      }
+      imported += 1;
+      sortOrder += 1;
+    } catch (error) {
+      failed += 1;
+      warnings.push(`Image import failed for ${imageUrl}: ${error instanceof Error ? error.message : 'unknown error'}`);
+    }
+  }
+
+  if (failed) warnings.push(`Image upload failed partial: ${failed} image(s) skipped.`);
+  if (!imported) warnings.push('No images were copied to storage.');
+  return { imported, failed, warnings };
 }
 
 function extractVisibleProfileText(html: string) {
@@ -3944,7 +4086,7 @@ function normalizeImportRow(input: Record<string, unknown>): Record<string, any>
 function normalizeSettings(rows: Array<{ key: string; value: unknown }>) {
   const defaults: Record<string, unknown> = {
     listing_price: 49.99,
-    max_photos: 6,
+    max_photos: 12,
     default_language: 'DE',
     supported_languages: ['DE', 'PL', 'EN'],
     enable_demo_profiles: true,

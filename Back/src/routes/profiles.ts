@@ -28,7 +28,8 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
 
   const city = normalizeGlobalCity(req.query.city);
   const country = normalizeCountry(req.query.country);
-  if (city) {
+  const radarMode = parseBoolean(req.query.radar) === true;
+  if (city && !radarMode) {
     const label = getGlobalCityLabel(city);
     query = query.or(`city.eq.${city},city.ilike.*${city}*,work_city.ilike.*${label}*,work_city.ilike.*${city}*,travel_city.ilike.*${label}*,travel_city.ilike.*${city}*`);
   }
@@ -56,7 +57,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     query = query.in('id', profileIds);
   }
 
-  const { data, error } = await query.limit(60);
+  const { data, error } = await query.limit(radarMode ? 300 : 60);
   if (error) return res.status(500).json({ error: error.message });
 
   const profiles = (data || [])
@@ -67,8 +68,8 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
       }
       return visible;
     })
-    .filter((profile) => !country || profileMatchesCountry(profile, country) || (city && profileMatchesCity(profile, city)))
-    .filter((profile) => !city || profileMatchesCity(profile, city))
+    .filter((profile) => radarMode || !country || profileMatchesCountry(profile, country) || (city && profileMatchesCity(profile, city)))
+    .filter((profile) => radarMode || !city || profileMatchesCity(profile, city))
     .filter((profile) => categoryFilter ? normalizeProfileCategory(profile.category) === categoryFilter : isActivePublicCategory(profile.category))
     .map((profile) => sanitizePublicProfile(withImageUrls(profile)))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
