@@ -121,3 +121,29 @@ test('post-failure precheck is read-only and inspects partial 047 state',async()
   assert.match(sql,/system_settings/); assert.match(sql,/client_referrals_parent_immutable/);
   assert.doesNotMatch(sql,/\b(insert|update|delete|alter|create|drop|truncate)\b/i);
 });
+
+test('048 removes residual referral and system setting privileges without changing data',async()=>{
+  const sql=await read('../supabase/migrations/048_referral_security_and_summary_fix.sql');
+  assert.match(sql,/^--[\s\S]*\nbegin;/i); assert.match(sql,/commit;\s*$/i);
+  assert.match(sql,/revoke insert, update, delete, truncate, references, trigger[\s\S]*public\.client_referrals[\s\S]*from anon, authenticated/i);
+  assert.match(sql,/alter table public\.system_settings enable row level security/i);
+  assert.match(sql,/revoke all privileges on table public\.system_settings from anon, authenticated/i);
+  assert.match(sql,/grant all privileges on table public\.client_referrals to service_role/i);
+  assert.match(sql,/grant all privileges on table public\.system_settings to service_role/i);
+  assert.doesNotMatch(sql,/\b(insert into|update\s+public\.|delete from|truncate table)\b/i);
+  assert.doesNotMatch(sql,/bcu_wallets|bcu_ledger_entries|balance_bcu/i);
+});
+
+test('admin referral summary is implemented in backend and does not require a summary RPC',async()=>{
+  const route=await read('../Back/src/routes/referrals.ts');
+  const handler=route.slice(route.indexOf("get('/summary"));
+  assert.match(handler,/supabaseAdmin\.from\('client_referrals'\)/);
+  assert.match(handler,/supabaseAdmin\.auth\.admin\.listUsers/);
+  assert.match(handler,/totalReferralRegistrations/);
+  assert.match(handler,/registrationsByDay/);
+  assert.match(handler,/usersBySource/);
+  assert.match(handler,/usersByRole/);
+  assert.doesNotMatch(handler,/get_admin_referral_summary|\.rpc\(/);
+  const migration=await read('../supabase/migrations/048_referral_security_and_summary_fix.sql');
+  assert.doesNotMatch(migration,/create\s+(or replace\s+)?function/i);
+});
