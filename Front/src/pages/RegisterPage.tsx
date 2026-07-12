@@ -30,6 +30,8 @@ export function RegisterPage() {
     if (authAccountTypeOptions.includes(requestedType as typeof authAccountTypeOptions[number])) {
       setAuthAccountType(requestedType as typeof authAccountTypeOptions[number]);
     }
+    const referralCode = searchParams.get('ref');
+    if (referralCode) localStorage.setItem('escortRadar.referralCode', referralCode.toUpperCase());
   }, [searchParams]);
 
   async function register() {
@@ -50,7 +52,7 @@ export function RegisterPage() {
       });
       const result = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (result.error) return setMessage(result.error.message);
-      if (referredByCode) localStorage.setItem('escortRadar.referralCode', referredByCode);
+      localStorage.removeItem('escortRadar.referralCode');
       navigate('/dashboard');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));

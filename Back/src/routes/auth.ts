@@ -86,6 +86,21 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
   });
 
   if (error || !data.user) return res.status(400).json({ error: error?.message || 'Registration failed' });
+  const { error: referralError } = await supabaseAdmin.rpc('assign_referral', {
+    p_user_id: data.user.id,
+    p_referral_code: referredByCode || null,
+    p_source: referredByCode ? 'referral_link' : 'direct'
+  });
+  if (referralError) {
+    console.error('Referral assignment failed after signup; retrying root fallback', { userId: data.user.id, code: referralError.code });
+    const { error: fallbackError } = await supabaseAdmin.rpc('assign_referral', {
+      p_user_id: data.user.id, p_referral_code: null, p_source: 'direct'
+    });
+    if (fallbackError) {
+      await supabaseAdmin.auth.admin.updateUserById(data.user.id, { app_metadata: { ...data.user.app_metadata, referral_pending: true } });
+      return res.status(503).json({ error: 'Account created; referral assignment is pending' });
+    }
+  }
   if (authAccountType === 'client') await recordClientRegistrationAttribution(data.user.id);
 
   res.status(201).json({

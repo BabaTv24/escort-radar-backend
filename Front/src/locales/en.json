@@ -1973,5 +1973,7 @@
   "home.stats.verified": "client verification",
   "home.stats.discreet": "discretion and security",
   "home.productPreviewAlt": "Escort Radar premium app preview",
-  "home.preview.availableNow": "Available now"
+  "home.preview.availableNow": "Available now",
+  "referrals.title": "Referrals", "referrals.yourCode": "Your code", "referrals.yourLink": "Your link", "referrals.copy": "Copy", "referrals.copied": "Copied", "referrals.share": "Share", "referrals.qrCode": "QR code", "referrals.direct": "Direct referrals", "referrals.subtree": "Entire subtree", "referrals.referredBy": "Referred by",
+  "admin.nav.referralTree": "Referral Tree", "referralTree.level": "Level", "referralTree.source": "Source", "referralTree.showChildren": "Show children", "referralTree.hideChildren": "Hide children", "referralTree.empty": "No referrals", "referralTree.loadError": "Could not load", "referralTree.retry": "Try again", "referralTree.roleFilter": "Role filter", "referralTree.sourceFilter": "Source filter", "referralTree.all": "All", "referralTree.balance": "BC balance", "referralTree.directChildren": "Direct children", "referralTree.descendants": "All descendants", "referralTree.previous": "Previous", "referralTree.next": "Next"
 }

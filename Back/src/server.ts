@@ -18,6 +18,7 @@ import { stripeWebhookRouter } from './routes/stripeWebhook.js';
 import { clientPreferencesRouter } from './routes/clientPreferences.js';
 import { clientPersonalProfileRouter } from './routes/clientPersonalProfile.js';
 import { bcuRouter } from './routes/bcu.js';
+import { adminReferralsRouter, referralsRouter } from './routes/referrals.js';
 
 const serverBuildTime = new Date().toISOString();
 const app = express();
@@ -77,6 +78,8 @@ app.use('/api/client-intent', clientIntentRouter);
 app.use('/api/client/preferences', clientPreferencesRouter);
 app.use('/api/client/personal-profile', clientPersonalProfileRouter);
 app.use('/api/bcu', bcuRouter);
+app.use('/api/referrals', referralsRouter);
+app.use('/api/admin/referrals', adminReferralsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });

@@ -11,6 +11,8 @@ import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientA
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
+import QRCode from 'qrcode';
+import type { ReferralMe } from '../lib/api';
 import {
   audienceOptions,
   activePublicCategoryOptions,
@@ -177,6 +179,7 @@ export function DashboardPage() {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [lastApiError, setLastApiError] = useState('');
   const [clientActivation, setClientActivation] = useState<ClientActivation | null>(null);
+  const [referralMe, setReferralMe] = useState<ReferralMe | null>(null);
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
   const [clientPersonalProfile, setClientPersonalProfile] = useState<ClientPersonalProfile | null>(null);
   const [coinWallet, setCoinWallet] = useState<CoinWallet | null>(null);
@@ -304,6 +307,16 @@ export function DashboardPage() {
       return;
     }
 
+    const storedIntent = localStorage.getItem(authIntentStorageKey);
+    let oauthReferralCode = localStorage.getItem('escortRadar.referralCode');
+    if (storedIntent) {
+      try { oauthReferralCode = String(JSON.parse(storedIntent).referred_by_code || oauthReferralCode || '') || null; } catch { /* ignore invalid local state */ }
+    }
+    await api.assignMyReferral(session.access_token, oauthReferralCode, oauthReferralCode ? 'referral_link' : 'direct').then(() => {
+      localStorage.removeItem('escortRadar.referralCode');
+    }).catch(() => undefined);
+    await syncStoredAuthIntent();
+
     const role = await resolveBackendAuthAccountType(session.access_token);
     if (import.meta.env.DEV) console.log('[DashboardAuth] resolved-role', { role, email: session.user.email || null });
     setAuthAccountType(role);
@@ -390,6 +403,7 @@ export function DashboardPage() {
     setDashboardStatus('loading');
     try {
       const clientData = await api.clientPremiumDashboardMe(accessToken);
+      await api.referralMe(accessToken).then(setReferralMe).catch(() => setReferralMe(null));
       setClientWalletSystem(clientData.wallet_system);
       if (clientData.wallet_system === 'bcu') {
         setBcuWallet(clientData.wallet);
@@ -811,6 +825,7 @@ export function DashboardPage() {
         dashboardStatus={dashboardStatus}
         clientProfile={clientProfile}
         activation={clientActivation}
+        referral={referralMe}
         personalProfile={clientPersonalProfile}
         transactions={bcuWallet ? bcuLedger : coinTransactions}
         message={message}
@@ -1340,13 +1355,12 @@ function UnknownAccountDashboard({ email, authAccountType, message, onLogout }: 
 
 function getPublicReferralLink(activation: ClientActivation | null) {
   if (!activation?.referral_code) return '';
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://escort-radar.fun';
-  return `${origin}/r/${encodeURIComponent(activation.referral_code)}`;
+  return `https://escort-radar.fun/register?ref=${encodeURIComponent(activation.referral_code)}`;
 }
 
 const CLIENT_REFERRAL_REWARD_COINS = 10;
 
-function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, walletSystem, dashboardStatus, clientProfile, activation, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, onRetry, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
+function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, walletSystem, dashboardStatus, clientProfile, activation, referral, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, onRetry, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
   userEmail: string;
   coinWallet: CoinWallet | null;
   bcuWallet: BcuWallet | null;
@@ -1355,6 +1369,7 @@ function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, wa
   dashboardStatus: 'idle' | 'loading' | 'saving' | 'success' | 'error';
   clientProfile: ClientProfile | null;
   activation: ClientActivation | null;
+  referral: ReferralMe | null;
   personalProfile: ClientPersonalProfile | null;
   transactions: Array<CoinTransaction | BcuLedgerEntry>;
   message: string;
@@ -1379,8 +1394,25 @@ function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, wa
     : activation?.state === 'client_activated';
   const personalVerificationStatus = personalProfile?.verification_status || 'incomplete';
   const isVerifiedClient = personalVerificationStatus === 'verified';
-  const referralLink = getPublicReferralLink(activation);
-  const referralQrImageUrl = referralLink ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(referralLink)}` : '';
+  const referralLink = referral?.referralLink || getPublicReferralLink(activation);
+  const [referralQrImageUrl, setReferralQrImageUrl] = useState('');
+  const [referralCopied, setReferralCopied] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!referralLink) { setReferralQrImageUrl(''); return; }
+    QRCode.toDataURL(referralLink, { width: 240, margin: 2, errorCorrectionLevel: 'M' }).then(url => { if (active) setReferralQrImageUrl(url); }).catch(() => { if (active) setReferralQrImageUrl(''); });
+    return () => { active = false; };
+  }, [referralLink]);
+  async function copyReferralLink() {
+    if (!referralLink) return;
+    await navigator.clipboard?.writeText(referralLink);
+    setReferralCopied(true); window.setTimeout(() => setReferralCopied(false), 1800);
+  }
+  async function shareReferralLink() {
+    if (!referralLink) return;
+    if (navigator.share) await navigator.share({ title: t('referrals.title'), url: referralLink }).catch(() => undefined);
+    else await copyReferralLink();
+  }
   const displayName = clientProfile?.display_name || userEmail.split('@')[0] || t('clientOffice.clientFallback');
   const city = clientProfile?.city || 'Berlin';
   const statusLabel = activated ? t('clientOffice.premiumActive') : t('dashboard.client.freeStatus');
@@ -1678,14 +1710,23 @@ function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, wa
             <section className="client-office-card referral-studio client-referral-card">
               <div className="client-office-card-header">
                 <div>
-                  <p className="eyebrow">{t('clientOffice.referralEyebrow')}</p>
-                  <h2>{t('clientOffice.referralTitle')}</h2>
+                  <p className="eyebrow">{t('referrals.title')}</p>
+                  <h2>{t('referrals.title')}</h2>
                 </div>
                 <QrCode size={18} />
               </div>
-              {referralQrImageUrl ? <img className="client-qr-image" src={referralQrImageUrl} alt="Referral QR" /> : <QrVisual seed="CLIENT-FREE" />}
-              <p className="muted">{referralLink || t('clientOffice.referralLocked')}</p>
-              {referralLink && <button className="button full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" onClick={() => navigator.clipboard?.writeText(referralLink)}><Copy size={14} /> <span>{t('clientOffice.copyInvite')}</span></button>}
+              {referralQrImageUrl ? <img className="client-qr-image" src={referralQrImageUrl} alt={t('referrals.qrCode')} /> : <QrVisual seed="CLIENT-FREE" />}
+              <dl className="referral-details">
+                <div><dt>{t('referrals.yourCode')}</dt><dd>{referral?.referralCode || activation?.referral_code || '-'}</dd></div>
+                <div><dt>{t('referrals.yourLink')}</dt><dd>{referralLink || t('clientOffice.referralLocked')}</dd></div>
+                <div><dt>{t('referrals.direct')}</dt><dd>{referral?.directReferralsCount || 0}</dd></div>
+                <div><dt>{t('referrals.subtree')}</dt><dd>{referral?.totalDescendantsCount || 0}</dd></div>
+                <div><dt>{t('referrals.referredBy')}</dt><dd>{referral?.referredByDisplay || '-'}</dd></div>
+              </dl>
+              {referralLink && <div className="referral-actions">
+                <button className="button er-btn er-glass-btn er-glass-btn--cyan" type="button" onClick={copyReferralLink}><Copy size={14} /> <span>{referralCopied ? t('referrals.copied') : t('referrals.copy')}</span></button>
+                <button className="button er-btn er-glass-btn er-glass-btn--purple" type="button" onClick={shareReferralLink}><LinkIcon size={14} /> <span>{t('referrals.share')}</span></button>
+              </div>}
               <div className="client-referral-progress">
                 <strong>{t('clientOffice.nextRewardProgress', { count: referralActivations ? 1 : 0 })}</strong>
                 <span>{t('clientOffice.nextReward', { count: CLIENT_REFERRAL_REWARD_COINS })}</span>

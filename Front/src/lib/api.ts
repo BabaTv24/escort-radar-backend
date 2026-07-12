@@ -4,6 +4,9 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 type RequestOptions = RequestInit & { token?: string };
 
+export type ReferralMe = { referralCode: string; referralLink: string; directReferralsCount: number; totalDescendantsCount: number; referredByDisplay: string | null; registrationSource: string; referralDepth: number };
+export type AdminReferralNode = { userId: string; parentUserId: string | null; displayName: string; role: string; accountStatus: string; registrationSource: string; referralCode: string; referralDepth: number; createdAt: string; directChildrenCount: number; totalDescendantsCount: number; balanceBcu: number; hasProfile: boolean };
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
@@ -49,6 +52,11 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body)
   }),
+  referralMe: (token: string) => request<ReferralMe>('/api/referrals/me', { token }),
+  assignMyReferral: (token: string, referralCode: string | null, registrationSource: 'direct' | 'referral_link' | 'referral_code' = 'referral_link') => request<{ assigned: boolean; referralCode: string }>('/api/referrals/assign-me', { method: 'POST', token, body: JSON.stringify({ referralCode, registrationSource }) }),
+  resolveReferral: (code: string) => request<{ valid: boolean; displayName: string | null }>(`/api/referrals/resolve/${encodeURIComponent(code)}`),
+  adminReferralTree: (token: string, params: URLSearchParams) => request<{ nodes: AdminReferralNode[]; page: number; pageSize: number; maxDepth: number; hasMore: boolean }>(`/api/admin/referrals/tree?${params}`, { token }),
+  adminReferralSummary: (token: string) => request<Record<string, unknown>>('/api/admin/referrals/summary', { token }),
   tags: () => request<{ tags: Tag[] }>('/api/tags'),
   profile: (id: string) => request<{ profile: Profile }>(`/api/profiles/${id}`),
   profileAccess: (token: string, id: string) => request<{ access: ProfileAccess }>(`/api/profiles/${id}/access`, { token }),

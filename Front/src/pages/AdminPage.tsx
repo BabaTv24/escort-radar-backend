@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientPersonalProfile, HermesProfilePreview, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { useI18n } from '../i18n';
+import { AdminReferralTree } from '../components/AdminReferralTree';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
@@ -146,6 +147,7 @@ const sections = [
     items: [
       ['dashboard', '/admin', BarChart3, 'admin.nav.dashboard'],
       ['clients', '/admin/clients', Users, 'admin.nav.clients'],
+      ['referral-tree', '/admin/referral-tree', Users, 'admin.nav.referralTree'],
       ['client-profiles', '/admin/client-profiles', UserCheck, 'admin.nav.clientProfiles'],
       ['profiles', '/admin/profiles', Crown, 'admin.nav.profiles'],
       ['subscriptions', '/admin/subscriptions', Coins, 'admin.nav.subscriptions'],
@@ -1760,6 +1762,7 @@ export function AdminPage() {
   );
 
   function renderView() {
+    if (view === 'referral-tree') return <AdminReferralTree token={token} />;
     if (view === 'dashboard') {
       const registeredClients = stats.registered_clients || users.filter((user) => user.account_type === 'client').length;
       const activatedClients = stats.activated_clients || 0;
@@ -2487,6 +2490,7 @@ export function AdminPage() {
 
 function adminViewTitle(view: string, t: (key: string, vars?: Record<string, string | number>) => string) {
   const titleKeys: Record<string, string> = {
+    'referral-tree': 'admin.nav.referralTree',
     payments: 'admin.nav.transactions',
     'chat-manager': 'admin.nav.chat',
     push: 'admin.nav.notifications',
