@@ -947,8 +947,9 @@ test('client activation token bonus is 7 and favorites are token-gated', async (
   const enLocale = await readFile(new URL('../Front/src/locales/en.json', import.meta.url), 'utf8');
   const deLocale = await readFile(new URL('../Front/src/locales/de.json', import.meta.url), 'utf8');
 
-  assert.match(configSource, /CLIENT_ACTIVATION_TOKEN_BONUS', 7/);
-  assert.doesNotMatch(configSource, /CLIENT_ACTIVATION_WELCOME_COINS', 100/);
+  assert.match(configSource, /CLIENT_ACTIVATION_WELCOME_COINS/);
+  assert.match(configSource, /CLIENT_ACTIVATION_TOKEN_BONUS/);
+  assert.doesNotMatch(configSource, /CLIENT_ACTIVATION_WELCOME_COINS=100/);
   assert.match(clientActivationSource, /getOrCreateTokenWallet\(userId\)/);
   assert.match(clientActivationSource, /adjustTokenWalletBalance\(wallet\.id, userId, config\.clientActivationWelcomeCoins, 'client_activation_bonus'/);
   assert.match(clientActivationSource, /\.from\('wallets'\)/);

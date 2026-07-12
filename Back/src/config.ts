@@ -67,13 +67,30 @@ function envNumber(key: string, fallback: number) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function optionalEnvNumber(value: string | undefined) {
+  if (value === undefined || value.trim() === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export function resolveClientActivationWelcomeCoins(env: NodeJS.ProcessEnv = process.env) {
+  return optionalEnvNumber(env.CLIENT_ACTIVATION_WELCOME_COINS)
+    ?? optionalEnvNumber(env.CLIENT_ACTIVATION_TOKEN_BONUS)
+    ?? 7;
+}
+
+export function resolveClientReferralRewardCoins(env: NodeJS.ProcessEnv = process.env) {
+  return optionalEnvNumber(env.CLIENT_REFERRAL_REWARD_COINS) ?? 10;
+}
+
 function envBoolean(key: string, fallback: boolean) {
   const value = process.env[key];
   if (value === undefined) return fallback;
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
-export const CLIENT_ACTIVATION_TOKEN_BONUS = envNumber('CLIENT_ACTIVATION_TOKEN_BONUS', 7);
+export const CLIENT_ACTIVATION_WELCOME_COINS = resolveClientActivationWelcomeCoins();
+export const CLIENT_ACTIVATION_TOKEN_BONUS = CLIENT_ACTIVATION_WELCOME_COINS;
 
 export const config: Config = {
   port: Number(process.env.PORT || 4000),
@@ -105,8 +122,8 @@ export const config: Config = {
   },
   appUrl: process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173',
   clientActivationPriceCents: envNumber('CLIENT_ACTIVATION_PRICE_CENTS', 99),
-  clientActivationWelcomeCoins: CLIENT_ACTIVATION_TOKEN_BONUS,
-  clientReferralRewardCoins: envNumber('CLIENT_REFERRAL_REWARD_COINS', 25),
+  clientActivationWelcomeCoins: CLIENT_ACTIVATION_WELCOME_COINS,
+  clientReferralRewardCoins: resolveClientReferralRewardCoins(),
   supportEmail: process.env.SUPPORT_EMAIL || 'support@escort-radar.fun',
   legalOperatorName: process.env.LEGAL_OPERATOR_NAME || '',
   legalOperatorAddress: process.env.LEGAL_OPERATOR_ADDRESS || '',
