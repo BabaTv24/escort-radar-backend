@@ -48,6 +48,8 @@ export function ProfilePage() {
   const [profileAccessChecked, setProfileAccessChecked] = useState(false);
   const [accessMessage, setAccessMessage] = useState('');
   const [favoriteSaved, setFavoriteSaved] = useState(false);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [favoritesWalletSystem, setFavoritesWalletSystem] = useState<'legacy' | 'bcu'>('legacy');
   const [activationBusy, setActivationBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
   const { t, option } = useI18n();
@@ -68,6 +70,7 @@ export function ProfilePage() {
         const session = await supabase.auth.getSession();
         const token = session.data.session?.access_token;
         if (token) {
+          api.clientPremiumDashboardMe(token).then((dashboard) => setFavoritesWalletSystem(dashboard.wallet_system)).catch(() => setFavoritesWalletSystem('legacy'));
           api.profileAccess(token, id)
             .then((accessData) => setProfileAccess(accessData.access))
             .catch(() => setProfileAccess(null))
@@ -404,12 +407,13 @@ export function ProfilePage() {
             <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><MessageCircle size={16} /> <span>{t('nav.messages')}</span></button>
             <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><Phone size={16} /> <span>{t('profile.call')}</span></button>
             {canUsePremiumProfileFeatures && <a href="#booking" className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><CalendarDays size={16} /> <span>{t('profile.book')}</span></a>}
-            <button className="button er-btn er-glass-btn er-glass-btn--pink er-glass-btn--md" type="button" disabled={activated && favoriteSaved} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}><Heart size={16} /> <span>{favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</span></button>
+            <button className="button er-btn er-glass-btn er-glass-btn--pink er-glass-btn--md" type="button" disabled={favoriteBusy || (activated && favoriteSaved)} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}><Heart size={16} /> <span>{favoriteSaved ? t('favorites.alreadyFavorite') : `${t('favorites.addToFavorites')}${favoritesWalletSystem === 'bcu' ? ' · 5 BC' : ''}`}</span></button>
             <button className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={() => activated ? sendGift() : setAccessMessage(t('profile.activateRevealContact'))}><Gift size={16} /> <span>{t('profile.gift')}</span></button>
             <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => setAccessMessage(activated ? t('profile.liveCamAvailable') : t('profile.activateRevealContact'))}><Video size={16} /> <span>{t('profile.live')}</span></button>
           </div>
           {accessMessage && <p className={accessMessage === t('favorites.notEnoughTokens') ? 'error-text' : activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
           {accessMessage === t('favorites.notEnoughTokens') && <Link className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><span>{t('favorites.buyTokens')}</span></Link>}
+          {accessMessage === t('favorites.premiumRequired') && <Link className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('favorites.activatePremium')}</span></Link>}
           {accessMessage === t('favorites.loginToSeeFavorites') && <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login"><span>{t('buttons.login')}</span></Link>}
           <div className="market-contact-facts">
             <MarketFact icon={<BadgeCheck size={16} />} label={t('profile.verified')} value={profile.verified ? t('profile.yes') : t('profile.pending')} />
@@ -471,13 +475,22 @@ export function ProfilePage() {
       navigate(`/login?next=${encodeURIComponent(`/profile/${profile!.id}`)}`);
       return;
     }
+    if (favoriteBusy) return;
+    if (favoritesWalletSystem === 'bcu' && !window.confirm(t('favorites.bcuConfirmation'))) return;
+    setFavoriteBusy(true);
     try {
       const result = await api.addFavorite(token, profile!.id);
       setFavoriteSaved(true);
-      setAccessMessage(result.already_exists || result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
+      if ('amount_bcu' in result) setAccessMessage(result.charged ? t('favorites.bcuPaid') : t('favorites.bcuRestored'));
+      else setAccessMessage(result.already_exists || result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
-      setAccessMessage(message.toLowerCase().includes('token') ? t('favorites.notEnoughTokens') : message || t('states.requestFailed'));
+      if (message.toLowerCase().includes('insufficient')) setAccessMessage(t('favorites.notEnoughTokens'));
+      else if (message.toLowerCase().includes('premium')) setAccessMessage(t('favorites.premiumRequired'));
+      else if (message.toLowerCase().includes('profile') || message.toLowerCase().includes('favorite')) setAccessMessage(t('favorites.profileUnavailable'));
+      else setAccessMessage(message.toLowerCase().includes('token') ? t('favorites.notEnoughTokens') : message || t('states.requestFailed'));
+    } finally {
+      setFavoriteBusy(false);
     }
   }
 

@@ -288,7 +288,7 @@ export const api = {
   tokenPackages: () => request<{ packages: TokenPackage[] }>('/api/tokens/packages'),
   myWallet: (token: string) => request<{ wallet: Wallet }>('/api/tokens/wallet/me', { token }),
   myFavorites: (token: string) => request<{ favorites: ClientFavorite[]; wallet: Wallet }>('/api/favorites', { token }),
-  addFavorite: (token: string, profileId: string) => request<{ favorite: ClientFavorite; wallet: Wallet; already_favorited: boolean; already_exists?: boolean; charged: number; new_balance?: number }>(`/api/favorites/${profileId}`, {
+  addFavorite: (token: string, profileId: string) => request<({ favorite: ClientFavorite; wallet: Wallet; already_favorited: boolean; already_exists?: boolean; charged: number; new_balance?: number } | { favorite: true; charged: boolean; amount_bcu: string; amount_bc: string; recipient: { profile_id: string; credited: boolean } })>(`/api/favorites/${profileId}`, {
     method: 'POST',
     token
   }),
@@ -296,6 +296,8 @@ export const api = {
     method: 'DELETE',
     token
   }),
+  bcuWallet: (token: string) => request<{ wallet: BcuWallet | null }>('/api/bcu/wallet', { token }),
+  bcuLedger: (token: string) => request<{ ledger: BcuLedgerEntry[] }>('/api/bcu/ledger', { token }),
   tokenPurchaseIntent: (token: string, package_id?: string) => request('/api/tokens/purchase-intent', {
     method: 'POST',
     token,

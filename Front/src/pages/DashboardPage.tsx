@@ -398,7 +398,7 @@ export function DashboardPage() {
         setCoinWallet(null);
         setCoinTransactions([]);
         setWallet(null);
-        setClientFavorites([]);
+        await api.myFavorites(accessToken).then((data) => setClientFavorites(data.favorites)).catch(() => setClientFavorites([]));
       } else {
         setBcuWallet(null);
         setBcuLedger([]);
@@ -455,6 +455,10 @@ export function DashboardPage() {
         api.myProfile(accessToken),
         loadBookingRequests(accessToken),
         api.myWallet(accessToken).then((data) => setWallet(data.wallet)).catch(() => undefined)
+      ]);
+      await Promise.all([
+        api.bcuWallet(accessToken).then((data) => setBcuWallet(data.wallet)).catch(() => setBcuWallet(null)),
+        api.bcuLedger(accessToken).then((data) => setBcuLedger(data.ledger)).catch(() => setBcuLedger([]))
       ]);
 
       if (profileData.profile) {
@@ -870,6 +874,8 @@ export function DashboardPage() {
         onSaveDraft={persistProfile}
         onActivateSubscription={startEscortSubscription}
         onLogout={logout}
+        bcuWallet={bcuWallet}
+        bcuLedger={bcuLedger}
       />
     );
   }
@@ -2088,7 +2094,7 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
   );
 }
 
-function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onActivateSubscription, onLogout }: {
+function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onActivateSubscription, onLogout, bcuWallet, bcuLedger }: {
   profile: Partial<Profile>;
   savedProfile: Profile | null;
   userEmail: string;
@@ -2105,6 +2111,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   onSaveDraft: (profile: Partial<Profile>, successMessage?: string) => Promise<void>;
   onActivateSubscription: () => void;
   onLogout: () => void;
+  bcuWallet: BcuWallet | null;
+  bcuLedger: BcuLedgerEntry[];
 }) {
   const { t } = useI18n();
   const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text' | 'account' | 'visibility'>(savedProfile ? 'operator' : 'setup');
@@ -2131,6 +2139,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   const imageCount = savedProfile?.profile_images?.length || 0;
   const photoLimit = getProfilePhotoLimit(savedProfile);
   const photoInputDisabled = !savedProfile || imageCount >= photoLimit || uploadStatus === 'uploading';
+  const favoriteGifts = bcuLedger.filter((entry) => entry.direction === 'credit' && entry.transaction_type === 'favorite_received');
+  const favoriteGiftTotal = favoriteGifts.reduce((sum, entry) => sum + Number(entry.amount_bc), 0);
 
   useEffect(() => {
     if (savedProfile && panel === 'setup') setPanel('photos');
@@ -2362,6 +2372,16 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
       </section>
 
       <AdvertiserSubscriptionProgress profile={savedProfile || profile} />
+
+      {bcuWallet && <section className="dashboard-card">
+        <span className="eyebrow">{t('favorites.receivedTitle')}</span>
+        <h2>{bcuWallet.balance_bc} BC</h2>
+        <p>{t('favorites.receivedSummary').replace('{{count}}', String(favoriteGifts.length)).replace('{{amount}}', String(favoriteGiftTotal))}</p>
+        {favoriteGifts.slice(0, 10).map((entry, index) => <div className="booking-row" key={`${entry.created_at}-${index}`}>
+          <div><strong>{t('favorites.receivedAnonymous')}</strong><p>{new Date(entry.created_at).toLocaleString()}</p></div>
+          <span>+{entry.amount_bc} BC</span>
+        </div>)}
+      </section>}
 
       <section className="one-hand-status-toggle" aria-label={t('dashboard.advertiser.availabilityStatus')}>
         {[

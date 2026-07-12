@@ -11,7 +11,7 @@ import { formatDistanceKm } from '../lib/geo';
 
 export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: { profile: Profile; isFavorite?: boolean; onFavoriteChange?: (profileId: string) => void }) {
   const { t, option } = useI18n();
-  const [favoriteState, setFavoriteState] = useState<'idle' | 'saved'>(isFavorite ? 'saved' : 'idle');
+  const [favoriteState, setFavoriteState] = useState<'idle' | 'saving' | 'saved'>(isFavorite ? 'saved' : 'idle');
   const [favoriteMessage, setFavoriteMessage] = useState('');
   const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
   const status = profile.availability_status || (profile.available_now ? 'available' : 'unavailable');
@@ -82,7 +82,7 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
         {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
         <div className="premium-card-actions">
-          <button className="button icon-favorite-action er-btn er-glass-btn er-glass-btn--pink er-glass-btn--sm" type="button" disabled={favoriteState === 'saved'} onClick={toggleFavorite} aria-label={favoriteState === 'saved' ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}>
+          <button className="button icon-favorite-action er-btn er-glass-btn er-glass-btn--pink er-glass-btn--sm" type="button" disabled={favoriteState !== 'idle'} onClick={toggleFavorite} aria-label={favoriteState === 'saved' ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}>
             <HeartHandshake size={16} />
           </button>
           <Link to={`/profile/${profile.id}`} className="button primary full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block"><span>{t('buttons.viewProfile')}</span></Link>
@@ -101,14 +101,25 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
       setFavoriteMessage(t('favorites.loginToSeeFavorites'));
       return;
     }
+    setFavoriteState('saving');
     try {
+      const dashboard = await api.clientPremiumDashboardMe(token).catch(() => ({ wallet_system: 'legacy' as const }));
+      if (dashboard.wallet_system === 'bcu' && !window.confirm(t('favorites.bcuConfirmation'))) {
+        setFavoriteState('idle');
+        return;
+      }
       const result = await api.addFavorite(token, profile.id);
       setFavoriteState('saved');
       onFavoriteChange?.(profile.id);
-      setFavoriteMessage(result.already_exists || result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
+      if ('amount_bcu' in result) setFavoriteMessage(result.charged ? t('favorites.bcuPaid') : t('favorites.bcuRestored'));
+      else setFavoriteMessage(result.already_exists || result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
     } catch (error) {
+      setFavoriteState('idle');
       const message = error instanceof Error ? error.message : '';
-      setFavoriteMessage(message.toLowerCase().includes('token') ? t('favorites.notEnoughTokens') : message || t('states.requestFailed'));
+      if (message.toLowerCase().includes('insufficient') || message.toLowerCase().includes('token')) setFavoriteMessage(t('favorites.notEnoughTokens'));
+      else if (message.toLowerCase().includes('premium')) setFavoriteMessage(t('favorites.premiumRequired'));
+      else if (message.toLowerCase().includes('profile') || message.toLowerCase().includes('favorite')) setFavoriteMessage(t('favorites.profileUnavailable'));
+      else setFavoriteMessage(message || t('states.requestFailed'));
     }
   }
 }
