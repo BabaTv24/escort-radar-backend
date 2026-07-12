@@ -93,3 +93,31 @@ test('admin tree UI provides filters lazy children responsive hierarchy and pagi
 test('all referral UI keys exist in PL EN and DE',async()=>{
   for(const lang of ['pl','en','de']) { const json=JSON.parse(await read(`../Front/src/locales/${lang}.json`)); for(const key of ['referrals.title','referrals.yourCode','referrals.yourLink','referrals.copy','referrals.copied','referrals.share','referrals.qrCode','referrals.direct','referrals.subtree','referrals.referredBy','admin.nav.referralTree','referralTree.showChildren','referralTree.loadError','referralTree.roleFilter','referralTree.sourceFilter']) assert.equal(typeof json[key],'string',`${lang}:${key}`); }
 });
+
+test('047 retry is atomic and uses Supabase pgcrypto schema after partial apply',async()=>{
+  const sql=await read('../supabase/migrations/047_master_admin_referral_tree.sql');
+  assert.match(sql,/^--[\s\S]*\nbegin;/i); assert.match(sql,/commit;\s*$/i);
+  assert.match(sql,/create extension if not exists pgcrypto with schema extensions/);
+  assert.match(sql,/extensions\.gen_random_bytes\(8\)/);
+  assert.doesNotMatch(sql,/(?<!extensions\.)gen_random_bytes\(8\)/);
+});
+
+test('047 can resume after partial schema apply without replacing codes balances or ledger',async()=>{
+  const sql=await read('../supabase/migrations/047_master_admin_referral_tree.sql');
+  assert.match(sql,/create table if not exists public\.system_settings/);
+  assert.match(sql,/add column if not exists referred_by_user_id/);
+  assert.match(sql,/drop trigger if exists client_referrals_parent_immutable/);
+  assert.match(sql,/drop policy if exists "No direct access to system settings"/);
+  assert.match(sql,/on conflict \(user_id\) do nothing/);
+  assert.match(sql,/on conflict \(key\) do update/);
+  assert.doesNotMatch(sql,/set\s+referral_code\s*=/i);
+  assert.doesNotMatch(sql,/update public\.bcu_wallets|insert into public\.bcu_ledger_entries/i);
+});
+
+test('post-failure precheck is read-only and inspects partial 047 state',async()=>{
+  const sql=await read('../scripts/sql/047_post_failure_precheck.sql');
+  assert.match(sql,/begin transaction read only;/i); assert.match(sql,/commit;\s*$/i);
+  assert.match(sql,/extensions\.gen_random_bytes\(integer\)/);
+  assert.match(sql,/system_settings/); assert.match(sql,/client_referrals_parent_immutable/);
+  assert.doesNotMatch(sql,/\b(insert|update|delete|alter|create|drop|truncate)\b/i);
+});

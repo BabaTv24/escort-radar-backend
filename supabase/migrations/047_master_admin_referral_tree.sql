@@ -1,5 +1,9 @@
 -- Master Admin Referral Tree. Review before applying. This file is intentionally idempotent.
-create extension if not exists pgcrypto;
+-- Run with psql -v ON_ERROR_STOP=1 so any failure rolls back this entire retry.
+begin;
+
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists public.system_settings (
   key text primary key,
@@ -27,7 +31,7 @@ create index if not exists client_referrals_source_idx on public.client_referral
 
 create or replace function public.generate_referral_code()
 returns text language sql volatile set search_path = public, pg_temp
-as $$ select 'ER-' || upper(substr(encode(gen_random_bytes(8), 'hex'), 1, 10)) $$;
+as $$ select 'ER-' || upper(substr(encode(extensions.gen_random_bytes(8), 'hex'), 1, 10)) $$;
 
 do $$
 declare v_admin_id uuid;
@@ -60,6 +64,11 @@ begin
       then 'sponsored_profile' else 'backfill' end
   from auth.users u where u.id<>v_admin_id
   on conflict(user_id) do nothing;
+
+  update public.client_referrals r set registration_source = case
+    when exists(select 1 from public.profiles p where p.user_id=r.user_id and (p.acquisition_source='admin_sponsored' or p.provider='manual_admin'))
+      then 'sponsored_profile' else 'backfill' end
+  where r.user_id<>v_admin_id and r.registration_source is null;
 
   update public.client_referrals set referral_link='https://escort-radar.fun/register?ref=' || referral_code
   where referral_link is distinct from 'https://escort-radar.fun/register?ref=' || referral_code;
@@ -160,6 +169,9 @@ language sql security definer set search_path=public,pg_temp as $$
 $$;
 
 alter table public.system_settings enable row level security;
+drop policy if exists "No direct access to system settings" on public.system_settings;
+create policy "No direct access to system settings" on public.system_settings
+for all to anon,authenticated using (false) with check (false);
 revoke all on public.system_settings from anon,authenticated;
 revoke insert,update,delete on public.client_referrals from anon,authenticated;
 revoke all on function public.generate_referral_code() from public,anon,authenticated;
@@ -168,3 +180,5 @@ revoke all on function public.get_admin_referral_tree(uuid,uuid,integer,integer,
 grant execute on function public.assign_referral(uuid,text,text) to service_role;
 grant execute on function public.get_admin_referral_tree(uuid,uuid,integer,integer,integer,text,text,text) to service_role;
 grant all on public.system_settings to service_role;
+
+commit;
