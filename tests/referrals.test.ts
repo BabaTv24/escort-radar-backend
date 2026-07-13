@@ -147,3 +147,63 @@ test('admin referral summary is implemented in backend and does not require a su
   const migration=await read('../supabase/migrations/048_referral_security_and_summary_fix.sql');
   assert.doesNotMatch(migration,/create\s+(or replace\s+)?function/i);
 });
+
+test('049 safely classifies historical direct clients without deriving source from activation provider',async()=>{
+  const sql=await read('../supabase/migrations/049_referral_source_and_display_fix.sql');
+  assert.match(sql,/begin;[\s\S]*commit;\s*$/i);
+  assert.match(sql,/r\.registration_source = 'backfill'/);
+  assert.match(sql,/not exists \(select 1 from public\.profiles p where p\.user_id = r\.user_id\)/);
+  assert.match(sql,/auth_account_type[\s\S]*client_profiles[\s\S]*client_activations[\s\S]*client_activation_payments/);
+  assert.doesNotMatch(sql,/activation_payment\.provider[\s\S]{0,100}registration_source\s*=/i);
+  assert.doesNotMatch(sql,/set\s+referral_code\s*=|update public\.bcu_wallets|insert into public\.bcu_ledger_entries/i);
+});
+
+test('049 makes sponsored profiles with users root children and creates no orphan profile node',async()=>{
+  const sql=await read('../supabase/migrations/049_referral_source_and_display_fix.sql');
+  assert.match(sql,/p\.user_id = r\.user_id[\s\S]*p\.is_sponsored is true/);
+  assert.match(sql,/registration_source = 'sponsored_profile'[\s\S]*registration_source in \('backfill','admin_created','import','sponsored_profile'\)/);
+  assert.match(sql,/referred_by_user_id = v_admin_id[\s\S]*root_user_id = v_admin_id[\s\S]*referral_depth = 1/);
+  assert.doesNotMatch(sql,/insert into public\.client_referrals/i);
+});
+
+test('049 preserves referral sources multi-level parents referral codes wallets and ledger',async()=>{
+  const sql=await read('../supabase/migrations/049_referral_source_and_display_fix.sql');
+  assert.match(sql,/r\.registration_source = 'backfill'[\s\S]*r\.referred_by_user_id = v_admin_id[\s\S]*r\.referral_depth = 1/);
+  assert.match(sql,/nullif\(trim\(coalesce\(r\.referred_by_code,''\)\),''\) is null/);
+  assert.doesNotMatch(sql,/registration_source\s+in\s+\('referral_link','referral_code'\)/);
+  assert.match(sql,/bigbaba\.vip@gmail\.com[\s\S]*ER-9582A4BF/);
+  assert.match(sql,/REFERRAL_049_CHANGED_REFERRAL_CODES/); assert.match(sql,/REFERRAL_049_CHANGED_WALLETS/); assert.match(sql,/REFERRAL_049_CHANGED_LEDGER/);
+  assert.doesNotMatch(sql,/\b(referral_code|balance_bcu|amount_bcu)\s*=/i);
+});
+
+test('049 tree display prefers profile and separates registration activation and badges',async()=>{
+  const sql=await read('../supabase/migrations/049_referral_source_and_display_fix.sql');
+  assert.match(sql,/coalesce\(nullif\(profile\.display_name,''\),nullif\(cp\.display_name,''\)/);
+  assert.match(sql,/Administrator główny/); assert.match(sql,/Użytkownik Escort Radar/);
+  const treeFunction=sql.slice(sql.indexOf('create function public.get_admin_referral_tree'),sql.indexOf('revoke all on function public.get_admin_referral_tree'));
+  assert.doesNotMatch(treeFunction,/u\.email/);
+  assert.match(sql,/registration_source text,activation_status text,activation_provider text/);
+  const route=await read('../Back/src/routes/referrals.ts');
+  assert.match(route,/activationStatus: row\.activation_status/); assert.match(route,/isSponsoredProfile/); assert.match(route,/isRoot/);
+  const ui=await read('../Front/src/components/AdminReferralTree.tsx');
+  assert.match(ui,/rootBadge/); assert.match(ui,/sponsoredBadge/); assert.match(ui,/clientBadge/); assert.match(ui,/stripeActivated/);
+});
+
+test('049 source filters summary and translations cover every source',async()=>{
+  const route=await read('../Back/src/routes/referrals.ts');
+  assert.match(route,/directUsers/); assert.match(route,/sponsoredProfiles/); assert.match(route,/unresolvedBackfill/);
+  const sources=['direct','referral_link','referral_code','sponsored_profile','admin_created','import','backfill'];
+  for(const lang of ['pl','en','de']) { const json=JSON.parse(await read(`../Front/src/locales/${lang}.json`));
+    for(const source of sources) assert.equal(typeof json[`referralTree.source.${source}`],'string',`${lang}:${source}`);
+    for(const key of ['referralTree.rootBadge','referralTree.sponsoredBadge','referralTree.clientBadge','referralTree.stripeActivated','referralTree.manuallyActivated']) assert.equal(typeof json[key],'string',`${lang}:${key}`);
+  }
+});
+
+test('049 precheck and postcheck are read-only safety reports',async()=>{
+  for(const path of ['../scripts/sql/049_referral_source_precheck.sql','../scripts/sql/049_referral_source_postcheck.sql']) {
+    const sql=await read(path); assert.match(sql,/^begin transaction read only;/i); assert.match(sql,/commit;\s*$/i);
+    assert.doesNotMatch(sql,/\b(insert|update|delete|alter|create|drop|truncate)\b/i);
+  }
+  const pre=await read('../scripts/sql/049_referral_source_precheck.sql'); assert.match(pre,/limit 10/); assert.match(pre,/activation_provider/); assert.match(pre,/will_change/); assert.match(pre,/referral_codes_fingerprint/);
+  const post=await read('../scripts/sql/049_referral_source_postcheck.sql'); assert.match(post,/exactly_one_root/); assert.match(post,/referral_codes_unique/); assert.match(post,/total_balance_bcu/); assert.match(post,/ledger_entries/); assert.match(post,/wallets_fingerprint/); assert.match(post,/ledger_fingerprint/);
+});

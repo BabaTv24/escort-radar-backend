@@ -44,11 +44,15 @@ export function AdminReferralTree({ token }: { token: string }) {
 
   function renderNode(node: AdminReferralNode, indent=0) {
     const open=expanded[node.userId];
+    const sourceLabel=t(`referralTree.source.${node.registrationSource}`);
+    const activationLabel=node.activationProvider==='stripe'&&node.activationStatus==='client_activated'
+      ? t('referralTree.stripeActivated')
+      : node.activationStatus==='client_activated' ? t('referralTree.manuallyActivated') : null;
     return <div className="referral-tree-branch" key={`${node.userId}-${indent}`}>
       <article className={`referral-tree-node ${node.referralDepth===0?'root':''}`} style={{'--tree-indent':indent} as CSSProperties}>
         <button className="referral-tree-toggle" disabled={!node.directChildrenCount} onClick={()=>toggle(node)} aria-label={open?t('referralTree.hideChildren'):t('referralTree.showChildren')}>{open?<ChevronDown/>:<ChevronRight/>}</button>
         <UserRound className="referral-tree-avatar" />
-        <div className="referral-tree-main"><strong>{node.displayName}</strong><span>{t('referralTree.level')} {node.referralDepth} · {node.role} · {node.accountStatus}</span><small>{t('referralTree.source')}: {node.registrationSource} · {new Date(node.createdAt).toLocaleDateString()}</small></div>
+        <div className="referral-tree-main"><strong>{node.displayName}</strong><span>{t('referralTree.level')} {node.referralDepth} · {node.role} · {node.accountStatus}</span><small>{new Date(node.createdAt).toLocaleDateString()}</small><div className="referral-tree-badges"><span>{sourceLabel}</span>{node.isRoot&&<span>{t('referralTree.rootBadge')}</span>}{node.isSponsoredProfile&&<span>{t('referralTree.sponsoredBadge')}</span>}{node.role==='client'&&<span>{t('referralTree.clientBadge')}</span>}{activationLabel&&<span>{activationLabel}</span>}</div></div>
         <div className="referral-tree-stats"><span>{t('referralTree.directChildren')}: {node.directChildrenCount}</span><span>{t('referralTree.descendants')}: {node.totalDescendantsCount}</span><span>{t('referralTree.balance')}: {(node.balanceBcu/10000).toLocaleString()}</span></div>
         <button className="button" onClick={()=>navigator.clipboard?.writeText(node.referralCode)}><Copy size={14}/>{node.referralCode}</button>
       </article>
@@ -60,7 +64,7 @@ export function AdminReferralTree({ token }: { token: string }) {
     <div className="referral-tree-toolbar">
       <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t('admin.filters.searchRecords')}/>
       <select value={role} onChange={e=>setRole(e.target.value)} aria-label={t('referralTree.roleFilter')}><option value="">{t('referralTree.all')}</option>{roles.map(x=><option key={x}>{x}</option>)}</select>
-      <select value={source} onChange={e=>setSource(e.target.value)} aria-label={t('referralTree.sourceFilter')}><option value="">{t('referralTree.all')}</option>{sources.map(x=><option key={x}>{x}</option>)}</select>
+      <select value={source} onChange={e=>setSource(e.target.value)} aria-label={t('referralTree.sourceFilter')}><option value="">{t('referralTree.all')}</option>{sources.map(x=><option key={x} value={x}>{t(`referralTree.source.${x}`)}</option>)}</select>
       <select value={maxDepth} onChange={e=>setMaxDepth(Number(e.target.value))} aria-label={t('referralTree.level')}>{[0,1,2,3,4,5].map(x=><option key={x} value={x}>{t('referralTree.level')} {x}</option>)}</select>
       <button className="button" onClick={loadRoot}><RefreshCw size={15}/>{t('referralTree.retry')}</button>
     </div>

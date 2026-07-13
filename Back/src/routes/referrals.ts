@@ -71,9 +71,11 @@ adminReferralsRouter.get('/tree', asyncHandler(async (req, res) => {
   const nodes = (data || []).map((row: Record<string, unknown>) => ({
     userId: row.user_id, parentUserId: row.parent_user_id, displayName: row.display_name,
     role: row.role, accountStatus: row.account_status, registrationSource: row.registration_source,
+    activationStatus: row.activation_status, activationProvider: row.activation_provider,
     referralCode: row.referral_code, referralDepth: row.referral_depth, createdAt: row.created_at,
     directChildrenCount: Number(row.direct_children_count || 0), totalDescendantsCount: Number(row.total_descendants_count || 0),
-    balanceBcu: Number(row.balance_bcu || 0), hasProfile: Boolean(row.has_profile)
+    balanceBcu: Number(row.balance_bcu || 0), hasProfile: Boolean(row.has_profile),
+    isSponsoredProfile: Boolean(row.is_sponsored_profile), isRoot: Number(row.referral_depth) === 0
   }));
   res.json({ nodes, page, pageSize, maxDepth, hasMore: nodes.length === pageSize });
 }));
@@ -92,7 +94,10 @@ adminReferralsRouter.get('/summary', asyncHandler(async (_req, res) => {
   }
   for (const user of authPage.users) { const role = String(user.app_metadata?.role || user.app_metadata?.auth_account_type || 'client'); usersByRole[role] = (usersByRole[role] || 0) + 1; }
   res.json({ totalUsers: totalUsers || 0, directToAdmin: referrals.filter(row => row.referred_by_user_id === root?.user_id).length,
+    directUsers: referrals.filter(row => row.registration_source === 'direct').length,
     totalReferralRegistrations: referrals.filter(row => row.registration_source === 'referral_link' || row.registration_source === 'referral_code').length,
+    sponsoredProfiles: referrals.filter(row => row.registration_source === 'sponsored_profile').length,
+    unresolvedBackfill: referrals.filter(row => row.registration_source === 'backfill').length,
     usersWithoutResolvedParent: referrals.filter(row => row.referral_depth !== 0 && !row.referred_by_user_id).length,
     maximumDepth: Math.max(0, ...referrals.map(row => row.referral_depth || 0)),
     registrationsByDay: Object.entries(registrationsByDay).map(([date, count]) => ({ date, count })), usersBySource, usersByRole });
