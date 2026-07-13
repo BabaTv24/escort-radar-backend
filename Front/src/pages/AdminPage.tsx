@@ -255,8 +255,6 @@ export function AdminPage() {
   const [hermesUrl, setHermesUrl] = useState('');
   const [hermesPreview, setHermesPreview] = useState<HermesProfilePreview | null>(null);
   const [hermesWarnings, setHermesWarnings] = useState<string[]>([]);
-  const [hermesPassword, setHermesPassword] = useState('');
-  const [hermesConfirmPassword, setHermesConfirmPassword] = useState('');
   const [hermesBusy, setHermesBusy] = useState(false);
   const [hermesStatus, setHermesStatus] = useState<'idle' | 'analysing' | 'success' | 'error'>('idle');
   const [newLocationRow, setNewLocationRow] = useState<LocationCatalogRow>({
@@ -993,33 +991,22 @@ export function AdminPage() {
   }
 
   async function createHermesDraft() {
-    if (!hermesPreview || !hermesUrl.trim()) return;
-    if (hermesPassword && hermesPassword.length < 8) {
-      setMessage(t('admin.hermes.passwordMin'));
-      return;
-    }
-    if (hermesPassword && hermesPassword !== hermesConfirmPassword) {
-      setMessage(t('admin.hermes.passwordMismatch'));
-      return;
-    }
+    const sourceUrl = hermesPreview?.source_url || hermesUrl.trim();
+    if (!hermesPreview || !sourceUrl) return;
     setHermesBusy(true);
     setMessage('');
     try {
       const result = await api.importProfileCreate(token, {
-        source_url: hermesPreview.source_url || hermesUrl.trim(),
+        source_url: sourceUrl,
         profile: hermesPreview,
         create_as_draft: true,
         sponsored: true,
-        imageUrls: (hermesPreview.images || []).slice(0, 12),
-        password: hermesPassword,
-        confirmPassword: hermesConfirmPassword
+        imageUrls: (hermesPreview.images || []).slice(0, 12)
       });
       setProfiles((current) => [result.profile, ...current.filter((profile) => profile.id !== result.profile.id)]);
       setHermesOpen(false);
       setHermesPreview(null);
       setHermesUrl('');
-      setHermesPassword('');
-      setHermesConfirmPassword('');
       setHermesStatus('idle');
       setHermesWarnings(result.warnings || []);
       setMessage(`${t('admin.hermes.createdDraft')} ID: ${result.profile_id}. ${t('admin.hermes.importedImages', { count: result.images_imported ?? result.imported_images ?? 0, failed: result.images_failed ?? result.failed_images ?? 0 })}`);
@@ -1718,8 +1705,6 @@ export function AdminPage() {
                   <AdminField label={t('admin.hermes.importSource')}><input value={hermesPreview.import_source || ''} onChange={(event) => updateHermesPreview({ import_source: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.description')}><textarea value={hermesPreview.description || ''} onChange={(event) => updateHermesPreview({ description: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.hermes.rawAboutText')}><textarea value={hermesPreview.raw_about_text || ''} onChange={(event) => updateHermesPreview({ raw_about_text: event.target.value })} /></AdminField>
-                  <AdminField label={t('admin.hermes.password')}><input type="password" value={hermesPassword} onChange={(event) => setHermesPassword(event.target.value)} autoComplete="new-password" /></AdminField>
-                  <AdminField label={t('admin.hermes.confirmPassword')}><input type="password" value={hermesConfirmPassword} onChange={(event) => setHermesConfirmPassword(event.target.value)} autoComplete="new-password" /></AdminField>
                 </div>
                 <p className="admin-hermes-note">{t('admin.hermes.summary', { fields: countHermesPreviewFields(hermesPreview), images: hermesPreview.images?.length || 0, services: hermesPreview.services?.length || 0, unknown: Object.keys(hermesPreview.unknown_fields || {}).length + (hermesPreview.unmapped_tags?.length || 0) })}</p>
                 {Object.keys(hermesPreview.unknown_fields || {}).length ? <AdminField label={t('admin.hermes.unknownFields')}><textarea value={Object.entries(hermesPreview.unknown_fields || {}).map(([key,value]) => `${key}: ${value}`).join('\n')} readOnly /></AdminField> : null}
@@ -1741,7 +1726,7 @@ export function AdminPage() {
                 ) : null}
                 {hermesPreview.raw_visible_text ? <AdminField label={t('admin.hermes.rawVisibleText')}><textarea className="hermes-raw-text" value={hermesPreview.raw_visible_text} onChange={(event) => updateHermesPreview({ raw_visible_text: event.target.value })} /></AdminField> : null}
                 <div className="admin-actions-row">
-                  <button className="button primary" disabled={hermesBusy || Boolean(hermesPassword && (hermesPassword.length < 8 || hermesPassword !== hermesConfirmPassword))} onClick={createHermesDraft}>{t('admin.hermes.createSponsoredDraft')}</button>
+                  <button className="button primary" disabled={hermesBusy || !hermesPreview || !(hermesPreview.source_url || hermesUrl.trim())} onClick={createHermesDraft}>{t('admin.hermes.createSponsoredDraft')}</button>
                   <button className="button" onClick={() => setHermesOpen(false)}>{t('admin.buttons.cancel')}</button>
                 </div>
               </>

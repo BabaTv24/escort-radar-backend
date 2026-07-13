@@ -1542,7 +1542,9 @@ test('Hermes sponsored draft supports generated technical owner without a public
   assert.match(createRoute, /if \(authUser\?\.id\) await logAccountAccess/);
   assert.match(createRoute, /images_imported: imageImport\.imported/); assert.match(createRoute, /images_failed: imageImport\.failed/);
   assert.match(adminPageSource, /ID: \$\{result\.profile_id\}/);
-  assert.doesNotMatch(adminPageSource, /disabled=\{hermesBusy \|\| hermesPassword\.length < 8/);
+  assert.doesNotMatch(adminPageSource, /hermesPassword|hermesConfirmPassword|admin\.hermes\.password|admin\.hermes\.confirmPassword/);
+  assert.doesNotMatch(adminPageSource, /password:\s*hermes|confirmPassword:\s*hermes/);
+  assert.match(adminPageSource, /disabled=\{hermesBusy \|\| !hermesPreview \|\| !\(hermesPreview\.source_url \|\| hermesUrl\.trim\(\)\)\}/);
 });
 
 test('Hermes preview fields are forwarded to sponsored draft payload and image failures stay partial', async () => {
