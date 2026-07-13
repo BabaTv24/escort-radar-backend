@@ -1739,6 +1739,7 @@
   "admin.hermes.passwordMin": "Password must be at least 8 characters.",
   "admin.hermes.passwordMismatch": "Passwords do not match.",
   "admin.hermes.importedImages": "Images: {{count}} copied, {{failed}} skipped.",
+  "admin.hermes.gender": "Gender", "admin.hermes.orientation": "Orientation", "admin.hermes.age": "Age", "admin.hermes.height": "Height (cm)", "admin.hermes.weight": "Weight (kg)", "admin.hermes.bust": "Bust", "admin.hermes.eyes": "Eyes", "admin.hermes.hair": "Hair", "admin.hermes.travel": "Travel", "admin.hermes.languages": "Languages", "admin.hermes.ethnicity": "Ethnicity", "admin.hermes.nationality": "Nationality", "admin.hermes.zodiac": "Zodiac sign", "admin.hermes.unmappedTags": "Unmapped services and tags", "admin.hermes.unknownFields": "Unrecognized fields", "admin.hermes.summary": "Found: {{fields}} fields, {{images}} images, {{services}} services; unrecognized: {{unknown}}.",
   "admin.revenue.sponsoredProfiles": "Sponsored profiles",
   "admin.revenue.clientActivation": "Client activations",
   "admin.revenue.escortSubscriptions": "Escort subscriptions",

@@ -360,6 +360,9 @@ export type HermesProfilePreview = {
   location?: string;
   category?: string;
   age?: number | null;
+  gender?: string; orientation?: string; height_cm?: number | null; weight_kg?: number | null;
+  bust?: string; eyes?: string; hair?: string; travel?: string; travels?: boolean | null;
+  visit_types?: string[]; languages?: string[]; ethnicity?: string; nationality?: string; zodiac_sign?: string;
   description?: string;
   phone?: string;
   email?: string;
@@ -371,6 +374,8 @@ export type HermesProfilePreview = {
   service_groups?: Record<string, string[]>;
   taboos?: string[];
   tags?: string[];
+  unmapped_tags?: string[];
+  unknown_fields?: Record<string, string>;
   prices?: Record<string, number>;
   availability?: string;
   price_1h?: number;

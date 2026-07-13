@@ -16,8 +16,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: 'Request failed' }));
     const reason = payload.reason ? ` (${payload.reason})` : '';
+    const stage = payload.stage ? ` [${payload.stage}]` : '';
     const details = payload.details ? `: ${typeof payload.details === 'string' ? payload.details : JSON.stringify(payload.details)}` : '';
-    throw new Error(`${payload.error || 'Request failed'}${reason}${details}`);
+    throw new Error(`${payload.error || 'Request failed'}${stage}${reason}${details}`);
   }
 
   if (response.status === 204) return undefined as T;
@@ -348,7 +349,7 @@ export const api = {
     token,
     body: JSON.stringify({ url })
   }),
-  importProfileCreate: (token: string, body: { source_url: string; profile: HermesProfilePreview; create_as_draft: boolean; password?: string; confirmPassword?: string }) => request<{ profile: Profile; warnings: string[] }>('/api/admin/import-profile-create', {
+  importProfileCreate: (token: string, body: { source_url: string; profile: HermesProfilePreview; create_as_draft: boolean; sponsored?: boolean; imageUrls?: string[]; password?: string; confirmPassword?: string }) => request<{ ok?: boolean; profile_id?: string; profile: Profile; imported_images?: number; failed_images?: number; warnings: string[] }>('/api/admin/import-profile-create', {
     method: 'POST',
     token,
     body: JSON.stringify(body)

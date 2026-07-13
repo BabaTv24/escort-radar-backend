@@ -24,6 +24,8 @@ import { writeAdminAuditLog } from '../services/adminAudit.js';
 import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
+import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, extractServiceTagCandidates, mapImportedServiceValues, normalizeImportedDetails, normalizeImportedPhone } from '../hermesImport.js';
+import { assertPublicImportDns as secureAssertPublicImportDns, fetchPublicImportResource as secureFetchPublicImportResource, readImportResponseLimited as secureReadImportResponseLimited, validatePublicImportUrl as secureValidatePublicImportUrl } from '../publicImportSecurity.js';
 import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
 import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfile.js';
 import { applyManualPaymentOrder } from '../manualPayments.js';
@@ -805,8 +807,7 @@ adminRouter.post('/import-profile-preview', asyncHandler(async (req, res) => {
       const hermes = await analyseProfileWithHermes(sourceUrl);
       return res.json(hermes);
     }
-    const response = await fetch(sourceUrl, {
-      redirect: 'follow',
+    const response = await fetchPublicImportResource(sourceUrl, {
       headers: {
         accept: 'text/html,application/xhtml+xml',
         'user-agent': 'EscortRadar-HermesAgent/1.0 (+public profile preview)'
@@ -818,10 +819,12 @@ adminRouter.post('/import-profile-preview', asyncHandler(async (req, res) => {
     if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
       return res.status(400).json({ error: 'Only public HTML pages can be imported' });
     }
-    const html = (await response.text()).slice(0, 600000);
+    const html = new TextDecoder().decode(await readImportResponseLimited(response, 600000));
     const profile = buildHermesProfilePreview(html, sourceUrl, warnings);
     (profile as Record<string, any>).suggested_owner_email = await nextSponsoredImportEmail();
-    res.json({ ok: true, source_url: sourceUrl, profile: normalizeHermesPreviewProfile(profile, sourceUrl, 'local_parser'), warnings });
+    const normalizedProfile = normalizeHermesPreviewProfile(profile, sourceUrl, 'local_parser');
+    appendImportCompletenessWarnings(normalizedProfile, warnings);
+    res.json({ ok: true, source_url: sourceUrl, profile: normalizedProfile, warnings: uniqueStrings(warnings) });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not analyse public URL' });
   }
@@ -832,6 +835,8 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
   const safetyError = validatePublicImportUrl(sourceUrl);
   if (safetyError) return res.status(400).json({ error: safetyError });
   const incomingProfile = req.body.profile && typeof req.body.profile === 'object' ? req.body.profile : {};
+  const displayName = optionalText((incomingProfile as any).display_name || (incomingProfile as any).name, 80);
+  if (!displayName) return res.status(400).json({ error: 'Profile display name is required', stage: 'validate profile payload' });
   const password = optionalText(req.body.password, 200);
   const confirmPassword = optionalText(req.body.confirmPassword || req.body.confirm_password, 200);
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password must contain at least 8 characters' });
@@ -849,13 +854,13 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
   const normalized = normalizeAdminProfilePayload({
     ...incomingProfile,
     owner_email: ownerEmail,
-    display_name: optionalText((incomingProfile as any).display_name || (incomingProfile as any).name, 80) || 'Hermes import draft',
+    display_name: displayName,
     city: normalizeHermesCity((incomingProfile as any).city),
     area: optionalText((incomingProfile as any).location || (incomingProfile as any).area, 80),
     work_area: optionalText((incomingProfile as any).location || (incomingProfile as any).work_area, 120),
     category: (incomingProfile as any).category || 'ladies',
     description: optionalText((incomingProfile as any).description, 2000) || 'Imported by Hermes Agent. Review and rewrite before publishing.',
-    phone: (incomingProfile as any).phone,
+    phone: normalizeImportedPhone((incomingProfile as any).phone),
     email: (incomingProfile as any).email,
     telegram: (incomingProfile as any).telegram,
     whatsapp: (incomingProfile as any).whatsapp,
@@ -871,7 +876,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     listing_plan: 'hermes_import_draft',
     subscription_note: `Hermes import source: ${sourceUrl}`
   });
-  if ('error' in normalized) return res.status(400).json({ error: normalized.error });
+  if ('error' in normalized) return res.status(400).json({ error: normalized.error, stage: 'validate profile payload' });
   let authUser: any = null;
   let authUserCreated = false;
   try {
@@ -880,12 +885,13 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
       password,
       accountType: 'advertiser',
       plan: 'hermes_import_draft',
-      subscriptionStatus: 'incomplete'
+      subscriptionStatus: 'incomplete',
+      existingUserMarker: 'hermes_import'
     });
     authUser = account.user;
     authUserCreated = account.created;
   } catch (error) {
-    return res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create login account' });
+    return res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create login account', stage: 'create auth user' });
   }
 
   const payload = {
@@ -907,7 +913,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     import_source: optionalText((incomingProfile as any).import_source, 60) || 'hermes',
     imported_at: new Date().toISOString(),
     admin_note: adminImportNote(sourceUrl, incomingProfile as Record<string, any>, combinedWarnings),
-    subscription_note: adminImportNote(sourceUrl, incomingProfile as Record<string, any>, combinedWarnings),
+    subscription_note: 'Imported sponsored draft; no active subscription.',
     location_updated_at: new Date().toISOString()
   };
   const { data, error } = await supabaseAdmin
@@ -917,7 +923,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     .single();
   if (error) {
     if (authUserCreated && authUser?.id) await supabaseAdmin.auth.admin.deleteUser(authUser.id);
-    return res.status(400).json({ error: error.message });
+    return res.status(400).json({ error: error.message, stage: 'create profile', rolled_back_auth_user: authUserCreated });
   }
   await logAccountAccess(req, data.id, authUser.id, authUserCreated ? 'hermes_import_account_created' : 'hermes_import_user_linked');
   const imageImport = await importProfileImagesToStorage({
@@ -3354,11 +3360,14 @@ async function findProfileByOwnerEmail(emailValue: unknown) {
   return data || null;
 }
 
-async function resolveAdminProfileUser(input: { email: string; password: string | null; accountType: string; plan: string; subscriptionStatus: string }) {
+async function resolveAdminProfileUser(input: { email: string; password: string | null; accountType: string; plan: string; subscriptionStatus: string; existingUserMarker?: string }) {
   const email = optionalEmail(input.email);
   if (!email) throw new Error('Valid owner email is required');
   const existing = await findAuthUserByEmail(email);
   if (existing) {
+    if (input.existingUserMarker && !canLinkExistingImportedUser(existing, input.existingUserMarker)) {
+      throw new Error('Existing account was not created by this importer and cannot be linked');
+    }
     const { data: linkedProfile } = await supabaseAdmin.from('profiles').select('id').eq('user_id', existing.id).limit(1).maybeSingle();
     if (linkedProfile) throw new Error('User already exists and is linked to another profile');
     await supabaseAdmin.auth.admin.updateUserById(existing.id, {
@@ -3366,7 +3375,8 @@ async function resolveAdminProfileUser(input: { email: string; password: string 
         ...(existing.app_metadata || {}),
         auth_account_type: input.accountType,
         plan: input.plan,
-        subscription_status: input.subscriptionStatus
+        subscription_status: input.subscriptionStatus,
+        created_by: input.existingUserMarker || existing.app_metadata?.created_by
       }
     });
     return { user: existing, created: false };
@@ -3380,7 +3390,8 @@ async function resolveAdminProfileUser(input: { email: string; password: string 
     app_metadata: {
       auth_account_type: input.accountType,
       plan: input.plan,
-      subscription_status: input.subscriptionStatus
+      subscription_status: input.subscriptionStatus,
+      ...(input.existingUserMarker ? { created_by: input.existingUserMarker } : {})
     }
   });
   if (error || !data.user) throw new Error(error?.message || 'Could not create login account');
@@ -3467,35 +3478,27 @@ async function logAccountAccess(req: any, profileId: string, userId: string, act
   if (error) console.info('[account access log] skipped reason=', error.message);
 }
 
-function validatePublicImportUrl(value: string) {
-  if (!value || value.length > 2000) return 'Valid public URL is required';
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return 'Valid public URL is required';
-  }
-  if (!['http:', 'https:'].includes(parsed.protocol)) return 'Only HTTP/HTTPS public URLs are supported';
-  const hostname = parsed.hostname.toLowerCase();
-  if (
-    hostname === 'localhost'
-    || hostname.endsWith('.local')
-    || hostname.endsWith('.internal')
-    || hostname.startsWith('127.')
-    || hostname.startsWith('10.')
-    || hostname.startsWith('192.168.')
-    || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
-    || hostname === '0.0.0.0'
-    || hostname === '::1'
-    || hostname.includes('..')
-  ) return 'Only public pages are supported';
-  return null;
+export function validatePublicImportUrl(value: string) {
+  return secureValidatePublicImportUrl(value);
+}
+
+export async function fetchPublicImportResource(value: string, init: RequestInit, redirects = 0): Promise<Response> {
+  return secureFetchPublicImportResource(value, init, redirects);
+}
+
+export async function readImportResponseLimited(response: Response, maxBytes: number) {
+  return secureReadImportResponseLimited(response, maxBytes);
+}
+
+async function assertPublicImportDns(value: string) {
+  return secureAssertPublicImportDns(value);
 }
 
 async function analyseProfileWithHermes(sourceUrl: string) {
   const webhookUrl = config.hermesAnalyzeProfileUrl.trim();
   const webhookSafetyError = validateHermesWebhookUrl(webhookUrl);
   if (webhookSafetyError) throw new Error(webhookSafetyError);
+  await assertPublicImportDns(webhookUrl);
   const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'application/json' };
   if (config.hermesWebhookSecret) headers['x-hermes-secret'] = config.hermesWebhookSecret;
   const response = await fetch(webhookUrl, {
@@ -3507,7 +3510,7 @@ async function analyseProfileWithHermes(sourceUrl: string) {
   if (!response.ok) throw new Error(`Hermes returned HTTP ${response.status}`);
   let payload: Record<string, any>;
   try {
-    payload = await response.json() as Record<string, any>;
+    payload = JSON.parse(new TextDecoder().decode(await readImportResponseLimited(response, 1024 * 1024))) as Record<string, any>;
   } catch {
     throw new Error('Hermes returned invalid JSON');
   }
@@ -3518,6 +3521,8 @@ async function analyseProfileWithHermes(sourceUrl: string) {
   if (!rawProfile || typeof rawProfile !== 'object') throw new Error('Hermes response did not include profile data');
   const resolvedSourceUrl = String(payload.source_url || rawProfile.source_url || sourceUrl);
   const normalizedProfile = normalizeHermesPreviewProfile(rawProfile, resolvedSourceUrl, 'hermes') as Record<string, any>;
+  const completenessWarnings: string[] = [];
+  appendImportCompletenessWarnings(normalizedProfile, completenessWarnings);
   return {
     ok: true,
     source_url: resolvedSourceUrl,
@@ -3527,9 +3532,17 @@ async function analyseProfileWithHermes(sourceUrl: string) {
     },
     warnings: uniqueStrings([
       ...(Array.isArray(payload.warnings) ? payload.warnings.map((item: unknown) => String(item)).slice(0, 20) : []),
-      ...(normalizedProfile.admin_warnings || [])
+      ...(normalizedProfile.admin_warnings || []),
+      ...completenessWarnings
     ])
   };
+}
+
+function appendImportCompletenessWarnings(profile: Record<string, any>, warnings: string[]) {
+  const usefulFields = ['display_name','phone','description','gender','orientation','age','height_cm','weight_kg','bust','eyes','hair','travel','languages','ethnicity','nationality','zodiac_sign','services'];
+  const found = usefulFields.filter((key) => Array.isArray(profile[key]) ? profile[key].length : profile[key] !== null && profile[key] !== undefined && profile[key] !== '').length;
+  if (found < 4) warnings.push(`Low confidence import: only ${found} meaningful profile field(s) were found. Review the source and fill missing data manually.`);
+  if (profile.unmapped_tags?.length) warnings.push(`${profile.unmapped_tags.length} service/tag value(s) could not be mapped and require manual review.`);
 }
 
 function validateHermesWebhookUrl(value: string) {
@@ -3546,6 +3559,9 @@ function validateHermesWebhookUrl(value: string) {
 }
 
 function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUrl: string, importSource: 'hermes' | 'local_parser') {
+  const detailSource = rawProfile.details || rawProfile.more_about_me || rawProfile.about_details;
+  const normalizedDetails = normalizeImportedDetails(detailSource && typeof detailSource === 'object' && !Array.isArray(detailSource)
+    ? Object.entries(detailSource).map(([key,value]) => [key,String(value ?? '')] as [string,string]) : []);
   const prices = rawProfile.prices && typeof rawProfile.prices === 'object' ? rawProfile.prices : {};
   const price1h = numericValue(rawProfile.price_1h ?? prices.price_1h ?? prices.one_hour ?? prices.hour);
   const serviceGroups = rawProfile.service_groups && typeof rawProfile.service_groups === 'object' ? rawProfile.service_groups : {};
@@ -3569,20 +3585,30 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     city: normalizeHermesCity(rawProfile.city || rawProfile.location),
     location: optionalText(rawProfile.location, 160),
     category: optionalText(rawProfile.category, 80) || inferCategory(String(rawProfile.description || rawProfile.tags || '')),
-    age: rawProfile.age == null ? null : numericValue(rawProfile.age),
+    age: rawProfile.age == null ? normalizedDetails.age ?? null : numericValue(rawProfile.age),
+    gender: optionalText(rawProfile.gender || normalizedDetails.gender, 40) || '', orientation: optionalText(rawProfile.orientation || normalizedDetails.orientation, 80) || '',
+    height_cm: rawProfile.height_cm == null && rawProfile.height == null ? normalizedDetails.height_cm ?? null : numericValue(rawProfile.height_cm ?? rawProfile.height),
+    weight_kg: rawProfile.weight_kg == null ? normalizedDetails.weight_kg ?? null : numericValue(rawProfile.weight_kg),
+    bust: optionalText(rawProfile.bust || normalizedDetails.bust, 80) || '', eyes: optionalText(rawProfile.eyes || normalizedDetails.eyes, 80) || '', hair: optionalText(rawProfile.hair || normalizedDetails.hair, 80) || '',
+    travel: optionalText(rawProfile.travel || normalizedDetails.travel, 120) || '', travels: typeof rawProfile.travels === 'boolean' ? rawProfile.travels : normalizedDetails.travels ?? null,
+    visit_types: Array.isArray(rawProfile.visit_types) ? uniqueStrings(rawProfile.visit_types).slice(0, 8) : normalizedDetails.visit_types || [],
+    languages: Array.isArray(rawProfile.languages) ? uniqueStrings(rawProfile.languages).slice(0, 8) : normalizedDetails.languages || [],
+    ethnicity: optionalText(rawProfile.ethnicity || normalizedDetails.ethnicity, 80) || '', nationality: optionalText(rawProfile.nationality || normalizedDetails.nationality, 80) || '', zodiac_sign: optionalText(rawProfile.zodiac_sign || rawProfile.zodiac || normalizedDetails.zodiac_sign, 80) || '',
     description: optionalText(sanitizeImportedDescription(rawProfile.description || rawProfile.about_text || '', moderation.blockedLines), 2000) || '',
     raw_about_text: optionalText(rawProfile.about_text || rawProfile.raw_about_text, 8000) || '',
     raw_visible_text: optionalText(rawProfile.raw_visible_text || rawProfile.visible_text, 30000) || '',
-    phone: optionalText(rawProfile.phone, 80) || '',
+    phone: normalizeImportedPhone(rawProfile.phone),
     email: optionalEmail(rawProfile.email) || '',
     website: optionalText(rawProfile.website, 240) || sourceUrl,
     telegram: optionalText(rawProfile.telegram, 80) || '',
     whatsapp: optionalText(rawProfile.whatsapp, 80) || '',
     services: mappedServices.mapped,
     raw_services: uniqueStrings(rawServices.length ? rawServices : mappedServices.raw).slice(0, 100),
+    unmapped_tags: uniqueStrings([...(Array.isArray(rawProfile.unmapped_tags) ? rawProfile.unmapped_tags : []), ...mappedServices.unmapped]).slice(0, 100),
     service_groups: serviceGroups,
     taboos: Array.isArray(rawProfile.taboos) ? rawProfile.taboos.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 80) : [],
     tags: Array.isArray(rawProfile.tags) ? rawProfile.tags.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 30) : [],
+    unknown_fields: rawProfile.unknown_fields && typeof rawProfile.unknown_fields === 'object' ? rawProfile.unknown_fields : normalizedDetails.unknown_fields,
     prices,
     price_1h: price1h || undefined,
     availability: optionalText(rawProfile.availability, 160) || '',
@@ -3615,8 +3641,9 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
   if (!title) warnings.push('No title meta tag found.');
   if (!description) warnings.push('No description meta tag found.');
   if (!images.length) warnings.push('No public image URLs found.');
-  const mappedServices = mapImportedServices(sections.services);
-  const phone = firstMatch(text, /(?:\+|00)?\d[\d\s()./-]{7,}\d/);
+  const details = normalizeImportedDetails(extractImportPairs(html, text));
+  const mappedServices = mapImportedServices(uniqueStrings([...sections.services, ...extractServiceTagCandidates(html)]));
+  const phone = extractPublicPhone(html, text);
   const telegram = firstMatch(text, /(?:telegram|tg)\s*[:@]\s*@?([a-zA-Z0-9_]{5,})/i);
   const whatsapp = firstMatch(text, /whats\s*app|whatsapp/i) ? phone : '';
   const price1h = firstMatch(text, /(?:1h|1 h|hour|stunde|godzina)[^\d]{0,20}(\d{2,5})\s*(?:€|eur)/i) || firstMatch(text, /(\d{2,5})\s*(?:€|eur)[^\n]{0,30}(?:1h|1 h|hour|stunde|godzina)/i);
@@ -3626,14 +3653,17 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     display_name: title || '',
     city: inferCity(text),
     category: inferCategory(text),
+    ...details,
     description: description || '',
     raw_about_text: aboutText,
     raw_visible_text: text,
-    phone: phone || '',
+    phone,
     telegram: telegram || '',
     whatsapp: whatsapp || '',
     services: mappedServices.mapped,
     raw_services: mappedServices.raw,
+    unmapped_tags: mappedServices.unmapped,
+    unknown_fields: details.unknown_fields,
     service_groups: sections.serviceGroups,
     taboos: sections.taboos,
     prices: price1h ? { price_1h: Number(price1h) } : {},
@@ -3754,8 +3784,7 @@ async function importProfileImagesToStorage(options: { profileId: string; imageU
       continue;
     }
     try {
-      const response = await fetch(imageUrl, {
-        redirect: 'follow',
+      const response = await fetchPublicImportResource(imageUrl, {
         headers: {
           accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
           'user-agent': 'EscortRadar-HermesAgent/1.0 (+public profile image import)'
@@ -3769,8 +3798,7 @@ async function importProfileImagesToStorage(options: { profileId: string; imageU
       }
       const declaredLength = Number(response.headers.get('content-length') || 0);
       if (declaredLength > 12 * 1024 * 1024) throw new Error('image is larger than 12 MB');
-      const buffer = Buffer.from(await response.arrayBuffer());
-      if (buffer.length > 12 * 1024 * 1024) throw new Error('image is larger than 12 MB');
+      const buffer = Buffer.from(await readImportResponseLimited(response, 12 * 1024 * 1024));
       if (buffer.length < 1024) throw new Error('image is too small');
 
       const processed = await sharp(buffer)
@@ -3882,6 +3910,8 @@ function normalizeImportLine(value: string) {
 }
 
 function mapImportedServices(values: unknown[]) {
+  return mapImportedServiceValues(values);
+  /* Legacy mapping retained below as documentation; unreachable and removed in a follow-up cleanup.
   const mappings: Array<[RegExp, string]> = [
     [/erotische massage|massage/i, 'masaz'],
     [/girlfriend|gfe|girlfriendsex/i, 'klimat_gfe'],
@@ -3904,7 +3934,8 @@ function mapImportedServices(values: unknown[]) {
   const raw = uniqueStrings(values.map((value) => String(value || '').trim()).filter(Boolean));
   const mapped = uniqueStrings(raw.map((value) => mappings.find(([pattern]) => pattern.test(value))?.[1] || '').filter(Boolean))
     .filter((key) => allowedServiceKeys.has(key));
-  return { mapped, raw };
+  return { mapped, raw, unmapped: [] };
+  */
 }
 
 function moderationWarningsForText(text: string) {
@@ -3956,9 +3987,12 @@ function adminImportNote(sourceUrl: string, profile: Record<string, any>, warnin
     `Import source: ${profile.import_source || 'hermes'}`,
     warnings.length ? `Warnings: ${warnings.join(' | ')}` : '',
     profile.raw_services?.length ? `Raw services: ${profile.raw_services.join(', ')}` : '',
+    profile.tags?.length ? `Raw tags: ${profile.tags.join(', ')}` : '',
+    profile.unmapped_tags?.length ? `Unmapped tags: ${profile.unmapped_tags.join(', ')}` : '',
+    profile.unknown_fields && Object.keys(profile.unknown_fields).length ? `Unknown fields: ${JSON.stringify(profile.unknown_fields).slice(0, 1500)}` : '',
     profile.taboos?.length ? `Taboos: ${profile.taboos.join(', ')}` : '',
     profile.raw_visible_text ? `Visible text excerpt: ${String(profile.raw_visible_text).slice(0, 1500)}` : ''
-  ].filter(Boolean).join('\n');
+  ].filter(Boolean).join('\n').slice(0, 4000);
 }
 
 function htmlToPlainText(html: string) {

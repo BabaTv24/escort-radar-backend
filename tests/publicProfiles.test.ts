@@ -15,6 +15,8 @@ import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts
 import { isValidLatLng, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
 import { getSafeNextPath } from '../Front/src/lib/authRedirect.ts';
 import { normalizeOperatorStatus, normalizeProfileCategory, validateProfileInput } from '../Back/src/validation.ts';
+import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, mapImportedServiceValues, normalizeImportedDetails, normalizeImportedPhone } from '../Back/src/hermesImport.ts';
+import { fetchPublicImportResource, readImportResponseLimited, validatePublicImportUrl } from '../Back/src/publicImportSecurity.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
   assert.equal(isPublicProfile({
@@ -1445,4 +1447,67 @@ test('Hermes sponsored create copies images with partial failure warnings and pu
   assert.match(adminRouteSource, /imported\/\$\{options\.profileId\}/);
   assert.match(adminRouteSource, /Image upload failed partial/);
   assert.match(adminRouteSource, /No images were copied to storage/);
+});
+
+test('Hermes normalizes international public phone without losing plus prefix', () => {
+  assert.equal(normalizeImportedPhone('+49 301 484 237 98'), '+4930148423798');
+  assert.equal(extractPublicPhone('<main><a href="tel:+49 301 484 237 98">Telefon</a></main>', ''), '+4930148423798');
+  assert.equal(extractPublicPhone('<main><a href="tel:+49%20301%20484%20237%2098">Telefon</a></main>', ''), '+4930148423798');
+  assert.equal(normalizeImportedPhone('0049 301 484 237 98'), '+4930148423798');
+  assert.equal(normalizeImportedPhone('+49 12'), '');
+  assert.equal(normalizeImportedPhone('+49 123 456 789 012 345 6'), '');
+  assert.equal(extractPublicPhone('<main><script type="application/ld+json">{"telephone":"+49 301 484 237 98"}</script></main>', ''), '+4930148423798');
+  assert.equal(extractPublicPhone('<main>Profil</main><footer>Support Telefon: +49 999 999 999</footer>', 'Profil'), '');
+});
+
+test('Hermes SSRF guard blocks unusual private IP forms redirects and oversized bodies', async () => {
+  for(const url of ['http://localhost/x','http://127.1/x','http://2130706433/x','http://0x7f000001/x','http://[::1]/x','http://169.254.169.254/latest','http://10.0.0.1/x','http://172.16.0.1/x','http://192.168.1.1/x']) assert.ok(validatePublicImportUrl(url),url);
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async()=>new Response(null,{status:302,headers:{location:'http://127.0.0.1/private'}});
+  try { await assert.rejects(fetchPublicImportResource('https://93.184.216.34/profile',{signal:AbortSignal.timeout(1000)}),/Unsafe redirect blocked/); }
+  finally { globalThis.fetch=originalFetch; }
+  await assert.rejects(readImportResponseLimited(new Response('123456'),5),/larger than 5 bytes/);
+});
+
+test('Hermes importer links only importer-owned existing auth users', () => {
+  assert.equal(canLinkExistingImportedUser({app_metadata:{created_by:'hermes_import'}},'hermes_import'),true);
+  assert.equal(canLinkExistingImportedUser({app_metadata:{created_by:'manual_admin'}},'hermes_import'),false);
+  assert.equal(canLinkExistingImportedUser({app_metadata:{}},'hermes_import'),false);
+});
+
+test('Hermes parses multilingual more-about-me key value structures', () => {
+  const html=`<main><dl>
+    <dt>Płeć:</dt><dd>Kobieta</dd><dt>Orientacja</dt><dd>Hetero</dd><dt>Wiek</dt><dd>23 l</dd>
+    <dt>Wzrost</dt><dd>166 cm</dd><dt>Waga</dt><dd>54 kg</dd><dt>Biust</dt><dd>2, Naturalny</dd>
+    <dt>Oczy</dt><dd>Niebieskie</dd><dt>Włosy</dt><dd>Brązowe</dd><dt>Wyjazdy</dt><dd>Tylko hotele</dd>
+    <dt>Języki</dt><dd>Angielski, Niemiecki</dd><dt>Etniczność</dt><dd>Europejska (biała)</dd>
+    <dt>Narodowość</dt><dd>Niemiecka</dd><dt>Znak zodiaku</dt><dd>Bliźnięta</dd><dt>Nietypowe pole</dt><dd>wartość</dd>
+  </dl></main>`;
+  const details=normalizeImportedDetails(extractImportPairs(html));
+  assert.deepEqual({ gender:details.gender,orientation:details.orientation,age:details.age,height:details.height_cm,weight:details.weight_kg },{ gender:'female',orientation:'hetero',age:23,height:166,weight:54 });
+  assert.equal(details.bust,'2, Naturalny'); assert.equal(details.eyes,'Niebieskie'); assert.equal(details.hair,'Brązowe');
+  assert.equal(details.travel,'Tylko hotele'); assert.equal(details.travels,false); assert.deepEqual(details.visit_types,['hotel']);
+  assert.deepEqual(details.languages,['en','de']); assert.equal(details.ethnicity,'european'); assert.equal(details.nationality,'Niemiecka'); assert.equal(details.zodiac_sign,'Bliźnięta');
+  assert.equal(details.unknown_fields['Nietypowe pole'],'wartość');
+});
+
+test('Hermes deduplicates supported services and reports unmapped public tags', () => {
+  const result=mapImportedServiceValues(['Massage','Massage','GFE','Nieznany fetysz','Nieznany fetysz']);
+  assert.deepEqual(result.mapped,['masaz','klimat_gfe']);
+  assert.deepEqual(result.unmapped,['Nieznany fetysz']);
+});
+
+test('Hermes preview fields are forwarded to sponsored draft payload and image failures stay partial', async () => {
+  const adminRouteSource=await readFile(new URL('../Back/src/routes/admin.ts',import.meta.url),'utf8');
+  const adminPageSource=await readFile(new URL('../Front/src/pages/AdminPage.tsx',import.meta.url),'utf8');
+  assert.match(adminRouteSource,/\.\.\.incomingProfile,[\s\S]*phone: normalizeImportedPhone\(\(incomingProfile as any\)\.phone\)/);
+  for(const field of ['gender','orientation','height_cm','weight_kg','bust','eyes','hair','travel','languages','ethnicity','nationality','zodiac_sign']) assert.match(adminPageSource,new RegExp(`hermesPreview\\.${field}`));
+  assert.match(adminRouteSource,/is_sponsored: true/); assert.match(adminRouteSource,/is_published: false/); assert.match(adminRouteSource,/moderation_status: 'pending'/);
+  assert.match(adminRouteSource,/const imageImport = await importProfileImagesToStorage/); assert.match(adminRouteSource,/failed_images: imageImport\.failed/);
+  assert.match(adminRouteSource,/deleteUser\(authUser\.id\)/); assert.match(adminRouteSource,/stage: 'create profile'/);
+  assert.match(adminRouteSource,/if \(authUserCreated && authUser\?\.id\) await supabaseAdmin\.auth\.admin\.deleteUser/);
+  assert.match(adminRouteSource,/subscription_status: 'incomplete'/); assert.doesNotMatch(adminRouteSource.slice(adminRouteSource.indexOf("post('/import-profile-create"),adminRouteSource.indexOf("get('/business-profiles")),/subscription_status: 'active'|subscription_status: 'trial'/);
+  const publicRouteSource=await readFile(new URL('../Back/src/routes/profiles.ts',import.meta.url),'utf8');
+  assert.match(publicRouteSource,/admin_note, subscription_note, source_url, import_source, imported_at/);
+  assert.match(adminRouteSource,/Unmapped tags:/); assert.match(adminRouteSource,/Unknown fields:/); assert.match(adminRouteSource,/slice\(0, 4000\)/);
 });

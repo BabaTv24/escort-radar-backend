@@ -402,7 +402,7 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
 }
 
 function sanitizePublicProfile(profile: any) {
-  const { primary_phone, additional_phones, whatsapp, telegram, latitude, longitude, work_place_label, exact_address: _omittedExactAddress, ...publicProfile } = profile;
+  const { phone, primary_phone, additional_phones, whatsapp, telegram, admin_note, subscription_note, source_url, import_source, imported_at, latitude, longitude, work_place_label, exact_address: _omittedExactAddress, ...publicProfile } = profile;
   const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
   const visibility = normalizePublicLocationVisibility(publicProfile.location_visibility || publicProfile.location_mode);
   const postalCode = visibility === 'hidden' ? null : publicProfile.postal_code;

@@ -1009,6 +1009,8 @@ export function AdminPage() {
         source_url: hermesPreview.source_url || hermesUrl.trim(),
         profile: hermesPreview,
         create_as_draft: true,
+        sponsored: true,
+        imageUrls: (hermesPreview.images || []).slice(0, 12),
         password: hermesPassword,
         confirmPassword: hermesConfirmPassword
       });
@@ -1020,7 +1022,7 @@ export function AdminPage() {
       setHermesConfirmPassword('');
       setHermesStatus('idle');
       setHermesWarnings(result.warnings || []);
-      setMessage(t('admin.hermes.createdDraft'));
+      setMessage(`${t('admin.hermes.createdDraft')} ${t('admin.hermes.importedImages', { count: result.imported_images || 0, failed: result.failed_images || 0 })}`);
       editStudioProfile(result.profile);
       setProfilePanelMode('overview');
       navigate(`/admin/profiles?profile=${encodeURIComponent(result.profile.id)}`, { replace: false });
@@ -1688,6 +1690,19 @@ export function AdminPage() {
                   <AdminField label={t('admin.profileEditor.city')}><input value={hermesPreview.city || ''} onChange={(event) => updateHermesPreview({ city: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.category')}><input value={hermesPreview.category || ''} onChange={(event) => updateHermesPreview({ category: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.phone')}><input value={hermesPreview.phone || ''} onChange={(event) => updateHermesPreview({ phone: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.gender')}><input value={hermesPreview.gender || ''} onChange={(event) => updateHermesPreview({ gender: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.orientation')}><input value={hermesPreview.orientation || ''} onChange={(event) => updateHermesPreview({ orientation: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.age')}><input type="number" value={hermesPreview.age ?? ''} onChange={(event) => updateHermesPreview({ age: event.target.value ? Number(event.target.value) : null })} /></AdminField>
+                  <AdminField label={t('admin.hermes.height')}><input type="number" value={hermesPreview.height_cm ?? ''} onChange={(event) => updateHermesPreview({ height_cm: event.target.value ? Number(event.target.value) : null })} /></AdminField>
+                  <AdminField label={t('admin.hermes.weight')}><input type="number" value={hermesPreview.weight_kg ?? ''} onChange={(event) => updateHermesPreview({ weight_kg: event.target.value ? Number(event.target.value) : null })} /></AdminField>
+                  <AdminField label={t('admin.hermes.bust')}><input value={hermesPreview.bust || ''} onChange={(event) => updateHermesPreview({ bust: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.eyes')}><input value={hermesPreview.eyes || ''} onChange={(event) => updateHermesPreview({ eyes: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.hair')}><input value={hermesPreview.hair || ''} onChange={(event) => updateHermesPreview({ hair: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.travel')}><input value={hermesPreview.travel || ''} onChange={(event) => updateHermesPreview({ travel: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.languages')}><input value={(hermesPreview.languages || []).join(', ')} onChange={(event) => updateHermesPreview({ languages: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
+                  <AdminField label={t('admin.hermes.ethnicity')}><input value={hermesPreview.ethnicity || ''} onChange={(event) => updateHermesPreview({ ethnicity: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.nationality')}><input value={hermesPreview.nationality || ''} onChange={(event) => updateHermesPreview({ nationality: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.hermes.zodiac')}><input value={hermesPreview.zodiac_sign || ''} onChange={(event) => updateHermesPreview({ zodiac_sign: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.hermes.ownerEmail')}><input value={hermesPreview.owner_email || hermesPreview.suggested_owner_email || ''} onChange={(event) => updateHermesPreview({ owner_email: event.target.value })} /></AdminField>
                   <AdminField label={t('form.email')}><input value={hermesPreview.email || ''} onChange={(event) => updateHermesPreview({ email: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.hermes.website')}><input value={hermesPreview.website || ''} onChange={(event) => updateHermesPreview({ website: event.target.value })} /></AdminField>
@@ -1696,6 +1711,7 @@ export function AdminPage() {
                   <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={hermesPreview.price_1h || ''} onChange={(event) => updateHermesPreview({ price_1h: Number(event.target.value || 0) })} /></AdminField>
                   <AdminField label={t('admin.hermes.services')}><textarea value={(hermesPreview.services || []).join(', ')} onChange={(event) => updateHermesPreview({ services: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
                   <AdminField label={t('admin.hermes.rawServices')}><textarea value={(hermesPreview.raw_services || []).join('\n')} onChange={(event) => updateHermesPreview({ raw_services: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
+                  <AdminField label={t('admin.hermes.unmappedTags')}><textarea value={(hermesPreview.unmapped_tags || []).join('\n')} readOnly /></AdminField>
                   <AdminField label={t('admin.hermes.taboos')}><textarea value={(hermesPreview.taboos || []).join('\n')} onChange={(event) => updateHermesPreview({ taboos: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
                   <AdminField label={t('admin.hermes.availability')}><input value={hermesPreview.availability || ''} onChange={(event) => updateHermesPreview({ availability: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.hermes.source')}><input value={hermesPreview.source_url || hermesUrl} onChange={(event) => updateHermesPreview({ source_url: event.target.value })} /></AdminField>
@@ -1705,6 +1721,8 @@ export function AdminPage() {
                   <AdminField label={t('admin.hermes.password')}><input type="password" value={hermesPassword} onChange={(event) => setHermesPassword(event.target.value)} autoComplete="new-password" /></AdminField>
                   <AdminField label={t('admin.hermes.confirmPassword')}><input type="password" value={hermesConfirmPassword} onChange={(event) => setHermesConfirmPassword(event.target.value)} autoComplete="new-password" /></AdminField>
                 </div>
+                <p className="admin-hermes-note">{t('admin.hermes.summary', { fields: countHermesPreviewFields(hermesPreview), images: hermesPreview.images?.length || 0, services: hermesPreview.services?.length || 0, unknown: Object.keys(hermesPreview.unknown_fields || {}).length + (hermesPreview.unmapped_tags?.length || 0) })}</p>
+                {Object.keys(hermesPreview.unknown_fields || {}).length ? <AdminField label={t('admin.hermes.unknownFields')}><textarea value={Object.entries(hermesPreview.unknown_fields || {}).map(([key,value]) => `${key}: ${value}`).join('\n')} readOnly /></AdminField> : null}
                 {(hermesPreview.suggested_owner_email || hermesPreview.owner_email) ? <p className="admin-hermes-note">{t('admin.hermes.autoOwnerEmail')}: <strong>{hermesPreview.owner_email || hermesPreview.suggested_owner_email}</strong></p> : null}
                 {hermesPreview.prices && Object.keys(hermesPreview.prices).length ? <pre className="hermes-json-preview">{JSON.stringify(hermesPreview.prices, null, 2)}</pre> : null}
                 {hermesPreview.service_groups && Object.keys(hermesPreview.service_groups).length ? (
@@ -2617,6 +2635,11 @@ function toDateTimeLocal(value: unknown) {
   if (!Number.isFinite(date.getTime())) return String(value).slice(0, 16);
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function countHermesPreviewFields(profile: HermesProfilePreview) {
+  const ignored = new Set(['images','admin_warnings','unknown_fields','unmapped_tags','raw_visible_text','source_url','import_source']);
+  return Object.entries(profile).filter(([key,value]) => !ignored.has(key) && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0)).length;
 }
 
 function moveImageId(images: NonNullable<Profile['profile_images']>, index: number, direction: -1 | 1) {
