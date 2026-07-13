@@ -16,9 +16,8 @@ export type ProfileRadarLocation = {
 };
 
 export const clientSearchLocationStorageKey = 'escortRadar.clientSearchLocation';
-export const RADAR_RADIUS_OPTIONS_METERS = [5_000, 10_000, 25_000, 50_000, 100_000, 150_000, 250_000] as const;
-export const MIN_RADAR_RADIUS_METERS = RADAR_RADIUS_OPTIONS_METERS[0];
-export const MAX_RADAR_RADIUS_METERS = RADAR_RADIUS_OPTIONS_METERS[RADAR_RADIUS_OPTIONS_METERS.length - 1];
+export const MIN_RADAR_RADIUS_METERS = 10;
+export const MAX_RADAR_RADIUS_METERS = 150_000;
 export const DEFAULT_RADAR_RADIUS_METERS = 25_000;
 
 const cityCenters: Record<string, { lat: number; lng: number }> = {

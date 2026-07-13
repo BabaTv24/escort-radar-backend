@@ -12,7 +12,7 @@ import {
   isRealClientActivationPayment
 } from '../Back/src/adminClients.ts';
 import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts';
-import { RADAR_RADIUS_OPTIONS_METERS, isProfileInRadarRange, isValidLatLng, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
+import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, isProfileInRadarRange, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
 import { getSafeNextPath } from '../Front/src/lib/authRedirect.ts';
 import { normalizeOperatorStatus, normalizeProfileCategory, validateProfileInput } from '../Back/src/validation.ts';
 import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, mapImportedServiceValues, normalizeImportedCity, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../Back/src/hermesImport.ts';
@@ -1037,11 +1037,13 @@ test('radar resolves Swiebodzin safely and respects 100/150 km radius boundaries
   const resolved = resolveProfileRadarLocation(profile);
   const distance = resolved ? safeDistanceKm(buckow, resolved) : null;
 
-  assert.deepEqual(RADAR_RADIUS_OPTIONS_METERS, [5_000, 10_000, 25_000, 50_000, 100_000, 150_000, 250_000]);
+  assert.equal(MIN_RADAR_RADIUS_METERS, 10);
+  assert.equal(MAX_RADAR_RADIUS_METERS, 150_000);
   assert.equal(resolved?.precision, 'city_fallback');
   assert.ok(distance !== null && distance > 100 && distance < 150);
   assert.equal(isProfileInRadarRange(profile, buckow, 100_000).inRange, false);
   assert.equal(isProfileInRadarRange(profile, buckow, 150_000).inRange, true);
+  assert.deepEqual(resolveManualSearcherLocation('Świebodzin'), { lat: 52.2475, lng: 15.5336, label: 'Swiebodzin', source: 'manual' });
 });
 
 test('radar location resolver falls back from bad coords to Berlin postal and area data', () => {
@@ -1088,9 +1090,29 @@ test('city page keeps listing profiles as radar input and does not pre-empty the
   assert.match(cityPageSource, /profiles=\{sortedProfiles\}/);
   assert.match(cityPageSource, /radarInputProfiles: sortedProfiles\.length/);
   assert.match(radarPanelSource, /source === 'manual_saved'/);
+  assert.match(radarPanelSource, /type="range"/);
+  assert.match(radarPanelSource, /min=\{MIN_RADAR_RADIUS_METERS\}/);
+  assert.match(radarPanelSource, /max=\{MAX_RADAR_RADIUS_METERS\}/);
+  assert.match(cityPageSource, /type="range"/);
   assert.match(radarPanelSource, /\[RadarLocationResolve\]/);
   assert.match(geoSource, /safeDistanceKm/);
   assert.match(geoSource, /sort\(\(left, right\) => right\.length - left\.length\)/);
+});
+
+test('admin profile update synchronizes work city and clears stale Berlin location data', async () => {
+  const adminPageSource = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  const adminRouteSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  const updateRoute = adminRouteSource.slice(adminRouteSource.indexOf("put('/profiles/:id'"), adminRouteSource.indexOf("patch('/profiles/:id/publish"));
+
+  assert.match(updateRoute, /normalizeAdminProfilePayload\(req\.body, true\)/);
+  assert.match(adminRouteSource, /hasOwnProperty\.call\(body, 'work_city'\)/);
+  assert.match(adminPageSource, /city: getLegacyCitySlug\(studioForm\.work_city\)/);
+  assert.match(adminPageSource, /work_city: studioForm\.work_city\.trim\(\)/);
+  assert.match(adminPageSource, /function applyAdminCitySelection/);
+  for (const field of ['work_area', 'area', 'postal_code', 'work_place_label', 'exact_address']) {
+    assert.match(adminPageSource, new RegExp(`${field}: ''`));
+  }
+  assert.match(adminPageSource, /resolveManualSearcherLocation\(workCity\)/);
 });
 
 test('category and status normalization accept production admin payload aliases', async () => {

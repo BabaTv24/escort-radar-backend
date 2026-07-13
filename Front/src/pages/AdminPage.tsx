@@ -16,7 +16,7 @@ import { activePublicCategoryOptions, categoryOptions } from '../data/filterOpti
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
-import { berlinDistrictOptions, resolveBerlinPostalDistrict } from '../lib/geo';
+import { berlinDistrictOptions, resolveBerlinPostalDistrict, resolveManualSearcherLocation } from '../lib/geo';
 import {
   normalizeProfileEthnicity,
   normalizeProfileGender,
@@ -795,6 +795,9 @@ export function AdminPage() {
         account_type: adminAccountTypeToBackend(studioForm.account_type),
         profile_type: adminProfileTypeToBackend(studioForm.profile_type),
         category: normalizeCategoryKey(studioForm.category) || studioForm.category,
+        city: getLegacyCitySlug(studioForm.work_city),
+        work_city: studioForm.work_city.trim(),
+        work_country: studioForm.work_country,
         height: studioForm.height_cm,
         languages: Array.isArray(studioForm.languages) ? studioForm.languages : String(studioForm.languages || '').split(',').map((item) => item.trim()).filter(Boolean),
         opening_hours: studioForm.opening_hours ? { note: studioForm.opening_hours } : {},
@@ -821,15 +824,16 @@ export function AdminPage() {
       const result = studioForm.id
         ? await api.updateAdminProfile(token, studioForm.id, body)
         : await api.createAdminProfile(token, body);
+      const savedProfile = result.profile;
       setProfiles((current) => {
-        const exists = current.some((profile) => profile.id === result.profile.id);
+        const exists = current.some((profile) => profile.id === savedProfile.id);
         return exists
-          ? current.map((profile) => profile.id === result.profile.id ? { ...profile, ...result.profile } : profile)
-          : [result.profile, ...current];
+          ? current.map((profile) => profile.id === savedProfile.id ? { ...profile, ...savedProfile } : profile)
+          : [savedProfile, ...current];
       });
       setStudioFile(null);
       if (studioForm.id) {
-        editStudioProfile(result.profile);
+        editStudioProfile(savedProfile);
       } else {
         setStudioForm({ ...emptyStudioForm });
       }
@@ -1263,12 +1267,10 @@ export function AdminPage() {
         <AdminField label={t('admin.profileEditor.workCountry')}><select value={country.code} onChange={(event) => {
           const nextCountry = getAdminLocationCountry(countries, event.target.value);
           const nextCity = nextCountry.cities[0]?.name || '';
-          const nextArea = nextCountry.cities[0]?.districts[0] || '';
-          setStudioForm({ ...studioForm, work_country: nextCountry.code, work_city: nextCity, city: getLegacyCitySlug(nextCity), work_area: nextArea, area: nextArea });
+          setStudioForm(applyAdminCitySelection({ ...studioForm, work_country: nextCountry.code }, nextCity));
         }}>{countries.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></AdminField>
         <AdminField label={t('admin.profileEditor.workCity')}><input list="admin-city-options" placeholder={t('admin.location.manualCity')} value={studioForm.work_city} onChange={(event) => {
-          const nextArea = getAdminLocationCity(country, event.target.value)?.districts[0] || '';
-          setStudioForm({ ...studioForm, work_city: event.target.value, city: getLegacyCitySlug(event.target.value), work_area: nextArea, area: nextArea });
+          setStudioForm(applyAdminCitySelection(studioForm, event.target.value));
         }} /></AdminField>
         <datalist id="admin-city-options">{cities.map((city) => <option key={city.name} value={city.name} />)}</datalist>
         <AdminField label={t('profileDetails.berlinDistrict')}><select value={districts.includes(studioForm.work_area) ? studioForm.work_area : ''} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value })}><option value="">{t('profileDetails.chooseDistrict')}</option>{districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></AdminField>
@@ -1276,7 +1278,7 @@ export function AdminPage() {
         <datalist id="admin-district-options">{districts.map((district) => <option key={district} value={district} />)}</datalist>
         <AdminField label={t('admin.location.postalCode')}><input maxLength={20} placeholder="12043" value={studioForm.postal_code} onChange={(event) => {
           const postalCode = event.target.value.slice(0, 20);
-          const district = resolveBerlinPostalDistrict(postalCode);
+          const district = isBerlin ? resolveBerlinPostalDistrict(postalCode) : '';
           setStudioForm({
             ...studioForm,
             postal_code: postalCode,
@@ -3005,6 +3007,26 @@ function getAdminLocationCountry(countries: ReturnType<typeof getAdminLocationCo
 function getAdminLocationCity(country: ReturnType<typeof getAdminLocationCountries>[number], value: string | null | undefined) {
   const normalized = normalizeLocationValue(value || '');
   return country.cities.find((city) => normalizeLocationValue(city.name) === normalized) || null;
+}
+
+function applyAdminCitySelection<T extends {
+  work_city: string; city: string; work_area: string; area: string; postal_code: string;
+  latitude: string; longitude: string; work_place_label: string; exact_address: string;
+}>(form: T, value: string): T {
+  const workCity = value.trimStart();
+  const resolved = resolveManualSearcherLocation(workCity);
+  return {
+    ...form,
+    work_city: workCity,
+    city: workCity.trim() ? getLegacyCitySlug(workCity) : '',
+    work_area: '',
+    area: '',
+    postal_code: '',
+    work_place_label: '',
+    exact_address: '',
+    latitude: resolved ? String(resolved.lat) : '',
+    longitude: resolved ? String(resolved.lng) : ''
+  };
 }
 
 function subscriptionProgressInfo(startValue: unknown, endValue: unknown) {

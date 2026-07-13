@@ -9,7 +9,7 @@ import { activePublicCategoryOptions, categoryOptions, defaultServiceMenuNames, 
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
-import { DEFAULT_RADAR_RADIUS_METERS, MAX_RADAR_RADIUS_METERS, RADAR_RADIUS_OPTIONS_METERS, clearSavedSearchLocation, formatRadiusMeters, getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange, readSavedSearchLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
+import { DEFAULT_RADAR_RADIUS_METERS, MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatRadiusMeters, getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange, readSavedSearchLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { normalizeCategoryKey } from '../lib/categories';
 import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
@@ -390,10 +390,14 @@ export function CityPage() {
             <span>{t('radar.radius')}</span>
             <strong>{formatRadiusMeters(draftFilters.radius)}</strong>
           </span>
-          <select
+          <input
+            type="range"
+            min={MIN_RADAR_RADIUS_METERS}
+            max={MAX_RADAR_RADIUS_METERS}
+            step={10}
             value={draftFilters.radius}
             onChange={(event) => updateRadarFilter('radius', Number(event.target.value))}
-          >{RADAR_RADIUS_OPTIONS_METERS.map((value) => <option key={value} value={value}>{formatRadiusMeters(value)}</option>)}</select>
+          />
         </label>
 
         <label className="premium-field compact-field">

@@ -4,7 +4,7 @@ import type { FormEvent } from 'react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { RADAR_RADIUS_OPTIONS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, readSavedSearchLocation, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
+import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, readSavedSearchLocation, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
 import { getPublicLocationLabel } from '../lib/locationLabels';
 import './RadarPanel.css';
 
@@ -146,10 +146,14 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             <label className="live-radar-range">
               <span>{t('radar.radius')}</span>
               <strong>{formatRadiusMeters(radius)}</strong>
-              <select
+              <input
+                type="range"
+                min={MIN_RADAR_RADIUS_METERS}
+                max={MAX_RADAR_RADIUS_METERS}
+                step={10}
                 value={radius}
                 onChange={(event) => onRadiusChange(Number(event.target.value))}
-              >{RADAR_RADIUS_OPTIONS_METERS.map((value) => <option key={value} value={value}>{formatRadiusMeters(value)}</option>)}</select>
+              />
             </label>
           ) : (
             <label className="radar-radius-slider">
@@ -157,10 +161,14 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
                 <span>{t('radar.radius')}</span>
                 <strong>{formatRadiusMeters(radius)}</strong>
               </span>
-              <select
+              <input
+                type="range"
+                min={MIN_RADAR_RADIUS_METERS}
+                max={MAX_RADAR_RADIUS_METERS}
+                step={10}
                 value={radius}
                 onChange={(event) => onRadiusChange(Number(event.target.value))}
-              >{RADAR_RADIUS_OPTIONS_METERS.map((value) => <option key={value} value={value}>{formatRadiusMeters(value)}</option>)}</select>
+              />
             </label>
           )}
         </div>

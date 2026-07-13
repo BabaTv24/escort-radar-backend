@@ -1591,7 +1591,7 @@ adminRouter.patch('/profiles/:id/promotion', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
-  const profileData = normalizeAdminProfilePayload(req.body);
+  const profileData = normalizeAdminProfilePayload(req.body, true);
   if ('error' in profileData) return res.status(400).json({ error: profileData.error });
 
   const patch = {
@@ -2931,7 +2931,8 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
   const ownerEmail = optionalEmail(body.owner_email || body.email);
   if (!ownerEmail) return { error: 'owner_email is required' };
 
-  const city = normalizeHermesCity(body.city);
+  const cityInput = allowImportedCity && Object.prototype.hasOwnProperty.call(body, 'work_city') ? body.work_city : body.city;
+  const city = normalizeHermesCity(cityInput);
   if (!city) return { error: 'city is required' };
   if (!allowImportedCity && !['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].includes(city)) return { error: 'Unsupported city' };
 
@@ -2970,7 +2971,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
       display_name: displayName,
       city,
       area: optionalText(body.area, 80),
-      work_country: optionalText(body.work_country, 80) || 'DE',
+      work_country: optionalText(body.work_country || body.country, 80) || 'DE',
       work_city: optionalText(body.work_city, 100) || adminCityLabel(city),
       work_area: optionalText(body.work_area, 120) || optionalText(body.area, 80),
       postal_code: optionalText(body.postal_code, 20),
