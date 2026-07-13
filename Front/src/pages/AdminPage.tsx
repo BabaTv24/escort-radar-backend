@@ -5,6 +5,11 @@ import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, Me
 import { api } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientPersonalProfile, HermesProfilePreview, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+
+type HermesImportPreview = HermesProfilePreview & {
+  city_label?: string;
+  currency?: 'EUR' | 'PLN' | 'USD' | 'GBP' | 'CHF';
+};
 import { useI18n } from '../i18n';
 import { AdminReferralTree } from '../components/AdminReferralTree';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
@@ -129,7 +134,7 @@ const emptyBcCoinPackageForm: Partial<BcCoinPackage> = {
   promotion_ends_at: ''
 };
 
-const emptyHermesPreview: HermesProfilePreview = {
+const emptyHermesPreview: HermesImportPreview = {
   display_name: '',
   city: 'berlin',
   category: 'ladies',
@@ -253,7 +258,7 @@ export function AdminPage() {
   const [profileImportReport, setProfileImportReport] = useState<{ created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } | null>(null);
   const [hermesOpen, setHermesOpen] = useState(false);
   const [hermesUrl, setHermesUrl] = useState('');
-  const [hermesPreview, setHermesPreview] = useState<HermesProfilePreview | null>(null);
+  const [hermesPreview, setHermesPreview] = useState<HermesImportPreview | null>(null);
   const [hermesWarnings, setHermesWarnings] = useState<string[]>([]);
   const [hermesBusy, setHermesBusy] = useState(false);
   const [hermesStatus, setHermesStatus] = useState<'idle' | 'analysing' | 'success' | 'error'>('idle');
@@ -1021,7 +1026,7 @@ export function AdminPage() {
     }
   }
 
-  function updateHermesPreview(patch: Partial<HermesProfilePreview>) {
+  function updateHermesPreview(patch: Partial<HermesImportPreview>) {
     setHermesPreview((current) => ({ ...(current || emptyHermesPreview), ...patch }));
   }
 
@@ -1674,7 +1679,7 @@ export function AdminPage() {
               <>
                 <div className="admin-form-grid hermes-preview-grid">
                   <AdminField label={t('admin.profileEditor.displayName')}><input value={hermesPreview.display_name || hermesPreview.name || ''} onChange={(event) => updateHermesPreview({ display_name: event.target.value, name: event.target.value })} /></AdminField>
-                  <AdminField label={t('admin.profileEditor.city')}><input value={hermesPreview.city || ''} onChange={(event) => updateHermesPreview({ city: event.target.value })} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.city')}><input value={hermesPreview.city_label || hermesPreview.city || ''} onChange={(event) => updateHermesPreview({ city: event.target.value, city_label: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.category')}><input value={hermesPreview.category || ''} onChange={(event) => updateHermesPreview({ category: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.phone')}><input value={hermesPreview.phone || ''} onChange={(event) => updateHermesPreview({ phone: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.hermes.gender')}><input value={hermesPreview.gender || ''} onChange={(event) => updateHermesPreview({ gender: event.target.value })} /></AdminField>
@@ -1696,6 +1701,7 @@ export function AdminPage() {
                   <AdminField label="Telegram"><input value={hermesPreview.telegram || ''} onChange={(event) => updateHermesPreview({ telegram: event.target.value })} /></AdminField>
                   <AdminField label="WhatsApp"><input value={hermesPreview.whatsapp || ''} onChange={(event) => updateHermesPreview({ whatsapp: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={hermesPreview.price_1h || ''} onChange={(event) => updateHermesPreview({ price_1h: Number(event.target.value || 0) })} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.currency')}><select value={hermesPreview.currency || 'EUR'} onChange={(event) => updateHermesPreview({ currency: event.target.value as HermesImportPreview['currency'] })}>{['EUR', 'PLN', 'USD', 'GBP', 'CHF'].map((currency) => <option key={currency} value={currency}>{currency}</option>)}</select></AdminField>
                   <AdminField label={t('admin.hermes.services')}><textarea value={(hermesPreview.services || []).join(', ')} onChange={(event) => updateHermesPreview({ services: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
                   <AdminField label={t('admin.hermes.rawServices')}><textarea value={(hermesPreview.raw_services || []).join('\n')} onChange={(event) => updateHermesPreview({ raw_services: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
                   <AdminField label={t('admin.hermes.unmappedTags')}><textarea value={(hermesPreview.unmapped_tags || []).join('\n')} readOnly /></AdminField>

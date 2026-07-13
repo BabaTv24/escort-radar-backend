@@ -12,10 +12,10 @@ import {
   isRealClientActivationPayment
 } from '../Back/src/adminClients.ts';
 import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts';
-import { isValidLatLng, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
+import { RADAR_RADIUS_OPTIONS_METERS, isProfileInRadarRange, isValidLatLng, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
 import { getSafeNextPath } from '../Front/src/lib/authRedirect.ts';
 import { normalizeOperatorStatus, normalizeProfileCategory, validateProfileInput } from '../Back/src/validation.ts';
-import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, mapImportedServiceValues, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile } from '../Back/src/hermesImport.ts';
+import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, mapImportedServiceValues, normalizeImportedCity, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../Back/src/hermesImport.ts';
 import { fetchPublicImportResource, readImportResponseLimited, validatePublicImportUrl } from '../Back/src/publicImportSecurity.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
@@ -1028,6 +1028,22 @@ test('radar distance helpers reject invalid coordinates and never return negativ
   assert.ok(distance !== null && distance < 25);
 });
 
+test('radar resolves Swiebodzin safely and respects 100/150 km radius boundaries', () => {
+  const buckow = { lat: 52.424, lng: 13.462, source: 'manual' as const };
+  const profile = {
+    id: 'swiebodzin-profile', display_name: 'Swiebodzin', city: 'swiebodzin', work_city: 'Świebodzin',
+    location_visibility: 'city_only', location_mode: 'city_only'
+  } as any;
+  const resolved = resolveProfileRadarLocation(profile);
+  const distance = resolved ? safeDistanceKm(buckow, resolved) : null;
+
+  assert.deepEqual(RADAR_RADIUS_OPTIONS_METERS, [5_000, 10_000, 25_000, 50_000, 100_000, 150_000, 250_000]);
+  assert.equal(resolved?.precision, 'city_fallback');
+  assert.ok(distance !== null && distance > 100 && distance < 150);
+  assert.equal(isProfileInRadarRange(profile, buckow, 100_000).inRange, false);
+  assert.equal(isProfileInRadarRange(profile, buckow, 150_000).inRange, true);
+});
+
 test('radar location resolver falls back from bad coords to Berlin postal and area data', () => {
   const friedrichshain = resolveProfileRadarLocation({
     id: 'profile-10247',
@@ -1531,6 +1547,28 @@ test('Escort Club parser reads the real profile DOM sections without ads or SEO 
   assert.deepEqual(profile.languages, ['en','de']); assert.equal(profile.ethnicity, 'european'); assert.equal(profile.nationality, 'Niemiecka'); assert.equal(profile.zodiac_sign, 'Bliźnięta');
   assert.equal(profile.price_1h, 250); assert.deepEqual(profile.services, ['masaz_body_to_body','face_fucking']); assert.deepEqual(profile.unmapped_tags, ['Nieznany tag']);
   assert.deepEqual(profile.images, ['https://static.escort.club/galleries/wolfie/1.jpg']);
+});
+
+test('import city and price parsing preserves real city and supported currency', () => {
+  assert.equal(normalizeImportedCity('Berlin'), 'berlin');
+  assert.equal(normalizeImportedCity('Świebodzin'), 'swiebodzin');
+  assert.equal(normalizeImportedCity('Warszawa'), 'warszawa');
+  for (const [source, amount, currency] of [
+    ['250 EUR', 250, 'EUR'], ['250 €', 250, 'EUR'], ['500 PLN', 500, 'PLN'],
+    ['500 zł', 500, 'PLN'], ['500 ZŁ', 500, 'PLN'], ['100 USD', 100, 'USD'],
+    ['100 $', 100, 'USD'], ['90 GBP', 90, 'GBP'], ['80 CHF', 80, 'CHF']
+  ] as const) assert.deepEqual(parseImportedPrice(source), { amount, currency });
+
+  const html = `<html><body><nav>Popularne miasta: Berlin</nav><main><h1>Anna</h1></main><footer>Berlin</footer></body></html>`;
+  const profile = parseEscortClubProfile(html, 'https://pl.escort.club/anons/123.html');
+  assert.equal(profile?.city, '');
+
+  const plnProfile = parseEscortClubProfile(`<html><head><script type="application/ld+json">{"address":{"addressLocality":"Świebodzin"}}</script></head><body>
+    <h1>Anna</h1><div class="contant-prices"><div class="stat-elem"><div class="sub-label">1 godz:</div><div class="sub-desc">500 ZŁ</div></div></div></div></div>
+  </body></html>`, 'https://pl.escort.club/anons/124.html');
+  assert.equal(plnProfile?.city, 'Świebodzin');
+  assert.equal(plnProfile?.price_1h, 500);
+  assert.equal(plnProfile?.currency, 'PLN');
 });
 
 test('Hermes sponsored draft supports generated technical owner without a public email or password', async () => {

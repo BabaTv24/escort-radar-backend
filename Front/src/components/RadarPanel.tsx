@@ -4,7 +4,7 @@ import type { FormEvent } from 'react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { clearSavedSearchLocation, formatDistanceKm, isValidLatLng, readSavedSearchLocation, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
+import { RADAR_RADIUS_OPTIONS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, readSavedSearchLocation, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
 import { getPublicLocationLabel } from '../lib/locationLabels';
 import './RadarPanel.css';
 
@@ -145,30 +145,22 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           {compact ? (
             <label className="live-radar-range">
               <span>{t('radar.radius')}</span>
-              <strong>{radius} km</strong>
-              <input
-                type="range"
-                min={1}
-                max={100}
-                step={1}
+              <strong>{formatRadiusMeters(radius)}</strong>
+              <select
                 value={radius}
                 onChange={(event) => onRadiusChange(Number(event.target.value))}
-              />
+              >{RADAR_RADIUS_OPTIONS_METERS.map((value) => <option key={value} value={value}>{formatRadiusMeters(value)}</option>)}</select>
             </label>
           ) : (
             <label className="radar-radius-slider">
               <span className="radar-radius-slider-head">
                 <span>{t('radar.radius')}</span>
-                <strong>{radius} km</strong>
+                <strong>{formatRadiusMeters(radius)}</strong>
               </span>
-              <input
-                type="range"
-                min={1}
-                max={100}
-                step={1}
+              <select
                 value={radius}
                 onChange={(event) => onRadiusChange(Number(event.target.value))}
-              />
+              >{RADAR_RADIUS_OPTIONS_METERS.map((value) => <option key={value} value={value}>{formatRadiusMeters(value)}</option>)}</select>
             </label>
           )}
         </div>
@@ -240,7 +232,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         {mapApiKey && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
         <div className="radar-distance-rings" aria-hidden="true">
           <span className="radar-distance-ring selected">
-            <em>{radius} km {t('radar.radiusLabel').toLowerCase()}</em>
+            <em>{formatRadiusMeters(radius)} {t('radar.radiusLabel').toLowerCase()}</em>
           </span>
         </div>
         <div className="radar-sweep" />
@@ -407,7 +399,7 @@ function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: n
   if (!profileLocation) return null;
 
   const distanceKm = safeDistanceKm(searcherLocation, profileLocation);
-  if (distanceKm === null || distanceKm > radius) return null;
+  if (distanceKm === null || distanceKm * 1000 > radius) return null;
 
   const bearingDeg = getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLocation.lat, profileLocation.lng);
   const operatorStatus = getOperatorStatus(profile);
@@ -427,7 +419,7 @@ function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: n
 function getRadarPoint(radius: number, distanceKm: number, bearingDeg: number) {
   const markerPaddingPercent = 11;
   const maxPixelRadius = 50 - markerPaddingPercent;
-  const radialRatio = Math.min(Math.max(distanceKm / Math.max(radius, 1), 0), 1);
+  const radialRatio = Math.min(Math.max(distanceKm * 1000 / Math.max(radius, 1), 0), 1);
   const minVisibleRatio = distanceKm > 0 ? 0.08 : 0;
   const visualRatio = Math.max(radialRatio, minVisibleRatio);
   const bearingRad = bearingDeg * (Math.PI / 180);

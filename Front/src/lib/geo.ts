@@ -16,6 +16,10 @@ export type ProfileRadarLocation = {
 };
 
 export const clientSearchLocationStorageKey = 'escortRadar.clientSearchLocation';
+export const RADAR_RADIUS_OPTIONS_METERS = [5_000, 10_000, 25_000, 50_000, 100_000, 150_000, 250_000] as const;
+export const MIN_RADAR_RADIUS_METERS = RADAR_RADIUS_OPTIONS_METERS[0];
+export const MAX_RADAR_RADIUS_METERS = RADAR_RADIUS_OPTIONS_METERS[RADAR_RADIUS_OPTIONS_METERS.length - 1];
+export const DEFAULT_RADAR_RADIUS_METERS = 25_000;
 
 const cityCenters: Record<string, { lat: number; lng: number }> = {
   berlin: { lat: 52.52, lng: 13.405 },
@@ -24,6 +28,7 @@ const cityCenters: Record<string, { lat: number; lng: number }> = {
   koeln: { lat: 50.9375, lng: 6.9603 },
   muenchen: { lat: 48.1351, lng: 11.582 },
   warszawa: { lat: 52.2297, lng: 21.0122 },
+  swiebodzin: { lat: 52.2475, lng: 15.5336 },
   poznan: { lat: 52.4064, lng: 16.9252 },
   krakow: { lat: 50.0647, lng: 19.945 },
   wroclaw: { lat: 51.1079, lng: 17.0385 },
@@ -300,18 +305,17 @@ export function getProfileCoordinates(profile: Profile) {
   const lat = toCoordinate(raw.latitude ?? raw.lat);
   const lng = toCoordinate(raw.longitude ?? raw.lng);
   if (isValidLatLng(lat, lng)) return { lat, lng };
-  return getCityCenter(profile.city);
+  return cityCenters[normalizeLocationQuery(profile.work_city || profile.city)] || null;
 }
 
-export function isProfileInRadarRange(profile: Profile, searcherLocation: GeoPoint, selectedRadius = 25) {
+export function isProfileInRadarRange(profile: Profile, searcherLocation: GeoPoint, selectedRadiusMeters = DEFAULT_RADAR_RADIUS_METERS) {
   const profileLocation = resolveProfileRadarLocation(profile);
   if (!profileLocation) return { inRange: false, distance_km: null };
   const distance = safeDistanceKm(searcherLocation, profileLocation);
   if (distance === null) return { inRange: false, distance_km: null };
-  const serviceRadius = profile.service_radius_km || 25;
 
   return {
-    inRange: distance <= selectedRadius && distance <= serviceRadius,
+    inRange: distance * 1000 <= selectedRadiusMeters,
     distance_km: Math.round(distance * 10) / 10
   };
 }
@@ -391,10 +395,8 @@ export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocat
     if (areaLocation) return { lat: areaLocation.lat, lng: areaLocation.lng, label: areaLocation.label, precision: 'area' };
   }
 
-  if (profile.location_visibility !== 'city_only' && normalizeLocationQuery(city) === 'berlin') {
-    const center = getCityCenter(city);
-    return { ...center, label: 'Berlin', precision: 'city_fallback' };
-  }
+  const cityCenter = cityCenters[normalizeLocationQuery(city)];
+  if (cityCenter) return { ...cityCenter, label: getCityLabel(city), precision: 'city_fallback' };
 
   return null;
 }
@@ -417,6 +419,14 @@ export function formatDistanceKm(distanceKm: unknown, unavailableLabel = '') {
   if (distance < 0.1) return '< 100 m';
   if (distance < 10) return `${distance.toFixed(1)} km`;
   return `${Math.round(distance)} km`;
+}
+
+export function formatRadiusMeters(radiusMeters: unknown) {
+  const meters = Number(radiusMeters);
+  if (!Number.isFinite(meters) || meters <= 0) return '10 m';
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  const kilometers = meters / 1000;
+  return Number.isInteger(kilometers) ? `${kilometers} km` : `${kilometers.toFixed(1)} km`;
 }
 
 function resolveKnownLocation(input: string) {

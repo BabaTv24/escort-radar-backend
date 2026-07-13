@@ -9,7 +9,7 @@ import { activePublicCategoryOptions, categoryOptions, defaultServiceMenuNames, 
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
-import { clearSavedSearchLocation, getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange, readSavedSearchLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
+import { DEFAULT_RADAR_RADIUS_METERS, MAX_RADAR_RADIUS_METERS, RADAR_RADIUS_OPTIONS_METERS, clearSavedSearchLocation, formatRadiusMeters, getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange, readSavedSearchLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { normalizeCategoryKey } from '../lib/categories';
 import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
@@ -35,7 +35,7 @@ function defaultFilters(city: string): SearchFilters {
     city,
     category: '',
     availability_status: 'all',
-    radius: 25,
+    radius: DEFAULT_RADAR_RADIUS_METERS,
     price_max: '',
     visit_types: [],
     service_tags: [],
@@ -154,6 +154,7 @@ export function CityPage() {
     const params = new URLSearchParams();
     params.set('city', urlCitySlug);
     params.set('country', countryCode);
+    params.set('radar', '1');
     if (appliedFilters.category) params.set('category', appliedFilters.category);
     if (appliedFilters.tag_ids.length) params.set('tags', appliedFilters.tag_ids.join(','));
     return `?${params.toString()}`;
@@ -229,7 +230,7 @@ export function CityPage() {
       radarInputProfiles: sortedProfiles.length,
       radarProfiles: radarProfiles.length,
       favoriteProfiles: favoriteProfileIds.size,
-      selectedRadiusKm: draftFilters.radius,
+      selectedRadius: formatRadiusMeters(draftFilters.radius),
       selectedCategory: appliedFilters.category,
       selectedCity: urlCitySlug,
       selectedCountry: countryCode,
@@ -387,16 +388,12 @@ export function CityPage() {
         <label className="radar-radius-slider premium-filter-group">
           <span className="radar-radius-slider-head">
             <span>{t('radar.radius')}</span>
-            <strong>{draftFilters.radius} km</strong>
+            <strong>{formatRadiusMeters(draftFilters.radius)}</strong>
           </span>
-          <input
-            type="range"
-            min={1}
-            max={100}
-            step={1}
+          <select
             value={draftFilters.radius}
             onChange={(event) => updateRadarFilter('radius', Number(event.target.value))}
-          />
+          >{RADAR_RADIUS_OPTIONS_METERS.map((value) => <option key={value} value={value}>{formatRadiusMeters(value)}</option>)}</select>
         </label>
 
         <label className="premium-field compact-field">
@@ -485,7 +482,7 @@ export function CityPage() {
         </div>
 
         <div className="locked-filter-preview" aria-hidden="true">
-          <span>{t('radar.radius')} <strong>{draftFilters.radius} km</strong></span>
+          <span>{t('radar.radius')} <strong>{formatRadiusMeters(draftFilters.radius)}</strong></span>
           <span>{t('radar.status')}</span>
           <span>{t('filters.category')}</span>
           <span>{t('filters.price')}</span>
@@ -646,7 +643,7 @@ export function CityPage() {
             <EmptyState
               title={t('search.noProfilesForCity')}
               message={t('city.emptySearchText')}
-              action={<button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25, 100))}><span>{t('city.increaseRadius')}</span></button>}
+              action={<button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => updateRadarFilter('radius', Math.min(draftFilters.radius + 25_000, MAX_RADAR_RADIUS_METERS))}><span>{t('city.increaseRadius')}</span></button>}
             />
           )
         )}
@@ -723,7 +720,8 @@ function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocat
     const radarRange = getSearchRange(profile, searcherLocation, filters.radius);
     return { ...profile, distance_km: radarRange.distance_km };
   }).filter((profile) => {
-    if (filters.city && !profileMatchesCity(profile, filters.city)) return false;
+    const radarRange = getSearchRange(profile, searcherLocation, filters.radius);
+    if (filters.city && !profileMatchesCity(profile, filters.city) && !radarRange.inRange) return false;
     if (filters.category && normalizeCategoryKey(profile.category) !== filters.category) return false;
     if (!matchesOperatorStatusFilter(profile, filters.availability_status)) return false;
     if (priceMax && profile.price_1h && profile.price_1h > priceMax) return false;
@@ -744,7 +742,7 @@ function getSearchRange(profile: Profile, searcherLocation: GeoPoint, selectedRa
   if (distance === null) return { inRange: false, distance_km: null };
 
   return {
-    inRange: distance <= selectedRadius,
+    inRange: distance * 1000 <= selectedRadius,
     distance_km: Math.round(distance * 10) / 10
   };
 }

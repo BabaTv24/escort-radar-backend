@@ -9,11 +9,60 @@ export type ImportedDetails = {
 };
 
 export type EscortClubProfile = ImportedDetails & {
-  name: string; display_name: string; phone_id?: string; city?: string; category: string;
+  name: string; display_name: string; phone_id?: string; city?: string; city_label?: string; category: string;
   height?: number;
   services: string[]; raw_services: string[]; unmapped_tags: string[];
-  prices: Record<string, number>; price_1h?: number; images: string[];
+  prices: Record<string, number>; price_1h?: number; currency?: string; images: string[];
 };
+
+export type ImportedPrice = { amount: number; currency: 'EUR' | 'PLN' | 'USD' | 'GBP' | 'CHF' };
+
+export function normalizeImportedCity(value: unknown) {
+  return String(value || '').trim().toLowerCase().normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[łŁ]/g, 'l')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
+}
+
+export function normalizeImportedCurrency(value: unknown): ImportedPrice['currency'] | '' {
+  const token = String(value || '').trim().toUpperCase();
+  if (token === '€' || token === 'EUR' || token === '&EURO;') return 'EUR';
+  if (token === 'ZŁ' || token === 'ZL' || token === 'PLN') return 'PLN';
+  if (token === '$' || token === 'USD') return 'USD';
+  if (token === '£' || token === 'GBP') return 'GBP';
+  if (token === 'CHF') return 'CHF';
+  return '';
+}
+
+export function parseImportedPrice(value: unknown): ImportedPrice | null {
+  const decoded = decodeImportHtml(String(value || '')).replace(/\s+/g, ' ');
+  const match = decoded.match(/(?:^|[^\d])([0-9]{1,6}(?:[.,][0-9]{1,2})?)\s*(EUR|€|PLN|zł|zl|USD|\$|GBP|£|CHF)(?:\b|$)/i);
+  if (!match) return null;
+  const amount = Number(match[1].replace(',', '.'));
+  const currency = normalizeImportedCurrency(match[2]);
+  return Number.isFinite(amount) && amount >= 0 && currency ? { amount, currency } : null;
+}
+
+export function extractImportedProfileCity(html: string) {
+  for (const match of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const queue: unknown[] = [JSON.parse(decodeImportHtml(match[1]))];
+      while (queue.length) {
+        const item = queue.shift();
+        if (Array.isArray(item)) { queue.push(...item); continue; }
+        if (!item || typeof item !== 'object') continue;
+        const record = item as Record<string, unknown>;
+        const locality = String(record.addressLocality || '').trim();
+        if (locality) return locality;
+        queue.push(...Object.values(record));
+      }
+    } catch { /* malformed structured data is ignored */ }
+  }
+  const scoped = html.match(/<(?:main|article)\b[^>]*>([\s\S]*?)<\/(?:main|article)>/i)?.[1]
+    || html.replace(/<(?:nav|aside|footer)\b[\s\S]*?<\/(?:nav|aside|footer)>/gi, '')
+      .replace(/<[^>]+class=["'][^"']*(?:recommended|popular-cities)[^"']*["'][^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+  return decodeImportHtml(scoped.match(/<[^>]+class=["'][^"']*(?:content-location|profile-location|profile-city)[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i)?.[1] || '')
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 export function canLinkExistingImportedUser(user: { app_metadata?: Record<string, unknown> }, marker: string) {
   return user.app_metadata?.created_by === marker;
@@ -166,8 +215,11 @@ export function parseEscortClubProfile(html: string, sourceUrl: string): EscortC
   const details = normalizeImportedDetails(pairs);
 
   const priceScope = html.match(/<div\b[^>]*class=["'][^"']*contant-prices[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/i)?.[1] || '';
-  const oneHour = priceScope.match(/(?:1\s*(?:godz|h|stunde|hour))[^<]{0,20}[\s\S]{0,200}?(\d{2,5})\s*(?:EUR|&euro;|€)/i)?.[1];
-  const price1h = oneHour ? Number(oneHour) : undefined;
+  const priceText = clean(priceScope);
+  const oneHourContext = priceText.match(/(?:^|\s)1\s*(?:godz|h|stunde|hour)[\s\S]{0,100}/i)?.[0]
+    || priceText.match(/[\s\S]{0,100}(?:^|\s)1\s*(?:godz|h|stunde|hour)/i)?.[0];
+  const importedPrice = parseImportedPrice(oneHourContext || priceText);
+  const price1h = importedPrice?.amount;
 
   const infoScope = html.match(/<section\b[^>]*class=["'][^"']*anons-info-sec[^"']*["'][^>]*>([\s\S]*?)<\/section>/i)?.[1] || '';
   const tagsScope = infoScope.match(/<div\b[^>]*class=["'][^"']*tags-box[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] || '';
@@ -183,14 +235,13 @@ export function parseEscortClubProfile(html: string, sourceUrl: string): EscortC
     } catch { /* ignore malformed gallery URL */ }
   }
   const phoneId = html.match(/data-phone-id=["'](\d+)["']/i)?.[1];
-  const city = clean(html.match(/"addressLocality"\s*:\s*"([^"]+)"/i)?.[1])
-    || clean(html.match(/<div\b[^>]*class=["'][^"']*content-location[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1]);
+  const city = extractImportedProfileCity(html);
 
   return {
-    name, display_name: name, phone_id: phoneId, city, category: 'ladies', ...details,
+    name, display_name: name, phone_id: phoneId, city, city_label: city, category: 'ladies', ...details,
     height: details.height_cm,
     services: mapped.mapped, raw_services: mapped.raw, unmapped_tags: mapped.unmapped,
-    prices: price1h ? { price_1h: price1h } : {}, price_1h: price1h,
+    prices: price1h ? { price_1h: price1h } : {}, price_1h: price1h, currency: importedPrice?.currency,
     images: [...new Set(imageValues)].slice(0, 12)
   };
 }

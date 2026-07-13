@@ -24,7 +24,7 @@ import { writeAdminAuditLog } from '../services/adminAudit.js';
 import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
-import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, extractServiceTagCandidates, mapImportedServiceValues, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile } from '../hermesImport.js';
+import { canLinkExistingImportedUser, extractImportPairs, extractImportedProfileCity, extractPublicPhone, extractServiceTagCandidates, mapImportedServiceValues, normalizeImportedCity, normalizeImportedCurrency, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../hermesImport.js';
 import { assertPublicImportDns as secureAssertPublicImportDns, fetchPublicImportResource as secureFetchPublicImportResource, readImportResponseLimited as secureReadImportResponseLimited, validatePublicImportUrl as secureValidatePublicImportUrl } from '../publicImportSecurity.js';
 import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
 import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfile.js';
@@ -860,6 +860,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     owner_email: ownerEmail,
     display_name: displayName,
     city: normalizeHermesCity((incomingProfile as any).city),
+    work_city: optionalText((incomingProfile as any).city_label || (incomingProfile as any).city, 100),
     area: optionalText((incomingProfile as any).location || (incomingProfile as any).area, 80),
     work_area: optionalText((incomingProfile as any).location || (incomingProfile as any).work_area, 120),
     category: (incomingProfile as any).category || 'ladies',
@@ -871,6 +872,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     services: Array.isArray((incomingProfile as any).services) ? (incomingProfile as any).services : [],
     website: optionalText((incomingProfile as any).website, 240) || sourceUrl,
     price_1h: numericValue((incomingProfile as any).price_1h || (incomingProfile as any).prices?.price_1h || 180) || 180,
+    currency: normalizeImportedCurrency((incomingProfile as any).currency) || 'EUR',
     is_published: false,
     verified: false,
     is_sponsored: true,
@@ -879,7 +881,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     subscription_status: 'incomplete',
     listing_plan: 'hermes_import_draft',
     subscription_note: `Hermes import source: ${sourceUrl}`
-  });
+  }, true);
   if ('error' in normalized) return res.status(400).json({ error: normalized.error, stage: 'validate profile payload' });
   let authUser: any = null;
   let authUserCreated = false;
@@ -2923,14 +2925,15 @@ export async function validateBusinessProfileLimit(input: Record<string, any>, e
   return null;
 }
 
-function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Record<string, unknown> } | { error: string } {
+function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImportedCity = false): { data: Record<string, unknown> } | { error: string } {
   const displayName = optionalText(body.display_name, 80);
   if (!displayName) return { error: 'display_name is required' };
   const ownerEmail = optionalEmail(body.owner_email || body.email);
   if (!ownerEmail) return { error: 'owner_email is required' };
 
-  const city = String(body.city || 'berlin').trim().toLowerCase();
-  if (!['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].includes(city)) return { error: 'Unsupported city' };
+  const city = normalizeHermesCity(body.city);
+  if (!city) return { error: 'city is required' };
+  if (!allowImportedCity && !['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].includes(city)) return { error: 'Unsupported city' };
 
   const operatorStatus = normalizeAdminOperatorStatus(body.operator_status);
   const services = normalizeAdminServices(body.services);
@@ -2949,7 +2952,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>): { data: Re
   const languages = Array.isArray(body.languages)
     ? body.languages.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
     : ['DE', 'EN'];
-  const currency = optionalText(body.currency, 8) || 'EUR';
+  const currency = normalizeImportedCurrency(body.currency) || 'EUR';
   const listingPlan = optionalText(body.listing_plan || body.subscription_plan, 80) || 'admin_profile_studio';
   const isSponsored = body.is_sponsored !== false && body.acquisition_source !== 'paid_advertiser';
   const businessType = normalizeBusinessType(body.business_type);
@@ -3548,6 +3551,7 @@ function appendImportCompletenessWarnings(profile: Record<string, any>, warnings
   const found = usefulFields.filter((key) => Array.isArray(profile[key]) ? profile[key].length : profile[key] !== null && profile[key] !== undefined && profile[key] !== '').length;
   if (found < 4) warnings.push(`Low confidence import: only ${found} meaningful profile field(s) were found. Review the source and fill missing data manually.`);
   if (profile.unmapped_tags?.length) warnings.push(`${profile.unmapped_tags.length} service/tag value(s) could not be mapped and require manual review.`);
+  if (!profile.city) warnings.push('No profile city was found in profile-specific source data. Enter the actual city before creating the draft.');
 }
 
 function validateHermesWebhookUrl(value: string) {
@@ -3569,6 +3573,7 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     ? Object.entries(detailSource).map(([key,value]) => [key,String(value ?? '')] as [string,string]) : []);
   const prices = rawProfile.prices && typeof rawProfile.prices === 'object' ? rawProfile.prices : {};
   const price1h = numericValue(rawProfile.price_1h ?? prices.price_1h ?? prices.one_hour ?? prices.hour);
+  const cityLabel = optionalText(rawProfile.city_label || rawProfile.city || rawProfile.location, 100) || '';
   const serviceGroups = rawProfile.service_groups && typeof rawProfile.service_groups === 'object' ? rawProfile.service_groups : {};
   const rawServices = Array.isArray(rawProfile.raw_services) ? rawProfile.raw_services.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 100) : [];
   const importedServices = [
@@ -3587,7 +3592,8 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
   return {
     name: optionalText(rawProfile.name || rawProfile.display_name || rawProfile.title, 120) || '',
     display_name: optionalText(rawProfile.display_name || rawProfile.name || rawProfile.title, 120) || '',
-    city: normalizeHermesCity(rawProfile.city || rawProfile.location),
+    city: normalizeHermesCity(cityLabel),
+    city_label: cityLabel,
     location: optionalText(rawProfile.location, 160),
     category: optionalText(rawProfile.category, 80) || inferCategory(String(rawProfile.description || rawProfile.tags || '')),
     age: rawProfile.age == null ? normalizedDetails.age ?? null : numericValue(rawProfile.age),
@@ -3616,6 +3622,7 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     unknown_fields: rawProfile.unknown_fields && typeof rawProfile.unknown_fields === 'object' ? rawProfile.unknown_fields : normalizedDetails.unknown_fields,
     prices,
     price_1h: price1h || undefined,
+    currency: normalizeImportedCurrency(rawProfile.currency || rawProfile.price_currency || prices.currency) || 'EUR',
     availability: optionalText(rawProfile.availability, 160) || '',
     images: Array.isArray(rawProfile.images)
       ? uniqueStrings(rawProfile.images.map((value: unknown) => resolveImportImageUrl(value, sourceUrl))).filter(isLikelyProfileImage).sort((left, right) => imageCandidateScore(right) - imageCandidateScore(left)).slice(0, 12)
@@ -3652,12 +3659,16 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
   const phone = extractPublicPhone(html, text);
   const telegram = firstMatch(text, /(?:telegram|tg)\s*[:@]\s*@?([a-zA-Z0-9_]{5,})/i);
   const whatsapp = firstMatch(text, /whats\s*app|whatsapp/i) ? phone : '';
-  const price1h = firstMatch(text, /(?:1h|1 h|hour|stunde|godzina)[^\d]{0,20}(\d{2,5})\s*(?:€|eur)/i) || firstMatch(text, /(\d{2,5})\s*(?:€|eur)[^\n]{0,30}(?:1h|1 h|hour|stunde|godzina)/i);
+  const priceContext = firstMatch(text, /(?:1h|1 h|hour|stunde|godzina)[^\n]{0,80}/i)
+    || firstMatch(text, /[^\n]{0,80}(?:1h|1 h|hour|stunde|godzina)/i);
+  const importedPrice = parseImportedPrice(priceContext);
+  const sourceCity = escortClub?.city || extractImportedProfileCity(html);
 
   return {
     name: escortClub?.name || title || '',
     display_name: escortClub?.display_name || title || '',
-    city: normalizeHermesCity(escortClub?.city) || inferCity(text),
+    city: normalizeHermesCity(sourceCity),
+    city_label: sourceCity,
     category: escortClub?.category || inferCategory(text),
     ...details,
     description: description || '',
@@ -3672,8 +3683,9 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     unknown_fields: details.unknown_fields,
     service_groups: sections.serviceGroups,
     taboos: sections.taboos,
-    prices: escortClub?.prices || (price1h ? { price_1h: Number(price1h) } : {}),
-    price_1h: escortClub?.price_1h || (price1h ? Number(price1h) : undefined),
+    prices: escortClub?.prices || (importedPrice ? { price_1h: importedPrice.amount } : {}),
+    price_1h: escortClub?.price_1h || importedPrice?.amount,
+    currency: escortClub?.currency || importedPrice?.currency || 'EUR',
     availability: sections.availability,
     images,
     admin_warnings: moderation.warnings,
@@ -4055,16 +4067,10 @@ function firstMatch(value: string, regex: RegExp) {
   return (match?.[1] || match?.[0] || '').trim();
 }
 
-function inferCity(text: string) {
-  const lower = text.toLowerCase();
-  const cities = ['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'];
-  return cities.find((city) => lower.includes(city)) || 'berlin';
-}
-
 function normalizeHermesCity(value: unknown) {
-  const city = String(value || '').trim().toLowerCase();
-  const aliases: Record<string, string> = { cologne: 'koeln', köln: 'koeln', munich: 'muenchen', münchen: 'muenchen', warsaw: 'warszawa' };
-  return ['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].includes(city) ? city : aliases[city] || 'berlin';
+  const city = normalizeImportedCity(value);
+  const aliases: Record<string, string> = { cologne: 'koeln', koln: 'koeln', munich: 'muenchen', munchen: 'muenchen', warsaw: 'warszawa' };
+  return aliases[city] || city;
 }
 
 function inferCategory(text: string) {
