@@ -1553,6 +1553,8 @@ test('Hermes preview fields are forwarded to sponsored draft payload and image f
   assert.match(adminRouteSource,/\.\.\.incomingProfile,[\s\S]*phone: normalizeImportedPhone\(\(incomingProfile as any\)\.phone\)/);
   for(const field of ['gender','orientation','height_cm','weight_kg','bust','eyes','hair','travel','languages','ethnicity','nationality','zodiac_sign']) assert.match(adminPageSource,new RegExp(`hermesPreview\\.${field}`));
   assert.match(adminRouteSource,/is_sponsored: true/); assert.match(adminRouteSource,/is_published: false/); assert.match(adminRouteSource,/moderation_status: 'pending'/);
+  const createRoute=adminRouteSource.slice(adminRouteSource.indexOf("post('/import-profile-create"),adminRouteSource.indexOf("get('/business-profiles"));
+  assert.doesNotMatch(createRoute,/\bfeatured\s*:/);
   assert.match(adminRouteSource,/const imageImport = await importProfileImagesToStorage/); assert.match(adminRouteSource,/failed_images: imageImport\.failed/);
   assert.match(adminRouteSource,/deleteUser\(authUser\.id\)/); assert.match(adminRouteSource,/stage: 'create profile'/);
   assert.match(adminRouteSource,/if \(authUserCreated && authUser\?\.id\) await supabaseAdmin\.auth\.admin\.deleteUser/);

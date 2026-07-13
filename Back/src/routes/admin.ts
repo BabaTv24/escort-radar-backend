@@ -909,7 +909,6 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     is_published: false,
     is_seed_profile: false,
     is_sponsored: true,
-    featured: true,
     max_photos: 12,
     provider: 'hermes_agent',
     acquisition_source: 'hermes_import_sponsored',
