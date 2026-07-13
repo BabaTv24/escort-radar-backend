@@ -24,7 +24,7 @@ import { writeAdminAuditLog } from '../services/adminAudit.js';
 import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
-import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, extractServiceTagCandidates, mapImportedServiceValues, normalizeImportedDetails, normalizeImportedPhone } from '../hermesImport.js';
+import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, extractServiceTagCandidates, mapImportedServiceValues, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile } from '../hermesImport.js';
 import { assertPublicImportDns as secureAssertPublicImportDns, fetchPublicImportResource as secureFetchPublicImportResource, readImportResponseLimited as secureReadImportResponseLimited, validatePublicImportUrl as secureValidatePublicImportUrl } from '../publicImportSecurity.js';
 import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
 import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfile.js';
@@ -809,8 +809,9 @@ adminRouter.post('/import-profile-preview', asyncHandler(async (req, res) => {
     }
     const response = await fetchPublicImportResource(sourceUrl, {
       headers: {
-        accept: 'text/html,application/xhtml+xml',
-        'user-agent': 'EscortRadar-HermesAgent/1.0 (+public profile preview)'
+        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'accept-language': 'pl-PL,pl;q=0.9,de;q=0.8,en;q=0.7',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
       },
       signal: AbortSignal.timeout(9000)
     });
@@ -821,6 +822,9 @@ adminRouter.post('/import-profile-preview', asyncHandler(async (req, res) => {
     }
     const html = new TextDecoder().decode(await readImportResponseLimited(response, 600000));
     const profile = buildHermesProfilePreview(html, sourceUrl, warnings);
+    if (!(profile as Record<string, any>).phone) {
+      (profile as Record<string, any>).phone = await fetchEscortClubPublicPhone(html, sourceUrl, warnings);
+    }
     (profile as Record<string, any>).suggested_owner_email = await nextSponsoredImportEmail();
     const normalizedProfile = normalizeHermesPreviewProfile(profile, sourceUrl, 'local_parser');
     appendImportCompletenessWarnings(normalizedProfile, warnings);
@@ -839,9 +843,9 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
   if (!displayName) return res.status(400).json({ error: 'Profile display name is required', stage: 'validate profile payload' });
   const password = optionalText(req.body.password, 200);
   const confirmPassword = optionalText(req.body.confirmPassword || req.body.confirm_password, 200);
-  if (!password || password.length < 8) return res.status(400).json({ error: 'Password must contain at least 8 characters' });
-  if (password !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match' });
-  const ownerEmail = optionalEmail((incomingProfile as any).owner_email || (incomingProfile as any).email) || await nextSponsoredImportEmail();
+  if (password && password.length < 8) return res.status(400).json({ error: 'Password must contain at least 8 characters' });
+  if (password && password !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match' });
+  const ownerEmail = optionalEmail((incomingProfile as any).owner_email) || await nextSponsoredImportEmail();
   const combinedWarnings = uniqueStrings([
     ...((incomingProfile as any).admin_warnings || []),
     ...((incomingProfile as any).warnings || [])
@@ -861,7 +865,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     category: (incomingProfile as any).category || 'ladies',
     description: optionalText((incomingProfile as any).description, 2000) || 'Imported by Hermes Agent. Review and rewrite before publishing.',
     phone: normalizeImportedPhone((incomingProfile as any).phone),
-    email: (incomingProfile as any).email,
+    email: optionalEmail((incomingProfile as any).email),
     telegram: (incomingProfile as any).telegram,
     whatsapp: (incomingProfile as any).whatsapp,
     services: Array.isArray((incomingProfile as any).services) ? (incomingProfile as any).services : [],
@@ -925,7 +929,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     if (authUserCreated && authUser?.id) await supabaseAdmin.auth.admin.deleteUser(authUser.id);
     return res.status(400).json({ error: error.message, stage: 'create profile', rolled_back_auth_user: authUserCreated });
   }
-  await logAccountAccess(req, data.id, authUser.id, authUserCreated ? 'hermes_import_account_created' : 'hermes_import_user_linked');
+  if (authUser?.id) await logAccountAccess(req, data.id, authUser.id, authUserCreated ? 'hermes_import_account_created' : 'hermes_import_user_linked');
   const imageImport = await importProfileImagesToStorage({
     profileId: data.id,
     imageUrls,
@@ -955,6 +959,8 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     ok: true,
     profile_id: data.id,
     profile: withAdminImageUrls(createdProfile || data),
+    images_imported: imageImport.imported,
+    images_failed: imageImport.failed,
     imported_images: imageImport.imported,
     failed_images: imageImport.failed,
     warnings: responseWarnings
@@ -3623,6 +3629,7 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
 }
 
 function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: string[]) {
+  const escortClub = parseEscortClubProfile(html, sourceUrl);
   const text = extractVisibleProfileText(html);
   const title = metaContent(html, 'og:title') || metaContent(html, 'twitter:title') || titleContent(html);
   const sections = extractProfileSections(text);
@@ -3633,7 +3640,7 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     || metaContent(html, 'og:description')
     || metaContent(html, 'description')
     || text.slice(0, 420);
-  const images = uniqueStrings([
+  const images = escortClub?.images.length ? escortClub.images : uniqueStrings([
     metaContent(html, 'og:image'),
     metaContent(html, 'twitter:image'),
     ...imageSources(html, sourceUrl)
@@ -3641,18 +3648,18 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
   if (!title) warnings.push('No title meta tag found.');
   if (!description) warnings.push('No description meta tag found.');
   if (!images.length) warnings.push('No public image URLs found.');
-  const details = normalizeImportedDetails(extractImportPairs(html, text));
-  const mappedServices = mapImportedServices(uniqueStrings([...sections.services, ...extractServiceTagCandidates(html)]));
+  const details = escortClub || normalizeImportedDetails(extractImportPairs(html, text));
+  const mappedServices = escortClub ? { mapped: escortClub.services, raw: escortClub.raw_services, unmapped: escortClub.unmapped_tags } : mapImportedServices(uniqueStrings([...sections.services, ...extractServiceTagCandidates(html)]));
   const phone = extractPublicPhone(html, text);
   const telegram = firstMatch(text, /(?:telegram|tg)\s*[:@]\s*@?([a-zA-Z0-9_]{5,})/i);
   const whatsapp = firstMatch(text, /whats\s*app|whatsapp/i) ? phone : '';
   const price1h = firstMatch(text, /(?:1h|1 h|hour|stunde|godzina)[^\d]{0,20}(\d{2,5})\s*(?:€|eur)/i) || firstMatch(text, /(\d{2,5})\s*(?:€|eur)[^\n]{0,30}(?:1h|1 h|hour|stunde|godzina)/i);
 
   return {
-    name: title || '',
-    display_name: title || '',
-    city: inferCity(text),
-    category: inferCategory(text),
+    name: escortClub?.name || title || '',
+    display_name: escortClub?.display_name || title || '',
+    city: normalizeHermesCity(escortClub?.city) || inferCity(text),
+    category: escortClub?.category || inferCategory(text),
     ...details,
     description: description || '',
     raw_about_text: aboutText,
@@ -3666,14 +3673,44 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     unknown_fields: details.unknown_fields,
     service_groups: sections.serviceGroups,
     taboos: sections.taboos,
-    prices: price1h ? { price_1h: Number(price1h) } : {},
-    price_1h: price1h ? Number(price1h) : undefined,
+    prices: escortClub?.prices || (price1h ? { price_1h: Number(price1h) } : {}),
+    price_1h: escortClub?.price_1h || (price1h ? Number(price1h) : undefined),
     availability: sections.availability,
     images,
     admin_warnings: moderation.warnings,
     source_url: sourceUrl,
     import_source: 'local_parser'
   };
+}
+
+async function fetchEscortClubPublicPhone(html: string, sourceUrl: string, warnings: string[]) {
+  let url: URL;
+  try { url = new URL(sourceUrl); } catch { return ''; }
+  if (url.hostname !== 'escort.club' && !url.hostname.endsWith('.escort.club')) return '';
+  const profileId = html.match(/data-phone-id=["'](\d+)["']/i)?.[1];
+  if (!profileId) return '';
+  try {
+    const endpoint = new URL('/includes/ajax.show-phone.php', url.origin).toString();
+    const response = await fetchPublicImportResource(endpoint, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json, text/javascript, */*; q=0.01',
+        'accept-language': 'pl-PL,pl;q=0.9,de;q=0.8,en;q=0.7',
+        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        referer: sourceUrl,
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      body: new URLSearchParams({ id: profileId }).toString(),
+      signal: AbortSignal.timeout(9000)
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = JSON.parse(new TextDecoder().decode(await readImportResponseLimited(response, 16384)));
+    return payload?.success ? normalizeImportedPhone(payload.phone) : '';
+  } catch (error) {
+    warnings.push(`Public phone could not be loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
+    return '';
+  }
 }
 
 function metaContent(html: string, key: string) {

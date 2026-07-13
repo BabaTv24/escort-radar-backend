@@ -8,6 +8,13 @@ export type ImportedDetails = {
   unknown_fields: Record<string, string>;
 };
 
+export type EscortClubProfile = ImportedDetails & {
+  name: string; display_name: string; phone_id?: string; city?: string; category: string;
+  height?: number;
+  services: string[]; raw_services: string[]; unmapped_tags: string[];
+  prices: Record<string, number>; price_1h?: number; images: string[];
+};
+
 export function canLinkExistingImportedUser(user: { app_metadata?: Record<string, unknown> }, marker: string) {
   return user.app_metadata?.created_by === marker;
 }
@@ -109,7 +116,9 @@ export function mapImportedServiceValues(values: unknown[]) {
   const raw = [...new Set(values.map((item) => String(item || '').replace(/\s+/g, ' ').trim()).filter(Boolean))];
   const mapped: string[] = [], unmapped: string[] = [];
   for (const value of raw) {
-    const key = mappings.find(([pattern]) => pattern.test(value))?.[1];
+    const catalogKey = value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const key = allowedServiceKeys.has(catalogKey) ? catalogKey : mappings.find(([pattern]) => pattern.test(value))?.[1];
     if (key && allowedServiceKeys.has(key)) mapped.push(key); else unmapped.push(value);
   }
   return { mapped: [...new Set(mapped)], raw, unmapped };
@@ -123,6 +132,73 @@ export function extractServiceTagCandidates(html: string) {
     if (text.length >= 2 && text.length <= 80 && !/(navigation|menu|stadt|city|empfohlen|recommended)/i.test(text)) values.push(text);
   }
   return [...new Set(values)];
+}
+
+export function parseEscortClubProfile(html: string, sourceUrl: string): EscortClubProfile | null {
+  let parsedUrl: URL;
+  try { parsedUrl = new URL(sourceUrl); } catch { return null; }
+  const host = parsedUrl.hostname.toLowerCase();
+  if (host !== 'escort.club' && !host.endsWith('.escort.club')) return null;
+
+  const clean = (value: unknown) => decodeImportHtml(String(value || ''))
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ').replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const h1 = clean(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]);
+  const title = clean(html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]);
+  const seoName = title.replace(/\s+\d{2}\s+(?:lat|lata|years?|jahre?).*$/i, '').trim();
+  const name = h1 || seoName;
+
+  const aboutScope = html.match(/<div\b[^>]*class=["'][^"']*content-hours[^"']*["'][^>]*>([\s\S]*?)<div\b[^>]*class=["'][^"']*contant-prices/i)?.[1]
+    || html.match(/Wi(?:ę|&#281;|&eogon;)cej o mnie[\s\S]*?<div\b[^>]*class=["'][^"']*stats-box[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/i)?.[1]
+    || '';
+  const pairs: Array<[string, string]> = [];
+  for (const match of aboutScope.matchAll(/<div\b[^>]*class=["'][^"']*stat-elem[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>?/gi)) {
+    const row = match[1];
+    const label = clean(row.match(/class=["'][^"']*sub-label[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i)?.[1]);
+    const value = clean(row.match(/class=["'][^"']*sub-desc[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i)?.[1]);
+    if (label && value) pairs.push([label, value]);
+  }
+  // The language row contains additional nesting and can fall outside a shallow row match.
+  for (const match of aboutScope.matchAll(/<div\b[^>]*class=["'][^"']*sub-label[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div\b[^>]*class=["'][^"']*sub-desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)) {
+    const pair: [string, string] = [clean(match[1]), clean(match[2])];
+    if (pair[0] && pair[1]) pairs.push(pair);
+  }
+  const details = normalizeImportedDetails(pairs);
+
+  const priceScope = html.match(/<div\b[^>]*class=["'][^"']*contant-prices[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/i)?.[1] || '';
+  const oneHour = priceScope.match(/(?:1\s*(?:godz|h|stunde|hour))[^<]{0,20}[\s\S]{0,200}?(\d{2,5})\s*(?:EUR|&euro;|€)/i)?.[1];
+  const price1h = oneHour ? Number(oneHour) : undefined;
+
+  const infoScope = html.match(/<section\b[^>]*class=["'][^"']*anons-info-sec[^"']*["'][^>]*>([\s\S]*?)<\/section>/i)?.[1] || '';
+  const tagsScope = infoScope.match(/<div\b[^>]*class=["'][^"']*tags-box[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] || '';
+  const tagValues = [...tagsScope.matchAll(/<a\b[^>]*class=["'][^"']*\btag\b[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)].map((match) => clean(match[1])).filter(Boolean);
+  const mapped = mapImportedServiceValues(tagValues);
+
+  const galleryScope = html.match(/<ul\b[^>]*id=["']lightSlider["'][^>]*>([\s\S]*?)<\/ul>/i)?.[1] || '';
+  const imageValues: string[] = [];
+  for (const match of galleryScope.matchAll(/<(?:a|img|li)\b[^>]*(?:href|src|data-thumb)=["']([^"']+)["'][^>]*>/gi)) {
+    try {
+      const absolute = new URL(decodeImportHtml(match[1]), sourceUrl).toString();
+      if (/^https?:\/\//i.test(absolute) && /\/galleries\//i.test(absolute)) imageValues.push(absolute);
+    } catch { /* ignore malformed gallery URL */ }
+  }
+  const phoneId = html.match(/data-phone-id=["'](\d+)["']/i)?.[1];
+  const city = clean(html.match(/"addressLocality"\s*:\s*"([^"]+)"/i)?.[1])
+    || clean(html.match(/<div\b[^>]*class=["'][^"']*content-location[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1]);
+
+  return {
+    name, display_name: name, phone_id: phoneId, city, category: 'ladies', ...details,
+    height: details.height_cm,
+    services: mapped.mapped, raw_services: mapped.raw, unmapped_tags: mapped.unmapped,
+    prices: price1h ? { price_1h: price1h } : {}, price_1h: price1h,
+    images: [...new Set(imageValues)].slice(0, 12)
+  };
+}
+
+function decodeImportHtml(value: string) {
+  const named: Record<string, string> = { amp: '&', quot: '"', apos: "'", nbsp: ' ', eogon: 'ę', Eogon: 'Ę', lstrok: 'ł', Lstrok: 'Ł', oacute: 'ó', Oacute: 'Ó', sacute: 'ś', Sacute: 'Ś', zacute: 'ź', Zacute: 'Ź', zdot: 'ż', Zdot: 'Ż', cacute: 'ć', Cacute: 'Ć', nacute: 'ń', Nacute: 'Ń', aogon: 'ą', Aogon: 'Ą', euro: '€' };
+  return value.replace(/&#(x?[0-9a-f]+);?/gi, (_match, code: string) => String.fromCodePoint(code[0].toLowerCase() === 'x' ? parseInt(code.slice(1), 16) : parseInt(code, 10)))
+    .replace(/&([a-z][a-z0-9]+);/gi, (match, name: string) => named[name] ?? match);
 }
 
 function normalizeOrientation(value: string) {

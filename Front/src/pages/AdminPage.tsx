@@ -994,11 +994,11 @@ export function AdminPage() {
 
   async function createHermesDraft() {
     if (!hermesPreview || !hermesUrl.trim()) return;
-    if (hermesPassword.length < 8) {
+    if (hermesPassword && hermesPassword.length < 8) {
       setMessage(t('admin.hermes.passwordMin'));
       return;
     }
-    if (hermesPassword !== hermesConfirmPassword) {
+    if (hermesPassword && hermesPassword !== hermesConfirmPassword) {
       setMessage(t('admin.hermes.passwordMismatch'));
       return;
     }
@@ -1022,7 +1022,7 @@ export function AdminPage() {
       setHermesConfirmPassword('');
       setHermesStatus('idle');
       setHermesWarnings(result.warnings || []);
-      setMessage(`${t('admin.hermes.createdDraft')} ${t('admin.hermes.importedImages', { count: result.imported_images || 0, failed: result.failed_images || 0 })}`);
+      setMessage(`${t('admin.hermes.createdDraft')} ID: ${result.profile_id}. ${t('admin.hermes.importedImages', { count: result.images_imported ?? result.imported_images ?? 0, failed: result.images_failed ?? result.failed_images ?? 0 })}`);
       editStudioProfile(result.profile);
       setProfilePanelMode('overview');
       navigate(`/admin/profiles?profile=${encodeURIComponent(result.profile.id)}`, { replace: false });
@@ -1741,7 +1741,7 @@ export function AdminPage() {
                 ) : null}
                 {hermesPreview.raw_visible_text ? <AdminField label={t('admin.hermes.rawVisibleText')}><textarea className="hermes-raw-text" value={hermesPreview.raw_visible_text} onChange={(event) => updateHermesPreview({ raw_visible_text: event.target.value })} /></AdminField> : null}
                 <div className="admin-actions-row">
-                  <button className="button primary" disabled={hermesBusy || hermesPassword.length < 8 || hermesPassword !== hermesConfirmPassword} onClick={createHermesDraft}>{t('admin.hermes.createSponsoredDraft')}</button>
+                  <button className="button primary" disabled={hermesBusy || Boolean(hermesPassword && (hermesPassword.length < 8 || hermesPassword !== hermesConfirmPassword))} onClick={createHermesDraft}>{t('admin.hermes.createSponsoredDraft')}</button>
                   <button className="button" onClick={() => setHermesOpen(false)}>{t('admin.buttons.cancel')}</button>
                 </div>
               </>

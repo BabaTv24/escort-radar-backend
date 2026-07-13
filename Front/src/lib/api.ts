@@ -349,7 +349,7 @@ export const api = {
     token,
     body: JSON.stringify({ url })
   }),
-  importProfileCreate: (token: string, body: { source_url: string; profile: HermesProfilePreview; create_as_draft: boolean; sponsored?: boolean; imageUrls?: string[]; password?: string; confirmPassword?: string }) => request<{ ok?: boolean; profile_id?: string; profile: Profile; imported_images?: number; failed_images?: number; warnings: string[] }>('/api/admin/import-profile-create', {
+  importProfileCreate: (token: string, body: { source_url: string; profile: HermesProfilePreview; create_as_draft: boolean; sponsored?: boolean; imageUrls?: string[]; password?: string; confirmPassword?: string }) => request<{ ok: boolean; profile_id: string; profile: Profile; images_imported: number; images_failed: number; imported_images?: number; failed_images?: number; warnings: string[] }>('/api/admin/import-profile-create', {
     method: 'POST',
     token,
     body: JSON.stringify(body)

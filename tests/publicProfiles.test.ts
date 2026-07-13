@@ -15,7 +15,7 @@ import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts
 import { isValidLatLng, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
 import { getSafeNextPath } from '../Front/src/lib/authRedirect.ts';
 import { normalizeOperatorStatus, normalizeProfileCategory, validateProfileInput } from '../Back/src/validation.ts';
-import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, mapImportedServiceValues, normalizeImportedDetails, normalizeImportedPhone } from '../Back/src/hermesImport.ts';
+import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, mapImportedServiceValues, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile } from '../Back/src/hermesImport.ts';
 import { fetchPublicImportResource, readImportResponseLimited, validatePublicImportUrl } from '../Back/src/publicImportSecurity.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
@@ -1424,11 +1424,11 @@ test('Hermes profile import preview returns raw services, groups and image candi
   assert.match(adminPageSource, /hermesPreview\.images\.slice\(0, 12\)/);
 });
 
-test('Hermes sponsored create requires password and keeps profile unpublished', async () => {
+test('Hermes sponsored create accepts an optional password and keeps profile unpublished', async () => {
   const adminRouteSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
   const apiSource = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
-  assert.match(adminRouteSource, /Password must contain at least 8 characters/);
-  assert.match(adminRouteSource, /Passwords do not match/);
+  assert.match(adminRouteSource, /if \(password && password\.length < 8\)/);
+  assert.match(adminRouteSource, /if \(password && password !== confirmPassword\)/);
   assert.match(adminRouteSource, /nextSponsoredImportEmail/);
   assert.match(adminRouteSource, /bussines\+sponsoring/);
   assert.match(adminRouteSource, /is_published: false/);
@@ -1495,6 +1495,54 @@ test('Hermes deduplicates supported services and reports unmapped public tags', 
   const result=mapImportedServiceValues(['Massage','Massage','GFE','Nieznany fetysz','Nieznany fetysz']);
   assert.deepEqual(result.mapped,['masaz','klimat_gfe']);
   assert.deepEqual(result.unmapped,['Nieznany fetysz']);
+});
+
+test('Escort Club parser reads the real profile DOM sections without ads or SEO title leakage', () => {
+  const html = `<!doctype html><html><head><title>Wolfie 23 lat, Berlin - anonse erotyczne - Escort.club</title>
+    <script type="application/ld+json">{"location":{"address":{"addressLocality":"Berlin"}}}</script></head><body>
+    <aside><img src="https://ads.example/banner.jpg"><a class="tag">Popularne miasta</a></aside>
+    <h1>Wolfie</h1><div class="content-contact"><a data-phone-id="140605" data-show-phone>+49 301-...</a></div>
+    <div class="content-hours"><div class="label">Więcej o mnie:</div><div class="stats-box">
+      <div class="stat-elem"><div class="sub-label">Płeć:</div><div class="sub-desc">Kobieta</div></div>
+      <div class="stat-elem"><div class="sub-label">Orientacja:</div><div class="sub-desc">Hetero</div></div>
+      <div class="stat-elem"><div class="sub-label">Wiek:</div><div class="sub-desc">23 l</div></div>
+      <div class="stat-elem"><div class="sub-label">Wzrost:</div><div class="sub-desc">166 cm</div></div>
+      <div class="stat-elem"><div class="sub-label">Waga:</div><div class="sub-desc">54 kg</div></div>
+      <div class="stat-elem"><div class="sub-label">Biust:</div><div class="sub-desc">2, Naturalny</div></div>
+      <div class="stat-elem"><div class="sub-label">Oczy:</div><div class="sub-desc">Niebieskie</div></div>
+      <div class="stat-elem"><div class="sub-label">Włosy:</div><div class="sub-desc">Brązowe</div></div>
+      <div class="stat-elem"><div class="sub-label">Wyjazdy:</div><div class="sub-desc">Tylko hotele</div></div>
+      <div class="stat-elem -lang"><div class="sub-label">Języki:</div><div class="sub-desc">Angielski, Niemiecki</div></div>
+      <div class="stat-elem"><div class="sub-label">Etniczność:</div><div class="sub-desc">Europejska (biała)</div></div>
+      <div class="stat-elem"><div class="sub-label">Narodowość:</div><div class="sub-desc">Niemiecka</div></div>
+      <div class="stat-elem"><div class="sub-label">Znak zodiaku:</div><div class="sub-desc">Bliźnięta</div></div>
+    </div></div><div class="contant-prices"><div class="stat-elem"><div class="sub-label">1 godz:</div><div class="sub-desc">250 EUR</div></div></div>
+    <section class="anons-info-sec"><h2>Dodatkowe informacje</h2><div class="tags-box">
+      <a class="tag">Masaż body to body</a><a class="tag">Face fucking</a><a class="tag">Nieznany tag</a>
+    </div></section>
+    <ul id="lightSlider"><li data-thumb="https://static.escort.club/galleries/wolfie/1.jpg"><a href="https://static.escort.club/galleries/wolfie/1.jpg"><img src="https://static.escort.club/galleries/wolfie/1.jpg"></a></li></ul>
+    <section class="recommended"><img src="https://static.escort.club/galleries/other/advert.jpg"></section></body></html>`;
+  const profile = parseEscortClubProfile(html, 'https://pl.escort.club/anons/140605.html');
+  assert.ok(profile);
+  assert.equal(profile.name, 'Wolfie'); assert.equal(profile.phone_id, '140605'); assert.equal(profile.city, 'Berlin');
+  assert.deepEqual({ gender:profile.gender, orientation:profile.orientation, age:profile.age, height:profile.height_cm, weight:profile.weight_kg }, { gender:'female', orientation:'hetero', age:23, height:166, weight:54 });
+  assert.equal(profile.bust, '2, Naturalny'); assert.equal(profile.eyes, 'Niebieskie'); assert.equal(profile.hair, 'Brązowe');
+  assert.equal(profile.travel, 'Tylko hotele'); assert.equal(profile.travels, false); assert.deepEqual(profile.visit_types, ['hotel']);
+  assert.deepEqual(profile.languages, ['en','de']); assert.equal(profile.ethnicity, 'european'); assert.equal(profile.nationality, 'Niemiecka'); assert.equal(profile.zodiac_sign, 'Bliźnięta');
+  assert.equal(profile.price_1h, 250); assert.deepEqual(profile.services, ['masaz_body_to_body','face_fucking']); assert.deepEqual(profile.unmapped_tags, ['Nieznany tag']);
+  assert.deepEqual(profile.images, ['https://static.escort.club/galleries/wolfie/1.jpg']);
+});
+
+test('Hermes sponsored draft supports generated technical owner without a public email or password', async () => {
+  const adminRouteSource=await readFile(new URL('../Back/src/routes/admin.ts',import.meta.url),'utf8');
+  const adminPageSource=await readFile(new URL('../Front/src/pages/AdminPage.tsx',import.meta.url),'utf8');
+  const createRoute=adminRouteSource.slice(adminRouteSource.indexOf("post('/import-profile-create"),adminRouteSource.indexOf("get('/business-profiles"));
+  assert.match(createRoute, /optionalEmail\(\(incomingProfile as any\)\.owner_email\) \|\| await nextSponsoredImportEmail\(\)/);
+  assert.match(createRoute, /if \(password && password\.length < 8\)/);
+  assert.match(createRoute, /if \(authUser\?\.id\) await logAccountAccess/);
+  assert.match(createRoute, /images_imported: imageImport\.imported/); assert.match(createRoute, /images_failed: imageImport\.failed/);
+  assert.match(adminPageSource, /ID: \$\{result\.profile_id\}/);
+  assert.doesNotMatch(adminPageSource, /disabled=\{hermesBusy \|\| hermesPassword\.length < 8/);
 });
 
 test('Hermes preview fields are forwarded to sponsored draft payload and image failures stay partial', async () => {
