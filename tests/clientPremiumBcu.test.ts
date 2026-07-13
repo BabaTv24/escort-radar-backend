@@ -127,10 +127,10 @@ test('Migration 045 secures atomic Premium and referral concurrency', async () =
     'BCU_CLIENT_PREMIUM_ENTITLEMENT_CONFLICT',
     'BCU_CLIENT_PREMIUM_ACTIVATION_INVALID',
     'BCU_REFERRAL_REWARD_CONFLICT',
-    "select * into v_reward\n      from public.client_rewards",
     'revoke execute on function public.activate_client_premium_bcu',
     'to service_role'
   ]) assert.ok(migration.toLowerCase().includes(contract.toLowerCase()), contract);
+  assert.match(migration, /select \* into v_reward\r?\n\s+from public\.client_rewards/i);
   assert.match(migration, /v_bonus_product\.amount_bcu <> 70000/);
   assert.match(migration, /v_referral_product\.amount_bcu <> 100000/);
   assert.doesNotMatch(migration, /activate_bcu_product\s*\(/);
