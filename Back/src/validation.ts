@@ -70,6 +70,7 @@ export function validateProfileInput(body: Record<string, unknown>) {
       postal_code: optionalText(body.postal_code, 20),
       work_place_label: optionalText(body.work_place_label, 180),
       exact_address: optionalText(body.exact_address, 240),
+      opening_hours: normalizeProfileOpeningHours(body.opening_hours),
       category: normalizeCategory(body.category),
       description: optionalText(body.description, 2000),
       languages: Array.isArray(body.languages)
@@ -141,6 +142,27 @@ export function validateProfileInput(body: Record<string, unknown>) {
       private_studio: Boolean(body.private_studio)
     }
   };
+}
+
+const availabilityDayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+
+export function normalizeProfileOpeningHours(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const input = value as Record<string, unknown>;
+  const weeklyInput = input.weekly && typeof input.weekly === 'object' && !Array.isArray(input.weekly)
+    ? input.weekly as Record<string, unknown>
+    : input;
+  const weekly: Record<string, { enabled: boolean; start: string | null; end: string | null }> = {};
+  for (const day of availabilityDayKeys) {
+    const raw = weeklyInput[day];
+    const schedule = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+    const start = optionalTime(schedule.start ?? schedule.from);
+    const end = optionalTime(schedule.end ?? schedule.to);
+    weekly[day] = { enabled: Boolean(schedule.enabled) && Boolean(start && end), start, end };
+  }
+  const timezone = optionalText(input.timezone, 80) || 'Europe/Berlin';
+  const note = optionalText(input.note, 500);
+  return { version: 1, timezone, weekly, ...(note ? { note } : {}) };
 }
 
 export function optionalText(value: unknown, max: number) {

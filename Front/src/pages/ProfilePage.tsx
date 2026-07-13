@@ -30,6 +30,7 @@ import { serviceLabel } from '../data/serviceCatalog';
 import { getPublicProfiles, mapApiProfileToPublicProfile } from '../lib/publicProfiles';
 import { getPublicLocationLabel, getPublicLocationMode } from '../lib/locationLabels';
 import { profileDetailRows } from '../lib/profileDetails';
+import { availabilityDayKeys, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
 
 type ProfileTab = 'overview' | 'services' | 'prices' | 'reviews';
 
@@ -87,6 +88,7 @@ export function ProfilePage() {
   if (error) return <div className="page narrow"><ErrorState message={error} onRetry={() => setRetryKey((value) => value + 1)} /></div>;
   if (!profile) return <div className="page narrow"><LoadingState /></div>;
 
+  const availabilityHours = normalizeAvailabilityHoursForEditor(profile.opening_hours);
   const activated = profileAccess?.client_state === 'client_activated';
   const canUsePremiumProfileFeatures = activated;
   const galleryImages = activated && profileAccess?.full_gallery?.length ? profileAccess.full_gallery : profile.profile_images || [];
@@ -238,15 +240,15 @@ export function ProfilePage() {
 
           <MarketSection tab="overview" activeTab={activeTab} eyebrow={t('profile.availability')} title={t('profile.scheduleTitle')}>
             <div className="market-schedule-grid">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
+              {availabilityDayKeys.map((day) => (
                 <div key={day}>
-                  <span>{day}</span>
-                  <strong>{index < 5 ? '18:00 - 02:00' : t('profile.onRequest')}</strong>
+                  <span>{t(`availability.days.${day}`)}</span>
+                  <strong>{availabilityHours.weekly[day].enabled ? `${availabilityHours.weekly[day].start} - ${availabilityHours.weekly[day].end}` : t('availability.closed')}</strong>
                 </div>
               ))}
             </div>
             {travelNotice && <p className="success">{travelNotice}</p>}
-            <p className="muted-copy">{profile.availability_note || t('profile.scheduleFallback')}</p>
+            <p className="muted-copy">{availabilityHours.note || profile.availability_note || t('profile.scheduleFallback')}</p>
           </MarketSection>
 
           <MarketSection tab="services" activeTab={activeTab} eyebrow={t('profile.tabs.services')} title={t('profile.selectedExperiences')}>

@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { api } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
+import { AvailabilityHoursEditor, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientPersonalProfile, HermesProfilePreview, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 type HermesImportPreview = HermesProfilePreview & {
@@ -89,7 +90,7 @@ const emptyStudioForm = {
   max_profiles: 30,
   contact_person: '',
   website: '',
-  opening_hours: '',
+  opening_hours: normalizeAvailabilityHoursForEditor({}),
   price_30min: 120,
   price_1h: 180,
   price_2h: 320,
@@ -688,7 +689,7 @@ export function AdminPage() {
       max_profiles: Number(profile.max_profiles || 30),
       contact_person: profile.contact_person || '',
       website: profile.website || '',
-      opening_hours: typeof profile.opening_hours === 'string' ? profile.opening_hours : String((profile.opening_hours as any)?.note || ''),
+      opening_hours: normalizeAvailabilityHoursForEditor(profile.opening_hours),
       price_30min: Number(profile.price_30min || 0),
       price_1h: Number(profile.price_1h || 180),
       price_2h: Number(profile.price_2h || 0),
@@ -800,7 +801,7 @@ export function AdminPage() {
         work_country: studioForm.work_country,
         height: studioForm.height_cm,
         languages: Array.isArray(studioForm.languages) ? studioForm.languages : String(studioForm.languages || '').split(',').map((item) => item.trim()).filter(Boolean),
-        opening_hours: studioForm.opening_hours ? { note: studioForm.opening_hours } : {},
+        opening_hours: studioForm.opening_hours,
         price_1h: Number(studioForm.price_1h || 0),
         price_30min: Number(studioForm.price_30min || 0),
         price_2h: Number(studioForm.price_2h || 0),
@@ -1253,6 +1254,10 @@ export function AdminPage() {
           <AdminField label={t('profile.moreAbout.zodiacSign')}><input value={studioForm.zodiac_sign} onChange={(event) => setStudioForm({ ...studioForm, zodiac_sign: event.target.value })} /></AdminField>
         </div>
         <AdminField label={t('admin.profileEditor.description')}><textarea className="admin-profile-textarea" placeholder={t('admin.profileEditor.descriptionPlaceholder')} value={studioForm.description} onChange={(event) => setStudioForm({ ...studioForm, description: event.target.value })} /></AdminField>
+        <section className="admin-card full-span availability-information-section">
+          <h3>{t('availability.additionalInformation')}</h3>
+          <AvailabilityHoursEditor value={studioForm.opening_hours} onChange={(opening_hours) => setStudioForm({ ...studioForm, opening_hours })} />
+        </section>
       </>;
     }
 
@@ -1315,7 +1320,6 @@ export function AdminPage() {
         <AdminField label="Max profiles"><input type="number" min={1} max={30} value={studioForm.max_profiles} onChange={(event) => setStudioForm({ ...studioForm, max_profiles: Number(event.target.value) })} /></AdminField>
         <AdminField label={t('admin.profileEditor.contactPerson')}><input placeholder={t('admin.profileEditor.contactPersonPlaceholder')} value={studioForm.contact_person} onChange={(event) => setStudioForm({ ...studioForm, contact_person: event.target.value })} /></AdminField>
         <AdminField label={t('admin.profileEditor.website')}><input placeholder="https://example.com" value={studioForm.website} onChange={(event) => setStudioForm({ ...studioForm, website: event.target.value })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.openingHours')}><input placeholder={t('admin.profileEditor.openingHoursPlaceholder')} value={studioForm.opening_hours} onChange={(event) => setStudioForm({ ...studioForm, opening_hours: event.target.value })} /></AdminField>
       </div>;
     }
 

@@ -7,6 +7,7 @@ import { clearLoginSessionHandoff, restoreLoginSessionHandoff, supabase } from '
 import { api } from '../lib/api';
 import { waitForSupabaseSession } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
+import { AvailabilityHoursEditor } from '../components/AvailabilityHoursEditor';
 import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
@@ -2156,7 +2157,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   bcuLedger: BcuLedgerEntry[];
 }) {
   const { t } = useI18n();
-  const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text' | 'account' | 'visibility'>(savedProfile ? 'operator' : 'setup');
+  const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text' | 'additional' | 'account' | 'visibility'>(savedProfile ? 'operator' : 'setup');
   const [serviceSearch, setServiceSearch] = useState('');
   const [geoMessage, setGeoMessage] = useState('');
   const [placeQuery, setPlaceQuery] = useState('');
@@ -2452,6 +2453,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
         <ActionButton active={panel === 'prices'} icon={<Gem size={22} />} label={t('dashboard.advertiser.prices')} onClick={() => setPanel('prices')} />
         <ActionButton active={panel === 'services'} icon={<Sparkles size={22} />} label={t('dashboard.advertiser.services')} onClick={() => setPanel('services')} />
         <ActionButton active={panel === 'text'} icon={<UserRound size={22} />} label={t('dashboard.advertiser.profileText')} onClick={() => setPanel('text')} />
+        <ActionButton active={panel === 'additional'} icon={<Clock size={22} />} label={t('availability.additionalInformation')} onClick={() => setPanel('additional')} />
         <ActionButton active={panel === 'account'} icon={<UserRound size={22} />} label={t('dashboard.account.title')} onClick={() => setPanel('account')} />
         <ActionButton active={panel === 'visibility'} icon={<BadgeCheck size={22} />} label={t('dashboard.visibility.title')} onClick={() => setPanel('visibility')} />
       </section>
@@ -2786,6 +2788,18 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           </section>
         )}
 
+        {panel === 'additional' && (
+          <section className="one-hand-card availability-information-section">
+            <div className="one-hand-section-head">
+              <div>
+                <p className="eyebrow">{t('availability.additionalInformation')}</p>
+                <h2>{t('availability.hours')}</h2>
+              </div>
+            </div>
+            <AvailabilityHoursEditor value={profile.opening_hours} onChange={(opening_hours) => onProfileChange({ ...profile, opening_hours })} />
+          </section>
+        )}
+
         {panel === 'account' && (
           <section className="one-hand-card">
             <div className="one-hand-section-head">
@@ -2848,6 +2862,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
         <button type="button" className={panel === 'prices' ? 'active' : ''} onClick={() => setPanel('prices')}><Gem size={18} />{t('dashboard.advertiser.prices')}</button>
         <button type="button" className={panel === 'services' ? 'active' : ''} onClick={() => setPanel('services')}><Sparkles size={18} />{t('dashboard.advertiser.services')}</button>
         {savedProfile && <button type="button" className={panel === 'text' ? 'active' : ''} onClick={() => setPanel('text')}><UserRound size={18} />{t('dashboard.advertiser.textShort')}</button>}
+        <button type="button" className={panel === 'additional' ? 'active' : ''} onClick={() => setPanel('additional')}><Clock size={18} />{t('availability.hours')}</button>
         {savedProfile && <button type="button" className={panel === 'account' ? 'active' : ''} onClick={() => setPanel('account')}><UserRound size={18} />{t('dashboard.account.short')}</button>}
         {savedProfile && <button type="button" className={panel === 'visibility' ? 'active' : ''} onClick={() => setPanel('visibility')}><BadgeCheck size={18} />{t('dashboard.visibility.short')}</button>}
       </nav>

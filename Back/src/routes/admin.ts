@@ -14,6 +14,7 @@ import {
   normalizeProfileOrientation,
   normalizeProfileCategory,
   normalizeProfileTravels,
+  normalizeProfileOpeningHours,
   normalizeOperatorStatus,
   optionalDecimalRange,
   optionalText,
@@ -3003,7 +3004,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
       max_profiles: optionalInteger(body.max_profiles, 1, 30) || 30,
       contact_person: optionalText(body.contact_person, 120),
       website: optionalText(body.website, 240),
-      opening_hours: normalizeOpeningHours(body.opening_hours),
+      opening_hours: normalizeProfileOpeningHours(body.opening_hours),
       price_30min: optionalMoney(body.price_30min),
       price_1h: optionalMoney(body.price_1h) || 180,
       price_2h: optionalMoney(body.price_2h),
@@ -3083,12 +3084,6 @@ function normalizeAdminSubscriptionStatus(value: unknown) {
 function optionalEmail(value: unknown) {
   const email = String(value || '').trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.slice(0, 240) : null;
-}
-
-function normalizeOpeningHours(value: unknown) {
-  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
-  const text = optionalText(value, 1000);
-  return text ? { note: text } : {};
 }
 
 function adminCityLabel(slug: string) {
