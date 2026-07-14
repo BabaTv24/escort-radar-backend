@@ -258,6 +258,8 @@ export function AdminPage() {
   const [accountActionLoading, setAccountActionLoading] = useState<'create' | 'temp' | 'magic' | 'reset' | 'send-login' | 'send-reset' | 'security' | ''>('');
   const [profileImportFile, setProfileImportFile] = useState<File | null>(null);
   const [profileImportReport, setProfileImportReport] = useState<{ created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } | null>(null);
+  const [cityImportOpen, setCityImportOpen] = useState(false);
+  const [cityImportUrl, setCityImportUrl] = useState('');
   const [hermesOpen, setHermesOpen] = useState(false);
   const [hermesDirty, setHermesDirty] = useState(false);
   const [hermesUrl, setHermesUrl] = useState('');
@@ -1703,6 +1705,20 @@ export function AdminPage() {
           </AdminWindow>
         </div>
       )}
+      {cityImportOpen && (
+        <div className="admin-modal-backdrop" onClick={() => setCityImportOpen(false)}>
+          <AdminWindow id="admin-city-import" title={t('admin.cityImport.title')} labels={adminWindowLabels} className="admin-modal" onClose={() => setCityImportOpen(false)}>
+            <AdminField label={t('admin.cityImport.urlLabel')}>
+              <input type="url" value={cityImportUrl} onChange={(event) => setCityImportUrl(event.target.value)} />
+            </AdminField>
+            <p className="admin-muted">{t('admin.cityImport.nextStageInfo')}</p>
+            <div className="admin-actions-row">
+              <button type="button" className="button primary" disabled>{t('admin.cityImport.findProfiles')}</button>
+              <button type="button" className="button" onClick={() => setCityImportOpen(false)}>{t('admin.window.close')}</button>
+            </div>
+          </AdminWindow>
+        </div>
+      )}
       {hermesOpen && (
         <div className="admin-modal-backdrop" onClick={requestCloseHermesImporter}>
           <AdminWindow id="admin-hermes-importer" title={t('admin.hermes.title')} subtitle={t('admin.hermes.eyebrow')} labels={adminWindowLabels} className="admin-modal hermes-modal" onClose={requestCloseHermesImporter}>
@@ -2000,6 +2016,7 @@ export function AdminPage() {
               </div>
               <div className="admin-actions-row">
                 <button className="button primary" onClick={openHermesImporter}><Sparkles size={15} /> {t('admin.hermes.importProfiles')}</button>
+                <button className="button primary" onClick={() => setCityImportOpen(true)}>{t('admin.cityImport.title')}</button>
                 <label className="admin-action-btn">
                   {t('admin.accounts.importProfiles')}
                   <input hidden type="file" accept=".csv,.xlsx,.xls" onChange={(event) => setProfileImportFile(event.target.files?.[0] || null)} />
