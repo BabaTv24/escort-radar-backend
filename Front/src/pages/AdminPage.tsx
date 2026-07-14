@@ -1,4 +1,4 @@
-import { isValidElement, useEffect, useState } from 'react';
+import { isValidElement, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
@@ -16,6 +16,8 @@ import { AdminReferralTree } from '../components/AdminReferralTree';
 import { AdminWindow, AdminWindowProvider } from '../components/AdminWindow';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
+import { runCityImportQueue } from '../lib/cityImportQueue';
+import type { CityImportQueueItem } from '../lib/cityImportQueue';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
 import { berlinDistrictOptions, resolveBerlinPostalDistrict, resolveManualSearcherLocation } from '../lib/geo';
@@ -260,6 +262,13 @@ export function AdminPage() {
   const [profileImportReport, setProfileImportReport] = useState<{ created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } | null>(null);
   const [cityImportOpen, setCityImportOpen] = useState(false);
   const [cityImportUrl, setCityImportUrl] = useState('');
+  const [cityImportLoading, setCityImportLoading] = useState(false);
+  const [cityImportError, setCityImportError] = useState('');
+  const [cityImportResult, setCityImportResult] = useState<{ listing_url: string; found_count: number; profile_urls: string[]; warnings: string[] } | null>(null);
+  const [selectedCityProfileUrls, setSelectedCityProfileUrls] = useState<string[]>([]);
+  const [cityImportQueueItems, setCityImportQueueItems] = useState<CityImportQueueItem[]>([]);
+  const [cityImportActive, setCityImportActive] = useState(false);
+  const cityImportStopRequested = useRef(false);
   const [hermesOpen, setHermesOpen] = useState(false);
   const [hermesDirty, setHermesDirty] = useState(false);
   const [hermesUrl, setHermesUrl] = useState('');
@@ -326,6 +335,10 @@ export function AdminPage() {
     restore: t('admin.window.restore'),
     close: t('admin.window.close')
   };
+  const cityImportProcessed = cityImportQueueItems.filter((item) => ['imported', 'skipped_duplicate', 'failed'].includes(item.status)).length;
+  const cityImportImported = cityImportQueueItems.filter((item) => item.status === 'imported').length;
+  const cityImportSkipped = cityImportQueueItems.filter((item) => item.status === 'skipped_duplicate').length;
+  const cityImportFailed = cityImportQueueItems.filter((item) => item.status === 'failed').length;
 
   useEffect(() => {
     if (isLoginRoute) {
@@ -803,6 +816,82 @@ export function AdminPage() {
     if (hermesDirty && !window.confirm(t('admin.window.unsavedConfirm'))) return;
     setHermesDirty(false);
     setHermesOpen(false);
+  }
+
+  async function discoverCityImportProfiles() {
+    const listingUrl = cityImportUrl.trim();
+    if (!listingUrl) return;
+    setCityImportLoading(true);
+    setCityImportError('');
+    setCityImportResult(null);
+    setSelectedCityProfileUrls([]);
+    setCityImportQueueItems([]);
+    try {
+      const result = await api.discoverCityProfiles(token, listingUrl, 30);
+      setCityImportResult(result);
+      setSelectedCityProfileUrls(result.profile_urls);
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : t('states.requestFailed');
+      const knownCode = ['invalid_url', 'unsupported_host', 'unsupported_listing', 'blocked_address', 'fetch_timeout', 'fetch_failed', 'captcha_or_protection_detected', 'no_profiles_found', 'html_too_large']
+        .find((code) => rawMessage.startsWith(code));
+      setCityImportError(knownCode ? t(`admin.cityImport.errors.${knownCode}`) : rawMessage);
+    } finally {
+      setCityImportLoading(false);
+    }
+  }
+
+  function toggleCityProfileUrl(profileUrl: string) {
+    setSelectedCityProfileUrls((current) => current.includes(profileUrl)
+      ? current.filter((url) => url !== profileUrl)
+      : [...current, profileUrl]);
+  }
+
+  function toggleAllCityProfileUrls() {
+    if (!cityImportResult) return;
+    setSelectedCityProfileUrls((current) => current.length === cityImportResult.profile_urls.length ? [] : [...cityImportResult.profile_urls]);
+  }
+
+  function requestCloseCityImport() {
+    if (cityImportActive) {
+      window.alert(t('admin.cityImport.closeBlocked'));
+      return;
+    }
+    setCityImportOpen(false);
+  }
+
+  async function startCityImportQueue() {
+    const urls = selectedCityProfileUrls.slice(0, 30);
+    if (!urls.length || cityImportActive) return;
+    cityImportStopRequested.current = false;
+    setCityImportActive(true);
+    try {
+      await runCityImportQueue({
+        urls,
+        shouldStop: () => cityImportStopRequested.current,
+        onChange: setCityImportQueueItems,
+        importItem: async (profileUrl) => {
+          const preview = await api.importProfilePreview(token, profileUrl);
+          try {
+            const result = await api.importProfileCreate(token, {
+              source_url: preview.source_url || profileUrl,
+              profile: preview.profile,
+              create_as_draft: true,
+              sponsored: true,
+              imageUrls: (preview.profile.images || []).slice(0, 12)
+            });
+            return { status: 'imported' as const, profileId: result.profile_id };
+          } catch (error) {
+            if (error instanceof Error && error.message.startsWith('duplicate_source_url')) {
+              return { status: 'skipped_duplicate' as const };
+            }
+            throw error;
+          }
+        }
+      });
+      await load();
+    } finally {
+      setCityImportActive(false);
+    }
   }
 
   async function saveSubscriptionDates() {
@@ -1706,15 +1795,62 @@ export function AdminPage() {
         </div>
       )}
       {cityImportOpen && (
-        <div className="admin-modal-backdrop" onClick={() => setCityImportOpen(false)}>
-          <AdminWindow id="admin-city-import" title={t('admin.cityImport.title')} labels={adminWindowLabels} className="admin-modal" onClose={() => setCityImportOpen(false)}>
+        <div className="admin-modal-backdrop" onClick={requestCloseCityImport}>
+          <AdminWindow id="admin-city-import" title={t('admin.cityImport.title')} labels={adminWindowLabels} className="admin-modal" onClose={requestCloseCityImport}>
             <AdminField label={t('admin.cityImport.urlLabel')}>
-              <input type="url" value={cityImportUrl} onChange={(event) => setCityImportUrl(event.target.value)} />
+              <input type="url" value={cityImportUrl} disabled={cityImportActive} onChange={(event) => {
+                setCityImportUrl(event.target.value);
+                setCityImportError('');
+                setCityImportResult(null);
+                setSelectedCityProfileUrls([]);
+                setCityImportQueueItems([]);
+              }} />
             </AdminField>
             <p className="admin-muted">{t('admin.cityImport.nextStageInfo')}</p>
             <div className="admin-actions-row">
-              <button type="button" className="button primary" disabled>{t('admin.cityImport.findProfiles')}</button>
-              <button type="button" className="button" onClick={() => setCityImportOpen(false)}>{t('admin.window.close')}</button>
+              <button type="button" className="button primary" disabled={cityImportActive || cityImportLoading || !/^https?:\/\/\S+$/i.test(cityImportUrl.trim())} onClick={discoverCityImportProfiles}>
+                {cityImportLoading ? t('states.loading') : t('admin.cityImport.findProfiles')}
+              </button>
+            </div>
+            {cityImportError ? <p className="error-text" role="alert">{cityImportError}</p> : null}
+            {cityImportResult ? (
+              <div className="city-import-results">
+                <strong>{t('admin.cityImport.foundCount', { count: cityImportResult.found_count })}</strong>
+                <label className="admin-check-row city-import-select-all">
+                  <input type="checkbox" disabled={cityImportActive} checked={cityImportResult.profile_urls.length > 0 && selectedCityProfileUrls.length === cityImportResult.profile_urls.length} onChange={toggleAllCityProfileUrls} />
+                  <span>{t('admin.cityImport.selectAll')}</span>
+                </label>
+                <div className="city-import-url-list">
+                  {cityImportResult.profile_urls.map((profileUrl) => (
+                    <label className="admin-check-row" key={profileUrl}>
+                      <input type="checkbox" disabled={cityImportActive} checked={selectedCityProfileUrls.includes(profileUrl)} onChange={() => toggleCityProfileUrl(profileUrl)} />
+                      <span className="city-import-url-copy">{profileUrl}</span>
+                      {cityImportQueueItems.find((item) => item.url === profileUrl) ? (
+                        <span className={`city-import-item-status ${cityImportQueueItems.find((item) => item.url === profileUrl)?.status}`}>
+                          {t(`admin.cityImport.status.${cityImportQueueItems.find((item) => item.url === profileUrl)?.status}`)}
+                        </span>
+                      ) : null}
+                      {cityImportQueueItems.find((item) => item.url === profileUrl)?.error ? <small className="error-text">{cityImportQueueItems.find((item) => item.url === profileUrl)?.error}</small> : null}
+                    </label>
+                  ))}
+                </div>
+                {cityImportResult.warnings.length ? (
+                  <ul className="admin-warning-list">
+                    {cityImportResult.warnings.map((warning) => <li key={warning}>{warning === 'profile_limit_reached' ? t('admin.cityImport.warnings.profileLimitReached') : warning}</li>)}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+            {cityImportQueueItems.length ? (
+              <div className="city-import-progress" aria-live="polite">
+                <strong>{t('admin.cityImport.progress', { processed: cityImportProcessed, total: cityImportQueueItems.length })}</strong>
+                <span>{t('admin.cityImport.summary', { imported: cityImportImported, skipped: cityImportSkipped, failed: cityImportFailed })}</span>
+              </div>
+            ) : null}
+            <div className="admin-actions-row">
+              <button type="button" className="button primary" disabled={cityImportActive || selectedCityProfileUrls.length === 0 || selectedCityProfileUrls.length > 30} onClick={startCityImportQueue}>{t('admin.cityImport.startImport')}</button>
+              {cityImportActive ? <button type="button" className="button" onClick={() => { cityImportStopRequested.current = true; }}>{t('admin.cityImport.stopImport')}</button> : null}
+              <button type="button" className="button" disabled={cityImportActive} onClick={requestCloseCityImport}>{t('admin.window.close')}</button>
             </div>
           </AdminWindow>
         </div>

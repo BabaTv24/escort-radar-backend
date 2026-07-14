@@ -51,6 +51,7 @@ import {
   sumRealRevenue
 } from '../revenue.js';
 import { explainProfileVisibility } from '../profileVisibility.js';
+import { CityImportDiscoveryError, discoverCityProfiles, isSourceUrlDuplicateError, normalizeProfileSourceUrl } from '../cityImportDiscovery.js';
 
 export const adminRouter = Router();
 
@@ -835,10 +836,27 @@ adminRouter.post('/import-profile-preview', asyncHandler(async (req, res) => {
   }
 }));
 
+adminRouter.post('/import-city/discover', asyncHandler(async (req, res) => {
+  try {
+    const result = await discoverCityProfiles({
+      listing_url: String(req.body.listing_url || ''),
+      max_profiles: req.body.max_profiles
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof CityImportDiscoveryError) {
+      const status = ['fetch_timeout', 'fetch_failed', 'captcha_or_protection_detected', 'html_too_large'].includes(error.code) ? 502 : 400;
+      return res.status(status).json({ error: error.code, reason: error.message });
+    }
+    throw error;
+  }
+}));
+
 adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
   const sourceUrl = String(req.body.source_url || '').trim();
   const safetyError = validatePublicImportUrl(sourceUrl);
   if (safetyError) return res.status(400).json({ error: safetyError });
+  const sourceUrlNormalized = normalizeProfileSourceUrl(sourceUrl);
   const incomingProfile = req.body.profile && typeof req.body.profile === 'object' ? req.body.profile : {};
   const displayName = optionalText((incomingProfile as any).display_name || (incomingProfile as any).name, 80);
   if (!displayName) return res.status(400).json({ error: 'Profile display name is required', stage: 'validate profile payload' });
@@ -846,6 +864,16 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
   const confirmPassword = optionalText(req.body.confirmPassword || req.body.confirm_password, 200);
   if (password && password.length < 8) return res.status(400).json({ error: 'Password must contain at least 8 characters' });
   if (password && password !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match' });
+  const { data: existingSourceProfile, error: sourceLookupError } = await supabaseAdmin
+    .from('profiles')
+    .select('id')
+    .eq('source_url_normalized', sourceUrlNormalized)
+    .limit(1)
+    .maybeSingle();
+  if (sourceLookupError) return res.status(400).json({ error: sourceLookupError.message, stage: 'check source URL duplicate' });
+  if (existingSourceProfile?.id) {
+    return res.status(409).json({ error: 'duplicate_source_url', status: 'skipped_duplicate', profile_id: existingSourceProfile.id });
+  }
   const ownerEmail = optionalEmail((incomingProfile as any).owner_email) || await nextSponsoredImportEmail();
   const combinedWarnings = uniqueStrings([
     ...((incomingProfile as any).admin_warnings || []),
@@ -916,6 +944,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     provider: 'hermes_agent',
     acquisition_source: 'hermes_import_sponsored',
     source_url: sourceUrl,
+    source_url_normalized: sourceUrlNormalized,
     import_source: optionalText((incomingProfile as any).import_source, 60) || 'hermes',
     imported_at: new Date().toISOString(),
     admin_note: adminImportNote(sourceUrl, incomingProfile as Record<string, any>, combinedWarnings),
@@ -929,6 +958,9 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     .single();
   if (error) {
     if (authUserCreated && authUser?.id) await supabaseAdmin.auth.admin.deleteUser(authUser.id);
+    if (isSourceUrlDuplicateError(error)) {
+      return res.status(409).json({ error: 'duplicate_source_url', status: 'skipped_duplicate' });
+    }
     return res.status(400).json({ error: error.message, stage: 'create profile', rolled_back_auth_user: authUserCreated });
   }
   if (authUser?.id) await logAccountAccess(req, data.id, authUser.id, authUserCreated ? 'hermes_import_account_created' : 'hermes_import_user_linked');

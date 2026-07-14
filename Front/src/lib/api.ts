@@ -2,7 +2,7 @@ import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlem
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-type RequestOptions = RequestInit & { token?: string };
+type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
 
 export type ReferralMe = { referralCode: string; referralLink: string; directReferralsCount: number; totalDescendantsCount: number; referredByDisplay: string | null; registrationSource: string; referralDepth: number };
 export type AdminReferralNode = { userId: string; parentUserId: string | null; displayName: string; role: string; accountStatus: string; registrationSource: string; activationStatus: string; activationProvider: string | null; referralCode: string; referralDepth: number; createdAt: string; directChildrenCount: number; totalDescendantsCount: number; balanceBcu: number; hasProfile: boolean; isSponsoredProfile: boolean; isRoot: boolean };
@@ -12,7 +12,18 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
 
-  const response = await fetch(`${API_URL}${path}`, { cache: 'no-store', ...options, headers });
+  const { timeoutMs, token: _token, ...fetchOptions } = options;
+  const controller = timeoutMs ? new AbortController() : null;
+  const timeoutId = controller ? globalThis.setTimeout(() => controller.abort(), timeoutMs) : null;
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { cache: 'no-store', ...fetchOptions, headers, signal: controller?.signal || fetchOptions.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw new Error('Request timed out. Please try again.');
+    throw error;
+  } finally {
+    if (timeoutId) globalThis.clearTimeout(timeoutId);
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: 'Request failed' }));
     const reason = payload.reason ? ` (${payload.reason})` : '';
@@ -75,7 +86,8 @@ export const api = {
   uploadImage: (token: string, form: FormData) => request<{ image: unknown }>('/api/uploads/profile-image', {
     method: 'POST',
     token,
-    body: form
+    body: form,
+    timeoutMs: 45000
   }),
   uploadClientAvatar: (token: string, form: FormData) => request<{ client_profile: ClientProfile; avatar_url: string }>('/api/uploads/client-avatar', {
     method: 'POST',
@@ -348,6 +360,12 @@ export const api = {
     method: 'POST',
     token,
     body: JSON.stringify({ url })
+  }),
+  discoverCityProfiles: (token: string, listingUrl: string, maxProfiles = 30) => request<{ listing_url: string; found_count: number; profile_urls: string[]; warnings: string[] }>('/api/admin/import-city/discover', {
+    method: 'POST',
+    token,
+    timeoutMs: 15000,
+    body: JSON.stringify({ listing_url: listingUrl, max_profiles: maxProfiles })
   }),
   importProfileCreate: (token: string, body: { source_url: string; profile: HermesProfilePreview; create_as_draft: boolean; sponsored?: boolean; imageUrls?: string[] }) => request<{ ok: boolean; profile_id: string; profile: Profile; images_imported: number; images_failed: number; imported_images?: number; failed_images?: number; warnings: string[] }>('/api/admin/import-profile-create', {
     method: 'POST',
