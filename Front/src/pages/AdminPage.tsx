@@ -13,6 +13,7 @@ type HermesImportPreview = HermesProfilePreview & {
 };
 import { useI18n } from '../i18n';
 import { AdminReferralTree } from '../components/AdminReferralTree';
+import { AdminWindow, AdminWindowProvider } from '../components/AdminWindow';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
@@ -258,6 +259,7 @@ export function AdminPage() {
   const [profileImportFile, setProfileImportFile] = useState<File | null>(null);
   const [profileImportReport, setProfileImportReport] = useState<{ created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } | null>(null);
   const [hermesOpen, setHermesOpen] = useState(false);
+  const [hermesDirty, setHermesDirty] = useState(false);
   const [hermesUrl, setHermesUrl] = useState('');
   const [hermesPreview, setHermesPreview] = useState<HermesImportPreview | null>(null);
   const [hermesWarnings, setHermesWarnings] = useState<string[]>([]);
@@ -315,6 +317,13 @@ export function AdminPage() {
   const isLoginRoute = location.pathname === '/admin/login';
   const filteredProfiles = profiles.filter((profile) => profileMatchesAdminFilters(profile, query, studioFilters));
   const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
+  const adminWindowLabels = {
+    minimize: t('admin.window.minimize'),
+    expand: t('admin.window.expand'),
+    maximize: t('admin.window.maximize'),
+    restore: t('admin.window.restore'),
+    close: t('admin.window.close')
+  };
 
   useEffect(() => {
     if (isLoginRoute) {
@@ -767,6 +776,33 @@ export function AdminPage() {
     });
   }
 
+  function requestCloseSubscriptionDateEditor() {
+    if (!subscriptionDateEditor) return;
+    const initial = {
+      start: formatDateInput(readSubscriptionStart(subscriptionDateEditor.row)),
+      end: formatDateInput(readSubscriptionEnd(subscriptionDateEditor.row)),
+      status: String(subscriptionDateEditor.row.status || 'active'),
+      note: String(subscriptionDateEditor.row.note || '')
+    };
+    const dirty = subscriptionDateEditor.start !== initial.start
+      || subscriptionDateEditor.end !== initial.end
+      || subscriptionDateEditor.status !== initial.status
+      || subscriptionDateEditor.note !== initial.note;
+    if (dirty && !window.confirm(t('admin.window.unsavedConfirm'))) return;
+    setSubscriptionDateEditor(null);
+  }
+
+  function openHermesImporter() {
+    setHermesDirty(false);
+    setHermesOpen(true);
+  }
+
+  function requestCloseHermesImporter() {
+    if (hermesDirty && !window.confirm(t('admin.window.unsavedConfirm'))) return;
+    setHermesDirty(false);
+    setHermesOpen(false);
+  }
+
   async function saveSubscriptionDates() {
     if (!subscriptionDateEditor) return;
     await action(async () => {
@@ -1014,6 +1050,7 @@ export function AdminPage() {
         imageUrls: (hermesPreview.images || []).slice(0, 12)
       });
       setProfiles((current) => [result.profile, ...current.filter((profile) => profile.id !== result.profile.id)]);
+      setHermesDirty(false);
       setHermesOpen(false);
       setHermesPreview(null);
       setHermesUrl('');
@@ -1595,6 +1632,7 @@ export function AdminPage() {
   }
 
   return (
+    <AdminWindowProvider>
     <div className="admin-shell">
       <aside className="admin-sidebar">
         <Link to="/admin" className="admin-brand">
@@ -1637,43 +1675,38 @@ export function AdminPage() {
         </header>
 
         {message && <p className="error-text">{message}</p>}
-        {renderView()}
+        <AdminWindow
+          key={view}
+          id={`admin-workspace-${view}`}
+          title={adminViewTitle(view, t)}
+          labels={adminWindowLabels}
+          workspace
+        >
+          {renderView()}
+        </AdminWindow>
       </main>
 
       {modal && (
         <div className="admin-modal-backdrop" onClick={() => setModal(null)}>
-          <article className="admin-modal" onClick={(event) => event.stopPropagation()}>
-            <h2>{modal.title}</h2>
+          <AdminWindow id="admin-detail-modal" title={modal.title} labels={adminWindowLabels} className="admin-modal" onClose={() => setModal(null)}>
             <pre>{modal.body}</pre>
             <button className="button primary" onClick={() => setModal(null)}>Zamknij</button>
-          </article>
+          </AdminWindow>
         </div>
       )}
       {photoPreview && (
         <div className="admin-modal-backdrop" onClick={() => setPhotoPreview(null)}>
-          <article className="admin-modal photo-preview-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="profile-studio-head compact">
-              <div>
-                <p className="eyebrow">{t('admin.photos.preview')}</p>
-                <h2>{photoPreview.profile_display_name || photoPreview.profile_id || t('admin.photos.noPhoto')}</h2>
-              </div>
-              <StatusBadge value={String(photoPreview.moderation_status || 'pending')} />
-            </div>
+          <AdminWindow id="admin-photo-preview" title={photoPreview.profile_display_name || photoPreview.profile_id || t('admin.photos.noPhoto')} subtitle={t('admin.photos.preview')} labels={adminWindowLabels} className="admin-modal photo-preview-modal" onClose={() => setPhotoPreview(null)}>
+            <StatusBadge value={String(photoPreview.moderation_status || 'pending')} />
             {adminPhotoSrc(photoPreview) ? <img src={adminPhotoSrc(photoPreview)} alt="" /> : <AdminCoverPlaceholder label={t('admin.photos.noPhoto')} />}
             <button className="button primary" onClick={() => setPhotoPreview(null)}>{t('admin.buttons.cancel')}</button>
-          </article>
+          </AdminWindow>
         </div>
       )}
       {hermesOpen && (
-        <div className="admin-modal-backdrop" onClick={() => setHermesOpen(false)}>
-          <article className="admin-modal hermes-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="profile-studio-head compact">
-              <div>
-                <p className="eyebrow">{t('admin.hermes.eyebrow')}</p>
-                <h2>{t('admin.hermes.title')}</h2>
-              </div>
-              <button className="button" onClick={() => setHermesOpen(false)}>{t('admin.buttons.cancel')}</button>
-            </div>
+        <div className="admin-modal-backdrop" onClick={requestCloseHermesImporter}>
+          <AdminWindow id="admin-hermes-importer" title={t('admin.hermes.title')} subtitle={t('admin.hermes.eyebrow')} labels={adminWindowLabels} className="admin-modal hermes-modal" onClose={requestCloseHermesImporter}>
+            <div onChange={() => setHermesDirty(true)}>
             <p className="admin-muted">{t('admin.hermes.legalNotice')}</p>
             <div className="admin-actions-row hermes-url-row">
               <input placeholder={t('admin.hermes.pasteLink')} value={hermesUrl} onChange={(event) => setHermesUrl(event.target.value)} />
@@ -1739,17 +1772,17 @@ export function AdminPage() {
                 {hermesPreview.raw_visible_text ? <AdminField label={t('admin.hermes.rawVisibleText')}><textarea className="hermes-raw-text" value={hermesPreview.raw_visible_text} onChange={(event) => updateHermesPreview({ raw_visible_text: event.target.value })} /></AdminField> : null}
                 <div className="admin-actions-row">
                   <button className="button primary" disabled={hermesBusy || !hermesPreview || !(hermesPreview.source_url || hermesUrl.trim())} onClick={createHermesDraft}>{t('admin.hermes.createSponsoredDraft')}</button>
-                  <button className="button" onClick={() => setHermesOpen(false)}>{t('admin.buttons.cancel')}</button>
+                  <button className="button" onClick={requestCloseHermesImporter}>{t('admin.buttons.cancel')}</button>
                 </div>
               </>
             )}
-          </article>
+            </div>
+          </AdminWindow>
         </div>
       )}
       {subscriptionDateEditor && (
-        <div className="admin-modal-backdrop" onClick={() => setSubscriptionDateEditor(null)}>
-          <article className="admin-modal" onClick={(event) => event.stopPropagation()}>
-            <h2>{t('admin.subscriptionActions.setCustomDates')}</h2>
+        <div className="admin-modal-backdrop" onClick={requestCloseSubscriptionDateEditor}>
+          <AdminWindow id="admin-subscription-editor" title={t('admin.subscriptionActions.setCustomDates')} labels={adminWindowLabels} className="admin-modal" onClose={requestCloseSubscriptionDateEditor}>
             <div className="admin-form-grid">
               <AdminField label={t('admin.subscriptions.startDate')}>
                 <input type="date" value={subscriptionDateEditor.start} onChange={(event) => setSubscriptionDateEditor({ ...subscriptionDateEditor, start: event.target.value })} />
@@ -1768,12 +1801,13 @@ export function AdminPage() {
             </AdminField>
             <div className="admin-actions-row">
               <button className="button primary" onClick={saveSubscriptionDates}>{t('admin.buttons.saveDates')}</button>
-              <button className="button" onClick={() => setSubscriptionDateEditor(null)}>{t('admin.buttons.cancel')}</button>
+              <button className="button" onClick={requestCloseSubscriptionDateEditor}>{t('admin.buttons.cancel')}</button>
             </div>
-          </article>
+          </AdminWindow>
         </div>
       )}
     </div>
+    </AdminWindowProvider>
   );
 
   function renderView() {
@@ -1965,7 +1999,7 @@ export function AdminPage() {
                 <h2>{t('admin.profiles.allProfiles')}</h2>
               </div>
               <div className="admin-actions-row">
-                <button className="button primary" onClick={() => setHermesOpen(true)}><Sparkles size={15} /> {t('admin.hermes.importProfiles')}</button>
+                <button className="button primary" onClick={openHermesImporter}><Sparkles size={15} /> {t('admin.hermes.importProfiles')}</button>
                 <label className="admin-action-btn">
                   {t('admin.accounts.importProfiles')}
                   <input hidden type="file" accept=".csv,.xlsx,.xls" onChange={(event) => setProfileImportFile(event.target.files?.[0] || null)} />
