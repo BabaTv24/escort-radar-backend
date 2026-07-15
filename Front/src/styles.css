@@ -12565,3 +12565,29 @@ textarea:focus {
   border-radius: .55rem;
   background: rgba(68, 210, 255, .055);
 }
+
+.critical-pin-card {
+  display: grid;
+  gap: .8rem;
+  margin-bottom: 1rem;
+}
+
+.critical-delete-modal > .admin-window-content-shell > .admin-window-content {
+  display: grid;
+  gap: .8rem;
+}
+
+.critical-delete-preview {
+  max-height: 12rem;
+  margin: 0;
+  padding: .7rem .7rem .7rem 1.8rem;
+  overflow: auto;
+  border: 1px solid rgba(255, 74, 105, .2);
+  border-radius: .5rem;
+  background: rgba(255, 74, 105, .05);
+}
+
+.critical-delete-preview small {
+  margin-left: .35rem;
+  color: #aaa;
+}

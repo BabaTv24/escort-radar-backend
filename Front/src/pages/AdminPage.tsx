@@ -2,7 +2,7 @@ import { isValidElement, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientPersonalProfile, HermesProfilePreview, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
@@ -305,6 +305,13 @@ export function AdminPage() {
   const [studioServiceCategory, setStudioServiceCategory] = useState('all');
   const [expandedServiceCategories, setExpandedServiceCategories] = useState<Record<string, boolean>>({});
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+  const [deletionPinStatus, setDeletionPinStatus] = useState<{ configured: boolean; updated_at: string | null } | null>(null);
+  const [deletionPinForm, setDeletionPinForm] = useState({ current: '', next: '', confirm: '' });
+  const [deletionPinSaving, setDeletionPinSaving] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeletePin, setBulkDeletePin] = useState('');
+  const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState('');
   const [bulkPremiumTier, setBulkPremiumTier] = useState('gold');
   const [bulkSubscriptionStatus, setBulkSubscriptionStatus] = useState('active');
   const [profilePanelMode, setProfilePanelMode] = useState<'overview' | 'edit' | 'photos' | 'services' | 'subscription'>('overview');
@@ -635,6 +642,12 @@ export function AdminPage() {
   }, [clientFilters.search, clientFilters.status, clientFilters.sort, clientFilters.direction, clientFilters.page, clientFilters.page_size, token, view]);
 
   useEffect(() => {
+    if (!token || !['profiles', 'profile-studio', 'settings'].includes(view)) return;
+    void refreshDeletionPinStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, view]);
+
+  useEffect(() => {
     if (!selectedProfileQueryId || !['profiles', 'profile-studio'].includes(view) || !profiles.length) return;
     const profile = profiles.find((item) => item.id === selectedProfileQueryId);
     if (!profile) return;
@@ -794,12 +807,103 @@ export function AdminPage() {
       setMessage(t('admin.bulk.noneSelected'));
       return;
     }
+    if (operation === 'delete') {
+      await openBulkDeleteConfirmation();
+      return;
+    }
     const confirmed = window.confirm(t('admin.bulk.confirm', { count: selectedProfileIds.length }));
     if (!confirmed) return;
     await action(async () => {
       await api.bulkAdminProfiles(token, { operation, profile_ids: selectedProfileIds, ...extra });
       setSelectedProfileIds([]);
     });
+  }
+
+  async function refreshDeletionPinStatus() {
+    try {
+      const status = await api.adminDeletionPinStatus(token);
+      setDeletionPinStatus(status);
+      return status;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      return null;
+    }
+  }
+
+  async function saveDeletionPin() {
+    if (!/^\d{6}$/.test(deletionPinForm.next) || (deletionPinStatus?.configured && !/^\d{6}$/.test(deletionPinForm.current))) {
+      setMessage(t('admin.securityPin.invalidFormat'));
+      return;
+    }
+    if (deletionPinForm.next !== deletionPinForm.confirm) {
+      setMessage(t('admin.securityPin.mismatch'));
+      return;
+    }
+    setDeletionPinSaving(true);
+    setMessage('');
+    try {
+      const status = await api.setAdminDeletionPin(token, {
+        current_pin: deletionPinStatus?.configured ? deletionPinForm.current : undefined,
+        new_pin: deletionPinForm.next,
+        confirm_pin: deletionPinForm.confirm
+      });
+      setDeletionPinStatus(status);
+      setMessage(t(deletionPinStatus?.configured ? 'admin.securityPin.changed' : 'admin.securityPin.setSuccess'));
+    } catch (error) {
+      setMessage(deletionPinErrorMessage(error));
+    } finally {
+      setDeletionPinForm({ current: '', next: '', confirm: '' });
+      setDeletionPinSaving(false);
+    }
+  }
+
+  async function openBulkDeleteConfirmation() {
+    const status = deletionPinStatus || await refreshDeletionPinStatus();
+    if (!status) return;
+    setBulkDeletePin('');
+    setBulkDeleteError('');
+    setBulkDeleteOpen(true);
+  }
+
+  function closeBulkDeleteConfirmation() {
+    if (bulkDeleteBusy) return;
+    setBulkDeletePin('');
+    setBulkDeleteError('');
+    setBulkDeleteOpen(false);
+  }
+
+  async function confirmBulkProfileDelete() {
+    if (!/^\d{6}$/.test(bulkDeletePin) || bulkDeleteBusy || !deletionPinStatus?.configured) return;
+    setBulkDeleteBusy(true);
+    setBulkDeleteError('');
+    try {
+      await api.bulkAdminProfiles(token, { operation: 'delete', profile_ids: selectedProfileIds, deletion_pin: bulkDeletePin });
+      setBulkDeletePin('');
+      setSelectedProfileIds([]);
+      setBulkDeleteOpen(false);
+      await load();
+    } catch (error) {
+      setBulkDeletePin('');
+      if (error instanceof ApiError && error.payload?.error === 'deletion_pin_not_configured') {
+        setDeletionPinStatus({ configured: false, updated_at: null });
+      }
+      setBulkDeleteError(deletionPinErrorMessage(error));
+    } finally {
+      setBulkDeletePin('');
+      setBulkDeleteBusy(false);
+    }
+  }
+
+  function deletionPinErrorMessage(error: unknown) {
+    const code = error instanceof ApiError ? String(error.payload?.error || '') : '';
+    const retryAfter = error instanceof ApiError ? Number(error.payload?.retry_after_minutes || 0) : 0;
+    if (code === 'invalid_pin_format') return t('admin.securityPin.invalidFormat');
+    if (code === 'pin_confirmation_mismatch') return t('admin.securityPin.mismatch');
+    if (code === 'deletion_pin_not_configured') return t('admin.securityPin.configureFirst');
+    if (code === 'invalid_deletion_pin') return t('admin.securityPin.invalid');
+    if (code === 'too_many_pin_attempts') return t('admin.securityPin.tooManyAttempts');
+    if (code === 'deletion_pin_locked') return t('admin.securityPin.retryInMinutes', { count: retryAfter || 1 });
+    return error instanceof Error ? error.message : t('states.requestFailed');
   }
 
   function openSubscriptionDateEditor(row: SubscriptionRow) {
@@ -1795,6 +1899,35 @@ export function AdminPage() {
         )}
       </main>
 
+      {bulkDeleteOpen && (
+        <div className="admin-modal-backdrop" onClick={closeBulkDeleteConfirmation}>
+          <AdminWindow id="admin-bulk-profile-delete" title={t('admin.securityPin.deleteTitle', { count: selectedProfileIds.length })} labels={adminWindowLabels} className="admin-modal critical-delete-modal" onClose={closeBulkDeleteConfirmation}>
+            <p className="error-text"><strong>{t('admin.securityPin.irreversible')}</strong></p>
+            <p>{t('admin.securityPin.deleteCount', { count: selectedProfileIds.length })}</p>
+            <ul className="critical-delete-preview">
+              {profiles.filter((profile) => selectedProfileIds.includes(profile.id)).slice(0, 5).map((profile) => (
+                <li key={profile.id}>{profile.display_name || formatShortId(profile.id)} <small>{formatShortId(profile.id)}</small></li>
+              ))}
+            </ul>
+            {!deletionPinStatus?.configured ? (
+              <div className="admin-alert">
+                <p>{t('admin.securityPin.configureFirst')}</p>
+                <button type="button" className="button primary" disabled={bulkDeleteBusy} onClick={() => { closeBulkDeleteConfirmation(); navigate('/admin/settings'); }}>{t('admin.securityPin.goToSettings')}</button>
+              </div>
+            ) : (
+              <AdminField label={t('admin.securityPin.current')}>
+                <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={bulkDeletePin} disabled={bulkDeleteBusy} onChange={(event) => setBulkDeletePin(event.target.value.replace(/\D/g, '').slice(0, 6))} />
+              </AdminField>
+            )}
+            {bulkDeleteError ? <p className="error-text" role="alert">{bulkDeleteError}</p> : null}
+            <div className="admin-actions-row">
+              <button type="button" className="button danger" disabled={bulkDeleteBusy || !deletionPinStatus?.configured || !/^\d{6}$/.test(bulkDeletePin)} onClick={confirmBulkProfileDelete}>{bulkDeleteBusy ? t('states.loading') : t('admin.securityPin.deleteProfiles')}</button>
+              <button type="button" className="button" disabled={bulkDeleteBusy} onClick={closeBulkDeleteConfirmation}>{t('admin.buttons.cancel')}</button>
+            </div>
+          </AdminWindow>
+        </div>
+      )}
+
       {modal && (
         <div className="admin-modal-backdrop" onClick={() => setModal(null)}>
           <AdminWindow id="admin-detail-modal" title={modal.title} labels={adminWindowLabels} className="admin-modal" onClose={() => setModal(null)}>
@@ -2640,6 +2773,31 @@ export function AdminPage() {
 
     if (view === 'settings') {
       return <>
+        <section className="admin-card critical-pin-card">
+          <div className="profile-studio-head compact">
+            <div>
+              <p className="eyebrow">{t('admin.securityPin.eyebrow')}</p>
+              <h2>{t('admin.securityPin.title')}</h2>
+            </div>
+            <StatusBadge value={deletionPinStatus?.configured ? t('admin.securityPin.configured') : t('admin.securityPin.notConfigured')} />
+          </div>
+          {deletionPinStatus?.updated_at ? <p className="admin-muted">{t('admin.securityPin.lastChanged')}: {formatDate(deletionPinStatus.updated_at)}</p> : null}
+          <div className="admin-form-grid">
+            {deletionPinStatus?.configured ? (
+              <AdminField label={t('admin.securityPin.current')}>
+                <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={deletionPinForm.current} disabled={deletionPinSaving} onChange={(event) => setDeletionPinForm({ ...deletionPinForm, current: event.target.value.replace(/\D/g, '').slice(0, 6) })} />
+              </AdminField>
+            ) : null}
+            <AdminField label={t('admin.securityPin.new')}>
+              <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={deletionPinForm.next} disabled={deletionPinSaving} onChange={(event) => setDeletionPinForm({ ...deletionPinForm, next: event.target.value.replace(/\D/g, '').slice(0, 6) })} />
+            </AdminField>
+            <AdminField label={t('admin.securityPin.confirm')}>
+              <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={deletionPinForm.confirm} disabled={deletionPinSaving} onChange={(event) => setDeletionPinForm({ ...deletionPinForm, confirm: event.target.value.replace(/\D/g, '').slice(0, 6) })} />
+            </AdminField>
+          </div>
+          <p className="admin-muted">{t('admin.securityPin.help')}</p>
+          <button type="button" className="button primary" disabled={deletionPinSaving} onClick={saveDeletionPin}>{deletionPinSaving ? t('states.loading') : t(deletionPinStatus?.configured ? 'admin.securityPin.change' : 'admin.securityPin.set')}</button>
+        </section>
         <section className="admin-settings-grid">
           <AdminStatCard label={t('admin.settingsFields.price')} value="49.99 EUR" />
           <AdminStatCard label={t('admin.settingsFields.maxPhotos')} value="12" />

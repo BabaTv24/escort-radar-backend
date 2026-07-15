@@ -53,6 +53,8 @@ import {
 import { explainProfileVisibility } from '../profileVisibility.js';
 import { CityImportDiscoveryError, discoverCityProfiles, isSourceUrlDuplicateError, normalizeProfileSourceUrl } from '../cityImportDiscovery.js';
 import { buildAdminProfilesResponse } from '../adminProfiles.js';
+import { hashDeletionPin, validateDeletionPin, verifyAdminDeletionPin } from '../adminDeletionPin.js';
+import { supabaseAdminDeletionPinStore } from '../adminDeletionPinStore.js';
 
 export const adminRouter = Router();
 
@@ -203,6 +205,37 @@ adminRouter.get('/me', asyncHandler(async (req, res) => {
       admin: req.user?.app_metadata?.admin === true
     }
   });
+}));
+
+adminRouter.get('/security/pin-status', asyncHandler(async (req, res) => {
+  const record = await supabaseAdminDeletionPinStore.get(req.user?.id || '');
+  res.json({
+    configured: Boolean(record),
+    updated_at: record?.deletion_pin_updated_at || null
+  });
+}));
+
+adminRouter.put('/security/deletion-pin', asyncHandler(async (req, res) => {
+  const adminId = req.user?.id || '';
+  const currentPin = req.body.current_pin;
+  const newPin = req.body.new_pin;
+  const confirmPin = req.body.confirm_pin;
+  if (!validateDeletionPin(newPin)) return res.status(400).json({ error: 'invalid_pin_format' });
+  if (newPin !== confirmPin) return res.status(400).json({ error: 'pin_confirmation_mismatch' });
+
+  const existing = await supabaseAdminDeletionPinStore.get(adminId);
+  if (existing) {
+    const verification = await verifyAdminDeletionPin(supabaseAdminDeletionPinStore, adminId, currentPin);
+    if (!verification.ok) {
+      await logAdminSecurityAction(req, 'deletion_pin_change_denied', { reason: verification.error }, 'admin_security_settings');
+      return res.status(verification.status).json({ error: verification.error, retry_after_minutes: verification.retryAfterMinutes });
+    }
+  }
+
+  const hash = await hashDeletionPin(newPin);
+  const saved = await supabaseAdminDeletionPinStore.save(adminId, hash, Boolean(existing));
+  await logAdminSecurityAction(req, existing ? 'deletion_pin_changed' : 'deletion_pin_set', {}, 'admin_security_settings');
+  res.json({ configured: true, updated_at: saved.deletion_pin_updated_at });
 }));
 
 adminRouter.get('/location-catalog', asyncHandler(async (_req, res) => {
@@ -2009,11 +2042,12 @@ adminRouter.post('/profiles/:id/images', adminUpload.single('image'), asyncHandl
 }));
 
 adminRouter.post('/profiles/bulk', asyncHandler(async (req, res) => {
-  const ids = Array.isArray(req.body.profile_ids)
-    ? req.body.profile_ids.map((id: unknown) => String(id)).filter(Boolean).slice(0, 200)
-    : [];
+  const rawIds = Array.isArray(req.body.profile_ids) ? req.body.profile_ids : [];
+  if (rawIds.length > 200) return res.status(400).json({ error: 'profile_ids_limit_exceeded' });
+  const ids: string[] = [...new Set<string>(rawIds.map((id: unknown) => String(id)).filter(Boolean))];
   const operation = String(req.body.operation || req.body.action || '');
   if (!ids.length) return res.status(400).json({ error: 'profile_ids are required' });
+  if (ids.some((id) => !isUuid(id))) return res.status(400).json({ error: 'invalid_profile_id' });
 
   const patch: Record<string, unknown> = {};
   if (operation === 'approve') {
@@ -2040,12 +2074,13 @@ adminRouter.post('/profiles/bulk', asyncHandler(async (req, res) => {
     patch.subscription_managed_by = req.user?.email || req.user?.id || null;
     patch.subscription_note = optionalText(req.body.note, 2000);
   } else if (operation === 'delete') {
+    if (!await authorizeAdminDeletion(req, res, ids.length, 'bulk_profile_delete_denied')) return;
     const { data: images } = await supabaseAdmin.from('profile_images').select('storage_path').in('profile_id', ids);
     const storagePaths = (images || []).map((image) => image.storage_path).filter(Boolean);
     if (storagePaths.length) await supabaseAdmin.storage.from(config.storageBucket).remove(storagePaths);
     const { error } = await supabaseAdmin.from('profiles').delete().in('id', ids);
     if (error) return res.status(400).json({ error: error.message });
-    await logAdminAction(req.user?.email, 'profiles_bulk_deleted', 'profile', null, { profile_ids: ids, note: optionalText(req.body.note, 1000) });
+    await logAdminSecurityAction(req, 'bulk_profile_delete_success', { profile_count: ids.length, profile_ids: ids });
     return res.json({ updated: ids.length, operation });
   } else {
     return res.status(400).json({ error: 'Invalid bulk operation' });
@@ -2293,6 +2328,8 @@ adminRouter.patch('/profiles/:id/verify', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.delete('/profiles/:id', asyncHandler(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(400).json({ error: 'invalid_profile_id' });
+  if (!await authorizeAdminDeletion(req, res, 1, 'profile_delete_denied')) return;
   const { data: images } = await supabaseAdmin
     .from('profile_images')
     .select('storage_path')
@@ -2304,10 +2341,7 @@ adminRouter.delete('/profiles/:id', asyncHandler(async (req, res) => {
   const { error } = await supabaseAdmin.from('profiles').delete().eq('id', req.params.id);
   if (error) return res.status(400).json({ error: error.message });
 
-  await logAdminAction(req.user?.email, 'profile_deleted', 'profile', req.params.id, {
-    hard_delete: true,
-    reason: optionalText(req.body.reason, 1000)
-  });
+  await logAdminSecurityAction(req, 'profile_delete_success', { profile_count: 1, profile_ids: [req.params.id] });
   res.status(204).send();
 }));
 
@@ -2871,6 +2905,27 @@ adminRouter.patch('/settings', asyncHandler(async (req, res) => {
 
 async function logAdminAction(adminEmail: string | undefined, action: string, targetType: string, targetId: string | null, details: Record<string, unknown>) {
   await writeAdminAuditLog(adminEmail, action, targetType, targetId, details);
+}
+
+async function authorizeAdminDeletion(req: any, res: any, profileCount: number, deniedAction: string) {
+  const verification = await verifyAdminDeletionPin(supabaseAdminDeletionPinStore, req.user?.id || '', req.body.deletion_pin);
+  if (verification.ok) return true;
+  await logAdminSecurityAction(req, deniedAction, { profile_count: profileCount, reason: verification.error });
+  res.status(verification.status).json({ error: verification.error, retry_after_minutes: verification.retryAfterMinutes });
+  return false;
+}
+
+async function logAdminSecurityAction(req: any, action: string, details: Record<string, unknown>, targetType = 'profile') {
+  await writeAdminAuditLog(req.user?.email, action, targetType, null, {
+    ...details,
+    admin_id: req.user?.id || null,
+    ip_address: String(req.ip || '').slice(0, 200) || null,
+    user_agent: optionalText(req.headers?.['user-agent'], 500)
+  });
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 async function countSponsoredProfiles() {

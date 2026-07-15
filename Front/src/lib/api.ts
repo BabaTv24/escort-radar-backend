@@ -201,9 +201,10 @@ export const api = {
     token,
     body: JSON.stringify(body)
   }),
-  deleteAdminProfile: (token: string, id: string) => request<void>(`/api/admin/profiles/${id}`, {
+  deleteAdminProfile: (token: string, id: string, deletionPin: string) => request<void>(`/api/admin/profiles/${id}`, {
     method: 'DELETE',
-    token
+    token,
+    body: JSON.stringify({ deletion_pin: deletionPin })
   }),
   publishAdminProfile: (token: string, id: string, is_published: boolean) => request<{ profile: Profile }>(`/api/admin/profiles/${id}/publish`, {
     method: 'PATCH',
@@ -258,6 +259,12 @@ export const api = {
   adminRevenue: (token: string) => request<{ stats: AdminStats; payments: Record<string, unknown>[] }>('/api/admin/revenue', { token }),
   adminBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/admin/bookings', { token }),
   adminSettings: (token: string) => request<{ settings: Record<string, unknown> }>('/api/admin/settings', { token }),
+  adminDeletionPinStatus: (token: string) => request<{ configured: boolean; updated_at: string | null }>('/api/admin/security/pin-status', { token }),
+  setAdminDeletionPin: (token: string, body: { current_pin?: string; new_pin: string; confirm_pin: string }) => request<{ configured: true; updated_at: string }>('/api/admin/security/deletion-pin', {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(body)
+  }),
   setProfileStatus: (token: string, id: string, status: string) => request(`/api/admin/profiles/${id}/status`, {
     method: 'PATCH',
     token,
