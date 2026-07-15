@@ -12432,6 +12432,48 @@ textarea:focus {
   gap: .8rem;
 }
 
+.admin-profile-window-stack {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-window-reopen-bar {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
+
+.admin-profile-window {
+  width: 100%;
+}
+
+.admin-profile-window > .admin-window-content-shell {
+  max-height: min(75dvh, 900px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.admin-profile-window.is-maximized > .admin-window-content-shell {
+  max-height: none;
+}
+
+.admin-profile-window-content,
+.admin-profile-window-content > .admin-card {
+  min-width: 0;
+}
+
+.admin-profile-control-window .admin-table-wrap {
+  max-width: 100%;
+  overflow-x: auto !important;
+  overscroll-behavior-inline: contain;
+}
+
 @media (max-width: 767px) {
   .admin-window-titlebar { min-height: 3.25rem; gap: .35rem; padding-left: .7rem; }
   .admin-window-heading h2 { font-size: .9rem; }
@@ -12449,6 +12491,9 @@ textarea:focus {
   .admin-window--workspace > .admin-window-content-shell > .admin-window-content,
   .admin-window > .admin-window-content-shell > .admin-window-content { padding: .7rem; }
   .admin-window.is-maximized .admin-table { width: 100%; min-width: 0; }
+  .admin-profile-window-stack { gap: .7rem; }
+  .admin-profile-window > .admin-window-content-shell { max-height: calc(100dvh - 8rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .admin-profile-window.is-maximized > .admin-window-content-shell { max-height: none; }
 }
 
 @media (max-width: 420px) {

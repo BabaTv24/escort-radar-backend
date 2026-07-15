@@ -308,6 +308,8 @@ export function AdminPage() {
   const [bulkPremiumTier, setBulkPremiumTier] = useState('gold');
   const [bulkSubscriptionStatus, setBulkSubscriptionStatus] = useState('active');
   const [profilePanelMode, setProfilePanelMode] = useState<'overview' | 'edit' | 'photos' | 'services' | 'subscription'>('overview');
+  const [profileControlOpen, setProfileControlOpen] = useState(true);
+  const [profileReviewOpen, setProfileReviewOpen] = useState(false);
   const [moderationFilter, setModerationFilter] = useState<'pending' | 'reported' | 'suspended' | 'rejected'>('pending');
   const [adminPlaceQuery, setAdminPlaceQuery] = useState('');
   const [adminPlaceSuggestions, setAdminPlaceSuggestions] = useState<Record<string, any>[]>([]);
@@ -635,7 +637,9 @@ export function AdminPage() {
   useEffect(() => {
     if (!selectedProfileQueryId || !['profiles', 'profile-studio'].includes(view) || !profiles.length) return;
     const profile = profiles.find((item) => item.id === selectedProfileQueryId);
-    if (!profile || studioForm.id === profile.id) return;
+    if (!profile) return;
+    setProfileReviewOpen(true);
+    if (studioForm.id === profile.id) return;
     editStudioProfile(profile);
     setProfilePanelMode('overview');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -751,6 +755,24 @@ export function AdminPage() {
     navigate(`/admin/profiles?profile=${encodeURIComponent(profile.id)}${from === 'subscriptions' ? '&from=subscriptions' : ''}`, { replace: false });
     editStudioProfile(profile);
     setProfilePanelMode('overview');
+    setProfileReviewOpen(true);
+  }
+
+  function openProfileEditor(profile: Profile) {
+    editStudioProfile(profile);
+    setProfileReviewOpen(true);
+  }
+
+  function openNewProfileEditor() {
+    setStudioForm({ ...emptyStudioForm });
+    setProfilePanelMode('edit');
+    setProfileReviewOpen(true);
+    navigate('/admin/profiles');
+  }
+
+  function closeProfileReview() {
+    setProfileReviewOpen(false);
+    if (selectedProfileQueryId) navigate('/admin/profiles', { replace: true });
   }
 
   function returnFromProfileOverview() {
@@ -1765,15 +1787,17 @@ export function AdminPage() {
         </header>
 
         {message && <p className="error-text">{message}</p>}
-        <AdminWindow
-          key={view}
-          id={`admin-workspace-${view}`}
-          title={adminViewTitle(view, t)}
-          labels={adminWindowLabels}
-          workspace
-        >
-          {renderView()}
-        </AdminWindow>
+        {view === 'profiles' || view === 'profile-studio' ? renderView() : (
+          <AdminWindow
+            key={view}
+            id={`admin-workspace-${view}`}
+            title={adminViewTitle(view, t)}
+            labels={adminWindowLabels}
+            workspace
+          >
+            {renderView()}
+          </AdminWindow>
+        )}
       </main>
 
       {modal && (
@@ -2143,7 +2167,23 @@ export function AdminPage() {
       const selectedProfile = profiles.find((profile) => profile.id === studioForm.id);
       const studioProfiles = filteredProfiles;
       return (
-        <section className="profile-studio-grid">
+        <section className="admin-profile-window-stack">
+          {!profileControlOpen || !profileReviewOpen ? (
+            <div className="admin-window-reopen-bar" aria-label={t('admin.window.restore')}>
+              {!profileControlOpen ? <button className="button" onClick={() => setProfileControlOpen(true)}>{t('admin.profiles.profileControl')}</button> : null}
+              {!profileReviewOpen ? <button className="button" onClick={() => setProfileReviewOpen(true)}>{t('admin.profileOverview.title')}</button> : null}
+            </div>
+          ) : null}
+          {profileControlOpen ? (
+          <AdminWindow
+            id="admin-profile-control"
+            title={t('admin.profiles.profileControl')}
+            labels={adminWindowLabels}
+            className="admin-profile-window admin-profile-control-window"
+            contentClassName="admin-profile-window-content"
+            onClose={() => setProfileControlOpen(false)}
+            workspace
+          >
           <article className="admin-card profile-studio-list">
             <div className="profile-studio-head">
               <div>
@@ -2153,6 +2193,7 @@ export function AdminPage() {
               <div className="admin-actions-row">
                 <button className="button primary" onClick={openHermesImporter}><Sparkles size={15} /> {t('admin.hermes.importProfiles')}</button>
                 <button className="button primary" onClick={() => setCityImportOpen(true)}>{t('admin.cityImport.title')}</button>
+                <button className="button" onClick={openNewProfileEditor}>{t('admin.actions.newProfile')}</button>
                 <label className="admin-action-btn">
                   {t('admin.accounts.importProfiles')}
                   <input hidden type="file" accept=".csv,.xlsx,.xls" onChange={(event) => setProfileImportFile(event.target.files?.[0] || null)} />
@@ -2233,7 +2274,7 @@ export function AdminPage() {
             }} actions={(profile) => (
               <>
                 <Action title={t('admin.actions.view')} onClick={() => openProfileOverview(profile)}><Eye size={15} /></Action>
-                <Action title={t('admin.actions.edit')} onClick={() => editStudioProfile(profile)}><Pencil size={15} /></Action>
+                <Action title={t('admin.actions.edit')} onClick={() => openProfileEditor(profile)}><Pencil size={15} /></Action>
                 <Action title={profile.is_published === false ? t('admin.actions.publish') : t('admin.actions.unpublish')} onClick={() => action(() => api.publishAdminProfile(token, profile.id, profile.is_published === false))}><Power size={15} /></Action>
                 <Action title={t('admin.actions.approve')} onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'approved', is_published: true }))}><UserCheck size={15} /></Action>
                 <Action title={profile.status === 'suspended' || profile.moderation_status === 'suspended' ? t('admin.actions.unsuspend') : t('admin.actions.suspend')} danger onClick={() => action(() => api.setProfileStatus(token, profile.id, profile.status === 'suspended' || profile.moderation_status === 'suspended' ? 'active' : 'suspended'))}><Ban size={15} /></Action>
@@ -2241,16 +2282,29 @@ export function AdminPage() {
               </>
             )} />}
           </article>
+          </AdminWindow>
+          ) : null}
 
+          {profileReviewOpen ? (
+          <AdminWindow
+            id="admin-profile-review"
+            title={t('admin.profileOverview.title')}
+            subtitle={studioForm.id ? studioForm.display_name : t('admin.profiles.createProfile')}
+            labels={adminWindowLabels}
+            className="admin-profile-window admin-profile-review-window"
+            contentClassName="admin-profile-window-content"
+            onClose={closeProfileReview}
+            workspace
+          >
           <article className="admin-card profile-studio-form">
             <div className="profile-studio-head">
               <div>
                 <p className="eyebrow">{studioForm.id ? t('admin.profileOverview.title') : t('admin.profiles.createProfile')}</p>
                 <h2>{studioForm.id ? studioForm.display_name : t('admin.profiles.newPreviewProfile')}</h2>
               </div>
-              {studioForm.id && <button className="button" onClick={() => setStudioForm({ ...emptyStudioForm })}>{t('admin.actions.newProfile')}</button>}
+              {studioForm.id && <button className="button" onClick={openNewProfileEditor}>{t('admin.actions.newProfile')}</button>}
             </div>
-            {profilePanelMode === 'overview' && studioForm.id ? renderProfileOverview(selectedProfile) : (
+            {profilePanelMode === 'overview' ? renderProfileOverview(selectedProfile) : (
               <>
                 <div className="studio-editor-tabs">
                   {studioTabs.map((tab) => (
@@ -2264,6 +2318,8 @@ export function AdminPage() {
               </>
             )}
           </article>
+          </AdminWindow>
+          ) : null}
         </section>
       );
     }
