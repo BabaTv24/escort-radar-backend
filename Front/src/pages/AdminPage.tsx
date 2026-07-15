@@ -1903,6 +1903,7 @@ export function AdminPage() {
                   <AdminField label={t('admin.profileEditor.description')}><textarea value={hermesPreview.description || ''} onChange={(event) => updateHermesPreview({ description: event.target.value })} /></AdminField>
                   <AdminField label={t('admin.hermes.rawAboutText')}><textarea value={hermesPreview.raw_about_text || ''} onChange={(event) => updateHermesPreview({ raw_about_text: event.target.value })} /></AdminField>
                 </div>
+                {hermesPreview.opening_hours ? <AvailabilityHoursEditor value={hermesPreview.opening_hours} onChange={(opening_hours) => updateHermesPreview({ opening_hours })} /> : null}
                 <p className="admin-hermes-note">{t('admin.hermes.summary', { fields: countHermesPreviewFields(hermesPreview), images: hermesPreview.images?.length || 0, services: hermesPreview.services?.length || 0, unknown: Object.keys(hermesPreview.unknown_fields || {}).length + (hermesPreview.unmapped_tags?.length || 0) })}</p>
                 {Object.keys(hermesPreview.unknown_fields || {}).length ? <AdminField label={t('admin.hermes.unknownFields')}><textarea value={Object.entries(hermesPreview.unknown_fields || {}).map(([key,value]) => `${key}: ${value}`).join('\n')} readOnly /></AdminField> : null}
                 {(hermesPreview.suggested_owner_email || hermesPreview.owner_email) ? <p className="admin-hermes-note">{t('admin.hermes.autoOwnerEmail')}: <strong>{hermesPreview.owner_email || hermesPreview.suggested_owner_email}</strong></p> : null}

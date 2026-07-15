@@ -11,9 +11,21 @@ export type ImportedDetails = {
 export type EscortClubProfile = ImportedDetails & {
   name: string; display_name: string; phone_id?: string; city?: string; city_label?: string; category: string;
   height?: number;
+  description: string;
+  opening_hours?: ImportedOpeningHours;
+  admin_warnings: string[];
   services: string[]; raw_services: string[]; unmapped_tags: string[];
   prices: Record<string, number>; price_1h?: number; currency?: string; images: string[];
 };
+
+export type ImportedOpeningHours = {
+  version: 1;
+  timezone: string;
+  weekly: Record<ImportedDayKey, { enabled: boolean; start: string | null; end: string | null }>;
+};
+
+type ImportedDayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+type ImportHtmlNode = { tag: string; attrs: string; children: Array<ImportHtmlNode | string>; parent?: ImportHtmlNode };
 
 export type ImportedPrice = { amount: number; currency: 'EUR' | 'PLN' | 'USD' | 'GBP' | 'CHF' };
 
@@ -236,14 +248,198 @@ export function parseEscortClubProfile(html: string, sourceUrl: string): EscortC
   }
   const phoneId = html.match(/data-phone-id=["'](\d+)["']/i)?.[1];
   const city = extractImportedProfileCity(html);
+  const dom = parseImportHtml(html);
+  const descriptionCandidate = extractEscortClubAbout(dom);
+  const fallbackDescription = extractImportMetaDescription(html);
+  const descriptionRejected = isEscortClubSeoBoilerplate(descriptionCandidate || fallbackDescription);
+  const description = descriptionRejected ? '' : descriptionCandidate;
+  const openingHours = extractEscortClubOpeningHours(dom, parsedUrl, city);
 
   return {
     name, display_name: name, phone_id: phoneId, city, city_label: city, category: 'ladies', ...details,
     height: details.height_cm,
+    description,
+    ...(openingHours ? { opening_hours: openingHours } : {}),
+    admin_warnings: descriptionRejected ? ['description_boilerplate_rejected'] : [],
     services: mapped.mapped, raw_services: mapped.raw, unmapped_tags: mapped.unmapped,
     prices: price1h ? { price_1h: price1h } : {}, price_1h: price1h, currency: importedPrice?.currency,
     images: [...new Set(imageValues)].slice(0, 12)
   };
+}
+
+export function isEscortClubSeoBoilerplate(value: unknown) {
+  const text = normalizeImportKey(value);
+  return [
+    'jezeli szukasz prywatnych anonsow',
+    'najlepsze darmowe ogloszenia',
+    'najlepsze anonse erotyczne',
+    'escort club to serwis',
+    'znajdz anonse erotyczne'
+  ].some((phrase) => text.includes(phrase));
+}
+
+function parseImportHtml(html: string) {
+  const root: ImportHtmlNode = { tag: 'root', attrs: '', children: [] };
+  const stack = [root];
+  const voidTags = new Set(['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr']);
+  for (const token of html.match(/<!--[\s\S]*?-->|<![^>]*>|<\/?[^>]+>|[^<]+/g) || []) {
+    if (token.startsWith('<!--') || /^<!/i.test(token)) continue;
+    if (token.startsWith('</')) {
+      const tag = token.match(/^<\/\s*([a-z0-9:-]+)/i)?.[1]?.toLowerCase();
+      if (!tag) continue;
+      const index = stack.map((node) => node.tag).lastIndexOf(tag);
+      if (index > 0) stack.length = index;
+      continue;
+    }
+    if (token.startsWith('<')) {
+      const match = token.match(/^<\s*([a-z0-9:-]+)([\s\S]*?)\/?\s*>$/i);
+      if (!match) continue;
+      const parent = stack[stack.length - 1];
+      const node: ImportHtmlNode = { tag: match[1].toLowerCase(), attrs: match[2] || '', children: [], parent };
+      parent.children.push(node);
+      if (!voidTags.has(node.tag) && !/\/\s*>$/.test(token)) stack.push(node);
+      continue;
+    }
+    stack[stack.length - 1].children.push(token);
+  }
+  return root;
+}
+
+function importNodeText(node: ImportHtmlNode, preserveLines = false): string {
+  if (['script','style','noscript','template'].includes(node.tag)) return '';
+  const block = /^(?:address|article|aside|blockquote|div|dl|dt|dd|fieldset|figcaption|figure|footer|form|h[1-6]|header|li|main|nav|ol|p|section|table|tr|ul)$/.test(node.tag);
+  const content = node.children.map((child) => typeof child === 'string' ? decodeImportHtml(child) : child.tag === 'br' ? '\n' : importNodeText(child, true)).join('');
+  const rendered = block ? `\n${content}\n` : content;
+  if (preserveLines) return rendered;
+  return rendered.split(/\r?\n/).map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+}
+
+function importNodeKey(node: ImportHtmlNode) {
+  return normalizeImportKey(importNodeText(node));
+}
+
+function isSemanticLabelNode(node: ImportHtmlNode) {
+  return /^h[1-6]$/.test(node.tag) || /\b(?:heading|headline|label|title)\b/i.test(node.attrs);
+}
+
+function walkImportNodes(root: ImportHtmlNode) {
+  const nodes: ImportHtmlNode[] = [];
+  const visit = (node: ImportHtmlNode) => {
+    nodes.push(node);
+    for (const child of node.children) if (typeof child !== 'string') visit(child);
+  };
+  visit(root);
+  return nodes;
+}
+
+const aboutLabels = new Set(['o mnie', 'about me', 'uber mich']);
+const sectionBoundaryLabels = new Set([
+  'wiecej informacji', 'dodatkowe informacje', 'more information', 'additional information', 'mehr informationen',
+  'godziny dostepnosci', 'availability hours', 'opening hours', 'offnungszeiten',
+  'opinie', 'reviews', 'bewertungen', 'uslugi', 'services', 'leistungen'
+]);
+
+function extractEscortClubAbout(root: ImportHtmlNode) {
+  const heading = walkImportNodes(root).find((node) => isSemanticLabelNode(node) && aboutLabels.has(importNodeKey(node)));
+  if (!heading) return '';
+  let anchor = heading;
+  for (let depth = 0; depth < 4 && anchor.parent; depth += 1) {
+    const siblings = anchor.parent.children;
+    const index = siblings.indexOf(anchor);
+    const fragments: string[] = [];
+    for (const sibling of siblings.slice(index + 1)) {
+      if (typeof sibling === 'string') {
+        const text = decodeImportHtml(sibling).replace(/\s+/g, ' ').trim();
+        if (text) fragments.push(text);
+        continue;
+      }
+      if (containsSectionBoundary(sibling)) break;
+      const text = importNodeText(sibling);
+      if (text) fragments.push(text);
+    }
+    const description = cleanImportedParagraphs(fragments.join('\n'));
+    if (description) return description;
+    anchor = anchor.parent;
+  }
+  return '';
+}
+
+function containsSectionBoundary(node: ImportHtmlNode) {
+  return walkImportNodes(node).some((candidate) => isSemanticLabelNode(candidate) && sectionBoundaryLabels.has(importNodeKey(candidate)));
+}
+
+function cleanImportedParagraphs(value: string) {
+  return value.split(/\r?\n/).map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => line && !aboutLabels.has(normalizeImportKey(line)))
+    .join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function extractImportMetaDescription(html: string) {
+  for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
+    const tag = match[0];
+    const field = tag.match(/\b(?:name|property)=["']([^"']+)["']/i)?.[1]?.toLowerCase();
+    if (field !== 'description' && field !== 'og:description') continue;
+    const content = tag.match(/\bcontent=["']([^"']*)["']/i)?.[1];
+    if (content) return decodeImportHtml(content).replace(/\s+/g, ' ').trim();
+  }
+  return '';
+}
+
+const importedDayAliases: Array<[ImportedDayKey, string[]]> = [
+  ['monday', ['poniedzialek','pon','monday','mon','montag','mo']],
+  ['tuesday', ['wtorek','wt','tuesday','tue','tues','dienstag','di']],
+  ['wednesday', ['sroda','sr','wednesday','wed','mittwoch','mi']],
+  ['thursday', ['czwartek','czw','thursday','thu','thurs','donnerstag','do']],
+  ['friday', ['piatek','pt','friday','fri','freitag','fr']],
+  ['saturday', ['sobota','sob','saturday','sat','samstag','sa']],
+  ['sunday', ['niedziela','niedz','nd','sunday','sun','sonntag','so']]
+];
+
+function extractEscortClubOpeningHours(root: ImportHtmlNode, sourceUrl: URL, city: string): ImportedOpeningHours | undefined {
+  const openingLabels = new Set(['godziny dostepnosci','availability hours','opening hours','offnungszeiten']);
+  const heading = walkImportNodes(root).find((node) => isSemanticLabelNode(node) && openingLabels.has(importNodeKey(node)));
+  if (!heading) return undefined;
+  let anchor = heading;
+  let parsed: Partial<Record<ImportedDayKey, { enabled: boolean; start: string | null; end: string | null }>> = {};
+  for (let depth = 0; depth < 4 && anchor.parent && !Object.keys(parsed).length; depth += 1) {
+    const siblings = anchor.parent.children;
+    const index = siblings.indexOf(anchor);
+    parsed = parseOpeningHourLines(siblings.slice(index + 1).map((item) => typeof item === 'string' ? decodeImportHtml(item) : importNodeText(item)).join('\n'));
+    anchor = anchor.parent;
+  }
+  if (!Object.keys(parsed).length) return undefined;
+  const inactive = () => ({ enabled: false, start: null, end: null });
+  const weekly = Object.fromEntries(importedDayAliases.map(([day]) => [day, parsed[day] || inactive()])) as ImportedOpeningHours['weekly'];
+  return { version: 1, timezone: escortClubTimezone(sourceUrl, city), weekly };
+}
+
+function parseOpeningHourLines(value: string) {
+  const result: Partial<Record<ImportedDayKey, { enabled: boolean; start: string | null; end: string | null }>> = {};
+  for (const rawLine of value.split(/\r?\n/)) {
+    const line = normalizeImportKey(rawLine).replace(/\s+/g, ' ').trim();
+    if (!line) continue;
+    for (const [day, aliases] of importedDayAliases) {
+      const dayMatch = line.match(new RegExp(`^(?:${aliases.join('|')})(?:[.,:]?\\s+|$)`));
+      if (!dayMatch) continue;
+      const rest = line.slice(dayMatch[0].length).replace(/^\s+/, '');
+      if (/^(?:nieczynne|zamkniete|niedostepna|niedostepny|closed|unavailable|geschlossen)\b/.test(rest)) {
+        result[day] = { enabled: false, start: null, end: null };
+        break;
+      }
+      const range = rest.match(/^(?:(?:od|von|from)\s+)?((?:[01]\d|2[0-3]):[0-5]\d)\s*(?:do|bis|to|-|–|—)\s*((?:[01]\d|2[0-3]):[0-5]\d)\b/);
+      if (range) result[day] = { enabled: true, start: range[1], end: range[2] };
+      break;
+    }
+  }
+  return result;
+}
+
+function escortClubTimezone(sourceUrl: URL, city: string) {
+  if (sourceUrl.hostname.toLowerCase().startsWith('pl.')) return 'Europe/Warsaw';
+  if (sourceUrl.hostname.toLowerCase().startsWith('de.')) return 'Europe/Berlin';
+  return /^(?:torun|warszawa|krakow|wroclaw|poznan|gdansk|lodz|szczecin|bydgoszcz|lublin)$/i.test(normalizeImportedCity(city))
+    ? 'Europe/Warsaw'
+    : 'Europe/Berlin';
 }
 
 function decodeImportHtml(value: string) {

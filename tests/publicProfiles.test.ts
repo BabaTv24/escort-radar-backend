@@ -14,8 +14,8 @@ import {
 import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts';
 import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, isProfileInRadarRange, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
 import { getSafeNextPath } from '../Front/src/lib/authRedirect.ts';
-import { normalizeOperatorStatus, normalizeProfileCategory, validateProfileInput } from '../Back/src/validation.ts';
-import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, mapImportedServiceValues, normalizeImportedCity, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../Back/src/hermesImport.ts';
+import { normalizeOperatorStatus, normalizeProfileCategory, normalizeProfileOpeningHours, validateProfileInput } from '../Back/src/validation.ts';
+import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, isEscortClubSeoBoilerplate, mapImportedServiceValues, normalizeImportedCity, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../Back/src/hermesImport.ts';
 import { fetchPublicImportResource, readImportResponseLimited, validatePublicImportUrl } from '../Back/src/publicImportSecurity.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
@@ -1147,6 +1147,36 @@ test('profile validation stores canonical category and online status fields', ()
   assert.equal(result.data.travels, true);
 });
 
+test('weekly availability hours are normalized for admin advertiser and future booking flow', async () => {
+  const schedule = normalizeProfileOpeningHours({
+    timezone: 'Europe/Warsaw',
+    note: 'Po wcześniejszym uzgodnieniu',
+    weekly: {
+      monday: { enabled: true, start: '09:00', end: '18:30' },
+      tuesday: { enabled: true, from: '10:00', to: '17:00' },
+      wednesday: { enabled: true, start: 'invalid', end: '18:00' }
+    },
+    private_field: 'ignored'
+  }) as any;
+  assert.equal(schedule.version, 1);
+  assert.equal(schedule.timezone, 'Europe/Warsaw');
+  assert.deepEqual(schedule.weekly.monday, { enabled: true, start: '09:00', end: '18:30' });
+  assert.deepEqual(schedule.weekly.tuesday, { enabled: true, start: '10:00', end: '17:00' });
+  assert.deepEqual(schedule.weekly.wednesday, { enabled: false, start: null, end: '18:00' });
+  assert.equal(schedule.private_field, undefined);
+
+  const [adminPage, dashboardPage, validationSource, migration] = await Promise.all([
+    readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../Back/src/validation.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/023_admin_full_profile_creation.sql', import.meta.url), 'utf8')
+  ]);
+  assert.match(adminPage, /<AvailabilityHoursEditor value=\{studioForm\.opening_hours\}/);
+  assert.match(dashboardPage, /<AvailabilityHoursEditor value=\{profile\.opening_hours\}/);
+  assert.match(validationSource, /opening_hours: normalizeProfileOpeningHours\(body\.opening_hours\)/);
+  assert.match(migration, /add column if not exists opening_hours jsonb default '\{\}'::jsonb/);
+});
+
 test('public profile maps online aliases and visit mode labels are visible to clients', async () => {
   const cardSource = await readFile(new URL('../Front/src/components/ProfileCard.tsx', import.meta.url), 'utf8');
   const profilePageSource = await readFile(new URL('../Front/src/pages/ProfilePage.tsx', import.meta.url), 'utf8');
@@ -1569,6 +1599,59 @@ test('Escort Club parser reads the real profile DOM sections without ads or SEO 
   assert.deepEqual(profile.languages, ['en','de']); assert.equal(profile.ethnicity, 'european'); assert.equal(profile.nationality, 'Niemiecka'); assert.equal(profile.zodiac_sign, 'Bliźnięta');
   assert.equal(profile.price_1h, 250); assert.deepEqual(profile.services, ['masaz_body_to_body','face_fucking']); assert.deepEqual(profile.unmapped_tags, ['Nieznany tag']);
   assert.deepEqual(profile.images, ['https://static.escort.club/galleries/wolfie/1.jpg']);
+});
+
+test('Escort Club parser reads About me paragraphs and all profile availability days', async () => {
+  const html = await readFile(new URL('./fixtures/escort-club-profile-233633.html', import.meta.url), 'utf8');
+  const profile = parseEscortClubProfile(html, 'https://pl.escort.club/anons/233633.html');
+  assert.ok(profile);
+  assert.equal(profile.description, 'Pierwszy akapit profilu.\nDrugi akapit.\nTrzecia linia.');
+  assert.doesNotMatch(profile.description, /Jeżeli szukasz|Najlepsze darmowe|Godziny dostępności|masaż|opinii/i);
+  assert.equal(profile.opening_hours?.timezone, 'Europe/Warsaw');
+  assert.deepEqual(profile.opening_hours?.weekly, {
+    monday: { enabled: true, start: '08:00', end: '21:00' },
+    tuesday: { enabled: true, start: '08:00', end: '21:00' },
+    wednesday: { enabled: true, start: '08:00', end: '21:00' },
+    thursday: { enabled: true, start: '08:00', end: '21:00' },
+    friday: { enabled: true, start: '08:00', end: '21:00' },
+    saturday: { enabled: true, start: '09:00', end: '21:00' },
+    sunday: { enabled: true, start: '09:00', end: '21:00' }
+  });
+  assert.deepEqual(normalizeProfileOpeningHours(profile.opening_hours), profile.opening_hours);
+});
+
+test('Escort Club parser rejects SEO description, supports localized closed days, and does not invent a schedule', () => {
+  assert.equal(isEscortClubSeoBoilerplate('Najlepsze darmowe ogłoszenia dla każdego miasta'), true);
+  const rejected = parseEscortClubProfile(`<main><h1>Anna</h1><section><h2>O mnie</h2><p>Jeżeli szukasz prywatnych anonsów, znajdziesz je tutaj.</p></section></main>`, 'https://pl.escort.club/anons/1.html');
+  assert.equal(rejected?.description, '');
+  assert.deepEqual(rejected?.admin_warnings, ['description_boilerplate_rejected']);
+
+  const localized = parseEscortClubProfile(`<main><h1>Anna</h1><section><h2>Opening hours</h2><p>Monday 10:00 - 20:00</p><p>Dienstag geschlossen</p></section></main>`, 'https://de.escort.club/anons/2.html');
+  assert.equal(localized?.opening_hours?.timezone, 'Europe/Berlin');
+  assert.deepEqual(localized?.opening_hours?.weekly.monday, { enabled: true, start: '10:00', end: '20:00' });
+  assert.deepEqual(localized?.opening_hours?.weekly.tuesday, { enabled: false, start: null, end: null });
+  assert.deepEqual(localized?.opening_hours?.weekly.wednesday, { enabled: false, start: null, end: null });
+
+  const noHours = parseEscortClubProfile('<main><h1>Anna</h1><section><h2>O mnie</h2><p>Treść profilu.</p></section></main>', 'https://pl.escort.club/anons/3.html');
+  assert.equal(noHours?.opening_hours, undefined);
+  assert.equal(parseEscortClubProfile('<main><h1>Other</h1></main>', 'https://example.com/profile'), null);
+});
+
+test('Hermes preview and create preserve Escort Club description and opening hours', async () => {
+  const [adminRouteSource, adminPageSource, apiTypes] = await Promise.all([
+    readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/types.ts', import.meta.url), 'utf8')
+  ]);
+  const previewBuilder = adminRouteSource.slice(adminRouteSource.indexOf('function buildHermesProfilePreview'), adminRouteSource.indexOf('async function fetchEscortClubPublicPhone'));
+  const previewNormalizer = adminRouteSource.slice(adminRouteSource.indexOf('function normalizeHermesPreviewProfile'), adminRouteSource.indexOf('function buildHermesProfilePreview'));
+  const createRoute = adminRouteSource.slice(adminRouteSource.indexOf("post('/import-profile-create"), adminRouteSource.indexOf("get('/business-profiles"));
+  assert.match(previewBuilder, /description: description \|\| ''/);
+  assert.match(previewBuilder, /opening_hours: escortClub\?\.opening_hours/);
+  assert.match(previewNormalizer, /opening_hours:[\s\S]{0,160}normalizeProfileOpeningHours\(rawProfile\.opening_hours\)/);
+  assert.match(createRoute, /\.\.\.incomingProfile/);
+  assert.match(adminPageSource, /<AvailabilityHoursEditor value=\{hermesPreview\.opening_hours\}/);
+  assert.match(apiTypes, /opening_hours\?: Profile\['opening_hours'\]/);
 });
 
 test('import city and price parsing preserves real city and supported currency', () => {

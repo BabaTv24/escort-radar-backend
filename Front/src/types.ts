@@ -378,6 +378,7 @@ export type HermesProfilePreview = {
   unknown_fields?: Record<string, string>;
   prices?: Record<string, number>;
   availability?: string;
+  opening_hours?: Profile['opening_hours'];
   price_1h?: number;
   images?: string[];
   owner_email?: string;

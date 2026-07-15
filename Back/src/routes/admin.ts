@@ -3652,6 +3652,9 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     price_1h: price1h || undefined,
     currency: normalizeImportedCurrency(rawProfile.currency || rawProfile.price_currency || prices.currency) || 'EUR',
     availability: optionalText(rawProfile.availability, 160) || '',
+    opening_hours: rawProfile.opening_hours && typeof rawProfile.opening_hours === 'object'
+      ? normalizeProfileOpeningHours(rawProfile.opening_hours)
+      : undefined,
     images: Array.isArray(rawProfile.images)
       ? uniqueStrings(rawProfile.images.map((value: unknown) => resolveImportImageUrl(value, sourceUrl))).filter(isLikelyProfileImage).sort((left, right) => imageCandidateScore(right) - imageCandidateScore(left)).slice(0, 12)
       : [],
@@ -3669,11 +3672,13 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
   const sections = extractProfileSections(text);
   const moderation = moderationWarningsForText(text);
   warnings.push(...moderation.warnings);
-  const aboutText = sections.about || '';
-  const description = sanitizeImportedDescription(aboutText, moderation.blockedLines)
-    || metaContent(html, 'og:description')
-    || metaContent(html, 'description')
-    || text.slice(0, 420);
+  const aboutText = escortClub?.description || sections.about || '';
+  const description = escortClub
+    ? escortClub.description
+    : sanitizeImportedDescription(aboutText, moderation.blockedLines)
+      || metaContent(html, 'og:description')
+      || metaContent(html, 'description')
+      || text.slice(0, 420);
   const images = escortClub?.images.length ? escortClub.images : uniqueStrings([
     metaContent(html, 'og:image'),
     metaContent(html, 'twitter:image'),
@@ -3682,6 +3687,7 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
   if (!title) warnings.push('No title meta tag found.');
   if (!description) warnings.push('No description meta tag found.');
   if (!images.length) warnings.push('No public image URLs found.');
+  if (escortClub?.admin_warnings.length) warnings.push(...escortClub.admin_warnings);
   const details = escortClub || normalizeImportedDetails(extractImportPairs(html, text));
   const mappedServices = escortClub ? { mapped: escortClub.services, raw: escortClub.raw_services, unmapped: escortClub.unmapped_tags } : mapImportedServices(uniqueStrings([...sections.services, ...extractServiceTagCandidates(html)]));
   const phone = extractPublicPhone(html, text);
@@ -3715,8 +3721,9 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     price_1h: escortClub?.price_1h || importedPrice?.amount,
     currency: escortClub?.currency || importedPrice?.currency || 'EUR',
     availability: sections.availability,
+    opening_hours: escortClub?.opening_hours,
     images,
-    admin_warnings: moderation.warnings,
+    admin_warnings: uniqueStrings([...moderation.warnings, ...(escortClub?.admin_warnings || [])]),
     source_url: sourceUrl,
     import_source: 'local_parser'
   };
