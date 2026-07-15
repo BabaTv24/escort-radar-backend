@@ -386,7 +386,7 @@ export const api = {
     token,
     body: JSON.stringify({ url })
   }),
-  discoverCityProfiles: (token: string, listingUrl: string, maxProfiles = 30) => request<{ listing_url: string; found_count: number; profile_urls: string[]; warnings: string[] }>('/api/admin/import-city/discover', {
+  discoverCityProfiles: (token: string, listingUrl: string, maxProfiles = 30) => request<{ listing_url: string; declared_count: number | null; found_count: number; profile_urls: string[]; warnings: string[] }>('/api/admin/import-city/discover', {
     method: 'POST',
     token,
     timeoutMs: 15000,

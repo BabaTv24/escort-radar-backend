@@ -268,7 +268,7 @@ export function AdminPage() {
   const [cityImportUrl, setCityImportUrl] = useState('');
   const [cityImportLoading, setCityImportLoading] = useState(false);
   const [cityImportError, setCityImportError] = useState('');
-  const [cityImportResult, setCityImportResult] = useState<{ listing_url: string; found_count: number; profile_urls: string[]; warnings: string[] } | null>(null);
+  const [cityImportResult, setCityImportResult] = useState<{ listing_url: string; declared_count: number | null; found_count: number; profile_urls: string[]; warnings: string[] } | null>(null);
   const [selectedCityProfileUrls, setSelectedCityProfileUrls] = useState<string[]>([]);
   const [cityImportQueueItems, setCityImportQueueItems] = useState<CityImportQueueItem[]>([]);
   const [cityImportActive, setCityImportActive] = useState(false);
@@ -1996,6 +1996,7 @@ export function AdminPage() {
             {cityImportError ? <p className="error-text" role="alert">{cityImportError}</p> : null}
             {cityImportResult ? (
               <div className="city-import-results">
+                {cityImportResult.declared_count !== null ? <span>{t('admin.cityImport.declaredCount', { count: cityImportResult.declared_count })}</span> : null}
                 <strong>{t('admin.cityImport.foundCount', { count: cityImportResult.found_count })}</strong>
                 <label className="admin-check-row city-import-select-all">
                   <input type="checkbox" disabled={cityImportActive} checked={cityImportResult.profile_urls.length > 0 && selectedCityProfileUrls.length === cityImportResult.profile_urls.length} onChange={toggleAllCityProfileUrls} />
@@ -2017,7 +2018,17 @@ export function AdminPage() {
                 </div>
                 {cityImportResult.warnings.length ? (
                   <ul className="admin-warning-list">
-                    {cityImportResult.warnings.map((warning) => <li key={warning}>{warning === 'profile_limit_reached' ? t('admin.cityImport.warnings.profileLimitReached') : warning}</li>)}
+                    {cityImportResult.warnings.map((warning) => (
+                      <li key={warning}>{warning === 'profile_limit_reached'
+                        ? t('admin.cityImport.warnings.profileLimitReached')
+                        : warning === 'found_more_than_declared'
+                          ? t('admin.cityImport.warnings.foundMoreThanDeclared')
+                          : warning === 'found_less_than_declared'
+                            ? t('admin.cityImport.warnings.foundLessThanDeclared')
+                            : warning === 'main_results_container_uncertain'
+                              ? t('admin.cityImport.warnings.mainResultsContainerUncertain')
+                              : warning}</li>
+                    ))}
                   </ul>
                 ) : null}
               </div>

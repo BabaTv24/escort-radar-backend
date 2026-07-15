@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   CityImportDiscoveryError,
   discoverCityProfiles,
+  extractEscortClubListing,
   extractEscortClubProfileUrls,
   isEscortClubProfileUrl,
   isSourceUrlDuplicateError,
@@ -54,18 +55,22 @@ test('city discovery rejects credentials, unsupported hosts and private SSRF tar
 });
 
 test('city profile extraction resolves relative links, normalizes and deduplicates a saved HTML sample', () => {
-  const html = `<!doctype html><html><body>
+  const html = `<!doctype html><html><body><section class="content-sec -index"><h1>Anonse erotyczne Bydgoszcz</h1><div class="row">
+    <div class="item-col"><span class="item-info"></span>
     <a href="/anonse/towarzyskie/bydgoszcz/">Miasto</a>
     <a href="/anons/140605.html?utm_source=city#kontakt">Anna</a>
-    <a href="https://pl.escort.club/anons/140605.html">Anna duplicate</a>
+    </div>
+    <div class="item-col"><span class="item-info"></span><a href="https://pl.escort.club/anons/140605.html">Anna duplicate</a></div>
+    <div class="item-col"><span class="item-info"></span>
     <a href="https://de.escort.club/anons/247251.html?fbclid=tracking">Wolfie</a>
+    </div>
     <a href="/anons/add">Add profile</a>
     <a href="/anons/abc.html">Invalid profile id</a>
     <a href="/anons/247251">Missing extension</a>
     <a href="?page=2">Następna strona</a>
     <a href="/login">Logowanie</a>
     <a href="https://example.com/anons/999.html">External</a>
-  </body></html>`;
+  </div></section></body></html>`;
   assert.deepEqual(extractEscortClubProfileUrls(html, listingUrl), [
     'https://pl.escort.club/anons/140605.html',
     'https://de.escort.club/anons/247251.html'
@@ -84,10 +89,64 @@ test('city discovery applies safe default 30 and hard maximum 50', () => {
   assert.equal(normalizeCityImportLimit(undefined), 30);
   assert.equal(normalizeCityImportLimit(0), 30);
   assert.equal(normalizeCityImportLimit(500), 50);
-  const html = Array.from({ length: 60 }, (_, index) => `<a href="/anons/${index + 1}.html">P${index + 1}</a>`).join('');
+  const html = `<section class="content-sec -index"><h1>Anonse erotyczne Bydgoszcz</h1><div class="row">${Array.from({ length: 60 }, (_, index) => `<div class="item-col"><span class="item-info"></span><a href="/anons/${index + 1}.html">P${index + 1}</a></div>`).join('')}</div></section>`;
   assert.equal(extractEscortClubProfileUrls(html, listingUrl).length, 30);
   assert.equal(extractEscortClubProfileUrls(html, listingUrl, 50).length, 50);
   assert.equal(extractEscortClubProfileUrls(html, listingUrl, 500).length, 50);
+});
+
+test('Hamburg discovery uses only the declared city result container', async () => {
+  const html = await readFile(new URL('./fixtures/escort-club-hamburg-listing.html', import.meta.url), 'utf8');
+  const hamburgUrl = 'https://pl.escort.club/anonse/towarzyskie/hamburg/';
+  const extraction = extractEscortClubListing(html, hamburgUrl, 30);
+  assert.equal(extraction.declared_count, 18);
+  assert.equal(extraction.found_count, 18);
+  assert.equal(extraction.profile_urls.length, 18);
+  assert.deepEqual(extraction.warnings, []);
+  assert.ok(extraction.profile_urls.every((url) => /\/anons\/1000\d{2}[.]html$/.test(url)));
+  assert.equal(extraction.profile_urls.some((url) => /2000\d{2}|999999|300001/.test(url)), false);
+
+  const result = await discoverCityProfiles({ listing_url: hamburgUrl, max_profiles: 30 }, {
+    fetchResource: async () => new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })
+  });
+  assert.equal(result.declared_count, 18);
+  assert.equal(result.found_count, 18);
+  assert.equal(result.warnings.includes('profile_limit_reached'), false);
+});
+
+test('discovery reports declared count mismatches without using the counter as a slice', () => {
+  const html = `<section class="search-sec">Lista wyników: 2 sex ogłoszenia</section>
+    <section class="content-sec -index"><h1>Anonse erotyczne Bydgoszcz</h1><div class="row">
+      ${[1, 2, 3].map((id) => `<div class="item-col"><span class="item-info"></span><a href="/anons/${id}.html">P${id}</a></div>`).join('')}
+    </div></section>`;
+  const result = extractEscortClubListing(html, listingUrl, 30);
+  assert.equal(result.found_count, 3);
+  assert.ok(result.warnings.includes('found_more_than_declared'));
+});
+
+test('paginated discovery scans only result containers and deduplicates profiles globally', async () => {
+  const page = (ids: number[], pageNumber: number) => `<section>Lista wyników: 4 sex ogłoszenia</section>
+    <section class="content-sec -index"><h1>Anonse erotyczne Bydgoszcz</h1><div class="row">
+      ${ids.map((id) => `<div class="item-col"><span class="item-info"></span><a href="/anons/${id}.html">P${id}</a></div>`).join('')}
+    </div></section>
+    <section class="dates-sec"><h2>Polecane ogłoszenia</h2><a href="/anons/999.html">Recommended</a></section>
+    <nav class="pagination"><a href="?page=${pageNumber === 1 ? 2 : 1}">Other page</a></nav>`;
+  const requested: string[] = [];
+  const result = await discoverCityProfiles({ listing_url: listingUrl, max_profiles: 30 }, {
+    fetchResource: async (url) => {
+      requested.push(url);
+      const pageNumber = new URL(url).searchParams.get('page');
+      return new Response(pageNumber === '2' ? page([2, 3, 4], 2) : page([1, 2], 1), {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      });
+    }
+  });
+  assert.equal(requested.length, 2);
+  assert.equal(result.declared_count, 4);
+  assert.equal(result.found_count, 4);
+  assert.deepEqual(result.profile_urls.map((url) => profileExternalIdForTest(url)), ['1', '2', '3', '4']);
+  assert.deepEqual(result.warnings, []);
 });
 
 test('city discovery returns no_profiles_found without making a real request', async () => {
@@ -139,3 +198,7 @@ test('manual profile import keeps a localized readable duplicate conflict', asyn
   assert.match(createDraft, /isDuplicateSourceUrlApiError\(error\)/);
   assert.match(createDraft, /admin\.cityImport\.status\.skipped_duplicate/);
 });
+
+function profileExternalIdForTest(url: string) {
+  return url.match(/\/anons\/(\d+)[.]html$/)?.[1];
+}
