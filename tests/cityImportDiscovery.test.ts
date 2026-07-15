@@ -5,6 +5,7 @@ import {
   CityImportDiscoveryError,
   discoverCityProfiles,
   extractEscortClubProfileUrls,
+  isEscortClubProfileUrl,
   isSourceUrlDuplicateError,
   normalizeCityImportLimit,
   normalizeCityListingUrl,
@@ -57,15 +58,26 @@ test('city profile extraction resolves relative links, normalizes and deduplicat
     <a href="/anonse/towarzyskie/bydgoszcz/">Miasto</a>
     <a href="/anons/140605.html?utm_source=city#kontakt">Anna</a>
     <a href="https://pl.escort.club/anons/140605.html">Anna duplicate</a>
-    <a href="https://de.escort.club/anons/wolfie-123.html/?fbclid=tracking">Wolfie</a>
+    <a href="https://de.escort.club/anons/247251.html?fbclid=tracking">Wolfie</a>
+    <a href="/anons/add">Add profile</a>
+    <a href="/anons/abc.html">Invalid profile id</a>
+    <a href="/anons/247251">Missing extension</a>
     <a href="?page=2">Następna strona</a>
     <a href="/login">Logowanie</a>
     <a href="https://example.com/anons/999.html">External</a>
   </body></html>`;
   assert.deepEqual(extractEscortClubProfileUrls(html, listingUrl), [
     'https://pl.escort.club/anons/140605.html',
-    'https://de.escort.club/anons/wolfie-123.html'
+    'https://de.escort.club/anons/247251.html'
   ]);
+});
+
+test('escort.club profile URL requires a numeric id and html pathname', () => {
+  assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anons/247251.html'), true);
+  assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anons/add'), false);
+  assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anons/abc.html'), false);
+  assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anons/247251'), false);
+  assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anonse/247251.html'), false);
 });
 
 test('city discovery applies safe default 30 and hard maximum 50', () => {
@@ -119,4 +131,11 @@ test('existing manual create request stays compatible and duplicate conflicts ne
   assert.match(createRoute, /res\.status\(201\)\.json/);
   assert.match(createRoute, /isSourceUrlDuplicateError\(error\)[\s\S]*res\.status\(409\)\.json\(\{ error: 'duplicate_source_url', status: 'skipped_duplicate'/);
   assert.doesNotMatch(createRoute, /isSourceUrlDuplicateError\(error\)[\s\S]{0,200}status\(500\)/);
+});
+
+test('manual profile import keeps a localized readable duplicate conflict', async () => {
+  const source = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  const createDraft = source.slice(source.indexOf('async function createHermesDraft'), source.indexOf('function updateHermesPreview'));
+  assert.match(createDraft, /isDuplicateSourceUrlApiError\(error\)/);
+  assert.match(createDraft, /admin\.cityImport\.status\.skipped_duplicate/);
 });

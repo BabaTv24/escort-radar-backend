@@ -5,7 +5,7 @@ const API_URL = (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }
 type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
 
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) {
+  constructor(message: string, public readonly status: number, public readonly payload?: Record<string, unknown>) {
     super(`HTTP ${status}: ${message}`);
     this.name = 'ApiError';
   }
@@ -36,7 +36,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const reason = payload.reason ? ` (${payload.reason})` : '';
     const stage = payload.stage ? ` [${payload.stage}]` : '';
     const details = payload.details ? `: ${typeof payload.details === 'string' ? payload.details : JSON.stringify(payload.details)}` : '';
-    throw new ApiError(`${payload.error || 'Request failed'}${stage}${reason}${details}`, response.status);
+    throw new ApiError(`${payload.error || 'Request failed'}${stage}${reason}${details}`, response.status, payload);
   }
 
   if (response.status === 204) return undefined as T;

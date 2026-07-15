@@ -1746,7 +1746,7 @@
   "admin.cityImport.status.queued": "W kolejce",
   "admin.cityImport.status.importing": "Importowanie",
   "admin.cityImport.status.imported": "Zaimportowano",
-  "admin.cityImport.status.skipped_duplicate": "Pominięto duplikat",
+  "admin.cityImport.status.skipped_duplicate": "Pominięto — profil już istnieje",
   "admin.cityImport.status.failed": "Błąd",
   "admin.cityImport.importUnavailable": "Automatyczny import pozostaje wyłączony, ponieważ obecny importer pojedynczego profilu nie ma atomowej ochrony przed duplikatem URL.",
   "admin.cityImport.warnings.profileLimitReached": "Osiągnięto limit wyników. Lista może zawierać więcej profili.",

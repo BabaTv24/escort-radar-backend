@@ -17,7 +17,7 @@ import { AdminWindow, AdminWindowProvider } from '../components/AdminWindow';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
 import { defaultAdminProfileFilters, profileMatchesAdminFilters, resolveAdminProfilesResult } from '../lib/adminProfiles';
-import { runCityImportQueue } from '../lib/cityImportQueue';
+import { isDuplicateSourceUrlApiError, runCityImportQueue } from '../lib/cityImportQueue';
 import type { CityImportQueueItem } from '../lib/cityImportQueue';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
@@ -892,21 +892,14 @@ export function AdminPage() {
         onChange: setCityImportQueueItems,
         importItem: async (profileUrl) => {
           const preview = await api.importProfilePreview(token, profileUrl);
-          try {
-            const result = await api.importProfileCreate(token, {
-              source_url: preview.source_url || profileUrl,
-              profile: preview.profile,
-              create_as_draft: true,
-              sponsored: true,
-              imageUrls: (preview.profile.images || []).slice(0, 12)
-            });
-            return { status: 'imported' as const, profileId: result.profile_id };
-          } catch (error) {
-            if (error instanceof Error && error.message.startsWith('duplicate_source_url')) {
-              return { status: 'skipped_duplicate' as const };
-            }
-            throw error;
-          }
+          const result = await api.importProfileCreate(token, {
+            source_url: preview.source_url || profileUrl,
+            profile: preview.profile,
+            create_as_draft: true,
+            sponsored: true,
+            imageUrls: (preview.profile.images || []).slice(0, 12)
+          });
+          return { status: 'imported' as const, profileId: result.profile_id };
         }
       });
       await load();
@@ -1174,7 +1167,9 @@ export function AdminPage() {
       navigate(`/admin/profiles?profile=${encodeURIComponent(result.profile.id)}`, { replace: false });
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      setMessage(isDuplicateSourceUrlApiError(error)
+        ? t('admin.cityImport.status.skipped_duplicate')
+        : error instanceof Error ? error.message : t('states.requestFailed'));
     } finally {
       setHermesBusy(false);
     }

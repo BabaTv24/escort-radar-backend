@@ -1746,7 +1746,7 @@
   "admin.cityImport.status.queued": "In Warteschlange",
   "admin.cityImport.status.importing": "Wird importiert",
   "admin.cityImport.status.imported": "Importiert",
-  "admin.cityImport.status.skipped_duplicate": "Duplikat übersprungen",
+  "admin.cityImport.status.skipped_duplicate": "Übersprungen — Profil existiert bereits",
   "admin.cityImport.status.failed": "Fehlgeschlagen",
   "admin.cityImport.importUnavailable": "Der automatische Import bleibt deaktiviert, weil der bestehende Einzelprofil-Importer keinen atomaren Schutz vor URL-Duplikaten hat.",
   "admin.cityImport.warnings.profileLimitReached": "Das Ergebnislimit wurde erreicht. Die Liste kann weitere Profile enthalten.",

@@ -41,11 +41,13 @@ export async function runCityImportQueue(options: RunCityImportQueueOptions) {
         profileId: result.profileId
       };
     } catch (error) {
-      items[index] = {
-        url: items[index].url,
-        status: 'failed',
-        error: error instanceof Error ? error.message : 'Import failed'
-      };
+      items[index] = isDuplicateSourceUrlApiError(error)
+        ? { url: items[index].url, status: 'skipped_duplicate' }
+        : {
+            url: items[index].url,
+            status: 'failed',
+            error: error instanceof Error ? error.message : 'Import failed'
+          };
     }
     notify();
 
@@ -56,6 +58,14 @@ export async function runCityImportQueue(options: RunCityImportQueueOptions) {
   }
 
   return items.map((item) => ({ ...item }));
+}
+
+export function isDuplicateSourceUrlApiError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { status?: unknown; payload?: unknown };
+  if (candidate.status !== 409 || !candidate.payload || typeof candidate.payload !== 'object') return false;
+  const payload = candidate.payload as Record<string, unknown>;
+  return payload.status === 'skipped_duplicate' && payload.error === 'duplicate_source_url';
 }
 
 async function waitWithStop(milliseconds: number, shouldStop: () => boolean) {

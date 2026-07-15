@@ -122,14 +122,25 @@ export function extractEscortClubProfileUrls(html: string, listingUrl: string, m
     } catch {
       continue;
     }
-    if (!['http:', 'https:'].includes(candidate.protocol) || candidate.username || candidate.password) continue;
-    if (!isEscortClubHost(candidate.hostname.toLowerCase())) continue;
-    if (!isEscortClubProfilePath(candidate.pathname)) continue;
+    if (!isEscortClubProfileUrl(candidate)) continue;
 
     unique.add(normalizeProfileSourceUrl(candidate.toString()));
   }
 
   return [...unique];
+}
+
+export function isEscortClubProfileUrl(value: string | URL) {
+  let parsed: URL;
+  try {
+    parsed = value instanceof URL ? value : new URL(String(value || '').trim());
+  } catch {
+    return false;
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return false;
+  if (!isEscortClubHost(parsed.hostname.toLowerCase())) return false;
+  const pathname = parsed.pathname.toLowerCase().replace(/\/{2,}/g, '/');
+  return /^\/anons\/\d+[.]html$/.test(pathname);
 }
 
 export async function discoverCityProfiles(
@@ -219,11 +230,6 @@ async function fetchCityListingResource(value: string, init: RequestInit, redire
   if (!location) throw new Error('Redirect did not include a location');
   const next = new URL(location, value).toString();
   return fetchCityListingResource(next, init, redirects + 1);
-}
-
-function isEscortClubProfilePath(pathname: string) {
-  const normalized = pathname.toLowerCase().replace(/\/{2,}/g, '/');
-  return /^\/anons\/[^/]+(?:\.html)?\/?$/.test(normalized);
 }
 
 function normalizePath(pathname: string, trailingSlash: boolean) {

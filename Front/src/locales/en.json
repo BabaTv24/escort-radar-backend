@@ -1746,7 +1746,7 @@
   "admin.cityImport.status.queued": "Queued",
   "admin.cityImport.status.importing": "Importing",
   "admin.cityImport.status.imported": "Imported",
-  "admin.cityImport.status.skipped_duplicate": "Duplicate skipped",
+  "admin.cityImport.status.skipped_duplicate": "Skipped — profile already exists",
   "admin.cityImport.status.failed": "Failed",
   "admin.cityImport.importUnavailable": "Automatic import remains disabled because the current single-profile importer has no atomic URL duplicate protection.",
   "admin.cityImport.warnings.profileLimitReached": "The result limit was reached. The listing may contain more profiles.",
