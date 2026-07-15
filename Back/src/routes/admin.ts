@@ -55,6 +55,7 @@ import { CityImportDiscoveryError, discoverCityProfiles, isSourceUrlDuplicateErr
 import { buildAdminProfilesResponse } from '../adminProfiles.js';
 import { hashDeletionPin, validateDeletionPin, verifyAdminDeletionPin } from '../adminDeletionPin.js';
 import { supabaseAdminDeletionPinStore } from '../adminDeletionPinStore.js';
+import { runBulkProfilePublish } from '../bulkProfilePublish.js';
 
 export const adminRouter = Router();
 
@@ -2056,7 +2057,30 @@ adminRouter.post('/profiles/bulk', asyncHandler(async (req, res) => {
     patch.reviewed_by = req.user?.email || req.user?.id || null;
     patch.reviewed_at = new Date().toISOString();
   } else if (operation === 'publish') {
-    patch.is_published = true;
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .in('id', ids);
+    if (profilesError) return res.status(400).json({ error: profilesError.message });
+
+    const result = await runBulkProfilePublish(ids, profiles || [], async (profileId) => {
+      const { data, error } = await supabaseAdmin
+        .from('profiles')
+        .update({ is_published: true })
+        .eq('id', profileId)
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('profile_not_found_during_publish');
+    });
+    await logAdminAction(req.user?.email, 'profiles_bulk_publish', 'profile', null, {
+      profile_ids: ids,
+      published: result.published,
+      already_published: result.already_published,
+      skipped: result.skipped,
+      failed: result.failed
+    });
+    return res.json(result);
   } else if (operation === 'unpublish') {
     patch.is_published = false;
   } else if (operation === 'suspend') {

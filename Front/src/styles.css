@@ -446,6 +446,9 @@ textarea { min-height: 8rem; resize: vertical; }
 .admin-bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: .75rem 0; padding: .65rem; border: 1px solid rgba(247,212,107,.12); border-radius: .55rem; background: rgba(255,255,255,.035); }
 .admin-bulk-bar select { width: auto; min-width: 9rem; }
 .admin-bulk-bar label { width: auto; white-space: nowrap; }
+.admin-bulk-publish-summary { display: grid; gap: .4rem; margin: 0 0 .75rem; padding: .7rem .8rem; border: 1px solid rgba(50,213,131,.35); border-radius: .55rem; background: rgba(50,213,131,.08); color: #dfffea; }
+.admin-bulk-publish-summary.has-errors { border-color: rgba(255,143,143,.45); }
+.admin-bulk-publish-summary ul { display: grid; gap: .2rem; margin: 0; padding-left: 1.25rem; }
 .profile-overview-panel { display: grid; gap: .85rem; }
 .profile-overview-empty { min-height: 18rem; display: grid; align-content: center; gap: .35rem; padding: 1rem; border: 1px dashed rgba(247,212,107,.2); border-radius: .65rem; color: #d8d0bd; }
 .profile-overview-hero { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: .9rem; }

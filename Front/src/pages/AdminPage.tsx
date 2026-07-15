@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { ApiError, api } from '../lib/api';
+import type { BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientPersonalProfile, HermesProfilePreview, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
@@ -19,6 +20,7 @@ import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories'
 import { defaultAdminProfileFilters, profileMatchesAdminFilters, resolveAdminProfilesResult } from '../lib/adminProfiles';
 import { isDuplicateSourceUrlApiError, runCityImportQueue } from '../lib/cityImportQueue';
 import type { CityImportQueueItem } from '../lib/cityImportQueue';
+import { selectedIdsAfterBulkPublish } from '../lib/bulkProfilePublish';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
 import { berlinDistrictOptions, resolveBerlinPostalDistrict, resolveManualSearcherLocation } from '../lib/geo';
@@ -305,6 +307,8 @@ export function AdminPage() {
   const [studioServiceCategory, setStudioServiceCategory] = useState('all');
   const [expandedServiceCategories, setExpandedServiceCategories] = useState<Record<string, boolean>>({});
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+  const [bulkPublishBusy, setBulkPublishBusy] = useState(false);
+  const [bulkPublishResult, setBulkPublishResult] = useState<BulkProfilePublishResponse | null>(null);
   const [deletionPinStatus, setDeletionPinStatus] = useState<{ configured: boolean; updated_at: string | null } | null>(null);
   const [deletionPinForm, setDeletionPinForm] = useState({ current: '', next: '', confirm: '' });
   const [deletionPinSaving, setDeletionPinSaving] = useState(false);
@@ -813,6 +817,32 @@ export function AdminPage() {
     }
     const confirmed = window.confirm(t('admin.bulk.confirm', { count: selectedProfileIds.length }));
     if (!confirmed) return;
+    if (operation === 'publish') {
+      if (bulkPublishBusy) return;
+      const requestedIds = [...selectedProfileIds];
+      setBulkPublishBusy(true);
+      setBulkPublishResult(null);
+      try {
+        const response = await api.bulkAdminProfiles(token, { operation, profile_ids: requestedIds, ...extra });
+        if (response.operation !== 'publish' || !('items' in response)) throw new Error('invalid_bulk_publish_response');
+        setBulkPublishResult(response);
+        setSelectedProfileIds((current) => selectedIdsAfterBulkPublish(current, response));
+        setMessage(t('admin.bulk.publishSummary', {
+          published: response.published,
+          already: response.already_published,
+          skipped: response.skipped,
+          failed: response.failed
+        }));
+        const refreshed = await api.adminProfiles(token);
+        setProfiles(refreshed.profiles);
+        setStats((current) => ({ ...current, ...refreshed.stats }));
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      } finally {
+        setBulkPublishBusy(false);
+      }
+      return;
+    }
     await action(async () => {
       await api.bulkAdminProfiles(token, { operation, profile_ids: selectedProfileIds, ...extra });
       setSelectedProfileIds([]);
@@ -2370,7 +2400,7 @@ export function AdminPage() {
             <div className="admin-bulk-bar">
               <label><input type="checkbox" checked={studioProfiles.length > 0 && selectedProfileIds.length === studioProfiles.length} onChange={(event) => setSelectedProfileIds(event.target.checked ? studioProfiles.map((profile) => profile.id) : [])} /> {t('admin.bulk.selected', { count: selectedProfileIds.length })}</label>
               <Action onClick={() => runBulkAction('approve')}>{t('admin.bulk.approve')}</Action>
-              <Action onClick={() => runBulkAction('publish')}>{t('admin.bulk.publish')}</Action>
+              <Action disabled={bulkPublishBusy} onClick={() => runBulkAction('publish')}>{bulkPublishBusy ? t('admin.bulk.publishing') : t('admin.bulk.publish')}</Action>
               <Action onClick={() => runBulkAction('unpublish')}>{t('admin.bulk.unpublish')}</Action>
               <Action onClick={() => runBulkAction('suspend')}>{t('admin.bulk.suspend')}</Action>
               <select value={bulkPremiumTier} onChange={(event) => setBulkPremiumTier(event.target.value)}>{['standard', 'gold', 'elite', 'diamond'].map((tier) => <option key={tier} value={tier}>{t(`admin.status.${tier}`)}</option>)}</select>
@@ -2379,6 +2409,7 @@ export function AdminPage() {
               <Action onClick={() => runBulkAction('subscription_status', { subscription_status: bulkSubscriptionStatus })}>{t('admin.bulk.setSubscriptionStatus')}</Action>
               <Action danger onClick={() => runBulkAction('delete')}>{t('admin.bulk.delete')}</Action>
             </div>
+            {bulkPublishResult && <BulkPublishSummary result={bulkPublishResult} t={t} />}
             {profileLoadError ? (
               <div className="error-text" role="alert">
                 <p>{t('admin.profiles.loadError')}: {profileLoadError}</p>
@@ -3543,6 +3574,28 @@ function getAdminOperatorStatusSelectClass(value: unknown) {
 
 function Action({ children, onClick, danger = false, disabled = false, title }: { children: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; title?: string }) {
   return <button type="button" title={title} aria-label={title} disabled={disabled} className={`${danger ? 'admin-action-btn danger' : 'admin-action-btn'} ${title ? 'icon' : ''}`} onClick={onClick}>{children}</button>;
+}
+
+function BulkPublishSummary({ result, t }: { result: BulkProfilePublishResponse; t: (key: string, vars?: Record<string, string | number>) => string }) {
+  const reasons: BulkProfilePublishStatus[] = [
+    'skipped_moderation_pending',
+    'skipped_unpaid_or_inactive_subscription',
+    'skipped_suspended',
+    'skipped_incomplete',
+    'not_found',
+    'failed'
+  ];
+  return (
+    <div className={`admin-bulk-publish-summary ${result.failed ? 'has-errors' : ''}`} role="status">
+      <strong>{t('admin.bulk.publishSummary', { published: result.published, already: result.already_published, skipped: result.skipped, failed: result.failed })}</strong>
+      <ul>
+        {reasons.map((status) => {
+          const count = result.items.filter((item) => item.status === status).length;
+          return count ? <li key={status}>{t(`admin.bulk.publishReason.${status}`, { count })}: {count}</li> : null;
+        })}
+      </ul>
+    </div>
+  );
 }
 
 function adminAccountErrorMessage(error: unknown, t: (key: string, vars?: Record<string, string | number>) => string) {

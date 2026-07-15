@@ -13,6 +13,17 @@ export class ApiError extends Error {
 
 export type ReferralMe = { referralCode: string; referralLink: string; directReferralsCount: number; totalDescendantsCount: number; referredByDisplay: string | null; registrationSource: string; referralDepth: number };
 export type AdminReferralNode = { userId: string; parentUserId: string | null; displayName: string; role: string; accountStatus: string; registrationSource: string; activationStatus: string; activationProvider: string | null; referralCode: string; referralDepth: number; createdAt: string; directChildrenCount: number; totalDescendantsCount: number; balanceBcu: number; hasProfile: boolean; isSponsoredProfile: boolean; isRoot: boolean };
+export type BulkProfilePublishStatus = 'published' | 'already_published' | 'skipped_moderation_pending' | 'skipped_unpaid_or_inactive_subscription' | 'skipped_suspended' | 'skipped_incomplete' | 'not_found' | 'failed';
+export type BulkProfilePublishResponse = {
+  operation: 'publish';
+  requested: number;
+  published: number;
+  already_published: number;
+  skipped: number;
+  failed: number;
+  updated: number;
+  items: Array<{ profile_id: string; status: BulkProfilePublishStatus; error?: string }>;
+};
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
@@ -216,7 +227,7 @@ export const api = {
     token,
     body: JSON.stringify(body)
   }),
-  bulkAdminProfiles: (token: string, body: Record<string, unknown>) => request<{ updated: number; operation: string; profiles?: Profile[] }>('/api/admin/profiles/bulk', {
+  bulkAdminProfiles: (token: string, body: Record<string, unknown>) => request<{ updated: number; operation: string; profiles?: Profile[] } | BulkProfilePublishResponse>('/api/admin/profiles/bulk', {
     method: 'POST',
     token,
     body: JSON.stringify(body)
