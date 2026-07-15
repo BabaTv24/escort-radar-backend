@@ -97,11 +97,11 @@ const emptyStudioForm = {
   contact_person: '',
   website: '',
   opening_hours: normalizeAvailabilityHoursForEditor({}),
-  price_30min: 120,
-  price_1h: 180,
-  price_2h: 320,
-  price_3h: 450,
-  price_night: 900,
+  price_30min: 120 as number | '',
+  price_1h: 180 as number | '',
+  price_2h: 320 as number | '',
+  price_3h: 450 as number | '',
+  price_night: 900 as number | '',
   currency: 'EUR',
   operator_status: 'AVAILABLE_TODAY',
   availability_status: 'available',
@@ -734,11 +734,11 @@ export function AdminPage() {
       contact_person: profile.contact_person || '',
       website: profile.website || '',
       opening_hours: normalizeAvailabilityHoursForEditor(profile.opening_hours),
-      price_30min: Number(profile.price_30min || 0),
-      price_1h: Number(profile.price_1h || 180),
-      price_2h: Number(profile.price_2h || 0),
-      price_3h: Number(profile.price_3h || 0),
-      price_night: Number(profile.price_night || 0),
+      price_30min: profile.price_30min ?? '',
+      price_1h: profile.price_1h ?? '',
+      price_2h: profile.price_2h ?? '',
+      price_3h: profile.price_3h ?? '',
+      price_night: profile.price_night ?? '',
       currency: profile.currency || profile.listing_currency || 'EUR',
       operator_status: profile.operator_status || 'AVAILABLE_TODAY',
       availability_status: profile.availability_status || 'available',
@@ -1077,11 +1077,11 @@ export function AdminPage() {
         height: studioForm.height_cm,
         languages: Array.isArray(studioForm.languages) ? studioForm.languages : String(studioForm.languages || '').split(',').map((item) => item.trim()).filter(Boolean),
         opening_hours: studioForm.opening_hours,
-        price_1h: Number(studioForm.price_1h || 0),
-        price_30min: Number(studioForm.price_30min || 0),
-        price_2h: Number(studioForm.price_2h || 0),
-        price_3h: Number(studioForm.price_3h || 0),
-        price_night: Number(studioForm.price_night || 0),
+        price_1h: studioForm.price_1h === '' ? null : Number(studioForm.price_1h),
+        price_30min: studioForm.price_30min === '' ? null : Number(studioForm.price_30min),
+        price_2h: studioForm.price_2h === '' ? null : Number(studioForm.price_2h),
+        price_3h: studioForm.price_3h === '' ? null : Number(studioForm.price_3h),
+        price_night: studioForm.price_night === '' ? null : Number(studioForm.price_night),
         service_pricing: filterServicePricing(studioForm.service_pricing, studioForm.services),
         age: Number(studioForm.age || 0),
         height_cm: Number(studioForm.height_cm || 0),
@@ -1603,11 +1603,11 @@ export function AdminPage() {
 
     if (studioTab === 'prices') {
       return <div className="admin-form-grid">
-        <AdminField label={t('admin.profileEditor.price30')}><input type="number" value={studioForm.price_30min} onChange={(event) => setStudioForm({ ...studioForm, price_30min: Number(event.target.value) })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={studioForm.price_1h} onChange={(event) => setStudioForm({ ...studioForm, price_1h: Number(event.target.value) })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.price2h')}><input type="number" value={studioForm.price_2h} onChange={(event) => setStudioForm({ ...studioForm, price_2h: Number(event.target.value) })} /></AdminField>
-        <AdminField label={t('form.price3h')}><input type="number" value={studioForm.price_3h} onChange={(event) => setStudioForm({ ...studioForm, price_3h: Number(event.target.value) })} /></AdminField>
-        <AdminField label={t('admin.profileEditor.priceNight')}><input type="number" value={studioForm.price_night} onChange={(event) => setStudioForm({ ...studioForm, price_night: Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.price30')}><input type="number" value={studioForm.price_30min} onChange={(event) => setStudioForm({ ...studioForm, price_30min: event.target.value === '' ? '' : Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={studioForm.price_1h} onChange={(event) => setStudioForm({ ...studioForm, price_1h: event.target.value === '' ? '' : Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.price2h')}><input type="number" value={studioForm.price_2h} onChange={(event) => setStudioForm({ ...studioForm, price_2h: event.target.value === '' ? '' : Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('form.price3h')}><input type="number" value={studioForm.price_3h} onChange={(event) => setStudioForm({ ...studioForm, price_3h: event.target.value === '' ? '' : Number(event.target.value) })} /></AdminField>
+        <AdminField label={t('admin.profileEditor.priceNight')}><input type="number" value={studioForm.price_night} onChange={(event) => setStudioForm({ ...studioForm, price_night: event.target.value === '' ? '' : Number(event.target.value) })} /></AdminField>
         <AdminField label={t('admin.profileEditor.currency')}><input value={studioForm.currency} onChange={(event) => setStudioForm({ ...studioForm, currency: event.target.value })} /></AdminField>
         <div className="admin-card full-span"><ServicePricingEditor selectedServices={studioForm.services} servicePricing={studioForm.service_pricing} currency={studioForm.currency} onChange={(service_pricing) => setStudioForm({ ...studioForm, service_pricing })} /></div>
       </div>;
@@ -2072,7 +2072,11 @@ export function AdminPage() {
                   <AdminField label={t('admin.hermes.website')}><input value={hermesPreview.website || ''} onChange={(event) => updateHermesPreview({ website: event.target.value })} /></AdminField>
                   <AdminField label="Telegram"><input value={hermesPreview.telegram || ''} onChange={(event) => updateHermesPreview({ telegram: event.target.value })} /></AdminField>
                   <AdminField label="WhatsApp"><input value={hermesPreview.whatsapp || ''} onChange={(event) => updateHermesPreview({ whatsapp: event.target.value })} /></AdminField>
-                  <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={hermesPreview.price_1h || ''} onChange={(event) => updateHermesPreview({ price_1h: Number(event.target.value || 0) })} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.price30')}><input type="number" value={hermesPreview.price_30min ?? ''} onChange={(event) => updateHermesPreview(hermesPricePatch(hermesPreview, 'price_30min', event.target.value))} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.price1h')}><input type="number" value={hermesPreview.price_1h ?? ''} onChange={(event) => updateHermesPreview(hermesPricePatch(hermesPreview, 'price_1h', event.target.value))} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.price2h')}><input type="number" value={hermesPreview.price_2h ?? ''} onChange={(event) => updateHermesPreview(hermesPricePatch(hermesPreview, 'price_2h', event.target.value))} /></AdminField>
+                  <AdminField label={t('form.price3h')}><input type="number" value={hermesPreview.price_3h ?? ''} onChange={(event) => updateHermesPreview(hermesPricePatch(hermesPreview, 'price_3h', event.target.value))} /></AdminField>
+                  <AdminField label={t('admin.profileEditor.priceNight')}><input type="number" value={hermesPreview.price_night ?? ''} onChange={(event) => updateHermesPreview(hermesPricePatch(hermesPreview, 'price_night', event.target.value))} /></AdminField>
                   <AdminField label={t('admin.profileEditor.currency')}><select value={hermesPreview.currency || 'EUR'} onChange={(event) => updateHermesPreview({ currency: event.target.value as HermesImportPreview['currency'] })}>{['EUR', 'PLN', 'USD', 'GBP', 'CHF'].map((currency) => <option key={currency} value={currency}>{currency}</option>)}</select></AdminField>
                   <AdminField label={t('admin.hermes.services')}><textarea value={(hermesPreview.services || []).join(', ')} onChange={(event) => updateHermesPreview({ services: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
                   <AdminField label={t('admin.hermes.rawServices')}><textarea value={(hermesPreview.raw_services || []).join('\n')} onChange={(event) => updateHermesPreview({ raw_services: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })} /></AdminField>
@@ -3047,6 +3051,17 @@ function toDateTimeLocal(value: unknown) {
   if (!Number.isFinite(date.getTime())) return String(value).slice(0, 16);
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function hermesPricePatch(profile: HermesImportPreview, key: 'price_30min' | 'price_1h' | 'price_2h' | 'price_3h' | 'price_night', value: string): Partial<HermesImportPreview> {
+  const prices = { ...(profile.prices || {}) };
+  if (value === '') {
+    delete prices[key];
+    return { [key]: null, prices };
+  }
+  const amount = Number(value);
+  prices[key] = amount;
+  return { [key]: amount, prices };
 }
 
 function countHermesPreviewFields(profile: HermesProfilePreview) {

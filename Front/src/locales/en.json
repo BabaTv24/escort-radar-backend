@@ -5,6 +5,7 @@
   "availability.from": "from",
   "availability.to": "to",
   "availability.closed": "Unavailable",
+  "availability.allDay": "24h / All day",
   "availability.note": "Additional note",
   "availability.notePlaceholder": "For example, other hours by prior arrangement",
   "availability.days.monday": "Monday",

@@ -16,6 +16,7 @@ import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, isProfileInRadarRange
 import { getSafeNextPath } from '../Front/src/lib/authRedirect.ts';
 import { normalizeOperatorStatus, normalizeProfileCategory, normalizeProfileOpeningHours, validateProfileInput } from '../Back/src/validation.ts';
 import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, isEscortClubSeoBoilerplate, mapImportedServiceValues, normalizeImportedCity, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../Back/src/hermesImport.ts';
+import { isAllDayAvailability, normalizeAvailabilityHoursForEditor } from '../Front/src/components/AvailabilityHoursEditor.tsx';
 import { fetchPublicImportResource, readImportResponseLimited, validatePublicImportUrl } from '../Back/src/publicImportSecurity.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
@@ -1104,7 +1105,7 @@ test('admin profile update synchronizes work city and clears stale Berlin locati
   const adminRouteSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
   const updateRoute = adminRouteSource.slice(adminRouteSource.indexOf("put('/profiles/:id'"), adminRouteSource.indexOf("patch('/profiles/:id/publish"));
 
-  assert.match(updateRoute, /normalizeAdminProfilePayload\(req\.body, true\)/);
+  assert.match(updateRoute, /normalizeAdminProfilePayload\(req\.body, true, true\)/);
   assert.match(adminRouteSource, /hasOwnProperty\.call\(body, 'work_city'\)/);
   assert.match(adminPageSource, /city: getLegacyCitySlug\(studioForm\.work_city\)/);
   assert.match(adminPageSource, /work_city: studioForm\.work_city\.trim\(\)/);
@@ -1620,6 +1621,65 @@ test('Escort Club parser reads About me paragraphs and all profile availability 
   assert.deepEqual(normalizeProfileOpeningHours(profile.opening_hours), profile.opening_hours);
 });
 
+test('Escort Club parser maps every base price by duration and preserves all-day availability', async () => {
+  const html = await readFile(new URL('./fixtures/escort-club-prices-all-day.html', import.meta.url), 'utf8');
+  const profile = parseEscortClubProfile(html, 'https://pl.escort.club/anons/247251.html');
+  assert.ok(profile);
+  assert.deepEqual(profile.prices, {
+    price_night: 1500,
+    price_2h: 700,
+    price_30min: 200,
+    price_3h: 950,
+    price_1h: 400
+  });
+  assert.deepEqual({
+    price_30min: profile.price_30min,
+    price_1h: profile.price_1h,
+    price_2h: profile.price_2h,
+    price_3h: profile.price_3h,
+    price_night: profile.price_night,
+    currency: profile.currency
+  }, { price_30min: 200, price_1h: 400, price_2h: 700, price_3h: 950, price_night: 1500, currency: 'PLN' });
+  assert.equal(Object.values(profile.prices).includes(100), false);
+  assert.deepEqual(profile.opening_hours?.weekly.monday, { enabled: true, start: '00:00', end: '00:00' });
+  assert.deepEqual(profile.opening_hours?.weekly.tuesday, { enabled: true, start: '09:00', end: '18:00' });
+  assert.deepEqual(profile.opening_hours?.weekly.wednesday, { enabled: false, start: null, end: null });
+});
+
+test('Escort Club price parser leaves missing negotiated prices empty and warns about mixed currencies', () => {
+  const profile = parseEscortClubProfile(`<main><h1>Bela</h1><div class="contant-prices">
+    <div class="stat-elem"><div class="sub-label">1h</div><div class="sub-desc">do uzgodnienia</div></div>
+    <div class="stat-elem"><div class="sub-label">30 min</div><div class="sub-desc">200 PLN</div></div>
+    <div class="stat-elem"><div class="sub-label">2h</div><div class="sub-desc">700 PLN</div></div>
+    <div class="stat-elem"><div class="sub-label">3h</div><div class="sub-desc">220 EUR</div></div>
+  </div></main>`, 'https://pl.escort.club/anons/247251.html');
+  assert.ok(profile);
+  assert.equal(profile.price_1h, undefined);
+  assert.equal(profile.currency, 'PLN');
+  assert.ok(profile.admin_warnings.includes('mixed_price_currencies'));
+});
+
+test('global Escort Club 24/7 enables all seven days', () => {
+  const profile = parseEscortClubProfile('<main><h1>Bela</h1><section><h2>Godziny dostępności</h2><p>24/7</p></section></main>', 'https://pl.escort.club/anons/247251.html');
+  assert.ok(profile?.opening_hours);
+  assert.equal(Object.keys(profile.opening_hours.weekly).length, 7);
+  for (const schedule of Object.values(profile.opening_hours.weekly)) {
+    assert.deepEqual(schedule, { enabled: true, start: '00:00', end: '00:00' });
+  }
+});
+
+test('opening-hours validation and editor preserve only the explicit midnight all-day range', () => {
+  const normalized = normalizeProfileOpeningHours({ weekly: {
+    monday: { enabled: true, start: '00:00', end: '00:00' },
+    tuesday: { enabled: true, start: '09:00', end: '09:00' }
+  } }) as any;
+  assert.deepEqual(normalized.weekly.monday, { enabled: true, start: '00:00', end: '00:00' });
+  assert.equal(normalized.weekly.tuesday.enabled, false);
+  const editor = normalizeAvailabilityHoursForEditor(normalized);
+  assert.equal(editor.weekly.monday.enabled, true);
+  assert.equal(isAllDayAvailability(editor.weekly.monday), true);
+});
+
 test('Escort Club parser rejects SEO description, supports localized closed days, and does not invent a schedule', () => {
   assert.equal(isEscortClubSeoBoilerplate('Najlepsze darmowe ogłoszenia dla każdego miasta'), true);
   const rejected = parseEscortClubProfile(`<main><h1>Anna</h1><section><h2>O mnie</h2><p>Jeżeli szukasz prywatnych anonsów, znajdziesz je tutaj.</p></section></main>`, 'https://pl.escort.club/anons/1.html');
@@ -1661,8 +1721,10 @@ test('import city and price parsing preserves real city and supported currency',
   for (const [source, amount, currency] of [
     ['250 EUR', 250, 'EUR'], ['250 €', 250, 'EUR'], ['500 PLN', 500, 'PLN'],
     ['500 zł', 500, 'PLN'], ['500 ZŁ', 500, 'PLN'], ['100 USD', 100, 'USD'],
-    ['100 $', 100, 'USD'], ['90 GBP', 90, 'GBP'], ['80 CHF', 80, 'CHF']
+    ['100 $', 100, 'USD'], ['90 GBP', 90, 'GBP'], ['80 CHF', 80, 'CHF'],
+    ['1 200 PLN', 1200, 'PLN'], ['1 200,50 PLN', 1200.5, 'PLN'], ['1.200,50 EUR', 1200.5, 'EUR']
   ] as const) assert.deepEqual(parseImportedPrice(source), { amount, currency });
+  for (const value of ['do uzgodnienia', 'zapytaj', 'negocjacja']) assert.equal(parseImportedPrice(value), null);
 
   const html = `<html><body><nav>Popularne miasta: Berlin</nav><main><h1>Anna</h1></main><footer>Berlin</footer></body></html>`;
   const profile = parseEscortClubProfile(html, 'https://pl.escort.club/anons/123.html');
@@ -1705,4 +1767,26 @@ test('Hermes preview fields are forwarded to sponsored draft payload and image f
   const publicRouteSource=await readFile(new URL('../Back/src/routes/profiles.ts',import.meta.url),'utf8');
   assert.match(publicRouteSource,/admin_note, subscription_note, source_url, import_source, imported_at/);
   assert.match(adminRouteSource,/Unmapped tags:/); assert.match(adminRouteSource,/Unknown fields:/); assert.match(adminRouteSource,/slice\(0, 4000\)/);
+});
+
+test('Hermes preview and create carry every approved price without a fallback zero or 180', async () => {
+  const [adminRouteSource, adminPageSource, apiTypes] = await Promise.all([
+    readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/types.ts', import.meta.url), 'utf8')
+  ]);
+  const previewBuilder = adminRouteSource.slice(adminRouteSource.indexOf('function buildHermesProfilePreview'), adminRouteSource.indexOf('async function fetchEscortClubPublicPhone'));
+  const previewNormalizer = adminRouteSource.slice(adminRouteSource.indexOf('function normalizeHermesPreviewProfile'), adminRouteSource.indexOf('function buildHermesProfilePreview'));
+  const createRoute = adminRouteSource.slice(adminRouteSource.indexOf("post('/import-profile-create"), adminRouteSource.indexOf("get('/business-profiles"));
+  for (const field of ['price_30min', 'price_1h', 'price_2h', 'price_3h', 'price_night']) {
+    assert.match(previewBuilder, new RegExp(`${field}: escortClub\\?\\.${field}`));
+    assert.match(previewNormalizer, new RegExp(`${field}:`));
+    assert.match(createRoute, new RegExp(`${field}: \\(incomingProfile as any\\)\\.${field}`));
+    assert.match(adminPageSource, new RegExp(`hermesPricePatch\\(hermesPreview, '${field}'`));
+    assert.match(apiTypes, new RegExp(`${field}\\?: number \\| null`));
+  }
+  assert.match(createRoute, /normalizeAdminProfilePayload\([\s\S]*?\}, true, true\)/);
+  assert.doesNotMatch(createRoute, /price_1h:[^\n]*(?:\|\| 180|\?\? 180)/);
+  assert.match(adminPageSource, /price_1h: studioForm\.price_1h === '' \? null/);
+  assert.match(adminRouteSource, /put\('\/profiles\/:id'[\s\S]{0,180}normalizeAdminProfilePayload\(req\.body, true, true\)/);
 });

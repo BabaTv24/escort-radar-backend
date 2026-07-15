@@ -910,6 +910,9 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     ...(Array.isArray(req.body.image_urls) ? req.body.image_urls : []),
     ...(Array.isArray((incomingProfile as any).images) ? (incomingProfile as any).images : [])
   ]).slice(0, 12);
+  const incomingPrices = (incomingProfile as any).prices && typeof (incomingProfile as any).prices === 'object'
+    ? (incomingProfile as any).prices as Record<string, unknown>
+    : {};
   const normalized = normalizeAdminProfilePayload({
     ...incomingProfile,
     owner_email: ownerEmail,
@@ -926,7 +929,11 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     whatsapp: (incomingProfile as any).whatsapp,
     services: Array.isArray((incomingProfile as any).services) ? (incomingProfile as any).services : [],
     website: optionalText((incomingProfile as any).website, 240) || sourceUrl,
-    price_1h: numericValue((incomingProfile as any).price_1h || (incomingProfile as any).prices?.price_1h || 180) || 180,
+    price_30min: (incomingProfile as any).price_30min ?? incomingPrices.price_30min,
+    price_1h: (incomingProfile as any).price_1h ?? incomingPrices.price_1h,
+    price_2h: (incomingProfile as any).price_2h ?? incomingPrices.price_2h,
+    price_3h: (incomingProfile as any).price_3h ?? incomingPrices.price_3h,
+    price_night: (incomingProfile as any).price_night ?? incomingPrices.price_night,
     currency: normalizeImportedCurrency((incomingProfile as any).currency) || 'EUR',
     is_published: false,
     verified: false,
@@ -936,7 +943,7 @@ adminRouter.post('/import-profile-create', asyncHandler(async (req, res) => {
     subscription_status: 'incomplete',
     listing_plan: 'hermes_import_draft',
     subscription_note: `Hermes import source: ${sourceUrl}`
-  }, true);
+  }, true, true);
   if ('error' in normalized) return res.status(400).json({ error: normalized.error, stage: 'validate profile payload' });
   let authUser: any = null;
   let authUserCreated = false;
@@ -1650,7 +1657,7 @@ adminRouter.patch('/profiles/:id/promotion', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
-  const profileData = normalizeAdminProfilePayload(req.body, true);
+  const profileData = normalizeAdminProfilePayload(req.body, true, true);
   if ('error' in profileData) return res.status(400).json({ error: profileData.error });
 
   const patch = {
@@ -3029,7 +3036,7 @@ export async function validateBusinessProfileLimit(input: Record<string, any>, e
   return null;
 }
 
-function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImportedCity = false): { data: Record<string, unknown> } | { error: string } {
+function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImportedCity = false, preserveMissingPrices = false): { data: Record<string, unknown> } | { error: string } {
   const displayName = optionalText(body.display_name, 80);
   if (!displayName) return { error: 'display_name is required' };
   const ownerEmail = optionalEmail(body.owner_email || body.email);
@@ -3109,7 +3116,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
       website: optionalText(body.website, 240),
       opening_hours: normalizeProfileOpeningHours(body.opening_hours),
       price_30min: optionalMoney(body.price_30min),
-      price_1h: optionalMoney(body.price_1h) || 180,
+      price_1h: optionalMoney(body.price_1h) ?? (preserveMissingPrices ? null : 180),
       price_2h: optionalMoney(body.price_2h),
       price_3h: optionalMoney(body.price_3h),
       price_night: optionalMoney(body.price_night),
@@ -3217,6 +3224,7 @@ function optionalInteger(value: unknown, min: number, max: number) {
 }
 
 function optionalMoney(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) return null;
   return Math.round(number * 100) / 100;
@@ -3670,8 +3678,19 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
   const detailSource = rawProfile.details || rawProfile.more_about_me || rawProfile.about_details;
   const normalizedDetails = normalizeImportedDetails(detailSource && typeof detailSource === 'object' && !Array.isArray(detailSource)
     ? Object.entries(detailSource).map(([key,value]) => [key,String(value ?? '')] as [string,string]) : []);
-  const prices = rawProfile.prices && typeof rawProfile.prices === 'object' ? rawProfile.prices : {};
-  const price1h = numericValue(rawProfile.price_1h ?? prices.price_1h ?? prices.one_hour ?? prices.hour);
+  const rawPrices = rawProfile.prices && typeof rawProfile.prices === 'object' ? rawProfile.prices : {};
+  const price30min = optionalMoney(rawProfile.price_30min ?? rawPrices.price_30min ?? rawPrices.half_hour);
+  const price1h = optionalMoney(rawProfile.price_1h ?? rawPrices.price_1h ?? rawPrices.one_hour ?? rawPrices.hour);
+  const price2h = optionalMoney(rawProfile.price_2h ?? rawPrices.price_2h ?? rawPrices.two_hours);
+  const price3h = optionalMoney(rawProfile.price_3h ?? rawPrices.price_3h ?? rawPrices.three_hours);
+  const priceNight = optionalMoney(rawProfile.price_night ?? rawPrices.price_night ?? rawPrices.overnight);
+  const prices = Object.fromEntries(Object.entries({
+    price_30min: price30min,
+    price_1h: price1h,
+    price_2h: price2h,
+    price_3h: price3h,
+    price_night: priceNight
+  }).filter(([, value]) => value !== null));
   const cityLabel = optionalText(rawProfile.city_label || rawProfile.city || rawProfile.location, 100) || '';
   const serviceGroups = rawProfile.service_groups && typeof rawProfile.service_groups === 'object' ? rawProfile.service_groups : {};
   const rawServices = Array.isArray(rawProfile.raw_services) ? rawProfile.raw_services.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 100) : [];
@@ -3720,8 +3739,12 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     tags: Array.isArray(rawProfile.tags) ? rawProfile.tags.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 30) : [],
     unknown_fields: rawProfile.unknown_fields && typeof rawProfile.unknown_fields === 'object' ? rawProfile.unknown_fields : normalizedDetails.unknown_fields,
     prices,
-    price_1h: price1h || undefined,
-    currency: normalizeImportedCurrency(rawProfile.currency || rawProfile.price_currency || prices.currency) || 'EUR',
+    price_30min: price30min ?? undefined,
+    price_1h: price1h ?? undefined,
+    price_2h: price2h ?? undefined,
+    price_3h: price3h ?? undefined,
+    price_night: priceNight ?? undefined,
+    currency: normalizeImportedCurrency(rawProfile.currency || rawProfile.price_currency || rawPrices.currency) || 'EUR',
     availability: optionalText(rawProfile.availability, 160) || '',
     opening_hours: rawProfile.opening_hours && typeof rawProfile.opening_hours === 'object'
       ? normalizeProfileOpeningHours(rawProfile.opening_hours)
@@ -3729,7 +3752,10 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     images: Array.isArray(rawProfile.images)
       ? uniqueStrings(rawProfile.images.map((value: unknown) => resolveImportImageUrl(value, sourceUrl))).filter(isLikelyProfileImage).sort((left, right) => imageCandidateScore(right) - imageCandidateScore(left)).slice(0, 12)
       : [],
-    admin_warnings: moderation.warnings,
+    admin_warnings: uniqueStrings([
+      ...moderation.warnings,
+      ...(Array.isArray(rawProfile.admin_warnings) ? rawProfile.admin_warnings.map((item: unknown) => String(item)) : [])
+    ]),
     suggested_owner_email: optionalEmail(rawProfile.suggested_owner_email) || '',
     source_url: sourceUrl,
     import_source: importSource
@@ -3789,7 +3815,11 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     service_groups: sections.serviceGroups,
     taboos: sections.taboos,
     prices: escortClub?.prices || (importedPrice ? { price_1h: importedPrice.amount } : {}),
+    price_30min: escortClub?.price_30min,
     price_1h: escortClub?.price_1h || importedPrice?.amount,
+    price_2h: escortClub?.price_2h,
+    price_3h: escortClub?.price_3h,
+    price_night: escortClub?.price_night,
     currency: escortClub?.currency || importedPrice?.currency || 'EUR',
     availability: sections.availability,
     opening_hours: escortClub?.opening_hours,

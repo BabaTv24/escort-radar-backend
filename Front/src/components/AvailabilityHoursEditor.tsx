@@ -11,6 +11,10 @@ export type AvailabilityHours = {
   note?: string;
 };
 
+export function isAllDayAvailability(day: Pick<AvailabilityDay, 'enabled' | 'start' | 'end'>) {
+  return day.enabled && day.start === '00:00' && day.end === '00:00';
+}
+
 const defaultDay = (): AvailabilityDay => ({ enabled: false, start: '09:00', end: '18:00' });
 
 export function normalizeAvailabilityHoursForEditor(value: Profile['opening_hours']): AvailabilityHours {
@@ -64,7 +68,9 @@ export function AvailabilityHoursEditor({ value, onChange }: {
               <span aria-hidden="true">–</span>
               <input type="time" aria-label={`${t(`availability.days.${day}`)} ${t('availability.to')}`} value={schedule.weekly[day].end} disabled={!schedule.weekly[day].enabled} onChange={(event) => updateDay(day, { end: event.target.value })} />
             </div>
-            {!schedule.weekly[day].enabled && <small>{t('availability.closed')}</small>}
+            {isAllDayAvailability(schedule.weekly[day])
+              ? <small>{t('availability.allDay')}</small>
+              : !schedule.weekly[day].enabled && <small>{t('availability.closed')}</small>}
           </div>
         ))}
       </div>

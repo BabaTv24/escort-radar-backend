@@ -158,7 +158,8 @@ export function normalizeProfileOpeningHours(value: unknown) {
     const schedule = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
     const start = optionalTime(schedule.start ?? schedule.from);
     const end = optionalTime(schedule.end ?? schedule.to);
-    weekly[day] = { enabled: Boolean(schedule.enabled) && Boolean(start && end), start, end };
+    const validRange = Boolean(start && end) && (start !== end || start === '00:00');
+    weekly[day] = { enabled: Boolean(schedule.enabled) && validRange, start, end };
   }
   const timezone = optionalText(input.timezone, 80) || 'Europe/Berlin';
   const note = optionalText(input.note, 500);
@@ -184,6 +185,7 @@ function optionalNumber(value: unknown, min: number, max: number) {
 }
 
 function optionalMoney(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) return null;
   return Math.round(number * 100) / 100;

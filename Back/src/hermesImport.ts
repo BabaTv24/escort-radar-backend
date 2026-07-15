@@ -15,7 +15,9 @@ export type EscortClubProfile = ImportedDetails & {
   opening_hours?: ImportedOpeningHours;
   admin_warnings: string[];
   services: string[]; raw_services: string[]; unmapped_tags: string[];
-  prices: Record<string, number>; price_1h?: number; currency?: string; images: string[];
+  prices: Record<string, number>;
+  price_30min?: number; price_1h?: number; price_2h?: number; price_3h?: number; price_night?: number;
+  currency?: string; images: string[];
 };
 
 export type ImportedOpeningHours = {
@@ -46,12 +48,24 @@ export function normalizeImportedCurrency(value: unknown): ImportedPrice['curren
 }
 
 export function parseImportedPrice(value: unknown): ImportedPrice | null {
-  const decoded = decodeImportHtml(String(value || '')).replace(/\s+/g, ' ');
-  const match = decoded.match(/(?:^|[^\d])([0-9]{1,6}(?:[.,][0-9]{1,2})?)\s*(EUR|€|PLN|zł|zl|USD|\$|GBP|£|CHF)(?:\b|$)/i);
+  const decoded = decodeImportHtml(String(value || '')).replace(/[\u00a0\u202f]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/(?:do uzgodnienia|zapytaj|negocjacj|negotiable|auf anfrage)/i.test(normalizeImportKey(decoded))) return null;
+  const match = decoded.match(/(?:^|[^\d])([0-9][0-9\s.,]{0,14}?)\s*(EUR|€|PLN|zł|zl|USD|\$|GBP|£|CHF)(?:\b|$)/i);
   if (!match) return null;
-  const amount = Number(match[1].replace(',', '.'));
+  const amount = parseImportedAmount(match[1]);
   const currency = normalizeImportedCurrency(match[2]);
-  return Number.isFinite(amount) && amount >= 0 && currency ? { amount, currency } : null;
+  return Number.isFinite(amount) && amount > 0 && currency ? { amount, currency } : null;
+}
+
+function parseImportedAmount(value: string) {
+  const compact = value.replace(/\s+/g, '');
+  const separator = Math.max(compact.lastIndexOf(','), compact.lastIndexOf('.'));
+  if (separator < 0) return Number(compact);
+  const decimals = compact.length - separator - 1;
+  if (decimals >= 1 && decimals <= 2) {
+    return Number(`${compact.slice(0, separator).replace(/[.,]/g, '')}.${compact.slice(separator + 1)}`);
+  }
+  return Number(compact.replace(/[.,]/g, ''));
 }
 
 export function extractImportedProfileCity(html: string) {
@@ -226,13 +240,6 @@ export function parseEscortClubProfile(html: string, sourceUrl: string): EscortC
   }
   const details = normalizeImportedDetails(pairs);
 
-  const priceScope = html.match(/<div\b[^>]*class=["'][^"']*contant-prices[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/i)?.[1] || '';
-  const priceText = clean(priceScope);
-  const oneHourContext = priceText.match(/(?:^|\s)1\s*(?:godz|h|stunde|hour)[\s\S]{0,100}/i)?.[0]
-    || priceText.match(/[\s\S]{0,100}(?:^|\s)1\s*(?:godz|h|stunde|hour)/i)?.[0];
-  const importedPrice = parseImportedPrice(oneHourContext || priceText);
-  const price1h = importedPrice?.amount;
-
   const infoScope = html.match(/<section\b[^>]*class=["'][^"']*anons-info-sec[^"']*["'][^>]*>([\s\S]*?)<\/section>/i)?.[1] || '';
   const tagsScope = infoScope.match(/<div\b[^>]*class=["'][^"']*tags-box[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] || '';
   const tagValues = [...tagsScope.matchAll(/<a\b[^>]*class=["'][^"']*\btag\b[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)].map((match) => clean(match[1])).filter(Boolean);
@@ -254,15 +261,22 @@ export function parseEscortClubProfile(html: string, sourceUrl: string): EscortC
   const descriptionRejected = isEscortClubSeoBoilerplate(descriptionCandidate || fallbackDescription);
   const description = descriptionRejected ? '' : descriptionCandidate;
   const openingHours = extractEscortClubOpeningHours(dom, parsedUrl, city);
+  const priceResult = extractEscortClubPrices(dom);
 
   return {
     name, display_name: name, phone_id: phoneId, city, city_label: city, category: 'ladies', ...details,
     height: details.height_cm,
     description,
     ...(openingHours ? { opening_hours: openingHours } : {}),
-    admin_warnings: descriptionRejected ? ['description_boilerplate_rejected'] : [],
+    admin_warnings: [...(descriptionRejected ? ['description_boilerplate_rejected'] : []), ...priceResult.warnings],
     services: mapped.mapped, raw_services: mapped.raw, unmapped_tags: mapped.unmapped,
-    prices: price1h ? { price_1h: price1h } : {}, price_1h: price1h, currency: importedPrice?.currency,
+    prices: priceResult.prices,
+    price_30min: priceResult.prices.price_30min,
+    price_1h: priceResult.prices.price_1h,
+    price_2h: priceResult.prices.price_2h,
+    price_3h: priceResult.prices.price_3h,
+    price_night: priceResult.prices.price_night,
+    currency: priceResult.currency,
     images: [...new Set(imageValues)].slice(0, 12)
   };
 }
@@ -330,6 +344,51 @@ function walkImportNodes(root: ImportHtmlNode) {
   };
   visit(root);
   return nodes;
+}
+
+type ImportedPriceKey = 'price_30min' | 'price_1h' | 'price_2h' | 'price_3h' | 'price_night';
+
+function extractEscortClubPrices(root: ImportHtmlNode) {
+  const nodes = walkImportNodes(root);
+  const classScope = nodes.find((node) => /\b(?:contant-prices|content-prices|profile-prices|pricing)\b/i.test(node.attrs));
+  const priceLabels = new Set(['ceny', 'cennik', 'prices', 'preise']);
+  const heading = nodes.find((node) => isSemanticLabelNode(node) && priceLabels.has(importNodeKey(node)));
+  const scope = classScope || heading?.parent;
+  const prices: Partial<Record<ImportedPriceKey, number>> = {};
+  const currencies: ImportedPrice['currency'][] = [];
+  if (!scope) return { prices: prices as Record<string, number>, currency: undefined, warnings: [] as string[] };
+
+  const rows = walkImportNodes(scope).filter((node) => node !== scope && (
+    /\b(?:stat-elem|price-row|price-item)\b/i.test(node.attrs) || ['tr', 'li', 'p'].includes(node.tag)
+  ));
+  for (const row of rows) {
+    const descendants = walkImportNodes(row);
+    const labelNode = descendants.find((node) => /\b(?:sub-label|price-label|duration|label)\b/i.test(node.attrs));
+    const valueNode = descendants.find((node) => /\b(?:sub-desc|price-value|amount|value)\b/i.test(node.attrs));
+    const label = labelNode ? importNodeText(labelNode) : importNodeText(row);
+    const key = importedPriceKeyForLabel(label);
+    if (!key || prices[key] !== undefined) continue;
+    const parsed = parseImportedPrice(valueNode ? importNodeText(valueNode) : importNodeText(row));
+    if (!parsed) continue;
+    prices[key] = parsed.amount;
+    currencies.push(parsed.currency);
+  }
+
+  const currencyCounts = new Map<ImportedPrice['currency'], number>();
+  for (const currency of currencies) currencyCounts.set(currency, (currencyCounts.get(currency) || 0) + 1);
+  const currency = [...currencyCounts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
+  const warnings = currencyCounts.size > 1 ? ['mixed_price_currencies'] : [];
+  return { prices: prices as Record<string, number>, currency, warnings };
+}
+
+function importedPriceKeyForLabel(value: string): ImportedPriceKey | null {
+  const label = normalizeImportKey(value);
+  if (/(?:^|\s)(?:30\s*(?:min|minut)|0[,.]5\s*(?:godz|h\b|hour|stund))/.test(label)) return 'price_30min';
+  if (/(?:^|\s)(?:60\s*(?:min|minut)|1\s*(?:godz|godzina|h\b|hour|stund))/.test(label)) return 'price_1h';
+  if (/(?:^|\s)(?:120\s*(?:min|minut)|2\s*(?:godz|godziny|h\b|hours?|stunden?))/.test(label)) return 'price_2h';
+  if (/(?:^|\s)(?:180\s*(?:min|minut)|3\s*(?:godz|godziny|h\b|hours?|stunden?))/.test(label)) return 'price_3h';
+  if (/(?:noc|cala noc|overnight|night|ubernachtung)/.test(label)) return 'price_night';
+  return null;
 }
 
 const aboutLabels = new Set(['o mnie', 'about me', 'uber mich']);
@@ -418,20 +477,34 @@ function parseOpeningHourLines(value: string) {
   for (const rawLine of value.split(/\r?\n/)) {
     const line = normalizeImportKey(rawLine).replace(/\s+/g, ' ').trim();
     if (!line) continue;
+    let matchedDay = false;
     for (const [day, aliases] of importedDayAliases) {
       const dayMatch = line.match(new RegExp(`^(?:${aliases.join('|')})(?:[.,:]?\\s+|$)`));
       if (!dayMatch) continue;
+      matchedDay = true;
       const rest = line.slice(dayMatch[0].length).replace(/^\s+/, '');
       if (/^(?:nieczynne|zamkniete|niedostepna|niedostepny|closed|unavailable|geschlossen)\b/.test(rest)) {
         result[day] = { enabled: false, start: null, end: null };
+        break;
+      }
+      if (isImportedAllDay(rest)) {
+        result[day] = { enabled: true, start: '00:00', end: '00:00' };
         break;
       }
       const range = rest.match(/^(?:(?:od|von|from)\s+)?((?:[01]\d|2[0-3]):[0-5]\d)\s*(?:do|bis|to|-|–|—)\s*((?:[01]\d|2[0-3]):[0-5]\d)\b/);
       if (range) result[day] = { enabled: true, start: range[1], end: range[2] };
       break;
     }
+    if (!matchedDay && isImportedAllDay(line)) {
+      for (const [day] of importedDayAliases) result[day] = { enabled: true, start: '00:00', end: '00:00' };
+    }
   }
   return result;
+}
+
+function isImportedAllDay(value: string) {
+  const normalized = normalizeImportKey(value).replace(/\s+/g, ' ').trim();
+  return /^(?:caly czas|cala dobe|24\s*h|24\s*\/\s*7|all day|全天|ganztagig|rund um die uhr)\b/.test(normalized);
 }
 
 function escortClubTimezone(sourceUrl: URL, city: string) {

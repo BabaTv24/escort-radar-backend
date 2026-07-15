@@ -378,9 +378,14 @@ export type HermesProfilePreview = {
   unmapped_tags?: string[];
   unknown_fields?: Record<string, string>;
   prices?: Record<string, number>;
+  price_30min?: number | null;
+  price_1h?: number | null;
+  price_2h?: number | null;
+  price_3h?: number | null;
+  price_night?: number | null;
+  currency?: 'EUR' | 'PLN' | 'USD' | 'GBP' | 'CHF';
   availability?: string;
   opening_hours?: Profile['opening_hours'];
-  price_1h?: number;
   images?: string[];
   owner_email?: string;
   raw_about_text?: string;

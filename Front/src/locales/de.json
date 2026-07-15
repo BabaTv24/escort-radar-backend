@@ -5,6 +5,7 @@
   "availability.from": "von",
   "availability.to": "bis",
   "availability.closed": "Nicht verfügbar",
+  "availability.allDay": "24h / Ganztägig",
   "availability.note": "Zusätzlicher Hinweis",
   "availability.notePlaceholder": "Zum Beispiel andere Zeiten nach vorheriger Absprache",
   "availability.days.monday": "Montag",
