@@ -1,4 +1,4 @@
-import { isValidElement, useEffect, useRef, useState } from 'react';
+import { isValidElement, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
@@ -21,6 +21,8 @@ import { defaultAdminProfileFilters, profileMatchesAdminFilters, resolveAdminPro
 import { isDuplicateSourceUrlApiError, runCityImportQueue } from '../lib/cityImportQueue';
 import type { CityImportQueueItem } from '../lib/cityImportQueue';
 import { selectedIdsAfterBulkPublish } from '../lib/bulkProfilePublish';
+import { filterAdminProfileCityGroups, groupAdminProfilesByCity, normalizeAdminProfileCitySearch, profileIdsInCityGroups, updateAdminProfileSelection } from '../lib/adminProfileCity';
+import { adminWindowLayoutResetEvent, profileControlWindowStorageKey, profileReviewWindowStorageKey } from '../lib/adminWindowLayout';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
 import { berlinDistrictOptions, resolveBerlinPostalDistrict, resolveManualSearcherLocation } from '../lib/geo';
@@ -47,6 +49,8 @@ const adminAccountTypeOptions = ['client', 'advertiser', 'business', 'admin'];
 const adminProfileTypeOptions = ['independent', 'agency', 'massage_salon', 'club', 'live_cam', 'couple', 'trans', 'gay', 'male_escort', 'other'];
 const exposurePackageOptions = ['standard', 'gold', 'elite', 'diamond'];
 const adminAvailabilityStatusOptions = ['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'];
+const profileControlDefaultBounds = { x: 300, y: 100, width: 1200, height: 720 };
+const profileReviewDefaultBounds = { x: 360, y: 140, width: 960, height: 720 };
 const emptyStudioForm = {
   id: '',
   owner_email: '',
@@ -319,6 +323,7 @@ export function AdminPage() {
   const [bulkPremiumTier, setBulkPremiumTier] = useState('gold');
   const [bulkSubscriptionStatus, setBulkSubscriptionStatus] = useState('active');
   const [profilePanelMode, setProfilePanelMode] = useState<'overview' | 'edit' | 'photos' | 'services' | 'subscription'>('overview');
+  const [studioDirty, setStudioDirty] = useState(false);
   const [profileControlOpen, setProfileControlOpen] = useState(true);
   const [profileReviewOpen, setProfileReviewOpen] = useState(false);
   const [moderationFilter, setModerationFilter] = useState<'pending' | 'reported' | 'suspended' | 'rejected'>('pending');
@@ -326,25 +331,49 @@ export function AdminPage() {
   const [adminPlaceSuggestions, setAdminPlaceSuggestions] = useState<Record<string, any>[]>([]);
   const [adminPlaceLoading, setAdminPlaceLoading] = useState(false);
   const [studioFilters, setStudioFilters] = useState({ ...defaultAdminProfileFilters });
+  const [profileCityQuery, setProfileCityQuery] = useState('');
+  const [selectedProfileCityKey, setSelectedProfileCityKey] = useState('all');
+  const [expandedProfileCityKeys, setExpandedProfileCityKeys] = useState<string[]>([]);
+  const [windowLayoutResetNotice, setWindowLayoutResetNotice] = useState(false);
 
   const view = getAdminView(location.pathname);
   const adminSearchParams = new URLSearchParams(location.search);
   const selectedProfileQueryId = adminSearchParams.get('profile') || '';
   const profileReturnSource = adminSearchParams.get('from') === 'subscriptions' ? 'subscriptions' : 'profiles';
   const isLoginRoute = location.pathname === '/admin/login';
-  const filteredProfiles = profiles.filter((profile) => profileMatchesAdminFilters(profile, query, studioFilters));
+  const filteredProfiles = useMemo(() => profiles.filter((profile) => profileMatchesAdminFilters(profile, query, { ...studioFilters, city: 'all' })), [profiles, query, studioFilters]);
+  const profileCityGroups = useMemo(() => groupAdminProfilesByCity(filteredProfiles, t('admin.profiles.unknownCity')), [filteredProfiles, lang, t]);
+  const visibleProfileCityGroups = useMemo(() => filterAdminProfileCityGroups(profileCityGroups, profileCityQuery, selectedProfileCityKey), [profileCityGroups, profileCityQuery, selectedProfileCityKey]);
   const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
   const adminWindowLabels = {
     minimize: t('admin.window.minimize'),
     expand: t('admin.window.expand'),
     maximize: t('admin.window.maximize'),
     restore: t('admin.window.restore'),
-    close: t('admin.window.close')
+    close: t('admin.window.close'),
+    drag: t('admin.window.drag'),
+    resize: t('admin.window.resize')
   };
   const cityImportProcessed = cityImportQueueItems.filter((item) => ['imported', 'skipped_duplicate', 'failed'].includes(item.status)).length;
   const cityImportImported = cityImportQueueItems.filter((item) => item.status === 'imported').length;
   const cityImportSkipped = cityImportQueueItems.filter((item) => item.status === 'skipped_duplicate').length;
   const cityImportFailed = cityImportQueueItems.filter((item) => item.status === 'failed').length;
+
+  useEffect(() => {
+    const availableKeys = new Set(profileCityGroups.map((group) => group.key));
+    if (selectedProfileCityKey !== 'all' && !availableKeys.has(selectedProfileCityKey)) {
+      setSelectedProfileCityKey('all');
+      setProfileCityQuery('');
+    }
+    setExpandedProfileCityKeys((current) => {
+      const retained = current.filter((key) => availableKeys.has(key));
+      if (selectedProfileCityKey !== 'all' && availableKeys.has(selectedProfileCityKey)) {
+        return retained.includes(selectedProfileCityKey) ? retained : [...retained, selectedProfileCityKey];
+      }
+      if (!retained.length && profileCityGroups[0]) return [profileCityGroups[0].key];
+      return retained;
+    });
+  }, [profileCityGroups, selectedProfileCityKey]);
 
   useEffect(() => {
     if (isLoginRoute) {
@@ -766,6 +795,7 @@ export function AdminPage() {
     setAccountEmailBody('');
     setAccountSecurity(null);
     setAccountActionLoading('');
+    setStudioDirty(false);
   }
 
   function openProfileOverview(profile: Profile, from: 'profiles' | 'subscriptions' = 'profiles') {
@@ -783,12 +813,15 @@ export function AdminPage() {
   function openNewProfileEditor() {
     setStudioForm({ ...emptyStudioForm });
     setProfilePanelMode('edit');
+    setStudioDirty(false);
     setProfileReviewOpen(true);
     navigate('/admin/profiles');
   }
 
   function closeProfileReview() {
+    if (studioDirty && !window.confirm(t('admin.window.unsavedConfirm'))) return;
     setProfileReviewOpen(false);
+    setStudioDirty(false);
     if (selectedProfileQueryId) navigate('/admin/profiles', { replace: true });
   }
 
@@ -804,6 +837,22 @@ export function AdminPage() {
 
   function toggleBulkProfile(id: string) {
     setSelectedProfileIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  function setVisibleProfilesSelected(ids: string[], selected: boolean) {
+    setSelectedProfileIds((current) => updateAdminProfileSelection(current, ids, selected));
+  }
+
+  function toggleProfileCityExpanded(key: string) {
+    setExpandedProfileCityKeys((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  }
+
+  function resetAdminWindowLayout() {
+    window.localStorage.removeItem(profileControlWindowStorageKey);
+    window.localStorage.removeItem(profileReviewWindowStorageKey);
+    window.dispatchEvent(new Event(adminWindowLayoutResetEvent));
+    setWindowLayoutResetNotice(true);
+    window.setTimeout(() => setWindowLayoutResetNotice(false), 3000);
   }
 
   async function runBulkAction(operation: string, extra: Record<string, unknown> = {}) {
@@ -1112,6 +1161,7 @@ export function AdminPage() {
         editStudioProfile(savedProfile);
       } else {
         setStudioForm({ ...emptyStudioForm });
+        setStudioDirty(false);
       }
       const accountCreated = 'account_created' in result && Boolean(result.account_created);
       const userLinked = 'user_linked' in result && Boolean(result.user_linked);
@@ -2338,7 +2388,27 @@ export function AdminPage() {
 
     if (view === 'profiles' || view === 'profile-studio') {
       const selectedProfile = profiles.find((profile) => profile.id === studioForm.id);
-      const studioProfiles = filteredProfiles;
+      const expandedVisibleGroups = visibleProfileCityGroups.filter((group) => expandedProfileCityKeys.includes(group.key));
+      const visibleProfileIds = profileIdsInCityGroups(expandedVisibleGroups);
+      const renderStudioProfileTable = (rows: Profile[]) => <AdminTable rows={rows} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'visibility_audit', 'status', 'paid_status', 'photos', 'created_at']} labels={{ ...tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at']), visibility_audit: t('admin.visibility.publicVisibility') }} format={(key, value, profile) => {
+        if (key === 'cover') return <AdminProfileThumb profile={profile} />;
+        if (key === 'id') return <label className="admin-check-cell"><input type="checkbox" checked={selectedProfileIds.includes(profile.id)} onChange={() => toggleBulkProfile(profile.id)} aria-label={t('admin.bulk.toggleProfile')} />{formatShortId(profile.id)}</label>;
+        if (key === 'city') return profile.work_city || value;
+        if (key === 'category') return option(String(value || 'other'));
+        if (key === 'visibility_audit') return <ProfileVisibilityAudit audit={profile.visibility_audit} compact />;
+        if (key === 'status') return <ProfileStatusBadges profile={profile} />;
+        if (key === 'paid_status') return <ProfilePaidBadges profile={profile} />;
+        if (key === 'photos') return profile.profile_images?.length || 0;
+        if (key === 'created_at') return formatDate(value);
+        return value;
+      }} actions={(profile) => <>
+        <Action title={t('admin.actions.view')} onClick={() => openProfileOverview(profile)}><Eye size={15} /></Action>
+        <Action title={t('admin.actions.edit')} onClick={() => openProfileEditor(profile)}><Pencil size={15} /></Action>
+        <Action title={profile.is_published === false ? t('admin.actions.publish') : t('admin.actions.unpublish')} onClick={() => action(() => api.publishAdminProfile(token, profile.id, profile.is_published === false))}><Power size={15} /></Action>
+        <Action title={t('admin.actions.approve')} onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'approved', is_published: true }))}><UserCheck size={15} /></Action>
+        <Action title={profile.status === 'suspended' || profile.moderation_status === 'suspended' ? t('admin.actions.unsuspend') : t('admin.actions.suspend')} danger onClick={() => action(() => api.setProfileStatus(token, profile.id, profile.status === 'suspended' || profile.moderation_status === 'suspended' ? 'active' : 'suspended'))}><Ban size={15} /></Action>
+        <Link className="admin-action-btn icon" title={t('admin.actions.publicView')} aria-label={t('admin.actions.publicView')} to={`/profile/${profile.id}`}><ChevronRight size={15} /></Link>
+      </>} />;
       return (
         <section className="admin-profile-window-stack">
           {!profileControlOpen || !profileReviewOpen ? (
@@ -2355,6 +2425,12 @@ export function AdminPage() {
             className="admin-profile-window admin-profile-control-window"
             contentClassName="admin-profile-window-content"
             onClose={() => setProfileControlOpen(false)}
+            draggable
+            resizable
+            storageKey={profileControlWindowStorageKey}
+            defaultBounds={profileControlDefaultBounds}
+            minWidth={560}
+            minHeight={360}
             workspace
           >
           <article className="admin-card profile-studio-list">
@@ -2379,10 +2455,30 @@ export function AdminPage() {
               <p>{t('admin.accounts.importSummary', { created: profileImportReport.created, skipped: profileImportReport.skipped, failed: profileImportReport.failed })}</p>
               {profileImportReport.errors.length ? <ul>{profileImportReport.errors.map((error) => <li key={`${error.row}-${error.email || ''}`}>{t('admin.accounts.importRowError', { row: error.row, email: error.email || '-', error: error.error })}</li>)}</ul> : null}
             </section>}
-            <div className="studio-filter-grid">
-              <select value={studioFilters.city} onChange={(event) => setStudioFilters({ ...studioFilters, city: event.target.value })}>
-                {['all', 'berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
+            <div className="admin-profile-city-filter">
+              <label>
+                <span>{t('admin.profiles.searchCity')}</span>
+                <input type="search" list="admin-profile-city-options" placeholder={t('admin.profiles.searchCityPlaceholder')} value={profileCityQuery} onChange={(event) => {
+                  const value = event.target.value;
+                  setProfileCityQuery(value);
+                  const exact = profileCityGroups.find((group) => normalizeAdminProfileCitySearch(group.name) === normalizeAdminProfileCitySearch(value));
+                  setSelectedProfileCityKey(exact?.key || 'all');
+                }} />
+                <datalist id="admin-profile-city-options">
+                  {profileCityGroups.map((group) => <option key={group.key} value={group.name} label={`${group.name} (${group.profiles.length})`} />)}
+                </datalist>
+              </label>
+              <select aria-label={t('admin.profiles.searchCity')} value={selectedProfileCityKey} onChange={(event) => {
+                const key = event.target.value;
+                setSelectedProfileCityKey(key);
+                setProfileCityQuery(key === 'all' ? '' : profileCityGroups.find((group) => group.key === key)?.name || '');
+              }}>
+                <option value="all">{t('admin.profiles.allCities')}</option>
+                {profileCityGroups.map((group) => <option key={group.key} value={group.key}>{group.name} ({group.profiles.length})</option>)}
               </select>
+              <button type="button" className="button" disabled={!profileCityQuery && selectedProfileCityKey === 'all'} onClick={() => { setProfileCityQuery(''); setSelectedProfileCityKey('all'); }}>{t('admin.actions.clearAll')}</button>
+            </div>
+            <div className="studio-filter-grid">
               <select value={studioFilters.type} onChange={(event) => setStudioFilters({ ...studioFilters, type: event.target.value })}>
                 {['all', ...categoryOptions].map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
@@ -2413,7 +2509,7 @@ export function AdminPage() {
               <input placeholder={t('admin.filters.ownerEmail')} value={studioFilters.owner_email} onChange={(event) => setStudioFilters({ ...studioFilters, owner_email: event.target.value })} />
             </div>
             <div className="admin-bulk-bar">
-              <label><input type="checkbox" checked={studioProfiles.length > 0 && selectedProfileIds.length === studioProfiles.length} onChange={(event) => setSelectedProfileIds(event.target.checked ? studioProfiles.map((profile) => profile.id) : [])} /> {t('admin.bulk.selected', { count: selectedProfileIds.length })}</label>
+              <label><input type="checkbox" checked={visibleProfileIds.length > 0 && visibleProfileIds.every((id) => selectedProfileIds.includes(id))} onChange={(event) => setVisibleProfilesSelected(visibleProfileIds, event.target.checked)} /> {t('admin.bulk.selected', { count: selectedProfileIds.length })}</label>
               <Action onClick={() => runBulkAction('approve')}>{t('admin.bulk.approve')}</Action>
               <Action disabled={bulkPublishBusy} onClick={() => runBulkAction('publish')}>{bulkPublishBusy ? t('admin.bulk.publishing') : t('admin.bulk.publish')}</Action>
               <Action onClick={() => runBulkAction('unpublish')}>{t('admin.bulk.unpublish')}</Action>
@@ -2430,31 +2526,27 @@ export function AdminPage() {
                 <p>{t('admin.profiles.loadError')}: {profileLoadError}</p>
                 <button className="button secondary" onClick={() => load()}><RefreshCw size={16} /> {t('admin.actions.refresh')}</button>
               </div>
-            ) : <AdminTable rows={studioProfiles} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'visibility_audit', 'status', 'paid_status', 'photos', 'created_at']} labels={{ ...tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at']), visibility_audit: t('admin.visibility.publicVisibility') }} format={(key, value, profile) => {
-              if (key === 'cover') return <AdminProfileThumb profile={profile} />;
-              if (key === 'id') return (
-                <label className="admin-check-cell">
-                  <input type="checkbox" checked={selectedProfileIds.includes(profile.id)} onChange={() => toggleBulkProfile(profile.id)} aria-label={t('admin.bulk.toggleProfile')} />
-                  {formatShortId(profile.id)}
-                </label>
-              );
-              if (key === 'category') return option(String(value || 'other'));
-              if (key === 'visibility_audit') return <ProfileVisibilityAudit audit={profile.visibility_audit} compact />;
-              if (key === 'status') return <ProfileStatusBadges profile={profile} />;
-              if (key === 'paid_status') return <ProfilePaidBadges profile={profile} />;
-              if (key === 'photos') return profile.profile_images?.length || 0;
-              if (key === 'created_at') return formatDate(value);
-              return value;
-            }} actions={(profile) => (
-              <>
-                <Action title={t('admin.actions.view')} onClick={() => openProfileOverview(profile)}><Eye size={15} /></Action>
-                <Action title={t('admin.actions.edit')} onClick={() => openProfileEditor(profile)}><Pencil size={15} /></Action>
-                <Action title={profile.is_published === false ? t('admin.actions.publish') : t('admin.actions.unpublish')} onClick={() => action(() => api.publishAdminProfile(token, profile.id, profile.is_published === false))}><Power size={15} /></Action>
-                <Action title={t('admin.actions.approve')} onClick={() => action(() => api.moderateAdminProfile(token, profile.id, { moderation_status: 'approved', is_published: true }))}><UserCheck size={15} /></Action>
-                <Action title={profile.status === 'suspended' || profile.moderation_status === 'suspended' ? t('admin.actions.unsuspend') : t('admin.actions.suspend')} danger onClick={() => action(() => api.setProfileStatus(token, profile.id, profile.status === 'suspended' || profile.moderation_status === 'suspended' ? 'active' : 'suspended'))}><Ban size={15} /></Action>
-                <Link className="admin-action-btn icon" title={t('admin.actions.publicView')} aria-label={t('admin.actions.publicView')} to={`/profile/${profile.id}`}><ChevronRight size={15} /></Link>
-              </>
-            )} />}
+            ) : <div className="admin-profile-city-groups">
+              {visibleProfileCityGroups.map((group, groupIndex) => {
+                const expanded = expandedProfileCityKeys.includes(group.key);
+                const groupIds = group.profiles.map((profile) => profile.id);
+                const allSelected = groupIds.every((id) => selectedProfileIds.includes(id));
+                const panelId = `admin-profile-city-${groupIndex}`;
+                return <section className="admin-profile-city-card" key={group.key}>
+                  <div className="admin-profile-city-card-head">
+                    <button type="button" className="admin-profile-city-toggle" aria-expanded={expanded} aria-controls={panelId} onClick={() => toggleProfileCityExpanded(group.key)}>
+                      <ChevronRight aria-hidden="true" />
+                      <span>{group.name}</span>
+                      <strong>{group.profiles.length}</strong>
+                      <small>{expanded ? t('admin.profiles.collapse') : t('admin.profiles.expand')}</small>
+                    </button>
+                    <label><input type="checkbox" checked={allSelected} onChange={(event) => setVisibleProfilesSelected(groupIds, event.target.checked)} /> {t('admin.profiles.selectVisibleInCity')}</label>
+                  </div>
+                  <div id={panelId} hidden={!expanded}>{expanded ? renderStudioProfileTable(group.profiles) : null}</div>
+                </section>;
+              })}
+              {!visibleProfileCityGroups.length ? <p className="muted">{t('admin.table.empty')}</p> : null}
+            </div>}
           </article>
           </AdminWindow>
           ) : null}
@@ -2468,9 +2560,15 @@ export function AdminPage() {
             className="admin-profile-window admin-profile-review-window"
             contentClassName="admin-profile-window-content"
             onClose={closeProfileReview}
+            draggable
+            resizable
+            storageKey={profileReviewWindowStorageKey}
+            defaultBounds={profileReviewDefaultBounds}
+            minWidth={520}
+            minHeight={360}
             workspace
           >
-          <article className="admin-card profile-studio-form">
+          <article className="admin-card profile-studio-form" onChange={() => { if (profilePanelMode !== 'overview') setStudioDirty(true); }}>
             <div className="profile-studio-head">
               <div>
                 <p className="eyebrow">{studioForm.id ? t('admin.profileOverview.title') : t('admin.profiles.createProfile')}</p>
@@ -2819,6 +2917,13 @@ export function AdminPage() {
 
     if (view === 'settings') {
       return <>
+        <section className="admin-card admin-window-layout-settings">
+          <div>
+            <h2>{t('admin.window.resetLayout')}</h2>
+            {windowLayoutResetNotice ? <p className="success-text" role="status">{t('admin.window.layoutReset')}</p> : null}
+          </div>
+          <button type="button" className="button" onClick={resetAdminWindowLayout}>{t('admin.window.resetLayout')}</button>
+        </section>
         <section className="admin-card critical-pin-card">
           <div className="profile-studio-head compact">
             <div>

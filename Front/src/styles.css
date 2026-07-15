@@ -12477,6 +12477,82 @@ textarea:focus {
   overscroll-behavior-inline: contain;
 }
 
+.admin-window.is-floating {
+  position: fixed;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.admin-window.is-floating > .admin-window-content-shell {
+  flex: 1 1 auto;
+  max-height: none;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.admin-window.is-draggable .admin-window-titlebar { cursor: move; touch-action: none; }
+.admin-window.is-draggable .admin-window-controls { cursor: default; }
+
+.admin-window-resize-handle {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 0;
+  border-radius: .25rem 0 0 0;
+  background: linear-gradient(135deg, transparent 42%, #67d8ff 43% 52%, transparent 53% 62%, #67d8ff 63% 72%, transparent 73%);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.admin-window-resize-handle:focus-visible { outline: 2px solid #e7c86d; outline-offset: -2px; }
+
+.admin-profile-city-filter {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, .7fr) auto;
+  align-items: end;
+  gap: .65rem;
+  margin-block: .8rem;
+}
+
+.admin-profile-city-filter label { display: grid; gap: .35rem; min-width: 0; }
+.admin-profile-city-filter label > span { color: #b8c1ca; font-size: .78rem; font-weight: 800; }
+.admin-profile-city-filter input,
+.admin-profile-city-filter select { width: 100%; min-width: 0; }
+
+.admin-profile-city-groups { display: grid; gap: .7rem; min-width: 0; }
+.admin-profile-city-card { min-width: 0; overflow: hidden; border: 1px solid rgba(68, 210, 255, .18); border-radius: .6rem; background: rgba(4, 9, 14, .72); }
+.admin-profile-city-card-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-right: .75rem; background: linear-gradient(90deg, rgba(27, 49, 62, .7), rgba(10, 16, 22, .75)); }
+.admin-profile-city-card-head > label { flex: 0 0 auto; color: #c7d1da; font-size: .76rem; }
+.admin-profile-city-toggle { min-width: 0; flex: 1 1 auto; display: grid; grid-template-columns: auto minmax(0, auto) auto 1fr; align-items: center; gap: .55rem; border: 0; padding: .8rem; background: transparent; color: #f7f4eb; text-align: left; cursor: pointer; }
+.admin-profile-city-toggle svg { width: 1rem; transition: transform .15s ease; }
+.admin-profile-city-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.admin-profile-city-toggle span { overflow: hidden; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.admin-profile-city-toggle strong { min-width: 1.8rem; border-radius: 999px; padding: .15rem .45rem; background: rgba(103, 216, 255, .14); color: #86dfff; text-align: center; }
+.admin-profile-city-toggle small { justify-self: end; color: #9caab5; }
+.admin-profile-city-toggle:focus-visible { outline: 2px solid #e7c86d; outline-offset: -3px; }
+.admin-profile-city-card > div[hidden] { display: none; }
+.admin-profile-city-card .admin-table-card { border: 0; border-top: 1px solid rgba(68, 210, 255, .12); border-radius: 0; }
+
+.admin-window-layout-settings { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.admin-window-layout-settings h2 { margin: 0; }
+
+@media (max-width: 1023px) {
+  .admin-window.is-floating {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+  }
+  .admin-window-resize-handle { display: none; }
+}
+
 @media (max-width: 767px) {
   .admin-window-titlebar { min-height: 3.25rem; gap: .35rem; padding-left: .7rem; }
   .admin-window-heading h2 { font-size: .9rem; }
@@ -12497,6 +12573,12 @@ textarea:focus {
   .admin-profile-window-stack { gap: .7rem; }
   .admin-profile-window > .admin-window-content-shell { max-height: calc(100dvh - 8rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
   .admin-profile-window.is-maximized > .admin-window-content-shell { max-height: none; }
+  .admin-profile-city-filter { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  .admin-profile-city-card-head { align-items: stretch; flex-direction: column; gap: 0; padding: 0 0 .7rem; }
+  .admin-profile-city-card-head > label { padding-inline: .8rem; }
+  .admin-profile-city-toggle { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .admin-profile-city-toggle small { display: none; }
+  .admin-window-layout-settings { align-items: stretch; flex-direction: column; }
 }
 
 @media (max-width: 420px) {
