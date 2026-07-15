@@ -1,8 +1,15 @@
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_URL = (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || 'http://localhost:4000';
 
 type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
+
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(`HTTP ${status}: ${message}`);
+    this.name = 'ApiError';
+  }
+}
 
 export type ReferralMe = { referralCode: string; referralLink: string; directReferralsCount: number; totalDescendantsCount: number; referredByDisplay: string | null; registrationSource: string; referralDepth: number };
 export type AdminReferralNode = { userId: string; parentUserId: string | null; displayName: string; role: string; accountStatus: string; registrationSource: string; activationStatus: string; activationProvider: string | null; referralCode: string; referralDepth: number; createdAt: string; directChildrenCount: number; totalDescendantsCount: number; balanceBcu: number; hasProfile: boolean; isSponsoredProfile: boolean; isRoot: boolean };
@@ -29,7 +36,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const reason = payload.reason ? ` (${payload.reason})` : '';
     const stage = payload.stage ? ` [${payload.stage}]` : '';
     const details = payload.details ? `: ${typeof payload.details === 'string' ? payload.details : JSON.stringify(payload.details)}` : '';
-    throw new Error(`${payload.error || 'Request failed'}${stage}${reason}${details}`);
+    throw new ApiError(`${payload.error || 'Request failed'}${stage}${reason}${details}`, response.status);
   }
 
   if (response.status === 204) return undefined as T;

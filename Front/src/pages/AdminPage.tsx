@@ -16,6 +16,7 @@ import { AdminReferralTree } from '../components/AdminReferralTree';
 import { AdminWindow, AdminWindowProvider } from '../components/AdminWindow';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
+import { defaultAdminProfileFilters, profileMatchesAdminFilters, resolveAdminProfilesResult } from '../lib/adminProfiles';
 import { runCityImportQueue } from '../lib/cityImportQueue';
 import type { CityImportQueueItem } from '../lib/cityImportQueue';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
@@ -227,6 +228,7 @@ export function AdminPage() {
   const [clientFilters, setClientFilters] = useState({ search: '', status: 'all', sort: 'registered_at', direction: 'desc', page: 1, page_size: 25 });
   const [bigbabaClient, setBigbabaClient] = useState<AdminClient | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profileLoadError, setProfileLoadError] = useState('');
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
   const [moderationQueues, setModerationQueues] = useState<Record<string, Profile[]>>({});
   const [reports, setReports] = useState<AdminReport[]>([]);
@@ -310,16 +312,7 @@ export function AdminPage() {
   const [adminPlaceQuery, setAdminPlaceQuery] = useState('');
   const [adminPlaceSuggestions, setAdminPlaceSuggestions] = useState<Record<string, any>[]>([]);
   const [adminPlaceLoading, setAdminPlaceLoading] = useState(false);
-  const [studioFilters, setStudioFilters] = useState({
-    city: 'all',
-    type: 'all',
-    published: 'all',
-    suspended: 'all',
-    seed: 'all',
-    verified: 'all',
-    premium_tier: 'all',
-    owner_email: ''
-  });
+  const [studioFilters, setStudioFilters] = useState({ ...defaultAdminProfileFilters });
 
   const view = getAdminView(location.pathname);
   const adminSearchParams = new URLSearchParams(location.search);
@@ -516,6 +509,7 @@ export function AdminPage() {
 
   async function load(accessToken = token) {
     setLoading(true);
+    setProfileLoadError('');
     try {
       const [
         statsResult,
@@ -546,7 +540,7 @@ export function AdminPage() {
         adminLoadRequest('adminTokenStats', api.adminTokenStats(accessToken)),
         adminLoadRequest('adminClients', api.adminClients(accessToken, clientQueryString(clientFilters))),
         adminLoadRequest('adminUsers', api.adminUsers(accessToken)),
-        adminLoadRequest('adminProfiles', api.adminProfiles(accessToken)),
+        adminLoadRequest('adminProfiles', api.adminProfiles(accessToken), 30000),
         adminLoadRequest('adminSubscriptions', api.adminSubscriptions(accessToken)),
         adminLoadRequest('adminReports', api.adminReports(accessToken)),
         adminLoadRequest('adminBookings', api.adminBookings(accessToken)),
@@ -571,7 +565,7 @@ export function AdminPage() {
       const tokenData = settledValue(tokenResult, { stats: {} }, 'adminTokenStats');
       const clientsData = settledValue(clientsResult, { clients: [], total: 0, page: 1, page_size: 25, bigbaba: null }, 'adminClients');
       const usersData = settledValue(usersResult, { users: [] }, 'adminUsers');
-      const profileData = settledValue(profileResult, { stats: {}, profiles: [] }, 'adminProfiles');
+      const resolvedProfiles = resolveAdminProfilesResult(profileResult);
       const subscriptionData = settledValue(subscriptionResult, { subscriptions: [] }, 'adminSubscriptions');
       const reportData = settledValue(reportResult, { reports: [], reports_count: 0 }, 'adminReports');
       const bookingData = settledValue(bookingResult, { booking_requests: [] }, 'adminBookings');
@@ -591,14 +585,19 @@ export function AdminPage() {
       const adminLocationData = settledValue(locationCatalogResult, { locations: [] }, 'adminLocationCatalog');
       const bcCoinPackageData = settledValue(bcCoinPackageResult, { packages: [] }, 'adminBcCoinPackages');
 
-      setStats({ ...statsData.stats, ...profileData.stats, reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
+      setStats({ ...statsData.stats, ...(resolvedProfiles.ok ? resolvedProfiles.data.stats : {}), reports: reportData.reports_count, bookings: bookingData.booking_requests.length });
       setTokenStats(tokenData.stats);
       setClients((clientsData.clients || []) as AdminClient[]);
       setClientsTotal(Number(clientsData.total || 0));
       setBigbabaClient((clientsData.bigbaba || null) as AdminClient | null);
       setSubscriptionStats((subscriptionData as any).stats || {});
       setUsers(usersData.users);
-      setProfiles(profileData.profiles);
+      if (resolvedProfiles.ok) {
+        setProfiles(resolvedProfiles.data.profiles);
+      } else {
+        console.error('Admin load failed: adminProfiles', resolvedProfiles.error);
+        setProfileLoadError(resolvedProfiles.error);
+      }
       setSubscriptions(subscriptionData.subscriptions);
       setModerationQueues((moderationData as any).queues || {});
       setReports(reportData.reports);
@@ -2211,7 +2210,12 @@ export function AdminPage() {
               <Action onClick={() => runBulkAction('subscription_status', { subscription_status: bulkSubscriptionStatus })}>{t('admin.bulk.setSubscriptionStatus')}</Action>
               <Action danger onClick={() => runBulkAction('delete')}>{t('admin.bulk.delete')}</Action>
             </div>
-            <AdminTable rows={studioProfiles} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'visibility_audit', 'status', 'paid_status', 'photos', 'created_at']} labels={{ ...tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at']), visibility_audit: t('admin.visibility.publicVisibility') }} format={(key, value, profile) => {
+            {profileLoadError ? (
+              <div className="error-text" role="alert">
+                <p>{t('admin.profiles.loadError')}: {profileLoadError}</p>
+                <button className="button secondary" onClick={() => load()}><RefreshCw size={16} /> {t('admin.actions.refresh')}</button>
+              </div>
+            ) : <AdminTable rows={studioProfiles} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'visibility_audit', 'status', 'paid_status', 'photos', 'created_at']} labels={{ ...tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at']), visibility_audit: t('admin.visibility.publicVisibility') }} format={(key, value, profile) => {
               if (key === 'cover') return <AdminProfileThumb profile={profile} />;
               if (key === 'id') return (
                 <label className="admin-check-cell">
@@ -2235,7 +2239,7 @@ export function AdminPage() {
                 <Action title={profile.status === 'suspended' || profile.moderation_status === 'suspended' ? t('admin.actions.unsuspend') : t('admin.actions.suspend')} danger onClick={() => action(() => api.setProfileStatus(token, profile.id, profile.status === 'suspended' || profile.moderation_status === 'suspended' ? 'active' : 'suspended'))}><Ban size={15} /></Action>
                 <Link className="admin-action-btn icon" title={t('admin.actions.publicView')} aria-label={t('admin.actions.publicView')} to={`/profile/${profile.id}`}><ChevronRight size={15} /></Link>
               </>
-            )} />
+            )} />}
           </article>
 
           <article className="admin-card profile-studio-form">
@@ -2769,23 +2773,6 @@ function adminLabel(key: string) {
     'activity-logs': 'Logi aktywnosci'
   };
   return labels[key] || key;
-}
-
-function profileMatchesAdminFilters(profile: Profile, query: string, filters: Record<string, string>) {
-  const haystack = JSON.stringify(profile).toLowerCase();
-  if (query && !haystack.includes(query.toLowerCase())) return false;
-  if (filters.city !== 'all' && profile.city !== filters.city) return false;
-  if (filters.type !== 'all' && profile.category !== filters.type) return false;
-  if (filters.published !== 'all' && Boolean(profile.is_published !== false) !== (filters.published === 'yes')) return false;
-  if (filters.suspended !== 'all') {
-    const suspended = profile.status === 'suspended' || profile.moderation_status === 'suspended';
-    if (suspended !== (filters.suspended === 'yes')) return false;
-  }
-  if (filters.seed !== 'all' && Boolean(profile.is_seed_profile) !== (filters.seed === 'yes')) return false;
-  if (filters.verified !== 'all' && Boolean(profile.verified) !== (filters.verified === 'yes')) return false;
-  if (filters.premium_tier !== 'all' && profile.premium_tier !== filters.premium_tier) return false;
-  if (filters.owner_email && !String(profile.owner_email || '').toLowerCase().includes(filters.owner_email.toLowerCase())) return false;
-  return true;
 }
 
 function toggleStudioService(values: string[], key: string) {

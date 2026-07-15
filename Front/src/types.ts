@@ -122,6 +122,7 @@ export type Profile = {
   is_sponsored?: boolean;
   acquisition_source?: string | null;
   source_url?: string | null;
+  source_url_normalized?: string | null;
   import_source?: string | null;
   imported_at?: string | null;
   provider?: string | null;

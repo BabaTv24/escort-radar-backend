@@ -857,6 +857,7 @@
   "admin.profiles.owner": "Wlasciciel",
   "admin.profiles.adminCreated": "Profil utworzony przez admina",
   "admin.profiles.emptyStudio": "Brak profili w Studio.",
+  "admin.profiles.loadError": "Nie udało się pobrać profili",
   "admin.profiles.editProfile": "Edytuj profil",
   "admin.profiles.createProfile": "Utworz profil",
   "admin.profiles.profileControl": "Kontrola profili",

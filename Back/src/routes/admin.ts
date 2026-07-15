@@ -52,6 +52,7 @@ import {
 } from '../revenue.js';
 import { explainProfileVisibility } from '../profileVisibility.js';
 import { CityImportDiscoveryError, discoverCityProfiles, isSourceUrlDuplicateError, normalizeProfileSourceUrl } from '../cityImportDiscovery.js';
+import { buildAdminProfilesResponse } from '../adminProfiles.js';
 
 export const adminRouter = Router();
 
@@ -614,16 +615,7 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
     owner_email: profile.owner_email || (profile.user_id ? ownerEmailById.get(profile.user_id) || null : null),
     visibility_audit: explainProfileVisibility(profile, visibilityContext)
   }));
-  res.json({
-    profiles: rows,
-    stats: {
-      total_profiles: rows.length,
-      active_profiles: rows.filter((profile) => profile.status === 'active').length,
-      pending_profiles: rows.filter((profile) => profile.status === 'pending').length,
-      suspended_profiles: rows.filter((profile) => profile.status === 'suspended' || profile.moderation_status === 'suspended').length,
-      test_accounts: rows.filter((profile) => profile.is_test_account).length
-    }
-  });
+  res.json(buildAdminProfilesResponse(rows));
 }));
 
 adminRouter.get('/profiles/visibility-audit', asyncHandler(async (req, res) => {
