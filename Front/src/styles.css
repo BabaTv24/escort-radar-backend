@@ -4352,6 +4352,20 @@ textarea::placeholder {
 .admin-photo-filters {
   margin-bottom: .75rem;
 }
+
+.admin-photo-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .65rem;
+  padding-top: .7rem;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+.admin-photo-bulk-bar label { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+.admin-photo-bulk-bar input,
+.admin-photo-select { width: 20px; height: 20px; accent-color: #f4d77f; }
+.admin-photo-bulk-result { margin: .7rem 0 0; color: #f4d77f; }
+.admin-table tr.is-selected td { background: rgba(244,215,127,.09); box-shadow: inset 0 1px rgba(244,215,127,.18), inset 0 -1px rgba(244,215,127,.18); }
 .photo-preview-modal {
   display: grid;
   gap: .8rem;
@@ -9527,6 +9541,16 @@ textarea:focus {
   color: var(--er-gold-light);
   font-size: 1rem;
   font-weight: 900;
+}
+
+.live-radar-section .live-radar-range .radar-radius-slider-head,
+.live-radar-section .live-radar-range .radar-radius-scale {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.live-radar-section .live-radar-range .radar-radius-slider-head {
+  display: flex;
 }
 
 .live-radar-section .live-radar-range input {

@@ -1,5 +1,14 @@
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
+export type BulkPhotoModerationResponse = {
+  requested: number;
+  approved: number;
+  rejected: number;
+  skipped: number;
+  failed: number;
+  items: Array<{ image_id: string; status: 'approved' | 'rejected' | 'skipped' | 'failed'; reason?: string }>;
+};
+
 const API_URL = (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || 'http://localhost:4000';
 
 type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
@@ -448,6 +457,11 @@ export const api = {
     method: 'PATCH',
     token,
     body: JSON.stringify({ moderation_status })
+  }),
+  bulkModerateProfileImages: (token: string, image_ids: string[], operation: 'approve' | 'reject') => request<BulkPhotoModerationResponse>('/api/admin/profile-images/bulk-moderate', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ image_ids, operation })
   }),
   adminLiveSessions: (token: string) => request<{ live_sessions: unknown[] }>('/api/admin/live-sessions', { token }),
   adminChatSessions: (token: string) => request<{ chat_sessions: unknown[] }>('/api/admin/chat-sessions', { token }),

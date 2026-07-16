@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { ApiError, api } from '../lib/api';
-import type { BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
+import type { BulkPhotoModerationResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientPersonalProfile, HermesProfilePreview, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
@@ -253,6 +253,9 @@ export function AdminPage() {
   const [photos, setPhotos] = useState<Record<string, any>[]>([]);
   const [photoFilters, setPhotoFilters] = useState({ status: 'all', query: '', type: 'all' });
   const [photoPreview, setPhotoPreview] = useState<Record<string, any> | null>(null);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
+  const [bulkPhotoBusy, setBulkPhotoBusy] = useState(false);
+  const [bulkPhotoResult, setBulkPhotoResult] = useState<BulkPhotoModerationResponse | null>(null);
   const [clientReferrals, setClientReferrals] = useState<Record<string, any>[]>([]);
   const [activity, setActivity] = useState<AdminActivity[]>([]);
   const [revenueEvents, setRevenueEvents] = useState<Record<string, any>[]>([]);
@@ -358,6 +361,12 @@ export function AdminPage() {
   const cityImportImported = cityImportQueueItems.filter((item) => item.status === 'imported').length;
   const cityImportSkipped = cityImportQueueItems.filter((item) => item.status === 'skipped_duplicate').length;
   const cityImportFailed = cityImportQueueItems.filter((item) => item.status === 'failed').length;
+
+  useEffect(() => {
+    if (view === 'photos') return;
+    setSelectedPhotoIds([]);
+    setBulkPhotoResult(null);
+  }, [view]);
 
   useEffect(() => {
     const availableKeys = new Set(profileCityGroups.map((group) => group.key));
@@ -698,6 +707,44 @@ export function AdminPage() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
       setLoading(false);
+    }
+  }
+
+  function togglePhotoSelection(imageId: string) {
+    setSelectedPhotoIds((current) => current.includes(imageId) ? current.filter((id) => id !== imageId) : [...current, imageId]);
+  }
+
+  async function runBulkPhotoAction(operation: 'approve' | 'reject') {
+    if (!selectedPhotoIds.length || bulkPhotoBusy) return;
+    setBulkPhotoBusy(true);
+    setBulkPhotoResult(null);
+    try {
+      const result: BulkPhotoModerationResponse = { requested: 0, approved: 0, rejected: 0, skipped: 0, failed: 0, items: [] };
+      for (let offset = 0; offset < selectedPhotoIds.length; offset += 100) {
+        const chunk = selectedPhotoIds.slice(offset, offset + 100);
+        try {
+          const chunkResult = await api.bulkModerateProfileImages(token, chunk, operation);
+          result.requested += chunkResult.requested;
+          result.approved += chunkResult.approved;
+          result.rejected += chunkResult.rejected;
+          result.skipped += chunkResult.skipped;
+          result.failed += chunkResult.failed;
+          result.items.push(...chunkResult.items);
+        } catch (error) {
+          result.requested += chunk.length;
+          result.failed += chunk.length;
+          result.items.push(...chunk.map((image_id) => ({ image_id, status: 'failed' as const, reason: error instanceof Error ? error.message : 'request_failed' })));
+        }
+      }
+      setBulkPhotoResult(result);
+      const failedIds = new Set(result.items.filter((item) => item.status === 'failed').map((item) => item.image_id));
+      setSelectedPhotoIds((current) => current.filter((id) => failedIds.has(id)));
+      const refreshed = await api.adminPhotos(token);
+      setPhotos(refreshed.photos as Record<string, any>[]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setBulkPhotoBusy(false);
     }
   }
 
@@ -2861,6 +2908,8 @@ export function AdminPage() {
         if (photoFilters.query && !haystack.includes(photoFilters.query.toLowerCase())) return false;
         return true;
       });
+      const pendingPhotoIds = filteredPhotos.filter((photo) => String(photo.moderation_status || 'pending') === 'pending').map((photo) => String(photo.id));
+      const allPendingSelected = pendingPhotoIds.length > 0 && pendingPhotoIds.every((id) => selectedPhotoIds.includes(id));
       return (
         <>
           <section className="admin-card admin-photo-filters">
@@ -2882,8 +2931,26 @@ export function AdminPage() {
                 <option value="gallery">{t('admin.photos.type.gallery')}</option>
               </select>
             </div>
+            <div className="admin-photo-bulk-bar" aria-busy={bulkPhotoBusy}>
+              <label>
+                <input type="checkbox" checked={allPendingSelected} disabled={!pendingPhotoIds.length || bulkPhotoBusy} onChange={(event) => setSelectedPhotoIds((current) => event.target.checked
+                  ? Array.from(new Set([...current, ...pendingPhotoIds]))
+                  : current.filter((id) => !pendingPhotoIds.includes(id)))} />
+                <span>{t('admin.photos.selectAllPending')}</span>
+              </label>
+              <strong>{t('admin.photos.selectedCount', { count: selectedPhotoIds.length })}</strong>
+              <button className="button" disabled={!selectedPhotoIds.length || bulkPhotoBusy} onClick={() => runBulkPhotoAction('approve')}>{bulkPhotoBusy ? t('states.loading') : t('admin.photos.approveSelected')}</button>
+              <button className="button danger" disabled={!selectedPhotoIds.length || bulkPhotoBusy} onClick={() => runBulkPhotoAction('reject')}>{bulkPhotoBusy ? t('states.loading') : t('admin.photos.rejectSelected')}</button>
+            </div>
+            {bulkPhotoResult && <p className="admin-photo-bulk-result" role="status">{t('admin.photos.bulkSummary', {
+              approved: bulkPhotoResult.approved,
+              rejected: bulkPhotoResult.rejected,
+              skipped: bulkPhotoResult.skipped,
+              failed: bulkPhotoResult.failed
+            })}</p>}
           </section>
-          <AdminTable rows={filteredPhotos} columns={['photo', 'profile', 'owner_email', 'city', 'moderation_status', 'image_type', 'created_at']} labels={tableLabels(t, ['photo', 'profile', 'owner_email', 'city', 'moderation_status', 'image_type', 'created_at'])} format={(key, value, photo) => {
+          <AdminTable rows={filteredPhotos} rowClassName={(photo) => selectedPhotoIds.includes(String(photo.id)) ? 'is-selected' : ''} columns={['selection', 'photo', 'profile', 'owner_email', 'city', 'moderation_status', 'image_type', 'created_at']} labels={{ ...tableLabels(t, ['photo', 'profile', 'owner_email', 'city', 'moderation_status', 'image_type', 'created_at']), selection: t('admin.photos.select') }} format={(key, value, photo) => {
+            if (key === 'selection') return <input className="admin-photo-select" type="checkbox" aria-label={t('admin.photos.select')} checked={selectedPhotoIds.includes(String(photo.id))} disabled={String(photo.moderation_status || 'pending') !== 'pending' || bulkPhotoBusy} onChange={() => togglePhotoSelection(String(photo.id))} />;
             if (key === 'photo') return <AdminPhotoThumb photo={photo} onClick={() => setPhotoPreview(photo)} />;
             if (key === 'profile') return photo.profile_display_name || formatShortId(photo.profile_id);
             if (key === 'moderation_status') return <StatusBadge value={String(value || 'pending')} />;
@@ -3599,7 +3666,7 @@ function ChartPlaceholder({ title }: { title: string }) {
   return <article className="admin-card chart"><h2>{title}</h2><div className="chart-bars">{[42, 68, 51, 78, 62, 88, 74].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div></article>;
 }
 
-function AdminTable<T extends Record<string, any>>({ rows, columns, actions, format, labels }: { rows: T[]; columns: string[]; actions?: (row: T) => ReactNode; format?: (key: string, value: unknown, row: T) => unknown; labels?: Record<string, string> }) {
+function AdminTable<T extends Record<string, any>>({ rows, columns, actions, format, labels, rowClassName }: { rows: T[]; columns: string[]; actions?: (row: T) => ReactNode; format?: (key: string, value: unknown, row: T) => unknown; labels?: Record<string, string>; rowClassName?: (row: T) => string }) {
   const { t } = useI18n();
   const actionLabel = labels?.actions || t('admin.table.actions');
   return (
@@ -3609,7 +3676,7 @@ function AdminTable<T extends Record<string, any>>({ rows, columns, actions, for
           <thead><tr>{columns.map((column) => <th key={column}>{labels?.[column] || column}</th>)}{actions && <th>{actionLabel}</th>}</tr></thead>
           <tbody>
             {rows.map((row, index) => (
-              <tr key={row.id || index}>
+              <tr className={rowClassName?.(row)} key={row.id || index}>
                 {columns.map((column) => <td key={column} data-label={labels?.[column] || column}><CellValue value={format ? format(column, row[column], row) : row[column]} /></td>)}
                 {actions && <td data-label={actionLabel}><div className="admin-actions-row">{actions(row)}</div></td>}
               </tr>

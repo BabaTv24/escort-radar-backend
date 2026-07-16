@@ -46,7 +46,8 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
-  if (tagIds.length) {
+  // Radar candidates stay global; presentation filters run after distance.
+  if (tagIds.length && !radarMode) {
     const { data: taggedRows, error: tagError } = await supabaseAdmin
       .from('profile_tags')
       .select('profile_id')
@@ -57,8 +58,21 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     query = query.in('id', profileIds);
   }
 
-  const { data, error } = await query.limit(radarMode ? 300 : 60);
-  if (error) return res.status(500).json({ error: error.message });
+  let data: any[] = [];
+  if (radarMode) {
+    const pageSize = 200;
+    for (let offset = 0; ; offset += pageSize) {
+      const page = await query.range(offset, offset + pageSize - 1);
+      if (page.error) return res.status(500).json({ error: page.error.message });
+      const rows = page.data || [];
+      data.push(...rows);
+      if (rows.length < pageSize) break;
+    }
+  } else {
+    const page = await query.limit(60);
+    if (page.error) return res.status(500).json({ error: page.error.message });
+    data = page.data || [];
+  }
 
   const profiles = (data || [])
     .filter((profile) => {
@@ -70,12 +84,13 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     })
     .filter((profile) => radarMode || !country || profileMatchesCountry(profile, country) || (city && profileMatchesCity(profile, city)))
     .filter((profile) => radarMode || !city || profileMatchesCity(profile, city))
-    .filter((profile) => categoryFilter ? normalizeProfileCategory(profile.category) === categoryFilter : isActivePublicCategory(profile.category))
+    .filter((profile) => isActivePublicCategory(profile.category))
+    .filter((profile) => radarMode || !categoryFilter || normalizeProfileCategory(profile.category) === categoryFilter)
     .map((profile) => sanitizePublicProfile(withImageUrls(profile)))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
 
   if (process.env.NODE_ENV !== 'production') {
-    console.info('[public-profiles]', { endpoint: req.originalUrl, api_records: data?.length || 0, public_records: profiles.length });
+    console.info('[public-profiles]', { endpoint: req.originalUrl, api_records: data.length, public_records: profiles.length });
   }
   res.json({ profiles });
 }));

@@ -1007,7 +1007,8 @@ test('production regression contracts for Berlin profiles dashboard and client p
 
   assert.match(profilesSource, /profileMatchesCountry\(profile, country\) \|\| \(city && profileMatchesCity\(profile, city\)\)/);
   assert.match(cityPageSource, /const radarProfiles = useMemo/);
-  assert.doesNotMatch(cityPageSource, /if \(!radarRange\.inRange\) return false/);
+  assert.match(cityPageSource, /hasExplicitRadarCenter/);
+  assert.match(cityPageSource, /if \(!radarRange\.inRange\) return false/);
   assert.match(dashboardSource, /function resolveAccountMode/);
   assert.match(dashboardSource, /\[DashboardAuth\]/);
   assert.match(apiSource, /clientPreferences: \(token: string\)/);
@@ -1358,7 +1359,7 @@ test('city radar status supports favorites filter and login next flow', async ()
   assert.match(radarPanelSource, /if \(status === 'favorites'\) return true/);
   assert.match(cityPageSource, /setFavoriteProfileIds\(new Set\(favoritesData\.favorites\.map\(\(favorite\) => favorite\.profile_id\)\)\)/);
   assert.match(cityPageSource, /draftFilters\.availability_status === 'favorites'/);
-  assert.match(cityPageSource, /profiles\.filter\(\(profile\) => favoriteProfileIds\.has\(profile\.id\)\)/);
+  assert.match(cityPageSource, /filteredProfiles\.filter\(\(profile\) => favoriteProfileIds\.has\(profile\.id\)\)/);
   assert.match(cityPageSource, /favorites\.loginToSeeFavorites/);
   assert.match(cityPageSource, /encodeURIComponent\(`\$\{location\.pathname\}\$\{location\.search\}`\)/);
   assert.match(cityPageSource, /favorites\.noFavoritesYet/);

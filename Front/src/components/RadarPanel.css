@@ -55,6 +55,13 @@
   flex-wrap: wrap;
 }
 
+.radar-radius-scale {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  color: rgba(255, 244, 214, .64);
+}
+
 @media (max-width: 720px) {
   .radar-start-panel {
     gap: .75rem;
@@ -74,6 +81,49 @@
   }
 
   .radar-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    max-width: 100%;
+    overflow: clip;
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .radar-panel .radar-copy {
+    display: contents;
+  }
+
+  .radar-heading-block { order: 1; min-width: 0; }
+  .radar-location-control,
+  .radar-location-source { order: 2; min-width: 0; }
+  .radar-panel .radar-visual { order: 3; min-width: 0; }
+  .radar-radius-control { order: 4; width: 100%; min-width: 0; margin: 0; }
+  .radar-status-control { order: 5; min-width: 0; }
+  .radar-results-summary,
+  .radar-results-legend,
+  .radar-panel .radar-copy > a { order: 6; min-width: 0; }
+
+  .radar-radius-slider,
+  .live-radar-section .live-radar-range {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .radar-radius-slider-head { min-width: 0; }
+  .radar-radius-slider-head strong {
+    max-width: 45%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .radar-radius-slider input,
+  .live-radar-section .live-radar-range input {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
   }
 }

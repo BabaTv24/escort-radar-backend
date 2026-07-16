@@ -56,6 +56,7 @@ import { buildAdminProfilesResponse } from '../adminProfiles.js';
 import { hashDeletionPin, validateDeletionPin, verifyAdminDeletionPin } from '../adminDeletionPin.js';
 import { supabaseAdminDeletionPinStore } from '../adminDeletionPinStore.js';
 import { runBulkProfilePublish } from '../bulkProfilePublish.js';
+import { runBulkPhotoModeration, validateBulkPhotoModerationInput } from '../bulkPhotoModeration.js';
 
 export const adminRouter = Router();
 
@@ -2825,6 +2826,27 @@ adminRouter.get('/photos', asyncHandler(async (_req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   const photos = await Promise.all((data || []).map(withAdminPhotoRow));
   res.json({ photos });
+}));
+
+adminRouter.post('/profile-images/bulk-moderate', asyncHandler(async (req, res) => {
+  const parsed = validateBulkPhotoModerationInput(req.body);
+  if ('error' in parsed) return res.status(400).json({ error: parsed.error });
+
+  const result = await runBulkPhotoModeration(parsed.imageIds, parsed.operation, async (imageId, moderationStatus) => {
+    const { data, error } = await supabaseAdmin
+      .from('profile_images')
+      .update({ moderation_status: moderationStatus })
+      .eq('id', imageId)
+      .eq('moderation_status', 'pending')
+      .select('id')
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return 'skipped';
+    await logAdminAction(req.user?.email, 'photo_moderation_updated', 'profile_image', imageId, { moderation_status: moderationStatus, bulk: true });
+    return 'updated';
+  });
+
+  res.json(result);
 }));
 
 adminRouter.get('/uploads', asyncHandler(async (_req, res) => {

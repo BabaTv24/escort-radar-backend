@@ -171,7 +171,7 @@ export function CityPage() {
         if (import.meta.env.DEV) {
           console.debug('[Category]', { raw: urlCategory, normalized: normalizeCategoryKey(urlCategory), urlCategory, selectedCategory: appliedFilters.category, profilesCount: publicProfiles.length });
         }
-        setProfiles(applyFilters(publicProfiles, { ...appliedFilters, city: urlCitySlug }, searcherLocation));
+        setProfiles(publicProfiles);
       })
       .catch((reason) => {
         if (cancelled) return;
@@ -186,11 +186,15 @@ export function CityPage() {
     };
   }, [query, appliedFilters, searcherLocation, retryKey, urlCitySlug]);
 
+  const filteredProfiles = useMemo(
+    () => applyFilters(profiles, { ...appliedFilters, city: urlCitySlug }, searcherLocation),
+    [profiles, appliedFilters, urlCitySlug, searcherLocation]
+  );
   const statusFilteredProfiles = useMemo(
     () => draftFilters.availability_status === 'favorites'
-      ? profiles.filter((profile) => favoriteProfileIds.has(profile.id))
-      : profiles,
-    [profiles, draftFilters.availability_status, favoriteProfileIds]
+      ? filteredProfiles.filter((profile) => favoriteProfileIds.has(profile.id))
+      : filteredProfiles,
+    [filteredProfiles, draftFilters.availability_status, favoriteProfileIds]
   );
   const sortedProfiles = useMemo(() => sortProfiles(statusFilteredProfiles, sortMode), [statusFilteredProfiles, sortMode]);
   const radarProfiles = useMemo(
@@ -546,6 +550,7 @@ export function CityPage() {
           onClearManualLocation={clearManualLocation}
           fallbackNotice={fallbackNotice}
           mapApiKey={googleMapsApiKey}
+          profilesWithoutLocationCount={profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length}
         />
         {draftFilters.availability_status === 'favorites' && !hasClientSession && (
           <section className="state-panel">
@@ -719,13 +724,16 @@ function TagSelect({ title, values, tags, disabled = false, onToggle }: { title:
 
 function applyFilters(profiles: Profile[], filters: SearchFilters, searcherLocation: GeoPoint) {
   const priceMax = Number(filters.price_max) || 0;
+  const hasExplicitRadarCenter = ['browser', 'manual', 'manual_saved'].includes(searcherLocation.source);
 
   return profiles.map((profile) => {
     const radarRange = getSearchRange(profile, searcherLocation, filters.radius);
     return { ...profile, distance_km: radarRange.distance_km };
   }).filter((profile) => {
     const radarRange = getSearchRange(profile, searcherLocation, filters.radius);
-    if (filters.city && !profileMatchesCity(profile, filters.city) && !radarRange.inRange) return false;
+    if (hasExplicitRadarCenter) {
+      if (!radarRange.inRange) return false;
+    } else if (filters.city && !profileMatchesCity(profile, filters.city)) return false;
     if (filters.category && normalizeCategoryKey(profile.category) !== filters.category) return false;
     if (!matchesOperatorStatusFilter(profile, filters.availability_status)) return false;
     if (priceMax && profile.price_1h && profile.price_1h > priceMax) return false;

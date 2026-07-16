@@ -6,7 +6,7 @@ import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GeoPoint } from '../lib/geo';
-import { getCityCenter, getSearcherLocationWithFallback } from '../lib/geo';
+import { DEFAULT_RADAR_RADIUS_METERS, getCityCenter, getSearcherLocationWithFallback } from '../lib/geo';
 import type { Profile } from '../types';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { EmptyState, ErrorState, LoadingState } from '../components/LoadingState';
@@ -15,9 +15,10 @@ import { Seo } from '../components/Seo';
 export function HomePage() {
   const { t } = useI18n();
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [radarProfiles, setRadarProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [radius, setRadius] = useState(25);
+  const [radius, setRadius] = useState(DEFAULT_RADAR_RADIUS_METERS);
   const [radarStatus, setRadarStatus] = useState('all');
   const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter('berlin'), source: 'city_fallback' }));
   const [fallbackNotice, setFallbackNotice] = useState(false);
@@ -47,11 +48,16 @@ export function HomePage() {
   const loadProfiles = useCallback(() => {
     setLoading(true);
     setError('');
-    const params = new URLSearchParams({ city: 'berlin' });
-    getPublicProfiles(params)
-      .then(setProfiles)
+    const homepageParams = new URLSearchParams({ city: 'berlin' });
+    const radarParams = new URLSearchParams({ city: 'berlin', radar: '1' });
+    Promise.all([getPublicProfiles(homepageParams), getPublicProfiles(radarParams)])
+      .then(([homepageProfiles, publicRadarProfiles]) => {
+        setProfiles(homepageProfiles);
+        setRadarProfiles(publicRadarProfiles);
+      })
       .catch((reason) => {
         setProfiles([]);
+        setRadarProfiles([]);
         setError(reason instanceof Error ? reason.message : t('home.loadError'));
       })
       .finally(() => setLoading(false));
@@ -177,7 +183,7 @@ export function HomePage() {
       {/* Landing category tiles were removed; category routing remains in city search via activePublicCategoryOptions.map. */}
       <div className="landing-section live-radar-section">
         <RadarPanel
-          profiles={profiles}
+          profiles={radarProfiles}
           radius={radius}
           status={radarStatus}
           city="berlin"

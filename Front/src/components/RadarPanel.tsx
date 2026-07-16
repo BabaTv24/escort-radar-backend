@@ -23,6 +23,7 @@ type RadarPanelProps = {
   compact?: boolean;
   mapApiKey?: string;
   showFavoritesFilter?: boolean;
+  profilesWithoutLocationCount?: number;
 };
 
 const statusClassByOperator: Record<string, string> = {
@@ -44,7 +45,7 @@ const radarStatuses = [
 
 const allStatus = ['all', 'all', 'status.all'] as const;
 
-export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false, mapApiKey = '', showFavoritesFilter = true }: RadarPanelProps) {
+export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false, mapApiKey = '', showFavoritesFilter = true, profilesWithoutLocationCount }: RadarPanelProps) {
   const { t } = useI18n();
   const [manualQuery, setManualQuery] = useState('');
   const [manualError, setManualError] = useState('');
@@ -62,8 +63,8 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
       .map((profile) => getRadarProfile(profile, effectiveLocation, radius))
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
       .filter(({ profile }) => matchesOperatorStatusFilter(profile, status))
-      .slice(0, 12)
     : [];
+  const profilesWithoutLocation = profilesWithoutLocationCount ?? profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length;
 
   if (import.meta.env.DEV) {
     console.debug('[RadarLocationResolve]', profiles.map((profile) => ({
@@ -136,43 +137,32 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
   return (
     <section className={compact ? 'radar-panel compact' : 'radar-panel'}>
       <div className="radar-copy radar-control-panel">
-        <p className="eyebrow">{t('radar.eyebrow')}</p>
-        <h2>{t('radar.title')}</h2>
-        <p>{t('radar.subtitle')}</p>
-        <p className="safety-line">{t('radar.privacy')}</p>
-        {fallbackNotice && !hasRadarLocation && <p className="safety-line">{t('radar.fallbackNotice')}</p>}
-        <div className="radar-control-group">
-          {compact ? (
-            <label className="live-radar-range">
+        <div className="radar-heading-block">
+          <p className="eyebrow">{t('radar.eyebrow')}</p>
+          <h2>{t('radar.title')}</h2>
+          <p>{t('radar.subtitle')}</p>
+          <p className="safety-line">{t('radar.privacy')}</p>
+          {fallbackNotice && !hasRadarLocation && <p className="safety-line">{t('radar.fallbackNotice')}</p>}
+        </div>
+        <div className="radar-control-group radar-radius-control">
+          <label className={`radar-radius-slider ${compact ? 'live-radar-range' : ''}`}>
+            <span className="radar-radius-slider-head">
               <span>{t('radar.radius')}</span>
               <strong>{formatRadiusMeters(radius)}</strong>
-              <input
-                type="range"
-                min={MIN_RADAR_RADIUS_METERS}
-                max={MAX_RADAR_RADIUS_METERS}
-                step={10}
-                value={radius}
-                onChange={(event) => onRadiusChange(Number(event.target.value))}
-              />
-            </label>
-          ) : (
-            <label className="radar-radius-slider">
-              <span className="radar-radius-slider-head">
-                <span>{t('radar.radius')}</span>
-                <strong>{formatRadiusMeters(radius)}</strong>
-              </span>
-              <input
-                type="range"
-                min={MIN_RADAR_RADIUS_METERS}
-                max={MAX_RADAR_RADIUS_METERS}
-                step={10}
-                value={radius}
-                onChange={(event) => onRadiusChange(Number(event.target.value))}
-              />
-            </label>
-          )}
+            </span>
+            <input
+              aria-label={t('radar.radius')}
+              type="range"
+              min={MIN_RADAR_RADIUS_METERS}
+              max={MAX_RADAR_RADIUS_METERS}
+              step={10}
+              value={radius}
+              onChange={(event) => onRadiusChange(Number(event.target.value))}
+            />
+            <span className="radar-radius-scale"><small>10 m</small><small>150 km</small></span>
+          </label>
         </div>
-        <div className="radar-control-group">
+        <div className="radar-control-group radar-status-control">
           <span>{t('radar.status')}</span>
           <div className="segmented-pills">
             {[
@@ -191,7 +181,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           </div>
         </div>
         {hasRadarLocation && !isEditingLocation && (
-          <div className="radar-saved-location">
+          <div className="radar-saved-location radar-location-control">
             <strong>{t('radar.savedLocation')}: {effectiveLocation.label || t('radar.locationFromManual')}</strong>
             <div>
               <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={editManualLocation}><span>{t('radar.changeLocation')}</span></button>
@@ -201,7 +191,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           </div>
         )}
         {showManualForm && (
-          <form className="radar-start-panel" onSubmit={submitManualLocation}>
+          <form className="radar-start-panel radar-location-control" onSubmit={submitManualLocation}>
             <strong>{hasRadarLocation ? t('radar.editPostalCode') : t('radar.setStartingPoint')}</strong>
             <span>{t('radar.locationInputHelp')}</span>
             <div>
@@ -221,15 +211,16 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
           </form>
         )}
         {hasRadarLocation && (
-          <p className="safety-line">
+          <p className="safety-line radar-location-source">
             {effectiveLocation.source === 'browser' ? t('radar.locationFromGps') : t('radar.locationFromManual')}
             {effectiveLocation.label ? `: ${effectiveLocation.label}` : ''}
           </p>
         )}
-        <p className="safety-line">
+        <p className="safety-line radar-results-summary">
           {hasRadarLocation ? (radarProfiles.length ? `${radarProfiles.length} ${t('radar.profilesInRadarRange')}` : t('radar.noProfilesInRadius')) : t('radar.locationRequired')}
         </p>
-        <div className="radar-legend">
+        {profilesWithoutLocation > 0 && <p className="safety-line radar-results-summary">{t('radar.profilesWithoutLocationCount', { count: profilesWithoutLocation })}</p>}
+        <div className="radar-legend radar-results-legend">
           {radarLegendStatuses.map(([value, statusClass, labelKey]) => (
             <span key={value}><i className={`dot ${statusClass}`} /> {t(labelKey)}</span>
           ))}
