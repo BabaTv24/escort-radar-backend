@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { ApiError, api } from '../lib/api';
-import type { BulkPhotoModerationResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
+import type { BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientPersonalProfile, HermesProfilePreview, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
@@ -316,6 +316,10 @@ export function AdminPage() {
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [bulkPublishBusy, setBulkPublishBusy] = useState(false);
   const [bulkPublishResult, setBulkPublishResult] = useState<BulkProfilePublishResponse | null>(null);
+  const [bulkProfilePhotosOpen, setBulkProfilePhotosOpen] = useState(false);
+  const [bulkProfilePhotosBusy, setBulkProfilePhotosBusy] = useState(false);
+  const [bulkProfilePhotosResult, setBulkProfilePhotosResult] = useState<BulkProfilePhotoApprovalResponse | null>(null);
+  const [bulkProfilePhotosError, setBulkProfilePhotosError] = useState('');
   const [deletionPinStatus, setDeletionPinStatus] = useState<{ configured: boolean; updated_at: string | null } | null>(null);
   const [deletionPinForm, setDeletionPinForm] = useState({ current: '', next: '', confirm: '' });
   const [deletionPinSaving, setDeletionPinSaving] = useState(false);
@@ -943,6 +947,46 @@ export function AdminPage() {
       await api.bulkAdminProfiles(token, { operation, profile_ids: selectedProfileIds, ...extra });
       setSelectedProfileIds([]);
     });
+  }
+
+  function openBulkProfilePhotoApproval() {
+    if (!selectedProfileIds.length || bulkProfilePhotosBusy) return;
+    if (selectedProfileIds.length > 100) {
+      setMessage(t('admin.bulkPhotos.maxProfiles'));
+      return;
+    }
+    setBulkProfilePhotosError('');
+    setBulkProfilePhotosOpen(true);
+  }
+
+  function closeBulkProfilePhotoApproval() {
+    if (bulkProfilePhotosBusy) return;
+    setBulkProfilePhotosOpen(false);
+    setBulkProfilePhotosError('');
+  }
+
+  async function confirmBulkProfilePhotoApproval() {
+    if (!selectedProfileIds.length || selectedProfileIds.length > 100 || bulkProfilePhotosBusy) return;
+    const requestedProfileIds = [...selectedProfileIds];
+    setBulkProfilePhotosBusy(true);
+    setBulkProfilePhotosError('');
+    setBulkProfilePhotosResult(null);
+    try {
+      const result = await api.approveProfileImagesByProfiles(token, requestedProfileIds);
+      setBulkProfilePhotosResult(result);
+      const updatedProfileIds = new Set(result.profiles.filter((profile) => profile.status === 'matched' && profile.failed === 0).map((profile) => profile.profile_id));
+      setProfiles((current) => current.map((profile) => updatedProfileIds.has(profile.id)
+        ? { ...profile, profile_images: profile.profile_images?.map((image) => image.moderation_status === 'pending' ? { ...image, moderation_status: 'approved' } : image) }
+        : profile));
+      setPhotos((current) => current.map((photo) => updatedProfileIds.has(String(photo.profile_id)) && photo.moderation_status === 'pending'
+        ? { ...photo, moderation_status: 'approved' }
+        : photo));
+      setBulkProfilePhotosOpen(false);
+    } catch (error) {
+      setBulkProfilePhotosError(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setBulkProfilePhotosBusy(false);
+    }
   }
 
   async function refreshDeletionPinStatus() {
@@ -2055,6 +2099,26 @@ export function AdminPage() {
         </div>
       )}
 
+      {bulkProfilePhotosOpen && (
+        <div className="admin-modal-backdrop" onClick={closeBulkProfilePhotoApproval}>
+          <AdminWindow id="admin-bulk-profile-photo-approval" title={t('admin.bulkPhotos.title')} labels={adminWindowLabels} className="admin-modal" onClose={closeBulkProfilePhotoApproval}>
+            <p>{t('admin.bulkPhotos.confirm', { count: selectedProfileIds.length })}</p>
+            <p><strong>{t('admin.bulkPhotos.profileCount', { count: selectedProfileIds.length })}</strong></p>
+            <ul className="critical-delete-preview">
+              {profiles.filter((profile) => selectedProfileIds.includes(profile.id)).slice(0, 5).map((profile) => (
+                <li key={profile.id}>{profile.display_name || formatShortId(profile.id)}</li>
+              ))}
+            </ul>
+            {bulkProfilePhotosError ? <p className="error-text" role="alert">{bulkProfilePhotosError}</p> : null}
+            {bulkProfilePhotosBusy ? <p role="status">{t('admin.bulkPhotos.inProgress')}</p> : null}
+            <div className="admin-actions-row">
+              <button type="button" className="button primary" disabled={bulkProfilePhotosBusy} onClick={confirmBulkProfilePhotoApproval}>{bulkProfilePhotosBusy ? t('admin.bulkPhotos.inProgress') : t('admin.bulkPhotos.confirmAction')}</button>
+              <button type="button" className="button" disabled={bulkProfilePhotosBusy} onClick={closeBulkProfilePhotoApproval}>{t('admin.buttons.cancel')}</button>
+            </div>
+          </AdminWindow>
+        </div>
+      )}
+
       {modal && (
         <div className="admin-modal-backdrop" onClick={() => setModal(null)}>
           <AdminWindow id="admin-detail-modal" title={modal.title} labels={adminWindowLabels} className="admin-modal" onClose={() => setModal(null)}>
@@ -2558,6 +2622,7 @@ export function AdminPage() {
             <div className="admin-bulk-bar">
               <label><input type="checkbox" checked={visibleProfileIds.length > 0 && visibleProfileIds.every((id) => selectedProfileIds.includes(id))} onChange={(event) => setVisibleProfilesSelected(visibleProfileIds, event.target.checked)} /> {t('admin.bulk.selected', { count: selectedProfileIds.length })}</label>
               <Action onClick={() => runBulkAction('approve')}>{t('admin.bulk.approve')}</Action>
+              <Action disabled={!selectedProfileIds.length || bulkProfilePhotosBusy} onClick={openBulkProfilePhotoApproval}>{bulkProfilePhotosBusy ? t('admin.bulkPhotos.inProgress') : t('admin.bulkPhotos.actionWithCount', { count: selectedProfileIds.length })}</Action>
               <Action disabled={bulkPublishBusy} onClick={() => runBulkAction('publish')}>{bulkPublishBusy ? t('admin.bulk.publishing') : t('admin.bulk.publish')}</Action>
               <Action onClick={() => runBulkAction('unpublish')}>{t('admin.bulk.unpublish')}</Action>
               <Action onClick={() => runBulkAction('suspend')}>{t('admin.bulk.suspend')}</Action>
@@ -2568,6 +2633,13 @@ export function AdminPage() {
               <Action danger onClick={() => runBulkAction('delete')}>{t('admin.bulk.delete')}</Action>
             </div>
             {bulkPublishResult && <BulkPublishSummary result={bulkPublishResult} t={t} />}
+            {bulkProfilePhotosResult && <p className={bulkProfilePhotosResult.failed ? 'error-text' : 'admin-muted'} role="status">{
+              bulkProfilePhotosResult.failed
+                ? t('admin.bulkPhotos.partial', { approved: bulkProfilePhotosResult.approved, failed: bulkProfilePhotosResult.failed })
+                : bulkProfilePhotosResult.pending_found === 0
+                  ? t('admin.bulkPhotos.nonePending')
+                  : t('admin.bulkPhotos.success', { approved: bulkProfilePhotosResult.approved, profiles: bulkProfilePhotosResult.matched_profiles })
+            }</p>}
             {profileLoadError ? (
               <div className="error-text" role="alert">
                 <p>{t('admin.profiles.loadError')}: {profileLoadError}</p>

@@ -57,6 +57,7 @@ import { hashDeletionPin, validateDeletionPin, verifyAdminDeletionPin } from '..
 import { supabaseAdminDeletionPinStore } from '../adminDeletionPinStore.js';
 import { runBulkProfilePublish } from '../bulkProfilePublish.js';
 import { runBulkPhotoModeration, validateBulkPhotoModerationInput } from '../bulkPhotoModeration.js';
+import { buildProfilePhotoApprovalResult, validateProfilePhotoApprovalInput } from '../bulkProfilePhotoApproval.js';
 
 export const adminRouter = Router();
 
@@ -2846,6 +2847,47 @@ adminRouter.post('/profile-images/bulk-moderate', asyncHandler(async (req, res) 
     return 'updated';
   });
 
+  res.json(result);
+}));
+
+adminRouter.post('/profile-images/approve-by-profiles', asyncHandler(async (req, res) => {
+  const parsed = validateProfilePhotoApprovalInput(req.body);
+  if ('error' in parsed) return res.status(400).json({ error: parsed.error });
+
+  const { data: matchedProfiles, error: profilesError } = await supabaseAdmin
+    .from('profiles')
+    .select('id')
+    .in('id', parsed.profileIds);
+  if (profilesError) return res.status(500).json({ error: profilesError.message });
+
+  const matchedProfileIds = (matchedProfiles || []).map((profile) => String(profile.id));
+  const { data: imageRows, error: imagesError } = matchedProfileIds.length
+    ? await supabaseAdmin.from('profile_images').select('profile_id, moderation_status').in('profile_id', matchedProfileIds)
+    : { data: [], error: null };
+  if (imagesError) return res.status(500).json({ error: imagesError.message });
+
+  let updatedRows: Array<{ profile_id: string }> = [];
+  let updateFailed = false;
+  if (matchedProfileIds.length && (imageRows || []).some((image) => image.moderation_status === 'pending')) {
+    const update = await supabaseAdmin
+      .from('profile_images')
+      .update({ moderation_status: 'approved' })
+      .in('profile_id', matchedProfileIds)
+      .eq('moderation_status', 'pending')
+      .select('profile_id');
+    updatedRows = update.data || [];
+    updateFailed = Boolean(update.error);
+  }
+
+  const result = buildProfilePhotoApprovalResult(parsed.profileIds, matchedProfileIds, imageRows || [], updatedRows, updateFailed);
+  await logAdminAction(req.user?.email, 'bulk_profile_images_approved', 'profile_image', null, {
+    admin_id: req.user?.id || req.user?.email || null,
+    profile_count: result.matched_profiles,
+    requested_profile_count: result.requested_profiles,
+    approved_image_count: result.approved,
+    failed_image_count: result.failed,
+    timestamp: new Date().toISOString()
+  });
   res.json(result);
 }));
 

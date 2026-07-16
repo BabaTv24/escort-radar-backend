@@ -9,6 +9,23 @@ export type BulkPhotoModerationResponse = {
   items: Array<{ image_id: string; status: 'approved' | 'rejected' | 'skipped' | 'failed'; reason?: string }>;
 };
 
+export type BulkProfilePhotoApprovalResponse = {
+  requested_profiles: number;
+  matched_profiles: number;
+  pending_found: number;
+  approved: number;
+  already_approved: number;
+  failed: number;
+  profiles: Array<{
+    profile_id: string;
+    status: 'matched' | 'not_found';
+    pending_found: number;
+    approved: number;
+    already_approved: number;
+    failed: number;
+  }>;
+};
+
 const API_URL = (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || 'http://localhost:4000';
 
 type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
@@ -462,6 +479,11 @@ export const api = {
     method: 'POST',
     token,
     body: JSON.stringify({ image_ids, operation })
+  }),
+  approveProfileImagesByProfiles: (token: string, profile_ids: string[]) => request<BulkProfilePhotoApprovalResponse>('/api/admin/profile-images/approve-by-profiles', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ profile_ids })
   }),
   adminLiveSessions: (token: string) => request<{ live_sessions: unknown[] }>('/api/admin/live-sessions', { token }),
   adminChatSessions: (token: string) => request<{ chat_sessions: unknown[] }>('/api/admin/chat-sessions', { token }),
