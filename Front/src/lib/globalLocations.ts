@@ -6,7 +6,7 @@ export type GlobalCountry = {
 
 export const globalCountries: GlobalCountry[] = [
   { code: 'DE', labels: { en: 'Germany', pl: 'Niemcy', de: 'Deutschland' }, cities: ['Berlin', 'Hamburg', 'Muenchen', 'Koeln', 'Frankfurt am Main', 'Duesseldorf', 'Stuttgart', 'Dortmund', 'Leipzig', 'Hannover', 'Bremen', 'Nuernberg', 'Dresden', 'Essen', 'Duisburg', 'Bochum'] },
-  { code: 'PL', labels: { en: 'Poland', pl: 'Polska', de: 'Polen' }, cities: ['Warszawa', 'Krakow', 'Wroclaw', 'Poznan', 'Gdansk', 'Lodz', 'Szczecin', 'Katowice', 'Lublin', 'Bydgoszcz'] },
+  { code: 'PL', labels: { en: 'Poland', pl: 'Polska', de: 'Polen' }, cities: ['Warszawa', 'Krakow', 'Wroclaw', 'Poznan', 'Gdansk', 'Lodz', 'Szczecin', 'Katowice', 'Lublin', 'Bydgoszcz', 'Swiebodzin', 'Stargard', 'Koszalin', 'Kolobrzeg'] },
   { code: 'NL', labels: { en: 'Netherlands', pl: 'Holandia', de: 'Niederlande' }, cities: ['Amsterdam', 'Rotterdam', 'Den Haag', 'Utrecht', 'Eindhoven'] },
   { code: 'BE', labels: { en: 'Belgium', pl: 'Belgia', de: 'Belgien' }, cities: ['Brussels', 'Antwerp', 'Gent', 'Liege'] },
   { code: 'LU', labels: { en: 'Luxembourg', pl: 'Luksemburg', de: 'Luxemburg' }, cities: ['Luxembourg'] },
@@ -60,6 +60,11 @@ function normalizeText(value: unknown) {
   return String(value || '')
     .trim()
     .toLowerCase()
+    .replace(/ß/g, 'ss')
+    .replace(/ł/g, 'l')
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/ł/g, 'l')

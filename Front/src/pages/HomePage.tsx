@@ -300,7 +300,7 @@ function ProfileCarouselSection({
   const [isPaused, setPaused] = useState(false);
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const pauseTimeoutRef = useRef<number | null>(null);
-  const visibleProfiles = profiles.slice(0, 12);
+  const visibleProfiles = profiles;
 
   useEffect(() => {
     if (visibleProfiles.length <= 1 || isPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;

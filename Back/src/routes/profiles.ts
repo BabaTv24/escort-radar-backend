@@ -10,6 +10,7 @@ import { getCityLabel as getGlobalCityLabel, getCountryAliases, normalizeCity as
 import { isActivePublicCategory } from '../categories.js';
 import { normalizeEffectiveLocationVisibility, resolveEffectivePublicLocation } from '../publicLocation.js';
 import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
+import { prepareRadarCandidatePool } from '../radarPool.js';
 
 export const profilesRouter = Router();
 
@@ -39,20 +40,23 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .order('admin_priority', { ascending: false })
     .order('available_now', { ascending: false })
     .order('location_updated_at', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: true });
 
   if (city && !radarMode) {
     const label = getGlobalCityLabel(city);
     query = query.or(`city.eq.${city},city.ilike.*${city}*,work_city.ilike.*${label}*,work_city.ilike.*${city}*,travel_city.ilike.*${label}*,travel_city.ilike.*${city}*`);
   }
 
-  for (const key of ['available_now', 'mobile_service', 'private_studio', 'verified']) {
-    const parsed = parseBoolean(req.query[key]);
-    if (parsed !== undefined) query = query.eq(key, parsed);
+  if (!radarMode) {
+    for (const key of ['available_now', 'mobile_service', 'private_studio', 'verified']) {
+      const parsed = parseBoolean(req.query[key]);
+      if (parsed !== undefined) query = query.eq(key, parsed);
+    }
   }
 
   const categoryFilter = normalizeProfileCategory(req.query.category);
-  if (categoryFilter && !isActivePublicCategory(categoryFilter)) return res.json({ profiles: [] });
+  if (!radarMode && categoryFilter && !isActivePublicCategory(categoryFilter)) return res.json({ profiles: [] });
 
   const tagIds = String(req.query.tags || '')
     .split(',')
@@ -71,14 +75,19 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
   }
 
   let data: any[] = [];
+  let pagesFetched = 0;
+  let truncated = false;
   if (radarMode) {
     const pageSize = 200;
-    for (let offset = 0; ; offset += pageSize) {
+    const maxPages = 100;
+    for (let offset = 0; pagesFetched < maxPages; offset += pageSize) {
       const page = await query.range(offset, offset + pageSize - 1);
       if (page.error) return res.status(500).json({ error: page.error.message });
+      pagesFetched += 1;
       const rows = page.data || [];
       data.push(...rows);
       if (rows.length < pageSize) break;
+      if (pagesFetched === maxPages) truncated = true;
     }
   } else {
     const page = await query.limit(60);
@@ -99,7 +108,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
       }
     }
   }
-  const profiles = (data || [])
+  const filteredRecords = (data || [])
     .filter((profile) => {
       const visible = isPublicProfile(profile);
       if (!visible) {
@@ -114,14 +123,19 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .filter((profile) => radarMode || !country || profileMatchesCountry(profile, country) || (city && profileMatchesCity(profile, city)))
     .filter((profile) => radarMode || !city || profileMatchesCity(profile, city))
     .filter((profile) => isActivePublicCategory(profile.category))
-    .filter((profile) => radarMode || !categoryFilter || normalizeProfileCategory(profile.category) === categoryFilter)
-    .map((profile) => sanitizePublicProfile(withImageUrls(profile)))
+    .filter((profile) => radarMode || !categoryFilter || normalizeProfileCategory(profile.category) === categoryFilter);
+  const preparedRadarPool = radarMode ? prepareRadarCandidatePool(data, pagesFetched, truncated) : null;
+  const profiles = (preparedRadarPool
+    ? preparedRadarPool.candidates.map(({ profile, location }) => sanitizePublicProfile(withImageUrls(profile), location))
+    : filteredRecords.map((profile) => sanitizePublicProfile(withImageUrls(profile))))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
 
   const radarMeta = radarMode ? {
+    ...preparedRadarPool!.meta,
+    // Compatibility aliases for existing diagnostics clients.
     candidates_before_filters: data.length,
     candidates_public: profiles.length,
-    missing_location: profiles.filter((profile) => profile.latitude == null || profile.longitude == null).length,
+    missing_location: preparedRadarPool!.meta.unlocated_candidates,
     rejected_by_reason: rejectionCounts,
     duration_ms: Date.now() - startedAt,
     response_bytes: Buffer.byteLength(JSON.stringify(profiles), 'utf8')
@@ -453,14 +467,14 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
   };
 }
 
-function sanitizePublicProfile(profile: any) {
+function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile)) {
   const { phone, primary_phone, additional_phones, whatsapp, telegram, admin_note, subscription_note, source_url, import_source, imported_at, source_url_normalized, latitude, longitude, work_place_label, exact_address: _omittedExactAddress, ...publicProfile } = profile;
   const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
   const visibility = normalizeEffectiveLocationVisibility(publicProfile.location_mode, publicProfile.location_visibility);
   const postalCode = visibility === 'hidden' ? null : publicProfile.postal_code;
   // Legacy DB modes: approximate/city_only/exact_hidden. UI modes exact/postal_area/city_only/hidden are mapped before save.
   // Radar may use postal_code/work_area as a consciously configured public area, but never for hidden profiles.
-  const effectiveLocation = resolveEffectivePublicLocation({ ...publicProfile, latitude, longitude, location_visibility: visibility });
+  const effectiveLocation = resolvedLocation || resolveEffectivePublicLocation({ ...publicProfile, latitude, longitude, location_visibility: visibility });
   return {
     ...publicProfile,
     category: normalizeProfileCategory(publicProfile.category) || publicProfile.category,

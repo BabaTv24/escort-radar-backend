@@ -39,6 +39,9 @@ const cityCenters: Record<string, { lat: number; lng: number }> = {
   katowice: { lat: 50.2649, lng: 19.0238 },
   lublin: { lat: 51.2465, lng: 22.5684 },
   bydgoszcz: { lat: 53.1235, lng: 18.0084 },
+  stargard: { lat: 53.336, lng: 15.0499 },
+  koszalin: { lat: 54.1944, lng: 16.1722 },
+  kolobrzeg: { lat: 54.1757, lng: 15.5833 },
   'frankfurt am main': { lat: 50.1109, lng: 8.6821 },
   duesseldorf: { lat: 51.2277, lng: 6.7735 },
   dusseldorf: { lat: 51.2277, lng: 6.7735 },
@@ -299,8 +302,10 @@ export function safeDistanceKm(origin: { lat: unknown; lng: unknown }, target: {
 
 export function getCityCenter(city: string) {
   const normalizedCity = normalizeLocationQuery(city);
-  const center = cityCenters[normalizedCity] || cityCenters.berlin;
-  return { ...center, city: getCityLabel(cityCenters[normalizedCity] ? normalizedCity : 'berlin') };
+  const center = cityCenters[normalizedCity];
+  return center
+    ? { ...center, city: getCityLabel(normalizedCity) }
+    : { lat: Number.NaN, lng: Number.NaN, city: getCityLabel(normalizedCity) };
 }
 
 export function getProfileCoordinates(profile: Profile) {
@@ -502,9 +507,13 @@ function normalizeLocationQuery(value: string) {
   return value
     .trim()
     .toLowerCase()
+    .replace(/\u00df/g, 'ss')
+    .replace(/\u0142/g, 'l')
+    .replace(/\u00e4/g, 'ae')
+    .replace(/\u00f6/g, 'oe')
+    .replace(/\u00fc/g, 'ue')
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\u00df/g, 'ss')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ');

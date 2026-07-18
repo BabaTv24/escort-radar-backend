@@ -4,8 +4,9 @@ import type { FormEvent } from 'react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
-import { getOperatorStatus, matchesRadarStatus } from '../lib/homeRadar';
+import type { ProfileRadarLocation } from '../lib/geo';
+import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, saveSearchLocationToStorage } from '../lib/geo';
+import { getOperatorStatus, selectRadarProfiles } from '../lib/homeRadar';
 import { getPublicLocationLabel } from '../lib/locationLabels';
 import './RadarPanel.css';
 
@@ -60,12 +61,11 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
   const visibleRadarStatuses = showFavoritesFilter ? radarStatuses : radarStatuses.filter(([value]) => value !== 'favorites');
   const radarLegendStatuses = showFavoritesFilter ? radarStatuses : [allStatus, ...visibleRadarStatuses];
   const radarProfiles = hasRadarLocation
-    ? profiles
-      .map((profile) => getRadarProfile(profile, effectiveLocation!, radius))
-      .filter((item): item is NonNullable<typeof item> => Boolean(item))
-      .filter(({ profile }) => matchesRadarStatus(profile, status))
+    ? selectRadarProfiles(profiles, effectiveLocation, radius, status)
+      .map(({ profile, distanceKm, location }) => getRadarProfile(profile, effectiveLocation!, radius, distanceKm, location))
     : [];
   const profilesWithoutLocation = profilesWithoutLocationCount ?? profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length;
+  const locatedProfiles = profiles.length - profilesWithoutLocation;
 
   if (import.meta.env.DEV) {
     console.debug('[RadarLocationResolve]', profiles.map((profile) => ({
@@ -218,6 +218,8 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
         <p className="safety-line radar-results-summary">
           {hasRadarLocation ? (radarProfiles.length ? `${radarProfiles.length} ${t('radar.profilesInRadarRange')}` : t('radar.noProfilesInRadius')) : t('radar.locationRequired')}
         </p>
+        <p className="safety-line radar-results-summary">{t('radar.candidatePoolCount', { count: profiles.length })}</p>
+        <p className="safety-line radar-results-summary">{t('radar.locatedProfilesCount', { count: locatedProfiles })}</p>
         {profilesWithoutLocation > 0 && <p className="safety-line radar-results-summary">{t('radar.profilesWithoutLocationCount', { count: profilesWithoutLocation })}</p>}
         <div className="radar-legend radar-results-legend">
           {radarLegendStatuses.map(([value, statusClass, labelKey]) => (
@@ -386,13 +388,7 @@ function getRadarFilterButtonClass(value: string) {
   return 'er-glass-btn--purple';
 }
 
-function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number) {
-  const profileLocation = resolveProfileRadarLocation(profile);
-  if (!profileLocation) return null;
-
-  const distanceKm = safeDistanceKm(searcherLocation, profileLocation);
-  if (distanceKm === null || distanceKm * 1000 > radius) return null;
-
+function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number, distanceKm: number, profileLocation: ProfileRadarLocation) {
   const bearingDeg = getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLocation.lat, profileLocation.lng);
   const operatorStatus = getOperatorStatus(profile);
   const statusClass = statusClassByOperator[operatorStatus] || 'offline';

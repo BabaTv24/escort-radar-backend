@@ -294,6 +294,8 @@
   "radar.noProfilesInRadius": "Keine Profile im ausgewählten Radius.",
   "radar.profilesWithoutRadarLocation": "Profile ohne genaueren Standort sind in der Liste sichtbar, aber nicht im Radar.",
   "radar.profilesWithoutLocationCount": "Profile ohne bestimmten Standort: {{count}}",
+  "radar.candidatePoolCount": "Alle öffentlichen Datensätze im Pool: {{count}}",
+  "radar.locatedProfilesCount": "Datensätze mit bestimmtem Standort: {{count}}",
   "radar.savedLocation": "Gespeicherter Standort",
   "radar.changeLocation": "Standort ändern",
   "radar.clearLocation": "Löschen",

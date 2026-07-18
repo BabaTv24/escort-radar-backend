@@ -164,6 +164,7 @@ test('sponsored profile is public, mapped, and does not count as paid subscripti
     status: 'active',
     is_published: true,
     moderation_status: 'approved',
+    shadowbanned: false,
     is_sponsored: true,
     acquisition_source: 'admin_sponsored',
     provider: 'manual_admin'
@@ -850,6 +851,8 @@ test('global location catalog is the single source for city marketplace routing'
   assert.ok(frontLocations.getCitiesForCountry('DE').includes('Berlin'));
   assert.ok(frontLocations.getCitiesForCountry('DE').includes('Hamburg'));
   assert.ok(frontLocations.getCitiesForCountry('PL').includes('Warszawa'));
+  assert.ok(frontLocations.getCitiesForCountry('PL').includes('Stargard'));
+  assert.ok(frontLocations.getCitiesForCountry('PL').includes('Koszalin'));
   assert.equal(frontLocations.normalizeCountry('Germany'), 'DE');
   assert.equal(frontLocations.normalizeCountry('DE'), 'DE');
   assert.equal(frontLocations.normalizeCountry('Niemcy'), 'DE');
@@ -859,9 +862,9 @@ test('global location catalog is the single source for city marketplace routing'
 
   assert.match(locationCatalogSource, /globalCountries\.map/);
   assert.match(globalSearchSource, /navigateToCity\(item\)/);
-  assert.match(cityPageSource, /params\.set\('city', urlCitySlug\)/);
-  assert.match(cityPageSource, /params\.set\('country', countryCode\)/);
-  assert.match(cityPageSource, /setProfiles\(\[\]\)/);
+  assert.match(cityPageSource, /new URLSearchParams\(\{ radar: '1' \}\)/);
+  assert.doesNotMatch(cityPageSource, /params\.set\('city', urlCitySlug\)/);
+  assert.doesNotMatch(cityPageSource, /params\.set\('country', countryCode\)/);
   assert.match(adminSource, /locationCatalog\.forEach/);
   assert.match(dashboardSource, /work_country: nextCountry\.code/);
   assert.match(profilesSource, /const normalizedValue = normalizeGlobalCity\(value\)/);
@@ -1039,9 +1042,9 @@ test('production regression contracts for Berlin profiles dashboard and client p
   const preferenceMigration = await readFile(new URL('../supabase/migrations/035_client_search_location_preferences.sql', import.meta.url), 'utf8');
 
   assert.match(profilesSource, /profileMatchesCountry\(profile, country\) \|\| \(city && profileMatchesCity\(profile, city\)\)/);
-  assert.match(cityPageSource, /const radarProfiles = useMemo/);
-  assert.match(cityPageSource, /hasExplicitRadarCenter/);
-  assert.match(cityPageSource, /if \(!radarRange\.inRange\) return false/);
+  assert.match(cityPageSource, /selectRadarProfiles\(profiles, searcherLocation/);
+  assert.match(cityPageSource, /const radarProfiles = radarMatches\.map/);
+  assert.match(cityPageSource, /\}, \[diagnosticMode\]\)/);
   assert.match(dashboardSource, /function resolveAccountMode/);
   assert.match(dashboardSource, /\[DashboardAuth\]/);
   assert.match(apiSource, /clientPreferences: \(token: string\)/);
@@ -1122,8 +1125,8 @@ test('city page keeps listing profiles as radar input and does not pre-empty the
   const radarPanelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
   const geoSource = await readFile(new URL('../Front/src/lib/geo.ts', import.meta.url), 'utf8');
 
-  assert.match(cityPageSource, /profiles=\{sortedProfiles\}/);
-  assert.match(cityPageSource, /radarInputProfiles: sortedProfiles\.length/);
+  assert.match(cityPageSource, /profiles=\{profiles\}/);
+  assert.match(cityPageSource, /radarInputProfiles: profiles\.length/);
   assert.match(radarPanelSource, /const effectiveLocation = searcherLocation/);
   assert.doesNotMatch(radarPanelSource, /localManualLocation/);
   assert.match(radarPanelSource, /type="range"/);
@@ -1398,7 +1401,7 @@ test('city radar status supports favorites filter and login next flow', async ()
   assert.match(cityPageSource, /encodeURIComponent\(`\$\{location\.pathname\}\$\{location\.search\}`\)/);
   assert.match(cityPageSource, /favorites\.noFavoritesYet/);
   assert.match(cityPageSource, /onFavoriteChange=\{handleFavoriteChange\}/);
-  assert.match(cityPageSource, /if \(status === 'favorites'\) return true/);
+  assert.match(cityPageSource, /selectRadarProfiles\(profiles, searcherLocation/);
   assert.match(plLocale, /"favorites\.favoritesFilter": "Ulubione"/);
   assert.match(enLocale, /"favorites\.favoritesFilter": "Favorites"/);
   assert.match(deLocale, /"favorites\.favoritesFilter": "Favoriten"/);

@@ -9,6 +9,13 @@ const PUBLIC_PROFILES_PATH = '/api/profiles';
 type ApiProfile = Record<string, unknown>;
 
 export type PublicProfilesMetrics = {
+  fetched_candidates: number;
+  eligible_candidates: number;
+  located_candidates: number;
+  unlocated_candidates: number;
+  pages_fetched: number;
+  truncated: boolean;
+  warning?: string;
   candidates_before_filters: number;
   candidates_public: number;
   missing_location: number;

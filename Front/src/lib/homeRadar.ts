@@ -1,5 +1,6 @@
 import type { Profile } from '../types';
 import type { GeoPoint } from './geo';
+import type { ProfileRadarLocation } from './geo';
 import { isValidLatLng, resolveProfileRadarLocation, safeDistanceKm } from './geo';
 import { selectSponsoredProfilesForLocation, toLocationCitySlug } from './sponsoredProfiles';
 
@@ -8,6 +9,7 @@ export const HOME_RADAR_RADIUS_METERS = 150_000;
 export type HomeRadarProfile = {
   profile: Profile;
   distanceKm: number;
+  location: ProfileRadarLocation;
 };
 
 type PublicProfilesLoader = (
@@ -27,21 +29,28 @@ export function deriveHomeRadarView(profiles: Profile[], location: GeoPoint | nu
 }
 
 export function selectHomeRadarProfiles(profiles: Profile[], location: GeoPoint | null, status = 'all'): HomeRadarProfile[] {
+  return selectRadarProfiles(profiles, location, HOME_RADAR_RADIUS_METERS, status);
+}
+
+export function selectRadarProfiles(profiles: Profile[], location: GeoPoint | null, radiusMeters: number, status = 'all'): HomeRadarProfile[] {
   if (!location || !isValidLatLng(location.lat, location.lng)) return [];
+  const seen = new Set<string>();
 
   return profiles
     .map((profile): HomeRadarProfile | null => {
+      if (!profile.id || seen.has(profile.id)) return null;
+      seen.add(profile.id);
       // The radar=1 endpoint is the single public-eligibility authority. Here we only
       // enforce public location privacy, distance and the user's status selection.
       const profileLocation = resolveProfileRadarLocation(profile);
       if (!profileLocation) return null;
       const distanceKm = safeDistanceKm(location, profileLocation);
-      if (distanceKm === null || distanceKm * 1000 > HOME_RADAR_RADIUS_METERS) return null;
-      return { profile, distanceKm };
+      if (distanceKm === null || distanceKm * 1000 > radiusMeters) return null;
+      return { profile, distanceKm, location: profileLocation };
     })
     .filter((item): item is HomeRadarProfile => Boolean(item))
     .filter(({ profile }) => matchesRadarStatus(profile, status))
-    .sort((left, right) => left.distanceKm - right.distanceKm);
+    .sort((left, right) => left.distanceKm - right.distanceKm || left.profile.id.localeCompare(right.profile.id));
 }
 
 export function matchesRadarStatus(profile: Profile, status: string) {

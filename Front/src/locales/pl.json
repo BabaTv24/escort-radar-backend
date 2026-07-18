@@ -294,6 +294,8 @@
   "radar.noProfilesInRadius": "Brak profili w wybranym promieniu.",
   "radar.profilesWithoutRadarLocation": "Profile bez dokładniejszej lokalizacji są widoczne w liście, ale nie na radarze.",
   "radar.profilesWithoutLocationCount": "Profile bez ustalonej lokalizacji: {{count}}",
+  "radar.candidatePoolCount": "Wszystkie publiczne rekordy w puli: {{count}}",
+  "radar.locatedProfilesCount": "Rekordy z ustaloną lokalizacją: {{count}}",
   "radar.savedLocation": "Lokalizacja zapisana",
   "radar.changeLocation": "Zmień lokalizację",
   "radar.clearLocation": "Wyczyść",
