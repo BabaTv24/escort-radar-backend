@@ -11,6 +11,7 @@ import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
 import { DEFAULT_RADAR_RADIUS_METERS, MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatRadiusMeters, getCityCenter, getSearcherLocationWithFallback, isProfileInRadarRange, readSavedSearchLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
+import type { PublicProfilesMetrics } from '../lib/publicProfiles';
 import { normalizeCategoryKey } from '../lib/categories';
 import { GlobalLocationSearch } from '../components/GlobalLocationSearch';
 import { getCityLabel, normalizeCity, normalizeCountry } from '../lib/globalLocations';
@@ -49,6 +50,7 @@ export function CityPage() {
   const { city = 'berlin' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlCategory = searchParams.get('category');
+  const diagnosticMode = searchParams.get('diagnostics') === '1';
   const urlCitySlug = normalizeCity(city) || 'berlin';
   const countryCode = normalizeCountry(searchParams.get('country')) || 'DE';
   const cityLabel = getCityLabel(urlCitySlug) || urlCitySlug;
@@ -62,6 +64,7 @@ export function CityPage() {
   const [isMarketplaceCarouselPaused, setMarketplaceCarouselPaused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [serverRadarMetrics, setServerRadarMetrics] = useState<PublicProfilesMetrics | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => readSavedSearchLocation() || ({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel }));
   const [fallbackNotice, setFallbackNotice] = useState(false);
@@ -155,36 +158,36 @@ export function CityPage() {
     params.set('city', urlCitySlug);
     params.set('country', countryCode);
     params.set('radar', '1');
+    if (diagnosticMode) params.set('diagnostics', '1');
     if (appliedFilters.category) params.set('category', appliedFilters.category);
     if (appliedFilters.tag_ids.length) params.set('tags', appliedFilters.tag_ids.join(','));
     return `?${params.toString()}`;
-  }, [urlCitySlug, countryCode, appliedFilters.category, appliedFilters.tag_ids]);
+  }, [urlCitySlug, countryCode, appliedFilters.category, appliedFilters.tag_ids, diagnosticMode]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     setError('');
-    setProfiles([]);
-    getPublicProfiles(query)
+    getPublicProfiles(query, { signal: controller.signal, onMetrics: setServerRadarMetrics })
       .then((publicProfiles) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         if (import.meta.env.DEV) {
           console.debug('[Category]', { raw: urlCategory, normalized: normalizeCategoryKey(urlCategory), urlCategory, selectedCategory: appliedFilters.category, profilesCount: publicProfiles.length });
         }
         setProfiles(publicProfiles);
       })
       .catch((reason) => {
-        if (cancelled) return;
+        if (controller.signal.aborted || (reason instanceof DOMException && reason.name === 'AbortError')) return;
         setProfiles([]);
         setError(reason instanceof Error ? reason.message : t('home.loadError'));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [query, appliedFilters, searcherLocation, retryKey, urlCitySlug]);
+  }, [query, retryKey]);
 
   const filteredProfiles = useMemo(
     () => applyFilters(profiles, { ...appliedFilters, city: urlCitySlug }, searcherLocation),
@@ -201,6 +204,21 @@ export function CityPage() {
     () => sortedProfiles.filter((profile) => getSearchRange(profile, searcherLocation, draftFilters.radius).inRange && matchesOperatorStatusFilter(profile, draftFilters.availability_status)),
     [sortedProfiles, searcherLocation, draftFilters.radius, draftFilters.availability_status]
   );
+  const radarDiagnostics = useMemo(() => {
+    const withLocation = profiles.filter((profile) => resolveProfileRadarLocation(profile));
+    const inLocation = withLocation.filter((profile) => getSearchRange(profile, searcherLocation, draftFilters.radius).inRange);
+    const afterStatus = inLocation.filter((profile) => matchesOperatorStatusFilter(profile, draftFilters.availability_status));
+    return {
+      publicCandidates: serverRadarMetrics?.candidates_public ?? profiles.length,
+      inLocation: inLocation.length,
+      missingLocation: serverRadarMetrics?.missing_location ?? profiles.length - withLocation.length,
+      unpublished: serverRadarMetrics?.rejected_by_reason.unpublished || 0,
+      moderationPending: serverRadarMetrics?.rejected_by_reason.not_approved || 0,
+      excludedByFilters: inLocation.length - afterStatus.length
+        + (serverRadarMetrics?.rejected_by_reason.inactive || 0)
+        + (serverRadarMetrics?.rejected_by_reason.hidden_by_admin || 0)
+    };
+  }, [profiles, searcherLocation, draftFilters.radius, draftFilters.availability_status, serverRadarMetrics]);
   const topProfiles = sortedProfiles.slice(0, 12);
   const marketplaceCarouselProfiles = sortedProfiles.slice(0, 10);
   const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
@@ -552,6 +570,19 @@ export function CityPage() {
           mapApiKey={googleMapsApiKey}
           profilesWithoutLocationCount={profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length}
         />
+        {diagnosticMode ? (
+          <aside className="radar-diagnostics" role="status">
+            <strong>Radar diagnostics</strong>
+            <span>API candidates before filters: {serverRadarMetrics?.candidates_before_filters ?? profiles.length}</span>
+            <span>Public candidates: {radarDiagnostics.publicCandidates}</span>
+            <span>In selected city/radius: {radarDiagnostics.inLocation}</span>
+            <span>Missing location: {radarDiagnostics.missingLocation}</span>
+            <span>Unpublished: {radarDiagnostics.unpublished}</span>
+            <span>Moderation not approved: {radarDiagnostics.moderationPending}</span>
+            <span>Excluded by status/filters: {radarDiagnostics.excludedByFilters}</span>
+            <span>Response: {serverRadarMetrics?.duration_ms ?? 0} ms / {serverRadarMetrics?.response_bytes ?? 0} bytes</span>
+          </aside>
+        ) : null}
         {draftFilters.availability_status === 'favorites' && !hasClientSession && (
           <section className="state-panel">
             <p>{t('favorites.loginToSeeFavorites')}</p>

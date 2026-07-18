@@ -14,10 +14,24 @@ import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 export const profilesRouter = Router();
 
 profilesRouter.get('/', asyncHandler(async (req, res) => {
+  const startedAt = Date.now();
   res.set('Cache-Control', 'no-store, max-age=0');
+  const city = normalizeGlobalCity(req.query.city);
+  const country = normalizeCountry(req.query.country);
+  const radarMode = parseBoolean(req.query.radar) === true;
+  const diagnosticsRequested = radarMode && parseBoolean(req.query.diagnostics) === true;
+  const radarSelect = [
+    'id', 'display_name', 'slug', 'city', 'work_city', 'travel_city', 'area', 'work_area', 'work_country',
+    'category', 'status', 'is_published', 'moderation_status', 'shadowbanned', 'operator_status',
+    'availability_status', 'available_now', 'latitude', 'longitude', 'location_mode', 'location_visibility',
+    'postal_code', 'work_place_label', 'created_at', 'location_updated_at', 'admin_priority', 'verified',
+    'is_sponsored', 'acquisition_source', 'provider', 'price_1h', 'currency',
+    'profile_images(id, storage_path, is_primary, is_hidden, is_private, moderation_status, sort_order, created_at)',
+    'profile_tags(tag_id)'
+  ].join(', ');
   let query = supabaseAdmin
     .from('profiles')
-    .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
+    .select(radarMode ? radarSelect : '*, profile_images(*), profile_tags(tag_id, tags(*))')
     .eq('status', 'active')
     .eq('is_published', true)
     .eq('moderation_status', 'approved')
@@ -27,9 +41,6 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .order('location_updated_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
 
-  const city = normalizeGlobalCity(req.query.city);
-  const country = normalizeCountry(req.query.country);
-  const radarMode = parseBoolean(req.query.radar) === true;
   if (city && !radarMode) {
     const label = getGlobalCityLabel(city);
     query = query.or(`city.eq.${city},city.ilike.*${city}*,work_city.ilike.*${label}*,work_city.ilike.*${city}*,travel_city.ilike.*${label}*,travel_city.ilike.*${city}*`);
@@ -75,9 +86,26 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     data = page.data || [];
   }
 
+  const rejectionCounts: Record<string, number> = {};
+  if (diagnosticsRequested && process.env.NODE_ENV !== 'production') {
+    const diagnostics = await supabaseAdmin
+      .from('profiles')
+      .select('status, is_published, moderation_status, shadowbanned, category')
+      .limit(2000);
+    if (!diagnostics.error) {
+      for (const profile of diagnostics.data || []) {
+        const reason = publicProfileRejectionReason(profile) || (!isActivePublicCategory(profile.category) ? 'disabled_category' : null);
+        if (reason) rejectionCounts[reason] = (rejectionCounts[reason] || 0) + 1;
+      }
+    }
+  }
   const profiles = (data || [])
     .filter((profile) => {
       const visible = isPublicProfile(profile);
+      if (!visible) {
+        const reason = publicProfileRejectionReason(profile) || 'unknown';
+        rejectionCounts[reason] = (rejectionCounts[reason] || 0) + 1;
+      }
       if (!visible && process.env.NODE_ENV !== 'production') {
         console.info('[public-profiles] rejected', { profile_id: profile.id, reason: publicProfileRejectionReason(profile) });
       }
@@ -90,10 +118,18 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .map((profile) => sanitizePublicProfile(withImageUrls(profile)))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.info('[public-profiles]', { endpoint: req.originalUrl, api_records: data.length, public_records: profiles.length });
+  const radarMeta = radarMode ? {
+    candidates_before_filters: data.length,
+    candidates_public: profiles.length,
+    missing_location: profiles.filter((profile) => profile.latitude == null || profile.longitude == null).length,
+    rejected_by_reason: rejectionCounts,
+    duration_ms: Date.now() - startedAt,
+    response_bytes: Buffer.byteLength(JSON.stringify(profiles), 'utf8')
+  } : undefined;
+  if (process.env.NODE_ENV !== 'production' || radarMode) {
+    console.info('[public-profiles]', { endpoint: req.originalUrl, api_records: data.length, public_records: profiles.length, radar: radarMeta });
   }
-  res.json({ profiles });
+  res.json({ profiles, ...(radarMeta ? { radar_meta: radarMeta } : {}) });
 }));
 
 profilesRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {

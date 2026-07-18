@@ -563,9 +563,22 @@ export function AdminPage() {
   }
 
   async function load(accessToken = token) {
+    const loadStartedAt = performance.now();
+    const requestCount = view === 'profiles' || view === 'profile-studio' || view === 'photos' ? 1 : 23;
     setLoading(true);
     setProfileLoadError('');
     try {
+      if (view === 'profiles' || view === 'profile-studio') {
+        const profileResult = await adminLoadRequest('adminProfiles', api.adminProfiles(accessToken), 30000);
+        setProfiles(profileResult.profiles);
+        setStats((current) => ({ ...current, ...profileResult.stats }));
+        return;
+      }
+      if (view === 'photos') {
+        const photoResult = await adminLoadRequest('adminPhotos', api.adminPhotos(accessToken));
+        setPhotos(photoResult.photos as Record<string, any>[]);
+        return;
+      }
       const [
         statsResult,
         tokenResult,
@@ -677,6 +690,7 @@ export function AdminPage() {
       setAdminLocationRows((adminLocationData.locations || []) as LocationCatalogRow[]);
       setBcCoinPackages((bcCoinPackageData.packages || []) as BcCoinPackage[]);
     } finally {
+      console.info('[admin-load:metrics]', { view, request_count: requestCount, duration_ms: Math.round(performance.now() - loadStartedAt) });
       setLoading(false);
     }
   }
@@ -2501,15 +2515,27 @@ export function AdminPage() {
       const selectedProfile = profiles.find((profile) => profile.id === studioForm.id);
       const expandedVisibleGroups = visibleProfileCityGroups.filter((group) => expandedProfileCityKeys.includes(group.key));
       const visibleProfileIds = profileIdsInCityGroups(expandedVisibleGroups);
-      const renderStudioProfileTable = (rows: Profile[]) => <AdminTable rows={rows} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'visibility_audit', 'status', 'paid_status', 'photos', 'created_at']} labels={{ ...tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'status', 'paid_status', 'photos', 'created_at']), visibility_audit: t('admin.visibility.publicVisibility') }} format={(key, value, profile) => {
+      const renderStudioProfileTable = (rows: Profile[]) => <AdminTable rows={rows} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'public_visibility', 'availability', 'moderation', 'paid_status', 'photos', 'created_at']} labels={{
+        ...tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'paid_status', 'created_at']),
+        public_visibility: t('admin.profileTable.publicVisibility'),
+        availability: t('admin.profileTable.availability'),
+        moderation: t('admin.profileTable.moderation'),
+        photos: t('admin.profileTable.photos')
+      }} tooltips={{
+        public_visibility: t('admin.profileTable.publicVisibilityHelp'),
+        availability: t('admin.profileTable.availabilityHelp'),
+        moderation: t('admin.profileTable.moderationHelp'),
+        photos: t('admin.profileTable.photosHelp')
+      }} format={(key, value, profile) => {
         if (key === 'cover') return <AdminProfileThumb profile={profile} />;
         if (key === 'id') return <label className="admin-check-cell"><input type="checkbox" checked={selectedProfileIds.includes(profile.id)} onChange={() => toggleBulkProfile(profile.id)} aria-label={t('admin.bulk.toggleProfile')} />{formatShortId(profile.id)}</label>;
         if (key === 'city') return profile.work_city || value;
         if (key === 'category') return option(String(value || 'other'));
-        if (key === 'visibility_audit') return <ProfileVisibilityAudit audit={profile.visibility_audit} compact />;
-        if (key === 'status') return <ProfileStatusBadges profile={profile} />;
+        if (key === 'public_visibility') return <ProfileVisibilityAudit audit={profile.visibility_audit} compact />;
+        if (key === 'availability') return <ProfileAvailabilityBadge profile={profile} />;
+        if (key === 'moderation') return <ProfileModerationBadge profile={profile} />;
         if (key === 'paid_status') return <ProfilePaidBadges profile={profile} />;
-        if (key === 'photos') return profile.profile_images?.length || 0;
+        if (key === 'photos') return <ProfilePhotoCounts profile={profile} />;
         if (key === 'created_at') return formatDate(value);
         return value;
       }} actions={(profile) => <>
@@ -3578,12 +3604,29 @@ function isRealRevenuePayment(row: Record<string, any>) {
   return Number(row.amount || row.amount_eur || row.amount_cents || 0) > 0 || Boolean(row.stripe_payment_intent_id || row.stripe_session_id || row.stripe_ref);
 }
 
-function ProfileStatusBadges({ profile }: { profile: Profile }) {
+function ProfileAvailabilityBadge({ profile }: { profile: Profile }) {
+  return <StatusBadge value={getAdminOperatorStatusValue(profile)} />;
+}
+
+function ProfileModerationBadge({ profile }: { profile: Profile }) {
+  const value = profile.status === 'suspended' || profile.moderation_status === 'suspended'
+    ? 'suspended'
+    : profile.moderation_status || 'pending';
+  return <StatusBadge value={value} />;
+}
+
+function ProfilePhotoCounts({ profile }: { profile: Profile }) {
+  const { t } = useI18n();
+  const images = profile.profile_images || [];
+  const approved = images.filter((image) => (image.moderation_status || 'approved') === 'approved').length;
+  const pending = images.filter((image) => image.moderation_status === 'pending').length;
+  const rejected = images.filter((image) => image.moderation_status === 'rejected' || image.moderation_status === 'blocked').length;
   return (
-    <span className="admin-badge-stack">
-      <StatusBadge value={getAdminOperatorStatusValue(profile)} />
-      {profile.is_published === false ? <StatusBadge value="hidden" /> : null}
-      <StatusBadge value={profile.moderation_status || profile.verification_status || profile.status || 'pending'} />
+    <span className="admin-badge-stack admin-photo-counts">
+      <small>{t('admin.profileTable.photosTotal')}: {images.length}</small>
+      <small>{t('admin.profileTable.photosApproved')}: {approved}</small>
+      <small>{t('admin.profileTable.photosPending')}: {pending}</small>
+      <small>{t('admin.profileTable.photosRejected')}: {rejected}</small>
     </span>
   );
 }
@@ -3598,7 +3641,8 @@ function getAdminOperatorStatusValue(profile: Profile) {
 function ProfileVisibilityAudit({ audit, compact = false }: { audit?: Profile['visibility_audit']; compact?: boolean }) {
   const { t } = useI18n();
   if (!audit) return <span className="admin-badge-stack"><StatusBadge value="unknown" /></span>;
-  const reason = audit.reasons?.[0] || 'visible';
+  const publicBlockingReasons = ['unpublished', 'moderation_not_approved', 'suspended_or_inactive', 'shadowbanned', 'disabled_category'];
+  const reason = audit.isPublicVisible ? 'visible' : audit.reasons?.find((item) => publicBlockingReasons.includes(item)) || audit.reasons?.[0] || 'hidden';
   const checks: Array<[string, boolean]> = [
     ['city', audit.checks.cityMatches],
     ['category', audit.checks.categoryMatches],
@@ -3738,14 +3782,14 @@ function ChartPlaceholder({ title }: { title: string }) {
   return <article className="admin-card chart"><h2>{title}</h2><div className="chart-bars">{[42, 68, 51, 78, 62, 88, 74].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div></article>;
 }
 
-function AdminTable<T extends Record<string, any>>({ rows, columns, actions, format, labels, rowClassName }: { rows: T[]; columns: string[]; actions?: (row: T) => ReactNode; format?: (key: string, value: unknown, row: T) => unknown; labels?: Record<string, string>; rowClassName?: (row: T) => string }) {
+function AdminTable<T extends Record<string, any>>({ rows, columns, actions, format, labels, tooltips, rowClassName }: { rows: T[]; columns: string[]; actions?: (row: T) => ReactNode; format?: (key: string, value: unknown, row: T) => unknown; labels?: Record<string, string>; tooltips?: Record<string, string>; rowClassName?: (row: T) => string }) {
   const { t } = useI18n();
   const actionLabel = labels?.actions || t('admin.table.actions');
   return (
     <section className="admin-table-card">
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr>{columns.map((column) => <th key={column}>{labels?.[column] || column}</th>)}{actions && <th>{actionLabel}</th>}</tr></thead>
+          <thead><tr>{columns.map((column) => <th key={column} title={tooltips?.[column]}>{labels?.[column] || column}</th>)}{actions && <th>{actionLabel}</th>}</tr></thead>
           <tbody>
             {rows.map((row, index) => (
               <tr className={rowClassName?.(row)} key={row.id || index}>

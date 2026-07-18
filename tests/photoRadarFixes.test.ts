@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runBulkPhotoModeration, validateBulkPhotoModerationInput } from '../Back/src/bulkPhotoModeration.js';
-import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, isProfileInRadarRange, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.js';
+import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, getCityCenter, isProfileInRadarRange, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.js';
 import { isPublicProfile } from '../Back/src/publicProfiles.js';
+import { resolveEffectivePublicLocation } from '../Back/src/publicLocation.js';
+import { selectSponsoredProfilesForLocation } from '../Front/src/lib/sponsoredProfiles.js';
 
 const ids = [
   '11111111-1111-4111-8111-111111111111',
@@ -93,6 +95,80 @@ test('global radar candidates are paged and bypass city/country filters before d
   const radarPipeline = panel.slice(panel.indexOf('const radarProfiles ='), panel.indexOf('if (import.meta.env.DEV)'));
   assert.doesNotMatch(radarPipeline, /\.slice\(/);
   assert.match(panel, /if \(status === 'all'\) return true/);
+  assert.match(route, /radarSelect/);
+  assert.match(route, /response_bytes/);
+});
+
+test('admin profiles use a scoped request and photo moderation never requests the public radar', async () => {
+  const admin = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(admin, /radar=1|params\.set\('radar'/);
+
+  const loadStart = admin.indexOf('async function load(');
+  const loadEnd = admin.indexOf('\n  useEffect(', loadStart);
+  assert.ok(loadStart >= 0 && loadEnd > loadStart, 'scoped admin loader should exist');
+  const loadSource = admin.slice(loadStart, loadEnd);
+  const profileBranchStart = loadSource.indexOf("if (view === 'profiles' || view === 'profile-studio')");
+  const photoBranchStart = loadSource.indexOf("if (view === 'photos')", profileBranchStart);
+  const fullLoadStart = loadSource.indexOf('const [', photoBranchStart);
+  assert.ok(profileBranchStart >= 0 && photoBranchStart > profileBranchStart && fullLoadStart > photoBranchStart);
+
+  const profileBranch = loadSource.slice(profileBranchStart, photoBranchStart);
+  const photoBranch = loadSource.slice(photoBranchStart, fullLoadStart);
+  assert.deepEqual(profileBranch.match(/api\.[A-Za-z]+/g), ['api.adminProfiles']);
+  assert.deepEqual(photoBranch.match(/api\.[A-Za-z]+/g), ['api.adminPhotos']);
+  assert.match(profileBranch, /return;/);
+  assert.match(photoBranch, /return;/);
+
+  const actionSource = admin.slice(admin.indexOf('async function action('), admin.indexOf('function togglePhotoSelection'));
+  assert.match(actionSource, /await fn\(\);[\s\S]*await load\(\);/);
+  const bulkSource = admin.slice(admin.indexOf('async function confirmBulkProfilePhotoApproval('), admin.indexOf('async function refreshDeletionPinStatus'));
+  assert.doesNotMatch(bulkSource, /\bload\(/);
+  assert.match(bulkSource, /setProfiles\(\(current\)/);
+  assert.match(bulkSource, /setPhotos\(\(current\)/);
+  assert.match(admin, /columns=\{\['cover',[\s\S]*'public_visibility', 'availability', 'moderation',[\s\S]*'photos'/);
+  assert.match(admin, /function ProfilePhotoCounts/);
+  assert.match(admin, /photosApproved/);
+  assert.match(admin, /photosPending/);
+  assert.match(admin, /photosRejected/);
+});
+
+test('radius and status changes do not refetch an unchanged radar candidate pool', async () => {
+  const city = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
+  const publicProfiles = await readFile(new URL('../Front/src/lib/publicProfiles.ts', import.meta.url), 'utf8');
+  const requestEffect = city.slice(city.indexOf('getPublicProfiles(query'), city.indexOf('const filteredProfiles'));
+  assert.match(requestEffect, /\[query, retryKey\]/);
+  assert.doesNotMatch(requestEffect, /\[query, appliedFilters, searcherLocation/);
+  assert.match(requestEffect, /controller\.abort\(\)/);
+  assert.match(publicProfiles, /publicProfilesInFlight/);
+  assert.match(publicProfiles, /publicProfilesCache/);
+  assert.match(publicProfiles, /AbortController/);
+});
+
+test('Szczecin and Bydgoszcz city-only profiles with null coordinates get safe city radar points while hidden stays absent', () => {
+  for (const [city, latitude, longitude] of [
+    ['Szczecin', 53.4285, 14.5528],
+    ['Bydgoszcz', 53.1235, 18.0084]
+  ] as const) {
+    assert.deepEqual(resolveEffectivePublicLocation({ work_city: city, location_mode: 'city_only', location_visibility: 'city_only', latitude: null, longitude: null }), {
+      latitude,
+      longitude,
+      location_approximate: true,
+      location_precision: 'city'
+    });
+  }
+  assert.equal(resolveEffectivePublicLocation({ work_city: 'Bydgoszcz', location_mode: 'exact_hidden', location_visibility: 'hidden' }), null);
+});
+
+test('sponsored profiles follow the selected city and never fall back to Berlin', () => {
+  const profiles = [
+    { id: 'berlin', display_name: 'Berlin', city: 'Berlin', is_sponsored: true, location_visibility: 'city_only' },
+    { id: 'szczecin', display_name: 'Szczecin', city: 'Szczecin', is_sponsored: true, location_visibility: 'city_only' },
+    { id: 'bydgoszcz', display_name: 'Bydgoszcz', city: 'Bydgoszcz', is_sponsored: true, location_visibility: 'city_only' }
+  ] as any;
+  const at = (city: string) => ({ ...getCityCenter(city), source: 'city' as const });
+  assert.deepEqual(selectSponsoredProfilesForLocation(profiles, at('szczecin'), 25_000).map((profile) => profile.id), ['szczecin']);
+  assert.deepEqual(selectSponsoredProfilesForLocation(profiles, at('bydgoszcz'), 25_000).map((profile) => profile.id), ['bydgoszcz']);
+  assert.deepEqual(selectSponsoredProfilesForLocation([profiles[0]], at('szczecin'), 25_000), []);
 });
 
 test('public eligibility and location privacy stay independent from radar status', () => {

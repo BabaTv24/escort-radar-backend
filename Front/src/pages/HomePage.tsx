@@ -11,6 +11,7 @@ import type { Profile } from '../types';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { EmptyState, ErrorState, LoadingState } from '../components/LoadingState';
 import { Seo } from '../components/Seo';
+import { isSponsoredProfile, selectSponsoredProfilesForLocation } from '../lib/sponsoredProfiles';
 
 export function HomePage() {
   const { t } = useI18n();
@@ -25,9 +26,10 @@ export function HomePage() {
   const [footerSlideIndex, setFooterSlideIndex] = useState(0);
   const [isFooterCarouselPaused, setFooterCarouselPaused] = useState(false);
   const footerCarouselRef = useRef<HTMLDivElement | null>(null);
+  const profilesAbortRef = useRef<AbortController | null>(null);
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-  const sponsoredProfiles = profiles.filter((profile) => profile.is_sponsored || profile.acquisition_source === 'admin_sponsored' || profile.provider === 'manual_admin');
-  const paidProfiles = profiles.filter((profile) => !sponsoredProfiles.some((sponsored) => sponsored.id === profile.id));
+  const sponsoredProfiles = selectSponsoredProfilesForLocation(radarProfiles, searcherLocation, radius);
+  const paidProfiles = profiles.filter((profile) => !isSponsoredProfile(profile));
   const topProfiles = paidProfiles.slice(0, 8);
   const featured = (paidProfiles.length ? paidProfiles : profiles).slice(0, 8);
   const footerSlides = [
@@ -46,24 +48,37 @@ export function HomePage() {
   const footerCarouselSlides = [...footerSlides, ...footerSlides.slice(0, 4)];
 
   const loadProfiles = useCallback(() => {
+    profilesAbortRef.current?.abort();
+    const controller = new AbortController();
+    profilesAbortRef.current = controller;
     setLoading(true);
     setError('');
     const homepageParams = new URLSearchParams({ city: 'berlin' });
     const radarParams = new URLSearchParams({ city: 'berlin', radar: '1' });
-    Promise.all([getPublicProfiles(homepageParams), getPublicProfiles(radarParams)])
+    Promise.all([
+      getPublicProfiles(homepageParams, { signal: controller.signal }),
+      getPublicProfiles(radarParams, { signal: controller.signal })
+    ])
       .then(([homepageProfiles, publicRadarProfiles]) => {
+        if (controller.signal.aborted) return;
         setProfiles(homepageProfiles);
         setRadarProfiles(publicRadarProfiles);
       })
       .catch((reason) => {
+        if (controller.signal.aborted) return;
         setProfiles([]);
         setRadarProfiles([]);
         setError(reason instanceof Error ? reason.message : t('home.loadError'));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
   }, [t]);
 
-  useEffect(loadProfiles, [loadProfiles]);
+  useEffect(() => {
+    loadProfiles();
+    return () => profilesAbortRef.current?.abort();
+  }, [loadProfiles]);
 
   useEffect(() => {
     if (isFooterCarouselPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -138,19 +153,19 @@ export function HomePage() {
 
       {loading && <LoadingState label={t('home.loadingProfiles')} />}
       {error && <ErrorState message={error} onRetry={loadProfiles} />}
-      {!loading && !error && profiles.length === 0 && (
+      {!loading && !error && profiles.length === 0 && sponsoredProfiles.length === 0 && (
         <EmptyState title={t('home.noProfilesTitle')} message={t('home.noProfilesText')} />
       )}
 
-      {!loading && !error && profiles.length > 0 && <>
-      {sponsoredProfiles.length > 0 && (
+      {!loading && !error && (profiles.length > 0 || sponsoredProfiles.length > 0) && <>
+      {sponsoredProfiles.length > 0 ? (
         <ProfileCarouselSection
           eyebrow={t('home.sponsoredEyebrow')}
           title={t('home.sponsoredTitle')}
           profiles={sponsoredProfiles}
           actionLabel={t('home.openRadar')}
         />
-      )}
+      ) : <EmptyState title={t('home.sponsoredTitle')} message={t('search.noProfilesForCity')} />}
 
       {topProfiles.length > 0 && <section className="landing-section sponsored-profiles-section featured-profiles-section home-marketplace-showcase">
         <div className="section-head compact">

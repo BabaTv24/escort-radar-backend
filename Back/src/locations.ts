@@ -53,7 +53,8 @@ export type ResolvedCityLocation = {
 const cityLocations: Record<string, Omit<ResolvedCityLocation, 'precision' | 'approximate'>> = {
   berlin: { canonical_city: 'Berlin', country_code: 'DE', latitude: 52.52, longitude: 13.405 },
   hamburg: { canonical_city: 'Hamburg', country_code: 'DE', latitude: 53.5511, longitude: 9.9937 },
-  szczecin: { canonical_city: 'Szczecin', country_code: 'PL', latitude: 53.4285, longitude: 14.5528 }
+  szczecin: { canonical_city: 'Szczecin', country_code: 'PL', latitude: 53.4285, longitude: 14.5528 },
+  bydgoszcz: { canonical_city: 'Bydgoszcz', country_code: 'PL', latitude: 53.1235, longitude: 18.0084 }
 };
 
 export function resolveCityLocation(value: unknown): ResolvedCityLocation | null {

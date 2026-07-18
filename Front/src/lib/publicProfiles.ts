@@ -8,15 +8,72 @@ const PUBLIC_PROFILES_PATH = '/api/profiles';
 
 type ApiProfile = Record<string, unknown>;
 
-export async function getPublicProfiles(params: URLSearchParams | string = ''): Promise<Profile[]> {
+export type PublicProfilesMetrics = {
+  candidates_before_filters: number;
+  candidates_public: number;
+  missing_location: number;
+  rejected_by_reason: Record<string, number>;
+  duration_ms: number;
+  response_bytes: number;
+};
+
+type PublicProfilesRequestOptions = {
+  signal?: AbortSignal;
+  cacheTtlMs?: number;
+  onMetrics?: (metrics: PublicProfilesMetrics | null) => void;
+};
+
+const publicProfilesInFlight = new Map<string, { promise: Promise<Profile[]>; controller: AbortController }>();
+const publicProfilesCache = new Map<string, { expiresAt: number; profiles: Profile[] }>();
+const publicProfilesMetrics = new Map<string, PublicProfilesMetrics>();
+
+export async function getPublicProfiles(params: URLSearchParams | string = '', options: PublicProfilesRequestOptions = {}): Promise<Profile[]> {
   const query = typeof params === 'string'
     ? params
     : params.toString() ? `?${params.toString()}` : '';
   const url = `${API_URL}${PUBLIC_PROFILES_PATH}${query}`;
+  if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
+  const cacheTtlMs = options.cacheTtlMs ?? (new URL(url).searchParams.get('radar') === '1' ? 30_000 : 0);
+  const cached = publicProfilesCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) {
+    options.onMetrics?.(publicProfilesMetrics.get(url) || null);
+    return cached.profiles;
+  }
+
+  const existing = publicProfilesInFlight.get(url);
+  if (existing && !existing.controller.signal.aborted) {
+    return abortable(existing.promise, options.signal).then((profiles) => {
+      options.onMetrics?.(publicProfilesMetrics.get(url) || null);
+      return profiles;
+    });
+  }
+  if (existing) publicProfilesInFlight.delete(url);
+
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  options.signal?.addEventListener('abort', abort, { once: true });
+  const startedAt = performance.now();
+  const pending = fetchPublicProfiles(url, controller.signal)
+    .then((profiles) => {
+      if (cacheTtlMs > 0) publicProfilesCache.set(url, { expiresAt: Date.now() + cacheTtlMs, profiles });
+      options.onMetrics?.(publicProfilesMetrics.get(url) || null);
+      if (viteEnv.DEV) console.info('[public-profiles:metrics]', { url, duration_ms: Math.round(performance.now() - startedAt), profiles: profiles.length });
+      return profiles;
+    })
+    .finally(() => {
+      if (publicProfilesInFlight.get(url)?.promise === pending) publicProfilesInFlight.delete(url);
+      options.signal?.removeEventListener('abort', abort);
+    });
+  publicProfilesInFlight.set(url, { promise: pending, controller });
+  return pending;
+}
+
+async function fetchPublicProfiles(url: string, signal: AbortSignal): Promise<Profile[]> {
   const response = await fetch(url, {
     method: 'GET',
     cache: 'no-store',
-    headers: { Accept: 'application/json' }
+    headers: { Accept: 'application/json' },
+    signal
   });
 
   if (viteEnv.DEV) {
@@ -28,7 +85,8 @@ export async function getPublicProfiles(params: URLSearchParams | string = ''): 
     throw new Error(String(payload.error || 'Request failed'));
   }
 
-  const payload = await response.json() as { profiles?: unknown[] };
+  const payload = await response.json() as { profiles?: unknown[]; radar_meta?: PublicProfilesMetrics };
+  if (payload.radar_meta) publicProfilesMetrics.set(url, payload.radar_meta);
   const records = Array.isArray(payload.profiles) ? payload.profiles : [];
   const profiles = records
     .map(mapApiProfileToPublicProfile)
@@ -44,6 +102,21 @@ export async function getPublicProfiles(params: URLSearchParams | string = ''): 
   }
 
   return profiles;
+}
+
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new DOMException('Request aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new DOMException('Request aborted', 'AbortError'));
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
+export function clearPublicProfilesRequestCache() {
+  publicProfilesCache.clear();
+  publicProfilesMetrics.clear();
 }
 
 export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
