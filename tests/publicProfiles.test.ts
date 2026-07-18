@@ -18,6 +18,8 @@ import { normalizeOperatorStatus, normalizeProfileCategory, normalizeProfileOpen
 import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, isEscortClubSeoBoilerplate, mapImportedServiceValues, normalizeImportedCity, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../Back/src/hermesImport.ts';
 import { isAllDayAvailability, normalizeAvailabilityHoursForEditor } from '../Front/src/components/AvailabilityHoursEditor.tsx';
 import { fetchPublicImportResource, readImportResponseLimited, validatePublicImportUrl } from '../Back/src/publicImportSecurity.ts';
+import { resolveCityLocation } from '../Back/src/locations.ts';
+import { normalizeEffectiveLocationVisibility, resolveEffectivePublicLocation } from '../Back/src/publicLocation.ts';
 
 test('published admin profile is public without premium, GPS, prices, or photos', () => {
   assert.equal(isPublicProfile({
@@ -186,6 +188,36 @@ test('sponsored profiles have a public homepage section and badge', async () => 
   assert.match(homeSource, /home\.sponsoredTitle/);
   assert.match(homeSource, /sponsoredProfiles/);
   assert.match(cardSource, /SPONSOROWANY/);
+});
+
+test('Szczecin city-only profile gets a privacy-safe public radar point despite stale country and null coordinates', () => {
+  assert.equal(normalizeEffectiveLocationVisibility('city_only', 'city_only'), 'city_only');
+  assert.deepEqual(resolveCityLocation('Szczecin'), {
+    canonical_city: 'Szczecin',
+    country_code: 'PL',
+    latitude: 53.4285,
+    longitude: 14.5528,
+    precision: 'city',
+    approximate: true
+  });
+  assert.deepEqual(resolveEffectivePublicLocation({
+    work_city: 'Szczecin',
+    work_country: 'DE',
+    location_mode: 'city_only',
+    location_visibility: 'city_only',
+    latitude: null,
+    longitude: null
+  }), {
+    latitude: 53.4285,
+    longitude: 14.5528,
+    location_approximate: true,
+    location_precision: 'city'
+  });
+  assert.equal(resolveEffectivePublicLocation({
+    work_city: 'Szczecin',
+    location_mode: 'exact_hidden',
+    location_visibility: 'hidden'
+  }), null);
 });
 
 test('premium client office redesign keeps high-end UI tokens and mobile chrome', async () => {

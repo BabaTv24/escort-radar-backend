@@ -31,6 +31,7 @@ import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccoun
 import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfile.js';
 import { applyManualPaymentOrder } from '../manualPayments.js';
 import { loadBcCoinPackages, normalizeBcCoinPackagePayload } from '../bcCoinPackages.js';
+import { resolveCityLocation } from '../locations.js';
 import {
   buildAdminClient,
   enrichClientActivationPayments,
@@ -3133,6 +3134,11 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
   const isSponsored = body.is_sponsored !== false && body.acquisition_source !== 'paid_advertiser';
   const businessType = normalizeBusinessType(body.business_type);
   const travels = normalizeProfileTravels(body.travels ?? body.travel);
+  const resolvedCity = resolveCityLocation(body.work_city || city);
+  const suppliedWorkCountry = optionalText(body.work_country || body.country, 80);
+  const suppliedWorkCity = optionalText(body.work_city || body.city, 100);
+  const locationMode = ['exact_hidden', 'approximate', 'city_only'].includes(String(body.location_mode || 'city_only')) ? String(body.location_mode || 'city_only') : 'city_only';
+  const importedCityOnly = allowImportedCity && locationMode === 'city_only' ? resolvedCity : null;
 
   return {
     data: {
@@ -3146,8 +3152,8 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
       display_name: displayName,
       city,
       area: optionalText(body.area, 80),
-      work_country: optionalText(body.work_country || body.country, 80) || 'DE',
-      work_city: optionalText(body.work_city, 100) || adminCityLabel(city),
+      work_country: allowImportedCity ? resolvedCity?.country_code || suppliedWorkCountry || null : suppliedWorkCountry || resolvedCity?.country_code || null,
+      work_city: allowImportedCity ? resolvedCity?.canonical_city || suppliedWorkCity : suppliedWorkCity || resolvedCity?.canonical_city || adminCityLabel(city),
       work_area: optionalText(body.work_area, 120) || optionalText(body.area, 80),
       postal_code: optionalText(body.postal_code, 20),
       work_place_label: optionalText(body.work_place_label, 180),
@@ -3211,10 +3217,10 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
       listing_price: isSponsored ? 0 : optionalMoney(body.listing_price) ?? optionalMoney(body.price_1h) ?? 0,
       listing_currency: currency,
       max_photos: 12,
-      latitude: optionalCoordinate(body.latitude, -90, 90),
-      longitude: optionalCoordinate(body.longitude, -180, 180),
-      location_mode: ['exact_hidden', 'approximate', 'city_only'].includes(String(body.location_mode || 'city_only')) ? String(body.location_mode || 'city_only') : 'city_only',
-      location_visibility: normalizeAdminLocationVisibility(body.location_visibility || body.location_mode),
+      latitude: importedCityOnly ? importedCityOnly.latitude : optionalCoordinate(body.latitude, -90, 90),
+      longitude: importedCityOnly ? importedCityOnly.longitude : optionalCoordinate(body.longitude, -180, 180),
+      location_mode: locationMode,
+      location_visibility: normalizeAdminLocationVisibility(body.location_visibility || locationMode),
       service_radius_km: optionalInteger(body.service_radius_km, 1, 100) || 25,
       moderation_status: allowedModerationStatuses.includes(String(body.moderation_status || 'approved')) ? String(body.moderation_status || 'approved') : 'approved',
       moderation_note: optionalText(body.moderation_note, 2000),
@@ -3756,6 +3762,7 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     price_night: priceNight
   }).filter(([, value]) => value !== null));
   const cityLabel = optionalText(rawProfile.city_label || rawProfile.city || rawProfile.location, 100) || '';
+  const resolvedCity = resolveCityLocation(cityLabel);
   const serviceGroups = rawProfile.service_groups && typeof rawProfile.service_groups === 'object' ? rawProfile.service_groups : {};
   const rawServices = Array.isArray(rawProfile.raw_services) ? rawProfile.raw_services.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 100) : [];
   const importedServices = [
@@ -3776,6 +3783,12 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     display_name: optionalText(rawProfile.display_name || rawProfile.name || rawProfile.title, 120) || '',
     city: normalizeHermesCity(cityLabel),
     city_label: cityLabel,
+    work_city: resolvedCity?.canonical_city || cityLabel,
+    work_country: resolvedCity?.country_code || null,
+    latitude: resolvedCity?.latitude ?? null,
+    longitude: resolvedCity?.longitude ?? null,
+    location_mode: 'city_only',
+    location_visibility: 'city_only',
     location: optionalText(rawProfile.location, 160),
     category: optionalText(rawProfile.category, 80) || inferCategory(String(rawProfile.description || rawProfile.tags || '')),
     age: rawProfile.age == null ? normalizedDetails.age ?? null : numericValue(rawProfile.age),
@@ -3818,6 +3831,7 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
       : [],
     admin_warnings: uniqueStrings([
       ...moderation.warnings,
+      ...(!resolvedCity ? ['location_unresolved'] : []),
       ...(Array.isArray(rawProfile.admin_warnings) ? rawProfile.admin_warnings.map((item: unknown) => String(item)) : [])
     ]),
     suggested_owner_email: optionalEmail(rawProfile.suggested_owner_email) || '',

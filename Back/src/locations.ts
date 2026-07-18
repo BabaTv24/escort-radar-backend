@@ -40,6 +40,27 @@ export function getCountryAliases(value: unknown) {
   return country ? [country.code, ...country.labels] : [];
 }
 
+export type ResolvedCityLocation = {
+  canonical_city: string;
+  country_code: string;
+  latitude: number;
+  longitude: number;
+  precision: 'city';
+  approximate: true;
+};
+
+// Privacy-safe city centres used by import normalization and public radar hydration.
+const cityLocations: Record<string, Omit<ResolvedCityLocation, 'precision' | 'approximate'>> = {
+  berlin: { canonical_city: 'Berlin', country_code: 'DE', latitude: 52.52, longitude: 13.405 },
+  hamburg: { canonical_city: 'Hamburg', country_code: 'DE', latitude: 53.5511, longitude: 9.9937 },
+  szczecin: { canonical_city: 'Szczecin', country_code: 'PL', latitude: 53.4285, longitude: 14.5528 }
+};
+
+export function resolveCityLocation(value: unknown): ResolvedCityLocation | null {
+  const resolved = cityLocations[normalizeCity(value)];
+  return resolved ? { ...resolved, precision: 'city', approximate: true } : null;
+}
+
 function normalizeText(value: unknown) {
   return String(value || '')
     .trim()

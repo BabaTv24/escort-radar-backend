@@ -136,6 +136,8 @@ export type Profile = {
   location_visibility?: 'exact' | 'postal_area' | 'city_only' | 'hidden';
   latitude?: number | null;
   longitude?: number | null;
+  location_approximate?: boolean;
+  location_precision?: 'exact' | 'postal_area' | 'area' | 'city' | null;
   location_updated_at?: string | null;
   auto_location_on_login?: boolean;
   auto_location_while_online?: boolean;

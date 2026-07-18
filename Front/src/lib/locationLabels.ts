@@ -27,5 +27,6 @@ export function getPublicLocationLabel(profile: Profile, t: Translate) {
     const location = [postal, city].filter(Boolean).join(' ');
     return [location, area].filter(Boolean).join(' / ') || city;
   }
+  if (profile.location_approximate || profile.location_precision === 'city') return `${city} (${t('radar.approximateDistance')})`;
   return city;
 }

@@ -8,6 +8,7 @@ import { notifyMatchingClientsForProfile } from './clientIntent.js';
 import { isPublicProfile, publicProfileRejectionReason } from '../publicProfiles.js';
 import { getCityLabel as getGlobalCityLabel, getCountryAliases, normalizeCity as normalizeGlobalCity, normalizeCountry } from '../locations.js';
 import { isActivePublicCategory } from '../categories.js';
+import { normalizeEffectiveLocationVisibility, resolveEffectivePublicLocation } from '../publicLocation.js';
 import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 
 export const profilesRouter = Router();
@@ -419,11 +420,11 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
 function sanitizePublicProfile(profile: any) {
   const { phone, primary_phone, additional_phones, whatsapp, telegram, admin_note, subscription_note, source_url, import_source, imported_at, source_url_normalized, latitude, longitude, work_place_label, exact_address: _omittedExactAddress, ...publicProfile } = profile;
   const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
-  const visibility = normalizePublicLocationVisibility(publicProfile.location_visibility || publicProfile.location_mode);
+  const visibility = normalizeEffectiveLocationVisibility(publicProfile.location_mode, publicProfile.location_visibility);
   const postalCode = visibility === 'hidden' ? null : publicProfile.postal_code;
   // Legacy DB modes: approximate/city_only/exact_hidden. UI modes exact/postal_area/city_only/hidden are mapped before save.
   // Radar may use postal_code/work_area as a consciously configured public area, but never for hidden profiles.
-  const canExposeRadarPoint = (visibility === 'exact' || visibility === 'postal_area') && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
+  const effectiveLocation = resolveEffectivePublicLocation({ ...publicProfile, latitude, longitude, location_visibility: visibility });
   return {
     ...publicProfile,
     category: normalizeProfileCategory(publicProfile.category) || publicProfile.category,
@@ -431,8 +432,10 @@ function sanitizePublicProfile(profile: any) {
     postal_code: postalCode,
     work_place_label: visibility === 'exact' ? work_place_label : null,
     exact_address: visibility === 'exact' ? _omittedExactAddress : null,
-    latitude: canExposeRadarPoint ? Number(latitude) : null,
-    longitude: canExposeRadarPoint ? Number(longitude) : null,
+    latitude: effectiveLocation?.latitude ?? null,
+    longitude: effectiveLocation?.longitude ?? null,
+    location_approximate: effectiveLocation?.location_approximate ?? false,
+    location_precision: effectiveLocation?.location_precision ?? null,
     profile_images: visibleImages,
     images: visibleImages,
     locked_features: ['phone_number', 'whatsapp', 'telegram', 'full_gallery', 'vip_gallery', 'gifts', 'live_cam']

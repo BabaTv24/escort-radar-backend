@@ -12,7 +12,8 @@ export type ProfileRadarLocation = {
   lat: number;
   lng: number;
   label: string;
-  precision: 'exact' | 'postal_area' | 'area' | 'city_fallback' | 'approximate';
+  precision: 'exact' | 'postal_area' | 'area' | 'city' | 'city_fallback' | 'approximate';
+  approximate: boolean;
 };
 
 export const clientSearchLocationStorageKey = 'escortRadar.clientSearchLocation';
@@ -377,7 +378,8 @@ export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocat
       lat,
       lng,
       label: textValue(raw.work_place_label ?? raw.exact_address ?? raw.postal_code ?? raw.postalCode ?? raw.zip ?? raw.work_area ?? raw.area ?? raw.district ?? raw.work_city ?? raw.location_city ?? raw.city),
-      precision: profile.work_place_label || profile.exact_address ? 'exact' : profile.location_visibility === 'postal_area' ? 'postal_area' : 'approximate'
+      precision: profile.location_precision === 'city' ? 'city' : profile.work_place_label || profile.exact_address ? 'exact' : profile.location_visibility === 'postal_area' ? 'postal_area' : 'approximate',
+      approximate: profile.location_approximate === true || profile.location_precision === 'city' || profile.location_visibility !== 'exact'
     };
   }
 
@@ -385,17 +387,17 @@ export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocat
   const postalCode = textValue(raw.postal_code ?? raw.postalCode ?? raw.zip);
   if (postalCode) {
     const postal = resolveKnownLocation(`${postalCode} ${city}`);
-    if (postal) return { lat: postal.lat, lng: postal.lng, label: postal.label, precision: 'postal_area' };
+    if (postal) return { lat: postal.lat, lng: postal.lng, label: postal.label, precision: 'postal_area', approximate: true };
   }
 
   const area = textValue(raw.work_area ?? raw.area ?? raw.district ?? raw.approximate_location_area);
   if (area) {
     const areaLocation = resolveKnownLocation(`${area} ${city}`);
-    if (areaLocation) return { lat: areaLocation.lat, lng: areaLocation.lng, label: areaLocation.label, precision: 'area' };
+    if (areaLocation) return { lat: areaLocation.lat, lng: areaLocation.lng, label: areaLocation.label, precision: 'area', approximate: true };
   }
 
   const cityCenter = cityCenters[normalizeLocationQuery(city)];
-  if (cityCenter) return { ...cityCenter, label: getCityLabel(city), precision: 'city_fallback' };
+  if (cityCenter) return { ...cityCenter, label: getCityLabel(city), precision: 'city_fallback', approximate: true };
 
   return null;
 }

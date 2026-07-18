@@ -411,22 +411,32 @@ function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: n
     operatorStatus,
     statusClass,
     radarLocation: profileLocation,
-    point: getRadarPoint(radius, distanceKm, bearingDeg)
+    point: getRadarPoint(radius, distanceKm, bearingDeg, profile.id, profileLocation.approximate)
   };
 }
 
-function getRadarPoint(radius: number, distanceKm: number, bearingDeg: number) {
+function getRadarPoint(radius: number, distanceKm: number, bearingDeg: number, profileId: string, approximate: boolean) {
   const markerPaddingPercent = 11;
   const maxPixelRadius = 50 - markerPaddingPercent;
   const radialRatio = Math.min(Math.max(distanceKm * 1000 / Math.max(radius, 1), 0), 1);
-  const minVisibleRatio = distanceKm > 0 ? 0.08 : 0;
+  const deterministicAngle = stableProfileHash(profileId) % 360;
+  const minVisibleRatio = approximate ? 0.06 + (stableProfileHash(`${profileId}:radius`) % 7) / 100 : distanceKm > 0 ? 0.08 : 0;
   const visualRatio = Math.max(radialRatio, minVisibleRatio);
-  const bearingRad = bearingDeg * (Math.PI / 180);
+  const bearingRad = (approximate && radialRatio < minVisibleRatio ? deterministicAngle : bearingDeg) * (Math.PI / 180);
 
   return {
     left: 50 + Math.sin(bearingRad) * maxPixelRadius * visualRatio,
     top: 50 - Math.cos(bearingRad) * maxPixelRadius * visualRatio
   };
+}
+
+function stableProfileHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function getTooltipClass(point: { left: number; top: number }) {
