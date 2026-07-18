@@ -1,36 +1,40 @@
-export function isVisuallyCompressed(radius: number, distanceKm: number, approximate: boolean) {
-  return approximate && distanceKm * 1000 / Math.max(radius, 1) < 0.04;
-}
+export type RadarPoint = { left: number; top: number };
 
-export function getRadarPoint(radius: number, distanceKm: number, bearingDeg: number, profileId: string, approximate: boolean, spreadIndex?: number, spreadCount = 0) {
+export function getRadarPoint(radius: number, distanceKm: number, bearingDeg: number, _profileId?: string, _approximate?: boolean, _spreadIndex?: number, _spreadCount = 0): RadarPoint {
   const markerPaddingPercent = 11;
-  const maxPixelRadius = 50 - markerPaddingPercent;
-  const radialRatio = Math.min(Math.max(distanceKm * 1000 / Math.max(radius, 1), 0), 1);
-  if (approximate && spreadIndex !== undefined && spreadCount > 1 && isVisuallyCompressed(radius, distanceKm, approximate)) {
-    const goldenAngleDeg = 137.507764;
-    const visualRatio = 0.14 + 0.64 * Math.sqrt((spreadIndex + 0.5) / spreadCount);
-    const bearingRad = ((spreadIndex * goldenAngleDeg) % 360) * Math.PI / 180;
-    return {
-      left: 50 + Math.sin(bearingRad) * maxPixelRadius * visualRatio,
-      top: 50 - Math.cos(bearingRad) * maxPixelRadius * visualRatio
-    };
-  }
-  const deterministicAngle = stableProfileHash(profileId) % 360;
-  const minVisibleRatio = approximate ? 0.06 + (stableProfileHash(`${profileId}:radius`) % 7) / 100 : distanceKm > 0 ? 0.08 : 0;
-  const visualRatio = Math.max(radialRatio, minVisibleRatio);
-  const bearingRad = (approximate && radialRatio < minVisibleRatio ? deterministicAngle : bearingDeg) * (Math.PI / 180);
+  const radarRadiusPercent = 50 - markerPaddingPercent;
+  const normalizedRadius = Math.min(Math.max(distanceKm * 1000 / Math.max(radius, 1), 0), 1);
+  const angle = (bearingDeg - 90) * Math.PI / 180;
 
   return {
-    left: 50 + Math.sin(bearingRad) * maxPixelRadius * visualRatio,
-    top: 50 - Math.cos(bearingRad) * maxPixelRadius * visualRatio
+    left: 50 + Math.cos(angle) * normalizedRadius * radarRadiusPercent,
+    top: 50 + Math.sin(angle) * normalizedRadius * radarRadiusPercent
   };
 }
 
-function stableProfileHash(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+export function clusterRadarPoints<T extends { point: RadarPoint }>(items: T[], collisionDistancePercent: number) {
+  const clusters: Array<{ point: RadarPoint; items: T[] }> = [];
+
+  for (const item of items) {
+    const matchingIndexes = clusters
+      .map((cluster, index) => cluster.items.some(({ point }) => (
+        Math.hypot(item.point.left - point.left, item.point.top - point.top) <= collisionDistancePercent
+      )) ? index : -1)
+      .filter((index) => index >= 0);
+
+    if (matchingIndexes.length === 0) {
+      clusters.push({ point: item.point, items: [item] });
+      continue;
+    }
+
+    const targetIndex = matchingIndexes[0];
+    clusters[targetIndex].items.push(item);
+    for (let index = matchingIndexes.length - 1; index > 0; index -= 1) {
+      const sourceIndex = matchingIndexes[index];
+      clusters[targetIndex].items.push(...clusters[sourceIndex].items);
+      clusters.splice(sourceIndex, 1);
+    }
   }
-  return hash >>> 0;
+
+  return clusters;
 }

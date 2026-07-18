@@ -6,6 +6,126 @@
   opacity: .72;
 }
 
+.radar-marker-cluster {
+  position: absolute;
+  z-index: 13;
+  transform: translate(-50%, -50%);
+}
+
+.radar-marker-cluster.expanded {
+  z-index: 100;
+}
+
+.radar-cluster-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 2px solid #fff4d6;
+  border-radius: 50%;
+  background: #7b4dff;
+  box-shadow: 0 0 0 5px rgba(123, 77, 255, .2), 0 12px 30px rgba(0, 0, 0, .52);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.radar-cluster-button:focus-visible {
+  outline: 2px solid #f4d77f;
+  outline-offset: 3px;
+}
+
+.radar-cluster-list {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + .75rem);
+  width: min(16rem, 72vw);
+  max-height: 10rem;
+  overflow-y: auto;
+  transform: translateX(-50%);
+  border: 1px solid rgba(247, 215, 123, .4);
+  border-radius: .6rem;
+  background: rgba(10, 5, 9, .98);
+  box-shadow: 0 20px 54px rgba(0, 0, 0, .72);
+}
+
+.radar-marker-cluster.edge-left .radar-cluster-list {
+  left: -1rem;
+  transform: none;
+}
+
+.radar-marker-cluster.edge-right .radar-cluster-list {
+  right: -1rem;
+  left: auto;
+  transform: none;
+}
+
+.radar-marker-cluster.edge-bottom .radar-cluster-list {
+  top: auto;
+  bottom: calc(100% + .75rem);
+}
+
+.radar-cluster-profile {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: .55rem;
+  padding: .5rem;
+  color: #fff4d6;
+}
+
+.radar-cluster-profile + .radar-cluster-profile {
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+
+.radar-cluster-profile:hover,
+.radar-cluster-profile:focus-visible {
+  background: rgba(123, 77, 255, .2);
+  outline: none;
+}
+
+.radar-cluster-profile strong,
+.radar-cluster-profile small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radar-cluster-profile small {
+  color: rgba(255, 244, 214, .7);
+}
+
+.radar-cluster-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border: 2px solid var(--radar-status-color, #6b7280);
+  border-radius: 50%;
+  background: #171717;
+  font-size: .68rem;
+  font-weight: 900;
+}
+
+.radar-cluster-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.radar-panel.compact .radar-cluster-list {
+  max-height: 6rem;
+}
+
+@media (max-width: 720px) {
+  .radar-cluster-list {
+    max-height: 7.5rem;
+  }
+}
+
 .radar-start-panel {
   display: grid;
   width: 100%;

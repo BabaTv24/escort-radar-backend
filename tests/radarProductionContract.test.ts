@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { isRadarRequest } from '../Back/src/radarPool.js';
 import { clearPublicProfilesRequestCache, getPublicProfiles } from '../Front/src/lib/publicProfiles.js';
 import { MAX_RADAR_RADIUS_METERS, radarRadiusStorageKey, readSavedRadarRadius, saveRadarRadius } from '../Front/src/lib/geo.js';
-import { getRadarPoint } from '../Front/src/lib/radarLayout.js';
+import { clusterRadarPoints, getRadarPoint } from '../Front/src/lib/radarLayout.js';
 
 test('frontend radar=1 reaches the exact backend radar branch and never accepts a 60-row non-radar response', async () => {
   assert.equal(isRadarRequest('1'), true);
@@ -88,17 +88,28 @@ test('the 150 km radius persists across HomePage and CityPage mounts', async () 
   }
 });
 
-test('35 compressed city-only markers receive stable readable visual positions at 150 km', () => {
-  const first = Array.from({ length: 35 }, (_, index) => getRadarPoint(150_000, 0.3, 0, `szczecin-${index}`, true, index, 35));
-  const second = Array.from({ length: 35 }, (_, index) => getRadarPoint(150_000, 0.3, 0, `szczecin-${index}`, true, index, 35));
-  assert.deepEqual(first, second);
-  assert.equal(new Set(first.map(({ left, top }) => `${left.toFixed(6)}:${top.toFixed(6)}`)).size, 35);
+test('radar points preserve Haversine distance and bearing while overlapping profiles form a cluster', () => {
+  const atOneKm = getRadarPoint(1_000, 0.3, 90);
+  const atWideRadius = getRadarPoint(15_700, 0.3, 90);
+  assert.ok(atOneKm.left > atWideRadius.left, 'the same profile must move toward the center when radius grows');
+  assert.equal(atOneKm.top, 50);
+  assert.ok(Math.abs(atOneKm.left - (50 + .3 * 39)) < 1e-10);
+  assert.ok(Math.abs(atWideRadius.left - (50 + .3 / 15.7 * 39)) < 1e-10);
 
-  let nearestSeparation = Number.POSITIVE_INFINITY;
-  for (let left = 0; left < first.length; left += 1) {
-    for (let right = left + 1; right < first.length; right += 1) {
-      nearestSeparation = Math.min(nearestSeparation, Math.hypot(first[left].left - first[right].left, first[left].top - first[right].top));
-    }
-  }
-  assert.ok(nearestSeparation > 7, `nearest marker separation was only ${nearestSeparation}%`);
+  const north = getRadarPoint(1_000, 0.5, 0);
+  assert.equal(north.left, 50);
+  assert.ok(north.top < 50);
+
+  const points = Array.from({ length: 35 }, () => ({ point: getRadarPoint(150_000, 0.3, 0) }));
+  const clusters = clusterRadarPoints(points, 9);
+  assert.equal(clusters.length, 1);
+  assert.equal(clusters[0].items.length, 35);
+  assert.deepEqual(clusters[0].point, points[0].point);
+
+  const chained = clusterRadarPoints([
+    { point: { left: 40, top: 50 } },
+    { point: { left: 50, top: 50 } },
+    { point: { left: 45, top: 50 } }
+  ], 6);
+  assert.equal(chained.length, 1, 'a marker bridging two collision groups must merge both clusters');
 });

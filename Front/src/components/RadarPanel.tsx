@@ -8,7 +8,7 @@ import type { ProfileRadarLocation } from '../lib/geo';
 import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, saveSearchLocationToStorage } from '../lib/geo';
 import { getOperatorStatus, matchesRadarStatus, selectRadarProfiles } from '../lib/homeRadar';
 import { getPublicLocationLabel } from '../lib/locationLabels';
-import { getRadarPoint, isVisuallyCompressed } from '../lib/radarLayout';
+import { clusterRadarPoints, getRadarPoint } from '../lib/radarLayout';
 import './RadarPanel.css';
 
 type RadarPanelProps = {
@@ -56,27 +56,34 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
   const [manualMessage, setManualMessage] = useState('');
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
+  const [expandedClusterId, setExpandedClusterId] = useState('');
+  const [radarDiameterPx, setRadarDiameterPx] = useState(0);
+  const radarVisualNode = useRef<HTMLDivElement | null>(null);
   const effectiveLocation = searcherLocation;
   const hasRadarLocation = Boolean(effectiveLocation && isValidLatLng(effectiveLocation.lat, effectiveLocation.lng));
   const showManualForm = !hasRadarLocation || isEditingLocation;
   const visibleRadarStatuses = showFavoritesFilter ? radarStatuses : radarStatuses.filter(([value]) => value !== 'favorites');
   const radarLegendStatuses = showFavoritesFilter ? radarStatuses : [allStatus, ...visibleRadarStatuses];
   const radarCandidates = hasRadarLocation ? selectRadarProfiles(profiles, effectiveLocation, radius, 'all') : [];
-  const compressedCandidates = radarCandidates.filter(({ distanceKm, location }) => isVisuallyCompressed(radius, distanceKm, location.approximate));
-  const compressedIndexes = new Map(compressedCandidates.map(({ profile }, index) => [profile.id, index]));
   const radarProfiles = radarCandidates
-    .map(({ profile, distanceKm, location }) => getRadarProfile(
-      profile,
-      effectiveLocation!,
-      radius,
-      distanceKm,
-      location,
-      compressedIndexes.get(profile.id),
-      compressedCandidates.length
-    ))
+    .map(({ profile, distanceKm, location }) => getRadarProfile(profile, effectiveLocation!, radius, distanceKm, location))
     .filter(({ profile }) => matchesRadarStatus(profile, status));
+  const markerDiameterPx = compact ? 34 : 38;
+  const collisionDistancePercent = radarDiameterPx > 0 ? (markerDiameterPx + 4) / radarDiameterPx * 100 : (compact ? 13 : 9);
+  const radarClusters = clusterRadarPoints(radarProfiles, collisionDistancePercent);
   const profilesWithoutLocation = profilesWithoutLocationCount ?? profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length;
   const locatedProfiles = profiles.length - profilesWithoutLocation;
+
+  useEffect(() => {
+    const node = radarVisualNode.current;
+    if (!node) return;
+    const updateDiameter = () => setRadarDiameterPx(node.getBoundingClientRect().width);
+    updateDiameter();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(updateDiameter);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   if (import.meta.env.DEV) {
     console.debug('[RadarLocationResolve]', profiles.map((profile) => ({
@@ -239,7 +246,7 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
         </div>
         {compact && <Link to={radarHref || `/city/${city}`} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('home.openRadar')}</span></Link>}
       </div>
-      <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
+      <div ref={radarVisualNode} className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
         {mapApiKey && effectiveLocation && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
         <div className="radar-distance-rings" aria-hidden="true">
           <span className="radar-distance-ring selected">
@@ -254,7 +261,49 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
             <small>{t('radar.profilesWithoutRadarLocation')}</small>
           </div>
         )}
-        {radarProfiles.map(({ profile, distanceKm, point, operatorStatus, statusClass }) => {
+        {radarClusters.map((cluster) => {
+          const clusterId = cluster.items.map(({ profile }) => profile.id).join(':');
+          if (cluster.items.length > 1) {
+            const tooltipClass = getTooltipClass(cluster.point);
+            const expanded = expandedClusterId === clusterId;
+            return (
+              <div
+                key={clusterId}
+                className={`radar-marker-cluster ${tooltipClass} ${expanded ? 'expanded' : ''}`}
+                style={{ left: `${cluster.point.left}%`, top: `${cluster.point.top}%` }}
+              >
+                <button
+                  type="button"
+                  className="radar-cluster-button"
+                  aria-expanded={expanded}
+                  aria-label={`${cluster.items.length} ${t('radar.profilesInRadarRange')}`}
+                  onClick={() => setExpandedClusterId(expanded ? '' : clusterId)}
+                >
+                  {cluster.items.length}
+                </button>
+                {expanded && (
+                  <div className="radar-cluster-list">
+                    {cluster.items.map(({ profile, distanceKm, statusClass }) => {
+                      const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
+                      return (
+                        <Link key={profile.id} to={`/profile/${profile.id}`} className="radar-cluster-profile">
+                          <span className={`radar-cluster-avatar ${statusClass}`}>
+                            {primary?.public_url ? <img src={primary.public_url} alt="" loading="lazy" /> : getInitials(profile.display_name)}
+                          </span>
+                          <span>
+                            <strong>{profile.display_name}</strong>
+                            <small>{formatDistanceKm(distanceKm, t('radar.distanceUnavailable'))}</small>
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          const { profile, distanceKm, point, operatorStatus, statusClass } = cluster.items[0];
           const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
           const price = getPrice(profile, t);
           const tooltipClass = getTooltipClass(point);
@@ -399,7 +448,7 @@ function getRadarFilterButtonClass(value: string) {
   return 'er-glass-btn--purple';
 }
 
-function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number, distanceKm: number, profileLocation: ProfileRadarLocation, spreadIndex?: number, spreadCount = 0) {
+function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number, distanceKm: number, profileLocation: ProfileRadarLocation) {
   const bearingDeg = getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLocation.lat, profileLocation.lng);
   const operatorStatus = getOperatorStatus(profile);
   const statusClass = statusClassByOperator[operatorStatus] || 'offline';
@@ -411,7 +460,7 @@ function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: n
     operatorStatus,
     statusClass,
     radarLocation: profileLocation,
-    point: getRadarPoint(radius, distanceKm, bearingDeg, profile.id, profileLocation.approximate, spreadIndex, spreadCount)
+    point: getRadarPoint(radius, distanceKm, bearingDeg)
   };
 }
 
