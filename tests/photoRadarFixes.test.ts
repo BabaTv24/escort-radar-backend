@@ -6,6 +6,7 @@ import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, getCityCenter, isProf
 import { isPublicProfile } from '../Back/src/publicProfiles.js';
 import { resolveEffectivePublicLocation } from '../Back/src/publicLocation.js';
 import { selectSponsoredProfilesForLocation } from '../Front/src/lib/sponsoredProfiles.js';
+import { matchesRadarStatus } from '../Front/src/lib/homeRadar.js';
 
 const ids = [
   '11111111-1111-4111-8111-111111111111',
@@ -66,7 +67,7 @@ test('mobile radar uses one 10 m to 150 km slider ordered directly after the vis
 
 test('12353 resolves correctly and Haversine includes exactly 150 km but excludes 150.1 km', () => {
   const center = resolveManualSearcherLocation('12353 Berlin Buckow/Rudow');
-  assert.deepEqual(center, { lat: 52.424, lng: 13.462, label: '12353 Berlin Buckow / Rudow', source: 'manual' });
+  assert.deepEqual(center, { lat: 52.424, lng: 13.462, label: '12353 Berlin Buckow / Rudow', source: 'manual', city: 'Berlin' });
   assert.ok(center);
   const pointAt = { latitude: center!.lat + 150 / 111.195, longitude: center!.lng };
   const pointOutside = { latitude: center!.lat + 150.1 / 111.195, longitude: center!.lng };
@@ -94,7 +95,7 @@ test('global radar candidates are paged and bypass city/country filters before d
   assert.match(city, /profilesWithoutLocationCount=/);
   const radarPipeline = panel.slice(panel.indexOf('const radarProfiles ='), panel.indexOf('if (import.meta.env.DEV)'));
   assert.doesNotMatch(radarPipeline, /\.slice\(/);
-  assert.match(panel, /if \(status === 'all'\) return true/);
+  assert.equal(matchesRadarStatus({ operator_status: 'OFFLINE' } as any, 'all'), true);
   assert.match(route, /radarSelect/);
   assert.match(route, /response_bytes/);
 });

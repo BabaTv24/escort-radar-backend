@@ -4,7 +4,8 @@ import type { FormEvent } from 'react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, readSavedSearchLocation, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
+import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm, saveSearchLocationToStorage } from '../lib/geo';
+import { getOperatorStatus, matchesRadarStatus } from '../lib/homeRadar';
 import { getPublicLocationLabel } from '../lib/locationLabels';
 import './RadarPanel.css';
 
@@ -13,9 +14,10 @@ type RadarPanelProps = {
   radius: number;
   status: string;
   city: string;
+  radarHref?: string;
   onRadiusChange: (radius: number) => void;
   onStatusChange: (status: string) => void;
-  searcherLocation: GeoPoint;
+  searcherLocation: GeoPoint | null;
   onUseLocation?: () => void;
   onSetManualLocation?: (location: GeoPoint) => void;
   onClearManualLocation?: () => void;
@@ -45,24 +47,23 @@ const radarStatuses = [
 
 const allStatus = ['all', 'all', 'status.all'] as const;
 
-export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false, mapApiKey = '', showFavoritesFilter = true, profilesWithoutLocationCount }: RadarPanelProps) {
+export function RadarPanel({ profiles, radius, status, city, radarHref, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false, mapApiKey = '', showFavoritesFilter = true, profilesWithoutLocationCount }: RadarPanelProps) {
   const { t } = useI18n();
   const [manualQuery, setManualQuery] = useState('');
   const [manualError, setManualError] = useState('');
   const [manualMessage, setManualMessage] = useState('');
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
-  const [localManualLocation, setLocalManualLocation] = useState<GeoPoint | null>(() => readSavedSearchLocation());
-  const effectiveLocation = searcherLocation.source === 'browser' ? searcherLocation : localManualLocation || searcherLocation;
-  const hasRadarLocation = (effectiveLocation.source === 'browser' || effectiveLocation.source === 'manual' || effectiveLocation.source === 'manual_saved') && isValidLatLng(effectiveLocation.lat, effectiveLocation.lng);
+  const effectiveLocation = searcherLocation;
+  const hasRadarLocation = Boolean(effectiveLocation && isValidLatLng(effectiveLocation.lat, effectiveLocation.lng));
   const showManualForm = !hasRadarLocation || isEditingLocation;
   const visibleRadarStatuses = showFavoritesFilter ? radarStatuses : radarStatuses.filter(([value]) => value !== 'favorites');
   const radarLegendStatuses = showFavoritesFilter ? radarStatuses : [allStatus, ...visibleRadarStatuses];
   const radarProfiles = hasRadarLocation
     ? profiles
-      .map((profile) => getRadarProfile(profile, effectiveLocation, radius))
+      .map((profile) => getRadarProfile(profile, effectiveLocation!, radius))
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
-      .filter(({ profile }) => matchesOperatorStatusFilter(profile, status))
+      .filter(({ profile }) => matchesRadarStatus(profile, status))
     : [];
   const profilesWithoutLocation = profilesWithoutLocationCount ?? profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length;
 
@@ -111,14 +112,13 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
     setManualError('');
     setManualMessage(t('radar.locationUpdated'));
     setIsEditingLocation(false);
-    setLocalManualLocation(location);
     saveSearchLocationToStorage(location);
     onSetManualLocation?.(location);
     setManualBusy(false);
   }
 
   function editManualLocation() {
-    setManualQuery(effectiveLocation.label || '');
+    setManualQuery(effectiveLocation?.label || '');
     setManualError('');
     setManualMessage('');
     setIsEditingLocation(true);
@@ -129,7 +129,6 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
     setManualError('');
     setManualMessage(t('radar.locationCleared'));
     setIsEditingLocation(true);
-    setLocalManualLocation(null);
     clearSavedSearchLocation();
     onClearManualLocation?.();
   }
@@ -182,7 +181,7 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         </div>
         {hasRadarLocation && !isEditingLocation && (
           <div className="radar-saved-location radar-location-control">
-            <strong>{t('radar.savedLocation')}: {effectiveLocation.label || t('radar.locationFromManual')}</strong>
+            <strong>{t('radar.savedLocation')}: {effectiveLocation?.label || t('radar.locationFromManual')}</strong>
             <div>
               <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={editManualLocation}><span>{t('radar.changeLocation')}</span></button>
               <button className="button ghost er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" onClick={clearManualLocation}><span>{t('radar.clearLocation')}</span></button>
@@ -212,8 +211,8 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
         )}
         {hasRadarLocation && (
           <p className="safety-line radar-location-source">
-            {effectiveLocation.source === 'browser' ? t('radar.locationFromGps') : t('radar.locationFromManual')}
-            {effectiveLocation.label ? `: ${effectiveLocation.label}` : ''}
+            {effectiveLocation?.source === 'browser' ? t('radar.locationFromGps') : t('radar.locationFromManual')}
+            {effectiveLocation?.label ? `: ${effectiveLocation.label}` : ''}
           </p>
         )}
         <p className="safety-line radar-results-summary">
@@ -225,10 +224,10 @@ export function RadarPanel({ profiles, radius, status, city, onRadiusChange, onS
             <span key={value}><i className={`dot ${statusClass}`} /> {t(labelKey)}</span>
           ))}
         </div>
-        {compact && <Link to={`/city/${city}`} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('radar.cta')}</span></Link>}
+        {compact && <Link to={radarHref || `/city/${city}`} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('home.openRadar')}</span></Link>}
       </div>
       <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
-        {mapApiKey && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
+        {mapApiKey && effectiveLocation && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
         <div className="radar-distance-rings" aria-hidden="true">
           <span className="radar-distance-ring selected">
             <em>{formatRadiusMeters(radius)} {t('radar.radiusLabel').toLowerCase()}</em>
@@ -325,11 +324,20 @@ async function geocodeManualSearcherLocation(input: string, apiKey: string): Pro
       lat,
       lng,
       source: 'manual',
-      label: place.formatted_address || query
+      label: place.formatted_address || query,
+      city: getGeocodedCity(place) || query
     };
   } catch {
     return null;
   }
+}
+
+function getGeocodedCity(place: any) {
+  const components = Array.isArray(place?.address_components) ? place.address_components : [];
+  const city = components.find((component: any) => component.types?.includes('locality'))
+    || components.find((component: any) => component.types?.includes('postal_town'))
+    || components.find((component: any) => component.types?.includes('administrative_area_level_2'));
+  return typeof city?.long_name === 'string' ? city.long_name.trim() : '';
 }
 
 function loadRadarGoogleMaps(apiKey: string) {
@@ -369,21 +377,6 @@ const radarMapStyles = [
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#05070c' }] }
 ];
-
-function getOperatorStatus(profile: Profile) {
-  return profile.operator_status || (profile.available_now ? 'ONLINE_NOW' : profile.availability_status === 'busy' ? 'BUSY' : 'OFFLINE');
-}
-
-function matchesOperatorStatusFilter(profile: Profile, status: string) {
-  if (status === 'all') return true;
-  if (status === 'favorites') return true;
-  const operatorStatus = getOperatorStatus(profile);
-  if (status === 'online') return operatorStatus === 'ONLINE_NOW';
-  if (status === 'available') return operatorStatus === 'ONLINE_NOW' || operatorStatus === 'AVAILABLE_TODAY';
-  if (status === 'busy') return operatorStatus === 'BUSY';
-  if (status === 'unavailable') return operatorStatus === 'OFFLINE';
-  return operatorStatus === status;
-}
 
 function getRadarFilterButtonClass(value: string) {
   if (value === 'favorites') return 'er-glass-btn--pink';

@@ -6,29 +6,32 @@ import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GeoPoint } from '../lib/geo';
-import { DEFAULT_RADAR_RADIUS_METERS, getCityCenter, getSearcherLocationWithFallback } from '../lib/geo';
+import { DEFAULT_RADAR_RADIUS_METERS, readSavedSearchLocation } from '../lib/geo';
 import type { Profile } from '../types';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { EmptyState, ErrorState, LoadingState } from '../components/LoadingState';
 import { Seo } from '../components/Seo';
-import { isSponsoredProfile, selectSponsoredProfilesForLocation } from '../lib/sponsoredProfiles';
+import { isSponsoredProfile, toLocationCitySlug } from '../lib/sponsoredProfiles';
+import { deriveHomeRadarView, getHomeRadarHref, loadHomeRadarCandidatePool } from '../lib/homeRadar';
 
 export function HomePage() {
   const { t } = useI18n();
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [radarProfiles, setRadarProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [radius, setRadius] = useState(DEFAULT_RADAR_RADIUS_METERS);
   const [radarStatus, setRadarStatus] = useState('all');
-  const [searcherLocation, setSearcherLocation] = useState<GeoPoint>(() => ({ ...getCityCenter('berlin'), source: 'city_fallback' }));
+  const [searcherLocation, setSearcherLocation] = useState<GeoPoint | null>(() => readSavedSearchLocation());
   const [fallbackNotice, setFallbackNotice] = useState(false);
   const [footerSlideIndex, setFooterSlideIndex] = useState(0);
   const [isFooterCarouselPaused, setFooterCarouselPaused] = useState(false);
   const footerCarouselRef = useRef<HTMLDivElement | null>(null);
   const profilesAbortRef = useRef<AbortController | null>(null);
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-  const sponsoredProfiles = selectSponsoredProfilesForLocation(radarProfiles, searcherLocation, radius);
+  const { sponsoredProfiles, nearbyProfiles } = deriveHomeRadarView(profiles, searcherLocation, radarStatus);
+  const nearbyProfileCards = nearbyProfiles.map(({ profile }) => profile);
+  const radarHref = getHomeRadarHref(searcherLocation);
+  const radarCity = toLocationCitySlug(searcherLocation);
   const paidProfiles = profiles.filter((profile) => !isSponsoredProfile(profile));
   const topProfiles = paidProfiles.slice(0, 8);
   const featured = (paidProfiles.length ? paidProfiles : profiles).slice(0, 8);
@@ -53,21 +56,14 @@ export function HomePage() {
     profilesAbortRef.current = controller;
     setLoading(true);
     setError('');
-    const homepageParams = new URLSearchParams({ city: 'berlin' });
-    const radarParams = new URLSearchParams({ city: 'berlin', radar: '1' });
-    Promise.all([
-      getPublicProfiles(homepageParams, { signal: controller.signal }),
-      getPublicProfiles(radarParams, { signal: controller.signal })
-    ])
-      .then(([homepageProfiles, publicRadarProfiles]) => {
+    loadHomeRadarCandidatePool(getPublicProfiles, controller.signal)
+      .then((publicRadarProfiles) => {
         if (controller.signal.aborted) return;
-        setProfiles(homepageProfiles);
-        setRadarProfiles(publicRadarProfiles);
+        setProfiles(publicRadarProfiles);
       })
       .catch((reason) => {
         if (controller.signal.aborted) return;
         setProfiles([]);
-        setRadarProfiles([]);
         setError(reason instanceof Error ? reason.message : t('home.loadError'));
       })
       .finally(() => {
@@ -96,9 +92,18 @@ export function HomePage() {
   }, [footerSlideIndex]);
 
   async function useLocation() {
-    const location = await getSearcherLocationWithFallback('berlin');
-    setSearcherLocation(location);
-    setFallbackNotice(location.source === 'city_fallback');
+    if (!navigator.geolocation) {
+      setFallbackNotice(true);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setSearcherLocation({ lat: position.coords.latitude, lng: position.coords.longitude, source: 'browser', label: 'GPS' });
+        setFallbackNotice(false);
+      },
+      () => setFallbackNotice(true),
+      { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 }
+    );
   }
 
   function goToPreviousFooterSlide() {
@@ -131,7 +136,7 @@ export function HomePage() {
             <span><strong>100%</strong>{t('home.stats.discreet')}</span>
           </div>
           <div className="hero-actions">
-            <Link to="/city/berlin" className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={18} /> <span>{t('home.openRadar')}</span></Link>
+            <Link to={radarHref} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={18} /> <span>{t('home.openRadar')}</span></Link>
             <Link to="/dashboard" className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md"><PlusCircle size={18} /> <span>{t('home.create')}</span></Link>
           </div>
         </div>
@@ -143,7 +148,7 @@ export function HomePage() {
                 {image?.public_url ? <img src={image.public_url} alt="" /> : <div className="image-placeholder">{profile.display_name.slice(0, 1)}</div>}
                 <div>
                   <span>{profile.display_name}</span>
-                  <strong>{profile.available_now ? t('home.preview.availableNow') : profile.city || 'Berlin'}</strong>
+                  <strong>{profile.available_now ? t('home.preview.availableNow') : profile.work_city || profile.city}</strong>
                 </div>
               </div>
             );
@@ -157,13 +162,14 @@ export function HomePage() {
         <EmptyState title={t('home.noProfilesTitle')} message={t('home.noProfilesText')} />
       )}
 
-      {!loading && !error && (profiles.length > 0 || sponsoredProfiles.length > 0) && <>
+      {!loading && !error && <>
       {sponsoredProfiles.length > 0 ? (
         <ProfileCarouselSection
           eyebrow={t('home.sponsoredEyebrow')}
           title={t('home.sponsoredTitle')}
           profiles={sponsoredProfiles}
           actionLabel={t('home.openRadar')}
+          actionHref={radarHref}
         />
       ) : <EmptyState title={t('home.sponsoredTitle')} message={t('search.noProfilesForCity')} />}
 
@@ -173,7 +179,7 @@ export function HomePage() {
             <p className="eyebrow">{t('home.marketplaceEyebrow')}</p>
             <h2>{t('home.marketplaceTitle')}</h2>
           </div>
-          <Link to="/city/berlin" className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={17} /> <span>{t('home.openRadar')}</span></Link>
+          <Link to={radarHref} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={17} /> <span>{t('home.openRadar')}</span></Link>
         </div>
         <div className="avatar-carousel">
           {topProfiles.slice(0, 10).map((profile) => {
@@ -196,16 +202,25 @@ export function HomePage() {
       </section>}
 
       {/* Landing category tiles were removed; category routing remains in city search via activePublicCategoryOptions.map. */}
-      <div className="landing-section live-radar-section">
+      <div className="landing-section live-radar-section" id="live-radar">
         <RadarPanel
-          profiles={radarProfiles}
+          profiles={profiles}
           radius={radius}
           status={radarStatus}
-          city="berlin"
+          city={radarCity}
+          radarHref={radarHref}
           onRadiusChange={setRadius}
           onStatusChange={setRadarStatus}
           searcherLocation={searcherLocation}
           onUseLocation={useLocation}
+          onSetManualLocation={(location) => {
+            setSearcherLocation(location);
+            setFallbackNotice(false);
+          }}
+          onClearManualLocation={() => {
+            setSearcherLocation(null);
+            setFallbackNotice(false);
+          }}
           fallbackNotice={fallbackNotice}
           compact
           mapApiKey={googleMapsApiKey}
@@ -213,14 +228,17 @@ export function HomePage() {
         />
       </div>
 
-      <ProfileCarouselSection
-        eyebrow={t('home.berlinPreview')}
-        title={t('home.available')}
-        profiles={topProfiles.length ? topProfiles : sponsoredProfiles}
-        className="berlin-profiles-section"
-        actionLabel={t('home.viewAllBerlin')}
-        actionVariant="text"
-      />
+      {nearbyProfileCards.length > 0 ? (
+        <ProfileCarouselSection
+          eyebrow={t('home.radarPreview')}
+          title={t('home.available')}
+          profiles={nearbyProfileCards}
+          className="radar-profiles-section"
+          actionLabel={t('home.viewAllWithin150')}
+          actionHref={radarHref}
+          actionVariant="text"
+        />
+      ) : <EmptyState title={t('home.available')} message={searcherLocation ? t('home.noProfilesWithin150') : t('radar.locationRequired')} />}
       </>}
 
       <section
@@ -268,6 +286,7 @@ function ProfileCarouselSection({
   profiles,
   className = '',
   actionLabel,
+  actionHref = '#live-radar',
   actionVariant = 'button'
 }: {
   eyebrow: string;
@@ -275,6 +294,7 @@ function ProfileCarouselSection({
   profiles: Profile[];
   className?: string;
   actionLabel?: string;
+  actionHref?: string;
   actionVariant?: 'button' | 'text';
 }) {
   const [isPaused, setPaused] = useState(false);
@@ -355,7 +375,7 @@ function ProfileCarouselSection({
 
         <div className="profile-carousel-actions">
           {actionLabel ? (
-            <Link to="/city/berlin" className={actionVariant === 'text' ? 'text-link' : 'button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md'}>
+            <Link to={actionHref} className={actionVariant === 'text' ? 'text-link' : 'button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md'}>
               {actionVariant === 'button' ? <RadioTower size={17} /> : null}
               <span>{actionLabel}</span>
             </Link>

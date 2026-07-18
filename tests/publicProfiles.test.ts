@@ -13,6 +13,7 @@ import {
 } from '../Back/src/adminClients.ts';
 import { mapApiProfileToPublicProfile } from '../Front/src/lib/publicProfiles.ts';
 import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, isProfileInRadarRange, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, safeDistanceKm } from '../Front/src/lib/geo.ts';
+import { matchesRadarStatus } from '../Front/src/lib/homeRadar.ts';
 import { getSafeNextPath } from '../Front/src/lib/authRedirect.ts';
 import { normalizeOperatorStatus, normalizeProfileCategory, normalizeProfileOpeningHours, validateProfileInput } from '../Back/src/validation.ts';
 import { canLinkExistingImportedUser, extractImportPairs, extractPublicPhone, isEscortClubSeoBoilerplate, mapImportedServiceValues, normalizeImportedCity, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../Back/src/hermesImport.ts';
@@ -1077,7 +1078,7 @@ test('radar resolves Swiebodzin safely and respects 100/150 km radius boundaries
   assert.ok(distance !== null && distance > 100 && distance < 150);
   assert.equal(isProfileInRadarRange(profile, buckow, 100_000).inRange, false);
   assert.equal(isProfileInRadarRange(profile, buckow, 150_000).inRange, true);
-  assert.deepEqual(resolveManualSearcherLocation('Świebodzin'), { lat: 52.2475, lng: 15.5336, label: 'Swiebodzin', source: 'manual' });
+  assert.deepEqual(resolveManualSearcherLocation('Świebodzin'), { lat: 52.2475, lng: 15.5336, label: 'Swiebodzin', source: 'manual', city: 'Swiebodzin' });
 });
 
 test('radar location resolver falls back from bad coords to Berlin postal and area data', () => {
@@ -1123,7 +1124,8 @@ test('city page keeps listing profiles as radar input and does not pre-empty the
 
   assert.match(cityPageSource, /profiles=\{sortedProfiles\}/);
   assert.match(cityPageSource, /radarInputProfiles: sortedProfiles\.length/);
-  assert.match(radarPanelSource, /source === 'manual_saved'/);
+  assert.match(radarPanelSource, /const effectiveLocation = searcherLocation/);
+  assert.doesNotMatch(radarPanelSource, /localManualLocation/);
   assert.match(radarPanelSource, /type="range"/);
   assert.match(radarPanelSource, /min=\{MIN_RADAR_RADIUS_METERS\}/);
   assert.match(radarPanelSource, /max=\{MAX_RADAR_RADIUS_METERS\}/);
@@ -1388,7 +1390,7 @@ test('city radar status supports favorites filter and login next flow', async ()
   const deLocale = await readFile(new URL('../Front/src/locales/de.json', import.meta.url), 'utf8');
 
   assert.match(radarPanelSource, /\['favorites', 'favorites', 'favorites\.favoritesFilter'\]/);
-  assert.match(radarPanelSource, /if \(status === 'favorites'\) return true/);
+  assert.equal(matchesRadarStatus({ operator_status: 'OFFLINE' } as any, 'favorites'), true);
   assert.match(cityPageSource, /setFavoriteProfileIds\(new Set\(favoritesData\.favorites\.map\(\(favorite\) => favorite\.profile_id\)\)\)/);
   assert.match(cityPageSource, /draftFilters\.availability_status === 'favorites'/);
   assert.match(cityPageSource, /filteredProfiles\.filter\(\(profile\) => favoriteProfileIds\.has\(profile\.id\)\)/);

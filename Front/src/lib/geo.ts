@@ -6,6 +6,7 @@ export type GeoPoint = {
   lng: number;
   source: 'browser' | 'manual' | 'manual_saved' | 'city' | 'city_fallback';
   label?: string;
+  city?: string;
 };
 
 export type ProfileRadarLocation = {
@@ -297,7 +298,9 @@ export function safeDistanceKm(origin: { lat: unknown; lng: unknown }, target: {
 }
 
 export function getCityCenter(city: string) {
-  return cityCenters[normalizeLocationQuery(city)] || cityCenters.berlin;
+  const normalizedCity = normalizeLocationQuery(city);
+  const center = cityCenters[normalizedCity] || cityCenters.berlin;
+  return { ...center, city: getCityLabel(cityCenters[normalizedCity] ? normalizedCity : 'berlin') };
 }
 
 export function getProfileCoordinates(profile: Profile) {
@@ -343,7 +346,7 @@ export function getSearcherLocationWithFallback(city: string): Promise<GeoPoint>
 
 export function resolveManualSearcherLocation(input: string): GeoPoint | null {
   const location = resolveKnownLocation(input);
-  return location ? { ...location, source: 'manual' } : null;
+  return location ? { ...location, source: 'manual', city: resolveCityFromLocationText(input, location.label) } : null;
 }
 
 export function readSavedSearchLocation(): GeoPoint | null {
@@ -509,4 +512,12 @@ function normalizeLocationQuery(value: string) {
 
 function getCityLabel(city: string) {
   return city.slice(0, 1).toUpperCase() + city.slice(1);
+}
+
+function resolveCityFromLocationText(...values: string[]) {
+  const normalizedValues = values.map(normalizeLocationQuery).filter(Boolean);
+  const matchedCity = Object.keys(cityCenters)
+    .sort((left, right) => right.length - left.length)
+    .find((city) => normalizedValues.some((value) => value === city || value.includes(` ${city} `) || value.startsWith(`${city} `) || value.endsWith(` ${city}`)));
+  return matchedCity ? getCityLabel(matchedCity) : undefined;
 }
