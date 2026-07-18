@@ -6,7 +6,7 @@ import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GeoPoint } from '../lib/geo';
-import { DEFAULT_RADAR_RADIUS_METERS, readSavedSearchLocation } from '../lib/geo';
+import { readSavedRadarRadius, readSavedSearchLocation, saveRadarRadius } from '../lib/geo';
 import type { Profile } from '../types';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import { EmptyState, ErrorState, LoadingState } from '../components/LoadingState';
@@ -19,7 +19,7 @@ export function HomePage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [radius, setRadius] = useState(DEFAULT_RADAR_RADIUS_METERS);
+  const [radius, setRadius] = useState(readSavedRadarRadius);
   const [radarStatus, setRadarStatus] = useState('all');
   const [searcherLocation, setSearcherLocation] = useState<GeoPoint | null>(() => readSavedSearchLocation());
   const [fallbackNotice, setFallbackNotice] = useState(false);
@@ -209,7 +209,10 @@ export function HomePage() {
           status={radarStatus}
           city={radarCity}
           radarHref={radarHref}
-          onRadiusChange={setRadius}
+          onRadiusChange={(value) => {
+            saveRadarRadius(value);
+            setRadius(value);
+          }}
           onStatusChange={setRadarStatus}
           searcherLocation={searcherLocation}
           onUseLocation={useLocation}

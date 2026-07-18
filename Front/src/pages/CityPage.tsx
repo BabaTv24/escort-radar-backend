@@ -9,7 +9,7 @@ import { activePublicCategoryOptions, categoryOptions, defaultServiceMenuNames, 
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
-import { DEFAULT_RADAR_RADIUS_METERS, MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatRadiusMeters, getCityCenter, getSearcherLocationWithFallback, readSavedSearchLocation, resolveProfileRadarLocation, saveSearchLocationToStorage } from '../lib/geo';
+import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatRadiusMeters, getCityCenter, getSearcherLocationWithFallback, readSavedRadarRadius, readSavedSearchLocation, resolveProfileRadarLocation, saveRadarRadius, saveSearchLocationToStorage } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import type { PublicProfilesMetrics } from '../lib/publicProfiles';
 import { getOperatorStatus, selectRadarProfiles } from '../lib/homeRadar';
@@ -37,7 +37,7 @@ function defaultFilters(city: string): SearchFilters {
     city,
     category: '',
     availability_status: 'all',
-    radius: DEFAULT_RADAR_RADIUS_METERS,
+    radius: readSavedRadarRadius(),
     price_max: '',
     visit_types: [],
     service_tags: [],
@@ -259,6 +259,7 @@ export function CityPage() {
   }
 
   function updateRadarFilter<K extends 'radius' | 'availability_status'>(key: K, value: SearchFilters[K]) {
+    if (key === 'radius') saveRadarRadius(Number(value));
     setDraftFilters((current) => ({ ...current, [key]: value }));
     setAppliedFilters((current) => ({ ...current, [key]: value }));
   }

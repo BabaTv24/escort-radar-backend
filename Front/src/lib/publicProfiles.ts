@@ -30,7 +30,7 @@ type PublicProfilesRequestOptions = {
   onMetrics?: (metrics: PublicProfilesMetrics | null) => void;
 };
 
-const publicProfilesInFlight = new Map<string, { promise: Promise<Profile[]>; controller: AbortController }>();
+const publicProfilesInFlight = new Map<string, { promise: Promise<Profile[]> }>();
 const publicProfilesCache = new Map<string, { expiresAt: number; profiles: Profile[] }>();
 const publicProfilesMetrics = new Map<string, PublicProfilesMetrics>();
 
@@ -48,17 +48,14 @@ export async function getPublicProfiles(params: URLSearchParams | string = '', o
   }
 
   const existing = publicProfilesInFlight.get(url);
-  if (existing && !existing.controller.signal.aborted) {
+  if (existing) {
     return abortable(existing.promise, options.signal).then((profiles) => {
       options.onMetrics?.(publicProfilesMetrics.get(url) || null);
       return profiles;
     });
   }
-  if (existing) publicProfilesInFlight.delete(url);
 
   const controller = new AbortController();
-  const abort = () => controller.abort();
-  options.signal?.addEventListener('abort', abort, { once: true });
   const startedAt = performance.now();
   const pending = fetchPublicProfiles(url, controller.signal)
     .then((profiles) => {
@@ -69,10 +66,9 @@ export async function getPublicProfiles(params: URLSearchParams | string = '', o
     })
     .finally(() => {
       if (publicProfilesInFlight.get(url)?.promise === pending) publicProfilesInFlight.delete(url);
-      options.signal?.removeEventListener('abort', abort);
     });
-  publicProfilesInFlight.set(url, { promise: pending, controller });
-  return pending;
+  publicProfilesInFlight.set(url, { promise: pending });
+  return abortable(pending, options.signal);
 }
 
 async function fetchPublicProfiles(url: string, signal: AbortSignal): Promise<Profile[]> {
@@ -93,6 +89,10 @@ async function fetchPublicProfiles(url: string, signal: AbortSignal): Promise<Pr
   }
 
   const payload = await response.json() as { profiles?: unknown[]; radar_meta?: PublicProfilesMetrics };
+  const radarRequest = new URL(url).searchParams.get('radar') === '1';
+  if (radarRequest && !payload.radar_meta) {
+    throw new Error('Radar API response is missing radar_meta; the backend did not execute global radar mode.');
+  }
   if (payload.radar_meta) publicProfilesMetrics.set(url, payload.radar_meta);
   const records = Array.isArray(payload.profiles) ? payload.profiles : [];
   const profiles = records

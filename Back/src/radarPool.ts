@@ -12,6 +12,10 @@ export type RadarPoolMeta = {
   warning?: string;
 };
 
+export function isRadarRequest(value: unknown) {
+  return value === '1';
+}
+
 export function prepareRadarCandidatePool(records: Record<string, any>[], pagesFetched = 1, truncated = false) {
   const uniqueRecords = dedupeRadarCandidates(records);
   const eligibleRecords = uniqueRecords.filter((profile) => isPublicProfile(profile) && isActivePublicCategory(profile.category));

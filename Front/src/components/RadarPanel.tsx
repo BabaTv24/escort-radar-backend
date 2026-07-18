@@ -6,8 +6,9 @@ import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
 import type { ProfileRadarLocation } from '../lib/geo';
 import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, saveSearchLocationToStorage } from '../lib/geo';
-import { getOperatorStatus, selectRadarProfiles } from '../lib/homeRadar';
+import { getOperatorStatus, matchesRadarStatus, selectRadarProfiles } from '../lib/homeRadar';
 import { getPublicLocationLabel } from '../lib/locationLabels';
+import { getRadarPoint, isVisuallyCompressed } from '../lib/radarLayout';
 import './RadarPanel.css';
 
 type RadarPanelProps = {
@@ -60,10 +61,20 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
   const showManualForm = !hasRadarLocation || isEditingLocation;
   const visibleRadarStatuses = showFavoritesFilter ? radarStatuses : radarStatuses.filter(([value]) => value !== 'favorites');
   const radarLegendStatuses = showFavoritesFilter ? radarStatuses : [allStatus, ...visibleRadarStatuses];
-  const radarProfiles = hasRadarLocation
-    ? selectRadarProfiles(profiles, effectiveLocation, radius, status)
-      .map(({ profile, distanceKm, location }) => getRadarProfile(profile, effectiveLocation!, radius, distanceKm, location))
-    : [];
+  const radarCandidates = hasRadarLocation ? selectRadarProfiles(profiles, effectiveLocation, radius, 'all') : [];
+  const compressedCandidates = radarCandidates.filter(({ distanceKm, location }) => isVisuallyCompressed(radius, distanceKm, location.approximate));
+  const compressedIndexes = new Map(compressedCandidates.map(({ profile }, index) => [profile.id, index]));
+  const radarProfiles = radarCandidates
+    .map(({ profile, distanceKm, location }) => getRadarProfile(
+      profile,
+      effectiveLocation!,
+      radius,
+      distanceKm,
+      location,
+      compressedIndexes.get(profile.id),
+      compressedCandidates.length
+    ))
+    .filter(({ profile }) => matchesRadarStatus(profile, status));
   const profilesWithoutLocation = profilesWithoutLocationCount ?? profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length;
   const locatedProfiles = profiles.length - profilesWithoutLocation;
 
@@ -388,7 +399,7 @@ function getRadarFilterButtonClass(value: string) {
   return 'er-glass-btn--purple';
 }
 
-function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number, distanceKm: number, profileLocation: ProfileRadarLocation) {
+function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number, distanceKm: number, profileLocation: ProfileRadarLocation, spreadIndex?: number, spreadCount = 0) {
   const bearingDeg = getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLocation.lat, profileLocation.lng);
   const operatorStatus = getOperatorStatus(profile);
   const statusClass = statusClassByOperator[operatorStatus] || 'offline';
@@ -400,32 +411,8 @@ function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: n
     operatorStatus,
     statusClass,
     radarLocation: profileLocation,
-    point: getRadarPoint(radius, distanceKm, bearingDeg, profile.id, profileLocation.approximate)
+    point: getRadarPoint(radius, distanceKm, bearingDeg, profile.id, profileLocation.approximate, spreadIndex, spreadCount)
   };
-}
-
-function getRadarPoint(radius: number, distanceKm: number, bearingDeg: number, profileId: string, approximate: boolean) {
-  const markerPaddingPercent = 11;
-  const maxPixelRadius = 50 - markerPaddingPercent;
-  const radialRatio = Math.min(Math.max(distanceKm * 1000 / Math.max(radius, 1), 0), 1);
-  const deterministicAngle = stableProfileHash(profileId) % 360;
-  const minVisibleRatio = approximate ? 0.06 + (stableProfileHash(`${profileId}:radius`) % 7) / 100 : distanceKm > 0 ? 0.08 : 0;
-  const visualRatio = Math.max(radialRatio, minVisibleRatio);
-  const bearingRad = (approximate && radialRatio < minVisibleRatio ? deterministicAngle : bearingDeg) * (Math.PI / 180);
-
-  return {
-    left: 50 + Math.sin(bearingRad) * maxPixelRadius * visualRatio,
-    top: 50 - Math.cos(bearingRad) * maxPixelRadius * visualRatio
-  };
-}
-
-function stableProfileHash(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
 }
 
 function getTooltipClass(point: { left: number; top: number }) {

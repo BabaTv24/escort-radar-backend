@@ -94,7 +94,7 @@ test('global radar candidates are paged and bypass city/country filters before d
   assert.match(city, /new URLSearchParams\(\{ radar: '1' \}\)/);
   assert.match(city, /selectRadarProfiles\(profiles, searcherLocation/);
   assert.match(city, /profilesWithoutLocationCount=/);
-  const radarPipeline = panel.slice(panel.indexOf('const radarProfiles ='), panel.indexOf('if (import.meta.env.DEV)'));
+  const radarPipeline = panel.slice(panel.indexOf('const radarCandidates ='), panel.indexOf('if (import.meta.env.DEV)'));
   assert.doesNotMatch(radarPipeline, /\.slice\(/);
   assert.match(radarPipeline, /selectRadarProfiles/);
   assert.equal(matchesRadarStatus({ operator_status: 'OFFLINE' } as any, 'all'), true);

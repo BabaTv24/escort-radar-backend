@@ -10,7 +10,7 @@ import { getCityLabel as getGlobalCityLabel, getCountryAliases, normalizeCity as
 import { isActivePublicCategory } from '../categories.js';
 import { normalizeEffectiveLocationVisibility, resolveEffectivePublicLocation } from '../publicLocation.js';
 import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
-import { prepareRadarCandidatePool } from '../radarPool.js';
+import { isRadarRequest, prepareRadarCandidatePool } from '../radarPool.js';
 
 export const profilesRouter = Router();
 
@@ -19,8 +19,8 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
   res.set('Cache-Control', 'no-store, max-age=0');
   const city = normalizeGlobalCity(req.query.city);
   const country = normalizeCountry(req.query.country);
-  const radarMode = parseBoolean(req.query.radar) === true;
-  const diagnosticsRequested = radarMode && parseBoolean(req.query.diagnostics) === true;
+  const radarMode = isRadarRequest(req.query.radar);
+  const diagnosticsRequested = radarMode && req.query.diagnostics === '1';
   const radarSelect = [
     'id', 'display_name', 'slug', 'city', 'work_city', 'travel_city', 'area', 'work_area', 'work_country',
     'category', 'status', 'is_published', 'moderation_status', 'shadowbanned', 'operator_status',

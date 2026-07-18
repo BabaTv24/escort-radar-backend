@@ -18,6 +18,7 @@ export type ProfileRadarLocation = {
 };
 
 export const clientSearchLocationStorageKey = 'escortRadar.clientSearchLocation';
+export const radarRadiusStorageKey = 'escortRadar.radarRadiusMeters';
 export const MIN_RADAR_RADIUS_METERS = 10;
 export const MAX_RADAR_RADIUS_METERS = 150_000;
 export const DEFAULT_RADAR_RADIUS_METERS = 25_000;
@@ -372,6 +373,20 @@ export function saveSearchLocationToStorage(location: GeoPoint) {
 export function clearSavedSearchLocation() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(clientSearchLocationStorageKey);
+}
+
+export function readSavedRadarRadius() {
+  if (typeof window === 'undefined') return DEFAULT_RADAR_RADIUS_METERS;
+  const radius = Number(window.localStorage.getItem(radarRadiusStorageKey));
+  return Number.isFinite(radius) && radius >= MIN_RADAR_RADIUS_METERS && radius <= MAX_RADAR_RADIUS_METERS
+    ? radius
+    : DEFAULT_RADAR_RADIUS_METERS;
+}
+
+export function saveRadarRadius(radius: number) {
+  if (typeof window === 'undefined' || !Number.isFinite(radius)) return;
+  const safeRadius = Math.min(Math.max(radius, MIN_RADAR_RADIUS_METERS), MAX_RADAR_RADIUS_METERS);
+  window.localStorage.setItem(radarRadiusStorageKey, String(safeRadius));
 }
 
 export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocation | null {
