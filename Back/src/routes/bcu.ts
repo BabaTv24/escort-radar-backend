@@ -67,10 +67,16 @@ bcuRouter.post('/products/:productCode/activate', asyncHandler(async (req, res) 
 
 function serializeWallet(wallet: Awaited<ReturnType<typeof getBcuWalletForUser>>) {
   if (!wallet) return null;
+  const lockedBalanceBcu = wallet.locked_balance_bcu || '0';
+  const availableBalanceBcu = (BigInt(wallet.balance_bcu) - BigInt(lockedBalanceBcu)).toString();
   return {
     public_wallet_id: wallet.public_wallet_id,
     balance_bcu: wallet.balance_bcu,
     balance_bc: bcuToBc(wallet.balance_bcu),
+    locked_balance_bcu: lockedBalanceBcu,
+    locked_balance_bc: bcuToBc(lockedBalanceBcu),
+    available_balance_bcu: availableBalanceBcu,
+    available_balance_bc: bcuToBc(availableBalanceBcu),
     lifetime_credit_bcu: wallet.lifetime_credit_bcu,
     lifetime_credit_bc: bcuToBc(wallet.lifetime_credit_bcu),
     lifetime_debit_bcu: wallet.lifetime_debit_bcu,

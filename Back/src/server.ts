@@ -18,6 +18,7 @@ import { stripeWebhookRouter } from './routes/stripeWebhook.js';
 import { clientPreferencesRouter } from './routes/clientPreferences.js';
 import { clientPersonalProfileRouter } from './routes/clientPersonalProfile.js';
 import { bcuRouter } from './routes/bcu.js';
+import { sponsoredProfilesRouter } from './routes/sponsoredProfiles.js';
 import { adminReferralsRouter, referralsRouter } from './routes/referrals.js';
 
 const serverBuildTime = new Date().toISOString();
@@ -78,6 +79,7 @@ app.use('/api/client-intent', clientIntentRouter);
 app.use('/api/client/preferences', clientPreferencesRouter);
 app.use('/api/client/personal-profile', clientPersonalProfileRouter);
 app.use('/api/bcu', bcuRouter);
+app.use('/api/sponsored', sponsoredProfilesRouter);
 app.use('/api/referrals', referralsRouter);
 app.use('/api/admin/referrals', adminReferralsRouter);
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
+import { createHash, randomBytes } from 'node:crypto';
 import { requireAdmin, verifyAdminJwt } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import {
@@ -679,6 +680,79 @@ adminRouter.get('/profiles/visibility-audit', asyncHandler(async (req, res) => {
       visibility: explainProfileVisibility(profile, context)
     }))
   });
+}));
+
+adminRouter.get('/sponsored-profiles', asyncHandler(async (_req, res) => {
+  if (!config.bcuWalletEnabled) {
+    return res.json({ sponsored_profiles: [], stats: { total: 0, awaiting_activation: 0, active: 0, messages: 0, clients: 0, booking_attempts: 0 } });
+  }
+  const { data: profiles, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, user_id, owner_email, display_name, city, is_published, status, moderation_status, sponsorship_type, owner_activation_status, ai_agent_mode, owner_activated_at, created_at')
+    .eq('sponsorship_type', 'admin_sponsored')
+    .order('created_at', { ascending: false })
+    .limit(1000);
+  if (error) return res.status(500).json({ error: error.message });
+  const profileIds = (profiles || []).map((profile) => profile.id);
+  if (!profileIds.length) return res.json({ sponsored_profiles: [], stats: { total: 0, awaiting_activation: 0, active: 0, messages: 0, clients: 0, booking_attempts: 0 } });
+
+  const [{ data: sessions }, { data: bookings }, { data: interactions }] = await Promise.all([
+    supabaseAdmin.from('profile_chat_sessions').select('id, profile_id, client_user_id, owner_read_at').in('profile_id', profileIds),
+    supabaseAdmin.from('booking_requests').select('id, profile_id, status').in('profile_id', profileIds),
+    supabaseAdmin.from('bcu_profile_interactions').select('profile_id, interaction_type, amount_bcu').in('profile_id', profileIds)
+  ]);
+  const sessionIds = (sessions || []).map((session) => session.id);
+  const { data: messages } = sessionIds.length
+    ? await supabaseAdmin.from('profile_chat_messages').select('session_id, sender_type').in('session_id', sessionIds)
+    : { data: [] as any[] };
+  const rows = (profiles || []).map((profile) => {
+    const profileSessions = (sessions || []).filter((session) => session.profile_id === profile.id);
+    const ids = new Set(profileSessions.map((session) => session.id));
+    const profileMessages = (messages || []).filter((message) => ids.has(message.session_id) && message.sender_type === 'client');
+    const profileBookings = (bookings || []).filter((booking) => booking.profile_id === profile.id);
+    const profileInteractions = (interactions || []).filter((interaction) => interaction.profile_id === profile.id);
+    return {
+      ...profile,
+      message_count: profileMessages.length,
+      client_count: new Set(profileSessions.map((session) => session.client_user_id)).size,
+      unread_client_count: new Set(profileSessions.filter((session) => !session.owner_read_at).map((session) => session.client_user_id)).size,
+      booking_attempt_count: profileBookings.length,
+      awaiting_booking_count: profileBookings.filter((booking) => booking.status === 'awaiting_owner_activation').length,
+      earned_bcu: profileInteractions.reduce((sum, interaction) => sum + Number(interaction.amount_bcu || 0), 0)
+    };
+  });
+  res.json({
+    sponsored_profiles: rows,
+    stats: {
+      total: rows.length,
+      awaiting_activation: rows.filter((profile) => profile.owner_activation_status === 'awaiting_owner_activation').length,
+      active: rows.filter((profile) => profile.owner_activation_status === 'active').length,
+      messages: rows.reduce((sum, profile) => sum + profile.message_count, 0),
+      clients: new Set((sessions || []).map((session) => session.client_user_id)).size,
+      booking_attempts: rows.reduce((sum, profile) => sum + profile.booking_attempt_count, 0)
+    }
+  });
+}));
+
+adminRouter.post('/sponsored-profiles/:profileId/invite', asyncHandler(async (req, res) => {
+  if (!config.bcuWalletEnabled) return res.status(404).json({ error: 'Sponsored profile claims are not available' });
+  const expiresInHours = Math.min(168, Math.max(1, Number(req.body.expires_in_hours || 72)));
+  const claimToken = randomBytes(32).toString('base64url');
+  const tokenHash = createHash('sha256').update(claimToken).digest('hex');
+  const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString();
+  const { data: invite, error } = await supabaseAdmin.rpc('replace_sponsored_profile_claim_invite', {
+    p_profile_id: req.params.profileId,
+    p_token_hash: tokenHash,
+    p_expires_at: expiresAt,
+    p_created_by: req.user?.email || req.user?.id || 'admin'
+  });
+  if (error) return res.status(error.message.includes('NOT_FOUND') ? 404 : 400).json({ error: error.message });
+  const claimUrl = `${config.frontendUrl.replace(/\/$/, '')}/dashboard?profile_claim=${encodeURIComponent(claimToken)}`;
+  await logAdminAction(req.user?.email, 'sponsored_profile_invite_generated', 'profile', req.params.profileId, {
+    invite_id: invite.id,
+    expires_at: invite.expires_at
+  });
+  res.status(201).json({ claim_url: claimUrl, expires_at: invite.expires_at, sms_text: `Przejmij swój profil Escort Radar: ${claimUrl}` });
 }));
 
 adminRouter.get('/moderation', asyncHandler(async (_req, res) => {
@@ -1669,6 +1743,11 @@ adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
     verified_at: profileData.data.verified ? new Date().toISOString() : null,
     location_updated_at: new Date().toISOString()
   };
+  // Creation provenance is immutable here. Editing an existing profile must
+  // never turn it into an admin-sponsored profile or make it eligible for backfill.
+  for (const key of ['is_sponsored', 'acquisition_source', 'provider', 'sponsorship_type', 'owner_activation_status', 'ai_agent_mode']) {
+    delete (patch as Record<string, unknown>)[key];
+  }
   if (!Object.prototype.hasOwnProperty.call(req.body, 'services')) {
     delete (patch as Record<string, unknown>).services;
     delete (patch as Record<string, unknown>).service_menu;

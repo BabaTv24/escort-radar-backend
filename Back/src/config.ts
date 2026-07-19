@@ -60,6 +60,8 @@ type Config = {
   bcuWalletEnabled: boolean;
   hermesAnalyzeProfileUrl: string;
   hermesWebhookSecret: string;
+  openAiApiKey: string;
+  openAiProfileAgentModel: string;
 };
 
 function envNumber(key: string, fallback: number) {
@@ -141,5 +143,7 @@ export const config: Config = {
   manualCryptoEnabled: envBoolean('MANUAL_CRYPTO_ENABLED', true),
   bcuWalletEnabled: envBoolean('BCU_WALLET_ENABLED', false),
   hermesAnalyzeProfileUrl: process.env.HERMES_ANALYZE_PROFILE_URL || '',
-  hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET || ''
+  hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET || '',
+  openAiApiKey: process.env.OPENAI_API_KEY || '',
+  openAiProfileAgentModel: process.env.OPENAI_PROFILE_AGENT_MODEL || 'gpt-5.6-luna'
 };

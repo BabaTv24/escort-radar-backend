@@ -15,6 +15,7 @@ export type BcuWallet = {
   user_id: string;
   public_wallet_id: string;
   balance_bcu: string;
+  locked_balance_bcu: string;
   lifetime_credit_bcu: string;
   lifetime_debit_bcu: string;
   frozen: boolean;

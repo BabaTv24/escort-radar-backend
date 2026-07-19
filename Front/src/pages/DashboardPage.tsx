@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { waitForSupabaseSession } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor } from '../components/AvailabilityHoursEditor';
-import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, Tag } from '../types';
+import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, SponsoredProfileDashboard, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
@@ -131,6 +131,7 @@ const emptyProfile: Partial<Profile> = {
 };
 
 const authIntentStorageKey = 'escortRadar.authIntent';
+const sponsoredClaimStorageKey = 'escortRadar.sponsoredProfileClaim';
 const loginJustCompletedStorageKey = 'escortRadar:loginJustCompleted';
 const recentLoginGraceMs = 30_000;
 const DEFAULT_PROFILE_PHOTO_LIMIT = 12;
@@ -196,6 +197,7 @@ export function DashboardPage() {
   const [clientNotifications, setClientNotifications] = useState<RadarNotification[]>([]);
   const [nearbyClients, setNearbyClients] = useState<ClientIntent[]>([]);
   const [advertiserNotifications, setAdvertiserNotifications] = useState<RadarNotification[]>([]);
+  const [sponsoredDashboard, setSponsoredDashboard] = useState<SponsoredProfileDashboard | null>(null);
   const [activationBusy, setActivationBusy] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const sessionActivatedRef = useRef(false);
@@ -235,12 +237,12 @@ export function DashboardPage() {
         return;
       }
       if (recentLogin) clearLoginJustCompletedMarker();
-      if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session', { hasSession: false, recentLogin: Boolean(recentLogin), redirect: `/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}` });
+      if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session', { hasSession: false, recentLogin: Boolean(recentLogin), redirect: `/login?next=${encodeURIComponent(`/dashboard${location.search || ''}${location.hash || ''}`)}` });
       setToken('');
       setUserEmail('');
       setAuthAccountType('unknown');
       setAuthResolved(true);
-      navigate(`/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}`, { replace: true });
+      navigate(`/login?next=${encodeURIComponent(`/dashboard${location.search || ''}${location.hash || ''}`)}`, { replace: true });
     }).catch((error) => {
       if (!mounted) return;
       if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session-error', { message: error instanceof Error ? error.message : String(error) });
@@ -258,7 +260,7 @@ export function DashboardPage() {
         setUserEmail('');
         setAuthAccountType('unknown');
         setAuthResolved(true);
-        navigate(`/login?next=${encodeURIComponent(`/dashboard${location.hash || ''}`)}`, { replace: true });
+        navigate(`/login?next=${encodeURIComponent(`/dashboard${location.search || ''}${location.hash || ''}`)}`, { replace: true });
       });
     });
 
@@ -308,6 +310,29 @@ export function DashboardPage() {
       return;
     }
 
+    let activeSession = session;
+    let claimNotice = '';
+    const queryClaimToken = searchParams.get('profile_claim') || '';
+    if (queryClaimToken) sessionStorage.setItem(sponsoredClaimStorageKey, queryClaimToken);
+    const claimToken = queryClaimToken || sessionStorage.getItem(sponsoredClaimStorageKey) || '';
+    if (claimToken) {
+      try {
+        await api.claimSponsoredProfile(activeSession.access_token, claimToken);
+        sessionStorage.removeItem(sponsoredClaimStorageKey);
+        const cleanedParams = new URLSearchParams(searchParams);
+        cleanedParams.delete('profile_claim');
+        setSearchParams(cleanedParams, { replace: true });
+        const refreshed = await supabase.auth.refreshSession();
+        if (refreshed.data.session) {
+          activeSession = refreshed.data.session;
+          setToken(activeSession.access_token);
+        }
+        claimNotice = 'Profil sponsorowany został bezpiecznie przejęty. Historia rozmów, bookingów i saldo BCU są dostępne.';
+      } catch (error) {
+        claimNotice = error instanceof Error ? error.message : 'Nie udało się przejąć profilu sponsorowanego.';
+      }
+    }
+
     const storedIntent = localStorage.getItem(authIntentStorageKey);
     let oauthReferralCode = localStorage.getItem('escortRadar.referralCode');
     if (storedIntent) {
@@ -318,8 +343,8 @@ export function DashboardPage() {
     }).catch(() => undefined);
     await syncStoredAuthIntent();
 
-    const role = await resolveBackendAuthAccountType(session.access_token);
-    if (import.meta.env.DEV) console.log('[DashboardAuth] resolved-role', { role, email: session.user.email || null });
+    const role = await resolveBackendAuthAccountType(activeSession.access_token);
+    if (import.meta.env.DEV) console.log('[DashboardAuth] resolved-role', { role, email: activeSession.user.email || null });
     setAuthAccountType(role);
     setAuthResolved(true);
 
@@ -329,7 +354,8 @@ export function DashboardPage() {
     }
 
     if (role === 'client') {
-      await loadClientDashboard(session.access_token);
+      await loadClientDashboard(activeSession.access_token);
+      if (claimNotice) setMessage(claimNotice);
       return;
     }
 
@@ -339,7 +365,8 @@ export function DashboardPage() {
       return;
     }
 
-    await loadDashboard(session.access_token);
+    await loadDashboard(activeSession.access_token);
+    if (claimNotice) setMessage(claimNotice);
   }
 
   async function syncStoredAuthIntent(): Promise<Record<string, string> | null> {
@@ -473,7 +500,8 @@ export function DashboardPage() {
       ]);
       await Promise.all([
         api.bcuWallet(accessToken).then((data) => setBcuWallet(data.wallet)).catch(() => setBcuWallet(null)),
-        api.bcuLedger(accessToken).then((data) => setBcuLedger(data.ledger)).catch(() => setBcuLedger([]))
+        api.bcuLedger(accessToken).then((data) => setBcuLedger(data.ledger)).catch(() => setBcuLedger([])),
+        api.sponsoredProfileMe(accessToken).then(setSponsoredDashboard).catch(() => setSponsoredDashboard(null))
       ]);
 
       if (profileData.profile) {
@@ -892,6 +920,7 @@ export function DashboardPage() {
         onLogout={logout}
         bcuWallet={bcuWallet}
         bcuLedger={bcuLedger}
+        sponsoredDashboard={sponsoredDashboard}
       />
     );
   }
@@ -2136,7 +2165,7 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
   );
 }
 
-function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onActivateSubscription, onLogout, bcuWallet, bcuLedger }: {
+function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onActivateSubscription, onLogout, bcuWallet, bcuLedger, sponsoredDashboard }: {
   profile: Partial<Profile>;
   savedProfile: Profile | null;
   userEmail: string;
@@ -2155,9 +2184,10 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   onLogout: () => void;
   bcuWallet: BcuWallet | null;
   bcuLedger: BcuLedgerEntry[];
+  sponsoredDashboard: SponsoredProfileDashboard | null;
 }) {
   const { t } = useI18n();
-  const [panel, setPanel] = useState<'setup' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text' | 'additional' | 'account' | 'visibility'>(savedProfile ? 'operator' : 'setup');
+  const [panel, setPanel] = useState<'setup' | 'waiting' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text' | 'additional' | 'account' | 'visibility'>(savedProfile?.owner_activation_status === 'awaiting_owner_activation' ? 'waiting' : savedProfile ? 'operator' : 'setup');
   const [serviceSearch, setServiceSearch] = useState('');
   const [geoMessage, setGeoMessage] = useState('');
   const [placeQuery, setPlaceQuery] = useState('');
@@ -2446,6 +2476,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
       </section>
 
       <section className="one-hand-actions" aria-label={t('dashboard.advertiser.primaryActions')}>
+        {sponsoredDashboard?.profiles.length ? <ActionButton active={panel === 'waiting'} icon={<Flame size={22} />} label="Czekają na Ciebie" onClick={() => setPanel('waiting')} /> : null}
         {!savedProfile && <ActionButton active={panel === 'setup'} icon={<UserRound size={22} />} label={t('dashboard.advertiser.setup')} onClick={() => setPanel('setup')} />}
         <ActionButton active={panel === 'photos'} icon={<ImagePlus size={22} />} label={t('dashboard.advertiser.photos')} onClick={() => setPanel('photos')} />
         <ActionButton active={panel === 'location'} icon={<MapPin size={22} />} label={t('dashboard.advertiser.location')} onClick={() => setPanel('location')} />
@@ -2465,6 +2496,25 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           void onSaveDraft(profile, panel === 'services' ? t('dashboard.advertiser.servicesSaved') : t('dashboard.advertiser.profileSaved'));
         }}
       >
+        {panel === 'waiting' && sponsoredDashboard && (
+          <section className="one-hand-card">
+            <div className="one-hand-section-head"><div><p className="eyebrow">Profil sponsorowany</p><h2>Czekają na Ciebie</h2></div></div>
+            <div className="creator-metric-grid">
+              <Metric label="Wiadomości" value={sponsoredDashboard.stats.messages} />
+              <Metric label="Klienci" value={sponsoredDashboard.stats.clients} />
+              <Metric label="Próby bookingu" value={sponsoredDashboard.stats.booking_attempts} />
+            </div>
+            <p className="muted">Nieprzeczytani klienci: {sponsoredDashboard.stats.unread_clients}. Po aktywacji przejmiesz pełną historię, booking i rozmowy.</p>
+            {sponsoredDashboard.profiles.map((item) => <div className="booking-row" key={item.id}>
+              <div><strong>{item.display_name}</strong><p>{item.owner_activation_status} · agent: {item.ai_agent_mode}</p></div>
+              <span>{item.owner_activation_status === 'awaiting_owner_activation' ? 'Wymagany jednorazowy link claim od administratora' : 'Aktywny'}</span>
+            </div>)}
+            {sponsoredDashboard.conversations.slice(0, 10).map((conversation) => <div className="booking-row" key={conversation.id}>
+              <div><strong>{conversation.client_email || 'Klient'}</strong><p>{conversation.messages?.at(-1)?.content || 'Rozmowa rozpoczęta'}</p></div>
+              <span>{conversation.messages?.length || 0}</span>
+            </div>)}
+          </section>
+        )}
         {panel === 'setup' && (
           <section className="one-hand-card">
             <div className="one-hand-section-head">
@@ -2855,6 +2905,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
       </form>
 
       <nav className="one-hand-bottom-nav">
+        {sponsoredDashboard?.profiles.length ? <button type="button" className={panel === 'waiting' ? 'active' : ''} onClick={() => setPanel('waiting')}><Flame size={18} />Czekają</button> : null}
         {!savedProfile && <button type="button" className={panel === 'setup' ? 'active' : ''} onClick={() => setPanel('setup')}><UserRound size={18} />{t('dashboard.advertiser.setup')}</button>}
         <button type="button" className={panel === 'photos' ? 'active' : ''} onClick={() => setPanel('photos')}><ImagePlus size={18} />{t('dashboard.advertiser.photosShort')}</button>
         <button type="button" className={panel === 'location' ? 'active' : ''} onClick={() => setPanel('location')}><MapPin size={18} />{t('dashboard.advertiser.location')}</button>

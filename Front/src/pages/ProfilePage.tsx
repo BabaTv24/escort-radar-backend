@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import type { Profile, ProfileAccess } from '../types';
+import type { Profile, ProfileAccess, SponsoredChatMessage, SponsoredChatSession } from '../types';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { useI18n } from '../i18n';
 import { serviceLabel } from '../data/serviceCatalog';
@@ -53,6 +53,12 @@ export function ProfilePage() {
   const [favoritesWalletSystem, setFavoritesWalletSystem] = useState<'legacy' | 'bcu'>('legacy');
   const [activationBusy, setActivationBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
+  const [clientToken, setClientToken] = useState('');
+  const [chatSession, setChatSession] = useState<SponsoredChatSession | null>(null);
+  const [chatMessages, setChatMessages] = useState<SponsoredChatMessage[]>([]);
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatBusy, setChatBusy] = useState(false);
+  const paidSponsoredInteractionsEnabled = import.meta.env.VITE_BCU_WALLET_ENABLED === 'true';
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -70,6 +76,7 @@ export function ProfilePage() {
           .catch(() => setSimilarProfiles([]));
         const session = await supabase.auth.getSession();
         const token = session.data.session?.access_token;
+        setClientToken(token || '');
         if (token) {
           api.clientPremiumDashboardMe(token).then((dashboard) => setFavoritesWalletSystem(dashboard.wallet_system)).catch(() => setFavoritesWalletSystem('legacy'));
           api.profileAccess(token, id)
@@ -123,16 +130,21 @@ export function ProfilePage() {
 
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (paidSponsoredInteractionsEnabled && !clientToken) return navigate(`/login?next=${encodeURIComponent(`/profile/${profile!.id}`)}`);
+    if (paidSponsoredInteractionsEnabled && !window.confirm('Wysłanie zapytania booking kosztuje 5 BC. Kontynuować?')) return;
     const form = new FormData(event.currentTarget);
-    await api.createBookingRequest({
+    await api.createBookingRequest(clientToken, {
       profile_id: profile!.id,
       requester_email: String(form.get('email') || ''),
       requested_date: String(form.get('date') || ''),
       requested_time: String(form.get('time') || ''),
       duration_minutes: Number(form.get('duration') || 60),
-      message: String(form.get('message') || '')
+      message: String(form.get('message') || ''),
+      idempotency_key: crypto.randomUUID()
     });
-    setBookingMessage(t('profile.bookingSuccess'));
+    setBookingMessage(paidSponsoredInteractionsEnabled && profile!.owner_activation_status === 'awaiting_owner_activation'
+      ? 'Zapytanie zapisano ze statusem „oczekuje na aktywację”. Właściciel przejmie je po aktywacji konta.'
+      : t('profile.bookingSuccess'));
     event.currentTarget.reset();
   }
 
@@ -339,6 +351,23 @@ export function ProfilePage() {
                 </form>
               </section>
 
+              {chatSession && (
+                <section className="market-section sponsored-chat" id="profile-chat">
+                  <div className="market-section-heading">
+                    <p className="eyebrow">Asystent Profilu Escort Radar · 3 BC</p>
+                    <h2>Czat z profilem</h2>
+                  </div>
+                  {profile.owner_activation_status === 'awaiting_owner_activation' && <p className="subscription-notice">Konto nie zostało aktywowane przez właściciela. Odpowiada oznaczony agent AI, wyłącznie na podstawie danych profilu.</p>}
+                  <div className="sponsored-chat-history">
+                    {chatMessages.map((item) => <p key={item.id} className={`sponsored-chat-message is-${item.sender_type}`}><strong>{item.sender_type === 'client' ? 'Ty' : item.sender_type === 'owner' ? 'Właściciel' : 'Asystent Profilu Escort Radar'}</strong><span>{item.content}</span></p>)}
+                  </div>
+                  <form className="market-booking-form" onSubmit={sendChatMessage}>
+                    <textarea value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} maxLength={4000} required placeholder="Napisz wiadomość" />
+                    <button className="button primary" disabled={chatBusy} type="submit">{chatBusy ? t('states.loading') : 'Wyślij wiadomość'}</button>
+                  </form>
+                </section>
+              )}
+
               <section className="market-section similar-profiles">
                 <div className="market-section-heading">
                   <p className="eyebrow">{t('profile.nearby')}</p>
@@ -406,12 +435,12 @@ export function ProfilePage() {
             </div>
           )}
           <div className="market-contact-actions">
-            <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><MessageCircle size={16} /> <span>{t('nav.messages')}</span></button>
+            <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => paidSponsoredInteractionsEnabled && profile.sponsorship_type === 'admin_sponsored' ? openSponsoredChat() : activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><MessageCircle size={16} /> <span>{paidSponsoredInteractionsEnabled && profile.sponsorship_type === 'admin_sponsored' ? 'Czat · 3 BC' : t('nav.messages')}</span></button>
             <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><Phone size={16} /> <span>{t('profile.call')}</span></button>
             {canUsePremiumProfileFeatures && <a href="#booking" className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><CalendarDays size={16} /> <span>{t('profile.book')}</span></a>}
             <button className="button er-btn er-glass-btn er-glass-btn--pink er-glass-btn--md" type="button" disabled={favoriteBusy || (activated && favoriteSaved)} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}><Heart size={16} /> <span>{favoriteSaved ? t('favorites.alreadyFavorite') : `${t('favorites.addToFavorites')}${favoritesWalletSystem === 'bcu' ? ' · 5 BC' : ''}`}</span></button>
             <button className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={() => activated ? sendGift() : setAccessMessage(t('profile.activateRevealContact'))}><Gift size={16} /> <span>{t('profile.gift')}</span></button>
-            <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => setAccessMessage(activated ? t('profile.liveCamAvailable') : t('profile.activateRevealContact'))}><Video size={16} /> <span>{t('profile.live')}</span></button>
+            <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => paidSponsoredInteractionsEnabled ? requestVideochat() : setAccessMessage(activated ? t('profile.liveCamAvailable') : t('profile.activateRevealContact'))}><Video size={16} /> <span>{t('profile.live')}{paidSponsoredInteractionsEnabled ? ' · 7 BC' : ''}</span></button>
           </div>
           {accessMessage && <p className={accessMessage === t('favorites.notEnoughTokens') ? 'error-text' : activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
           {accessMessage === t('favorites.notEnoughTokens') && <Link className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><span>{t('favorites.buyTokens')}</span></Link>}
@@ -458,6 +487,49 @@ export function ProfilePage() {
       setAccessMessage(err instanceof Error ? err.message : t('profile.paymentStartFailed'));
     } finally {
       setActivationBusy(false);
+    }
+  }
+
+  async function openSponsoredChat() {
+    if (!clientToken) return navigate(`/login?next=${encodeURIComponent(`/profile/${profile!.id}`)}`);
+    if (!chatSession && !window.confirm('Rozpoczęcie czatu kosztuje jednorazowo 3 BC. Kontynuować?')) return;
+    setChatBusy(true);
+    try {
+      const started = chatSession ? { session: chatSession } : await api.startSponsoredChat(clientToken, profile!.id);
+      const history = await api.sponsoredChat(clientToken, started.session.id);
+      setChatSession(history.session);
+      setChatMessages(history.messages);
+      window.requestAnimationFrame(() => document.getElementById('profile-chat')?.scrollIntoView({ behavior: 'smooth' }));
+    } catch (error) {
+      setAccessMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
+  async function sendChatMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!clientToken || !chatSession || !chatDraft.trim()) return;
+    setChatBusy(true);
+    try {
+      const sent = await api.sendSponsoredChatMessage(clientToken, chatSession.id, chatDraft.trim());
+      setChatMessages((current) => [...current, sent.message, ...(sent.agent_message ? [sent.agent_message] : [])]);
+      setChatDraft('');
+    } catch (error) {
+      setAccessMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
+  async function requestVideochat() {
+    if (!clientToken) return navigate(`/login?next=${encodeURIComponent(`/profile/${profile!.id}`)}`);
+    if (!window.confirm('Próba wideoczatu kosztuje 7 BC. Kontynuować?')) return;
+    try {
+      await api.requestVideochat(clientToken, profile!.id, crypto.randomUUID());
+      setAccessMessage('Próba wideoczatu została zapisana. Właściciel zobaczy ją po aktywacji konta.');
+    } catch (error) {
+      setAccessMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     }
   }
 

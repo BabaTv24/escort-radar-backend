@@ -120,6 +120,10 @@ export type Profile = {
   premium_tier?: 'standard' | 'gold' | 'elite' | 'diamond';
   is_seed_profile?: boolean;
   is_sponsored?: boolean;
+  sponsorship_type?: 'none' | 'admin_sponsored';
+  owner_activation_status?: 'not_required' | 'awaiting_owner_activation' | 'active';
+  owner_activated_at?: string | null;
+  ai_agent_mode?: 'disabled' | 'pre_activation' | 'owner_assistant';
   acquisition_source?: string | null;
   source_url?: string | null;
   source_url_normalized?: string | null;
@@ -219,7 +223,8 @@ export type BookingRequest = {
   requested_time: string;
   duration_minutes: number;
   message?: string | null;
-  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+  idempotency_key?: string;
+  status: 'pending' | 'awaiting_owner_activation' | 'accepted' | 'rejected' | 'cancelled';
   created_at: string;
 };
 
@@ -528,6 +533,10 @@ export type BcuWallet = {
   public_wallet_id: string;
   balance_bcu: string;
   balance_bc: string;
+  locked_balance_bcu?: string;
+  locked_balance_bc?: string;
+  available_balance_bcu?: string;
+  available_balance_bc?: string;
   lifetime_credit_bcu: string;
   lifetime_credit_bc: string;
   lifetime_debit_bcu: string;
@@ -537,6 +546,34 @@ export type BcuWallet = {
   migrated_at?: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type SponsoredChatMessage = {
+  id: string;
+  session_id: string;
+  sender_type: 'client' | 'agent' | 'owner';
+  content: string;
+  agent_disclosure_shown?: boolean;
+  created_at: string;
+};
+
+export type SponsoredChatSession = {
+  id: string;
+  profile_id: string;
+  client_user_id: string;
+  client_email?: string | null;
+  status: 'open' | 'owner_takeover' | 'closed';
+  handled_by: 'agent' | 'owner';
+  owner_read_at?: string | null;
+  last_message_at: string;
+  messages?: SponsoredChatMessage[];
+};
+
+export type SponsoredProfileDashboard = {
+  profiles: Profile[];
+  stats: { messages: number; clients: number; booking_attempts: number; unread_clients: number };
+  conversations: SponsoredChatSession[];
+  booking_requests: BookingRequest[];
 };
 
 export type BcuLedgerEntry = {

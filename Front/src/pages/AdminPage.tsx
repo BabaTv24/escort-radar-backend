@@ -178,6 +178,7 @@ const sections = [
       ['photos', '/admin/photos', Camera, 'admin.nav.photos'],
       ['moderation', '/admin/moderation', Shield, 'admin.nav.moderation'],
       ['reports', '/admin/reports', Ban, 'admin.nav.reports'],
+      ['sponsored-profiles', '/admin/sponsored-profiles', Sparkles, 'admin.nav.sponsoredProfiles'],
       ['profile-studio', '/admin/profile-studio', Sparkles, 'admin.nav.sponsoredProfiles']
     ]
   },
@@ -234,6 +235,8 @@ export function AdminPage() {
   const [clientFilters, setClientFilters] = useState({ search: '', status: 'all', sort: 'registered_at', direction: 'desc', page: 1, page_size: 25 });
   const [bigbabaClient, setBigbabaClient] = useState<AdminClient | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [sponsoredProfiles, setSponsoredProfiles] = useState<Array<Profile & Record<string, any>>>([]);
+  const [sponsoredProfileStats, setSponsoredProfileStats] = useState<Record<string, number>>({});
   const [profileLoadError, setProfileLoadError] = useState('');
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
   const [moderationQueues, setModerationQueues] = useState<Record<string, Profile[]>>({});
@@ -564,10 +567,16 @@ export function AdminPage() {
 
   async function load(accessToken = token) {
     const loadStartedAt = performance.now();
-    const requestCount = view === 'profiles' || view === 'profile-studio' || view === 'photos' ? 1 : 23;
+    const requestCount = view === 'profiles' || view === 'profile-studio' || view === 'photos' || view === 'sponsored-profiles' ? 1 : 23;
     setLoading(true);
     setProfileLoadError('');
     try {
+      if (view === 'sponsored-profiles') {
+        const result = await adminLoadRequest('adminSponsoredProfiles', api.adminSponsoredProfiles(accessToken), 30000);
+        setSponsoredProfiles(result.sponsored_profiles);
+        setSponsoredProfileStats(result.stats);
+        return;
+      }
       if (view === 'profiles' || view === 'profile-studio') {
         const profileResult = await adminLoadRequest('adminProfiles', api.adminProfiles(accessToken), 30000);
         setProfiles(profileResult.profiles);
@@ -2387,6 +2396,26 @@ export function AdminPage() {
         </>
       );
     }
+    if (view === 'sponsored-profiles') {
+      const createClaimInvite = async (profileId: string) => {
+        try {
+          const invite = await api.createSponsoredProfileInvite(token, profileId);
+          await navigator.clipboard.writeText(invite.sms_text);
+          setMessage(`Zaproszenie SMS skopiowane. Wygasa: ${new Date(invite.expires_at).toLocaleString()}`);
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+        }
+      };
+      return <>
+        <section className="admin-metric-grid kpi-grid">
+          <AdminStatCard label="Sponsorowane profile" value={sponsoredProfileStats.total || 0} badge="admin_sponsored" />
+          <AdminStatCard label="Oczekują na aktywację" value={sponsoredProfileStats.awaiting_activation || 0} badge="awaiting_owner_activation" />
+          <AdminStatCard label="Wiadomości klientów" value={sponsoredProfileStats.messages || 0} badge={`${sponsoredProfileStats.clients || 0} klientów`} />
+          <AdminStatCard label="Próby bookingu" value={sponsoredProfileStats.booking_attempts || 0} badge="5 BC / próba" />
+        </section>
+        <AdminTable rows={sponsoredProfiles} columns={['display_name', 'city', 'sponsorship_type', 'owner_activation_status', 'ai_agent_mode', 'message_count', 'client_count', 'unread_client_count', 'booking_attempt_count', 'awaiting_booking_count', 'earned_bcu', 'created_at']} format={(key, value) => key === 'earned_bcu' ? `${(Number(value || 0) / 10000).toFixed(0)} BC` : value} actions={(profile) => <><Link className="admin-action-btn" to={`/admin/profiles?profile=${encodeURIComponent(profile.id)}`}>Profil</Link>{profile.owner_activation_status === 'awaiting_owner_activation' && <button className="admin-action-btn" type="button" onClick={() => void createClaimInvite(profile.id)}>Generuj SMS claim</button>}</>} />
+      </>;
+    }
 
     if (view === 'clients') {
       const totalPages = Math.max(1, Math.ceil(clientsTotal / Number(clientFilters.page_size || 25)));
@@ -3226,7 +3255,8 @@ function adminViewTitle(view: string, t: (key: string, vars?: Record<string, str
     payments: 'admin.nav.transactions',
     'chat-manager': 'admin.nav.chat',
     push: 'admin.nav.notifications',
-    'email-center': 'admin.nav.email'
+    'email-center': 'admin.nav.email',
+    'sponsored-profiles': 'admin.nav.sponsoredProfiles'
   };
   return t(titleKeys[view] || `admin.nav.${view}`);
 }
@@ -3275,6 +3305,7 @@ function adminLabel(key: string) {
   const labels: Record<string, string> = {
     dashboard: 'Dashboard',
     'profile-studio': 'Profile Studio',
+    'sponsored-profiles': 'Sponsorowane profile',
     users: 'Uzytkownicy',
     profiles: 'Profile',
     subscriptions: 'Subskrypcje',

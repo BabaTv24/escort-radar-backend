@@ -5441,6 +5441,13 @@ textarea::placeholder {
   grid-column: 1 / -1;
 }
 
+.sponsored-chat-history { display: grid; gap: .7rem; max-height: 28rem; overflow: auto; margin: 1rem 0; }
+.sponsored-chat-message { display: grid; gap: .25rem; max-width: 88%; padding: .8rem 1rem; border: 1px solid rgba(255,255,255,.12); border-radius: .9rem; background: rgba(255,255,255,.045); white-space: pre-wrap; }
+.sponsored-chat-message.is-client { justify-self: end; border-color: rgba(247,212,107,.35); }
+.sponsored-chat-message.is-agent { justify-self: start; border-color: rgba(82,207,255,.3); }
+.sponsored-chat-message strong { color: #f7d46b; font-size: .78rem; }
+.sponsored-chat-message span { line-height: 1.5; }
+
 .availability-information-section {
   display: grid;
   gap: 1rem;

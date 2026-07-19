@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, SponsoredChatMessage, SponsoredChatSession, SponsoredProfileDashboard, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 
 export type BulkPhotoModerationResponse = {
   requested: number;
@@ -150,10 +150,17 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body)
   }),
-  createBookingRequest: (body: Partial<BookingRequest>) => request<{ booking_request: BookingRequest }>('/api/booking-requests', {
+  createBookingRequest: (token: string | undefined, body: Partial<BookingRequest>) => request<{ booking_request: BookingRequest }>('/api/booking-requests', {
     method: 'POST',
+    token,
     body: JSON.stringify(body)
   }),
+  startSponsoredChat: (token: string, profileId: string) => request<{ session: SponsoredChatSession; charged_bc: string }>(`/api/sponsored/profiles/${profileId}/chat`, { method: 'POST', token }),
+  sponsoredChat: (token: string, sessionId: string) => request<{ session: SponsoredChatSession; messages: SponsoredChatMessage[] }>(`/api/sponsored/chat/${sessionId}`, { token }),
+  sendSponsoredChatMessage: (token: string, sessionId: string, content: string) => request<{ message: SponsoredChatMessage; agent_message: SponsoredChatMessage | null }>(`/api/sponsored/chat/${sessionId}/messages`, { method: 'POST', token, body: JSON.stringify({ content }) }),
+  sponsoredProfileMe: (token: string) => request<SponsoredProfileDashboard>('/api/sponsored/me', { token }),
+  claimSponsoredProfile: (token: string, claimToken: string) => request<{ claimed: boolean; profile: Profile; history_transferred: boolean; agent_mode: 'owner_assistant'; transferred_balance_bcu: string }>(`/api/sponsored/claim`, { method: 'POST', token, body: JSON.stringify({ claim_token: claimToken }) }),
+  requestVideochat: (token: string, profileId: string, idempotency_key: string) => request(`/api/sponsored/profiles/${profileId}/videochat`, { method: 'POST', token, body: JSON.stringify({ idempotency_key }) }),
   myBookingRequests: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/booking-requests/me', { token }),
   setBookingStatus: (token: string, id: string, status: BookingRequest['status']) => request<{ booking_request: BookingRequest }>(`/api/booking-requests/${id}/status`, {
     method: 'PATCH',
@@ -174,6 +181,8 @@ export const api = {
   }>('/api/admin/stats', { token }),
   adminMe: (token: string) => request<{ admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/me', { token }),
   adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number> }>(`/api/admin/profiles${params}`, { token }),
+  adminSponsoredProfiles: (token: string) => request<{ sponsored_profiles: Array<Profile & Record<string, any>>; stats: Record<string, number> }>('/api/admin/sponsored-profiles', { token }),
+  createSponsoredProfileInvite: (token: string, profileId: string) => request<{ claim_url: string; expires_at: string; sms_text: string }>(`/api/admin/sponsored-profiles/${profileId}/invite`, { method: 'POST', token }),
   adminClients: (token: string, params = '') => request<{ clients: Record<string, unknown>[]; total: number; page: number; page_size: number; bigbaba?: Record<string, unknown> | null }>(`/api/admin/clients${params}`, { token }),
   adminClient: (token: string, id: string) => request<{ client: Record<string, unknown>; payments: Record<string, unknown>[]; coin_transactions: Record<string, unknown>[]; rewards: Record<string, unknown>[]; referrals: Record<string, unknown>[] }>(`/api/admin/clients/${id}`, { token }),
   setAdminClientActivation: (token: string, id: string, state: 'client_free' | 'client_activated') => request<{ client: Record<string, unknown> | null }>(`/api/admin/clients/${id}/activation`, {
