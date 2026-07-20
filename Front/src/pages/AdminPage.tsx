@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { ApiError, api } from '../lib/api';
+import { adminSession } from '../lib/adminSession';
 import type { BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
@@ -41,7 +42,6 @@ import {
 type AdminUser = Record<string, any>;
 type SubscriptionRow = Record<string, any>;
 type AdminClient = Record<string, any>;
-const adminTokenStorageKey = 'escort-radar-admin-token';
 const adminEmailStorageKey = 'escortRadarAdminEmail';
 const serviceCategories = ['all', ...Array.from(new Set(serviceOptions.map((service) => service.category)))];
 const studioTabs = ['account', 'basic', 'location', 'business', 'prices', 'status', 'services', 'subscription', 'moderation', 'photos'] as const;
@@ -213,13 +213,15 @@ export function AdminPage() {
   const [email, setEmail] = useState(() => localStorage.getItem(adminEmailStorageKey) || '');
   const [password, setPassword] = useState('');
   const [rememberEmail, setRememberEmail] = useState(() => Boolean(localStorage.getItem(adminEmailStorageKey)));
-  const [token, setToken] = useState('');
+  const [token, setToken] = useState(() => isAdminPath(window.location.pathname) ? adminSession.read() : '');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [user, setUser] = useState<Record<string, unknown> | null>(null);
   const [admin, setAdmin] = useState<Record<string, unknown> | null>(null);
-  const [authRestoring, setAuthRestoring] = useState(false);
+  const [authRestoring, setAuthRestoring] = useState(() => isAdminPath(window.location.pathname));
+  const [authRetry, setAuthRetry] = useState(0);
+  const [authUnavailable, setAuthUnavailable] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { t, option, lang, setLang } = useI18n();
@@ -400,10 +402,9 @@ export function AdminPage() {
     let active = true;
 
     async function restoreAdminSession() {
-      console.log('AUTH RESTORE START');
       setAuthRestoring(true);
-      const storedToken = localStorage.getItem(adminTokenStorageKey) || '';
-      console.log('SESSION FOUND', Boolean(storedToken));
+      setAuthUnavailable(false);
+      const storedToken = adminSession.read();
 
       if (!active) return;
       if (!storedToken) {
@@ -411,85 +412,66 @@ export function AdminPage() {
         setUser(null);
         setAdmin(null);
         setAuthRestoring(false);
-        console.log('AUTH RESTORE END');
-        navigate('/admin/login', { replace: true });
         return;
       }
 
-      console.log('ADMIN CHECK START');
-      const adminCheck = await withTimeout(api.adminMe(storedToken), 5000, 'Admin me').catch((adminError) => {
-        setMessage(adminError instanceof Error ? adminError.message : t('admin.login.noAccess'));
-        return undefined;
-      });
-      if (!active) return;
+      try {
+        const adminCheck = await withTimeout(api.adminMe(storedToken), 10000, 'Admin me');
+        if (!active) return;
+        if (!adminCheck?.admin) throw new ApiError('Admin access required', 403);
 
-      if (!adminCheck?.admin) {
-        setToken('');
-        setUser(null);
-        setAdmin(null);
-        setMessage(t('admin.login.noAccess'));
-        setAuthRestoring(false);
-        console.log('AUTH RESTORE END');
-        return;
-      }
-
-      console.log('ADMIN CHECK SUCCESS');
-      setAdmin(adminCheck.admin);
-      setUser({
-        id: adminCheck.admin.id,
-        email: adminCheck.admin.email,
-        app_metadata: {
-          role: adminCheck.admin.role,
-          admin: adminCheck.admin.admin
+        setAdmin(adminCheck.admin);
+        setUser({
+          id: adminCheck.admin.id,
+          email: adminCheck.admin.email,
+          app_metadata: {
+            role: adminCheck.admin.role,
+            admin: adminCheck.admin.admin
+          }
+        });
+        setMessage('');
+        setToken(storedToken);
+      } catch (sessionError) {
+        if (!active) return;
+        if (sessionError instanceof ApiError && (sessionError.status === 401 || sessionError.status === 403)) {
+          adminSession.clear();
+          setToken('');
+          setUser(null);
+          setAdmin(null);
+          setMessage('');
+        } else {
+          setToken(storedToken);
+          setAuthUnavailable(true);
+          setMessage(sessionError instanceof Error ? sessionError.message : 'Admin session verification failed');
         }
-      });
-      setMessage('');
-      setToken(storedToken);
-      setAuthRestoring(false);
-      console.log('AUTH RESTORE END');
-      void load(storedToken);
+      } finally {
+        if (active) setAuthRestoring(false);
+      }
     }
 
-    restoreAdminSession().catch((sessionError) => {
-      if (!active) return;
-      setToken('');
-      setUser(null);
-      setAdmin(null);
-      const message = sessionError instanceof Error ? sessionError.message : t('admin.login.noAccess');
-      setMessage(message);
-      setAuthRestoring(false);
-      console.log('AUTH RESTORE END');
-      navigate('/admin/login', { replace: true });
-    });
+    void restoreAdminSession();
 
     return () => {
       active = false;
     };
-  }, [isLoginRoute, navigate, t]);
+  }, [isLoginRoute, authRetry]);
 
   async function handleLogin() {
-    console.log('ADMIN LOGIN START');
     setLoginLoading(true);
     setMessage('');
     try {
-      console.log('SUPABASE LOGIN START');
       const result = await withTimeout(
         api.adminLogin({ email, password }),
         10000,
         'Admin login'
       );
-      console.log('SUPABASE LOGIN RESULT', result);
       const accessToken = result.token || '';
       if (!accessToken) {
         setMessage('Nie udało się odczytać tokenu administratora. Spróbuj ponownie.');
         return;
       }
 
-      console.log('LOGIN SUCCESS SESSION', result);
-
-      console.log('ADMIN CHECK START');
       const adminCheck = await withTimeout(api.adminMe(accessToken), 10000, 'Admin me');
-      console.log('ADMIN ME RESULT', adminCheck);
       if (!adminCheck?.admin) {
         setAdmin(null);
         setMessage(t('admin.login.noAccess'));
@@ -507,16 +489,13 @@ export function AdminPage() {
       });
       setMessage('');
       setToken(accessToken);
-      localStorage.setItem(adminTokenStorageKey, accessToken);
+      adminSession.write(accessToken);
       if (rememberEmail) {
         localStorage.setItem(adminEmailStorageKey, email.trim());
       } else {
         localStorage.removeItem(adminEmailStorageKey);
       }
-      console.log('ADMIN CHECK SUCCESS');
-      console.log('ADMIN LOGIN SUCCESS');
       navigate('/admin', { replace: true });
-      void load(accessToken);
     } catch (error) {
       if (error instanceof Error && error.message.includes('Supabase login timeout')) {
         setMessage('Logowanie Supabase przekroczyło czas. Odśwież stronę albo spróbuj w innej przeglądarce.');
@@ -537,7 +516,7 @@ export function AdminPage() {
   }
 
   async function resetAdminSession() {
-    localStorage.removeItem(adminTokenStorageKey);
+    adminSession.clear();
     setToken('');
     setUser(null);
     setAdmin(null);
@@ -560,7 +539,7 @@ export function AdminPage() {
   }
 
   async function logout() {
-    localStorage.removeItem(adminTokenStorageKey);
+    adminSession.clear();
     setToken('');
     navigate('/admin/login', { replace: true });
   }
@@ -705,10 +684,16 @@ export function AdminPage() {
   }
 
   useEffect(() => {
-    if (!token || view !== 'clients') return;
+    if (!token || !admin || view !== 'clients') return;
     void load(token);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientFilters.search, clientFilters.status, clientFilters.sort, clientFilters.direction, clientFilters.page, clientFilters.page_size, token, view]);
+  }, [clientFilters.search, clientFilters.status, clientFilters.sort, clientFilters.direction, clientFilters.page, clientFilters.page_size, token, admin, view]);
+
+  useEffect(() => {
+    if (!token || !admin || view === 'clients') return;
+    void load(token);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, admin, view]);
 
   useEffect(() => {
     if (!token || !['profiles', 'profile-studio', 'settings'].includes(view)) return;
@@ -2021,6 +2006,20 @@ export function AdminPage() {
     );
   }
 
+  if (authUnavailable) {
+    return (
+      <div className="admin-login-page">
+        <div className="admin-login-card">
+          <img className="admin-login-logo" src="/Logo_Escort_3.png" alt="Escort Radar" />
+          <p className="eyebrow">{t('admin.login.subtitle')}</p>
+          <h1>Nie udało się sprawdzić sesji administratora</h1>
+          <p className="admin-alert">{message}</p>
+          <button className="button primary full" onClick={() => setAuthRetry((value) => value + 1)}>Spróbuj ponownie</button>
+        </div>
+      </div>
+    );
+  }
+
   if (!token) {
     return (
       <div className="admin-login-page">
@@ -3290,6 +3289,10 @@ function adminLoadRequest<T>(label: string, request: Promise<T>, timeoutMs = 100
 function getAdminView(pathname: string) {
   const value = pathname.replace('/admin/', '').replace('/admin', '') || 'dashboard';
   return value || 'dashboard';
+}
+
+function isAdminPath(pathname: string) {
+  return pathname === '/admin' || pathname.startsWith('/admin/');
 }
 
 function clientQueryString(filters: Record<string, string | number>) {
