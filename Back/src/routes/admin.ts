@@ -26,7 +26,7 @@ import { writeAdminAuditLog } from '../services/adminAudit.js';
 import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
-import { canLinkExistingImportedUser, extractImportPairs, extractImportedProfileCity, extractPublicPhone, extractServiceTagCandidates, mapImportedServiceValues, normalizeImportedCity, normalizeImportedCurrency, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../hermesImport.js';
+import { canLinkExistingImportedUser, extractImportPairs, extractImportedProfileCity, extractImportedProfileCountry, extractPublicPhone, extractServiceTagCandidates, mapImportedServiceValues, normalizeImportedCity, normalizeImportedCurrency, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice, resolveImportedCountry } from '../hermesImport.js';
 import { isSupportedEscortClubHost, isSupportedEscortClubProfileUrl } from '../escortClubUrls.js';
 import { assertPublicImportDns as secureAssertPublicImportDns, fetchPublicImportResource as secureFetchPublicImportResource, readImportResponseLimited as secureReadImportResponseLimited, validatePublicImportUrl as secureValidatePublicImportUrl } from '../publicImportSecurity.js';
 import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
@@ -56,6 +56,7 @@ import {
 import { explainProfileVisibility } from '../profileVisibility.js';
 import { CityImportDiscoveryError, discoverCityProfiles, isSourceUrlDuplicateError, normalizeProfileSourceUrl } from '../cityImportDiscovery.js';
 import { buildAdminProfilesResponse } from '../adminProfiles.js';
+import { aggregateAdminProfileCities, aggregateAdminProfileCountries, normalizeAdminCatalogText, selectAdminProfilePage, type AdminProfileCatalogRow } from '../adminProfileCatalog.js';
 import { hashDeletionPin, validateDeletionPin, verifyAdminDeletionPin } from '../adminDeletionPin.js';
 import { supabaseAdminDeletionPinStore } from '../adminDeletionPinStore.js';
 import { runBulkProfilePublish } from '../bulkProfilePublish.js';
@@ -622,6 +623,70 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
   });
 }));
 
+const adminCatalogCache = new Map<string, { expiresAt: number; rows: AdminProfileCatalogRow[]; truncated: boolean }>();
+
+function adminCatalogFilters(query: Record<string, any>) {
+  return {
+    q: String(query.q || '').trim().slice(0, 120),
+    type: String(query.type || 'all'), published: String(query.published || 'all'),
+    suspended: String(query.suspended || 'all'), seed: String(query.seed || 'all'),
+    verified: String(query.verified || 'all'), premium_tier: String(query.premium_tier || 'all'),
+    owner_email: String(query.owner_email || '').trim().slice(0, 160)
+  };
+}
+
+function applyAdminCatalogFilters(query: any, filters: ReturnType<typeof adminCatalogFilters>) {
+  const safeSearch = filters.q.replace(/[,()]/g, ' ');
+  if (safeSearch) query = query.or(`display_name.ilike.*${safeSearch}*,owner_email.ilike.*${safeSearch}*,work_city.ilike.*${safeSearch}*,city.ilike.*${safeSearch}*`);
+  if (filters.type !== 'all') query = query.eq('category', filters.type);
+  if (filters.published === 'yes' || filters.published === 'no') query = query.eq('is_published', filters.published === 'yes');
+  if (filters.suspended === 'yes') query = query.or('status.eq.suspended,moderation_status.eq.suspended');
+  if (filters.suspended === 'no') query = query.neq('status', 'suspended').or('moderation_status.neq.suspended,moderation_status.is.null');
+  if (filters.seed === 'yes') query = query.eq('is_seed_profile', true);
+  if (filters.seed === 'no') query = query.or('is_seed_profile.eq.false,is_seed_profile.is.null');
+  if (filters.verified === 'yes') query = query.eq('verified', true);
+  if (filters.verified === 'no') query = query.or('verified.eq.false,verified.is.null');
+  if (filters.premium_tier !== 'all') query = query.eq('premium_tier', filters.premium_tier);
+  if (filters.owner_email) query = query.ilike('owner_email', `*${filters.owner_email.replace(/[,()]/g, ' ')}*`);
+  return query;
+}
+
+async function loadAdminCatalogRows(rawQuery: Record<string, any>) {
+  const filters = adminCatalogFilters(rawQuery);
+  const cacheKey = JSON.stringify(filters);
+  const cached = adminCatalogCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return { ...cached, filters };
+  const rows: AdminProfileCatalogRow[] = [];
+  const pageSize = 1000;
+  const maxPages = 100;
+  const concurrency = 4;
+  let countQuery = supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true });
+  countQuery = applyAdminCatalogFilters(countQuery, filters);
+  const countResult = await countQuery;
+  if (countResult.error) throw countResult.error;
+  const total = countResult.count || 0;
+  const pages = Math.min(maxPages, Math.ceil(total / pageSize));
+  const truncated = total > maxPages * pageSize;
+  const fetchPage = async (page: number) => {
+    let query = supabaseAdmin.from('profiles')
+      .select('id, work_country, work_city, city, moderation_status, admin_priority, created_at')
+      .order('admin_priority', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: true })
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+    query = applyAdminCatalogFilters(query, filters);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  };
+  for (let page = 0; page < pages; page += concurrency) {
+    const batch = await Promise.all(Array.from({ length: Math.min(concurrency, pages - page) }, (_, index) => fetchPage(page + index)));
+    batch.forEach((items) => rows.push(...items));
+  }
+  const value = { expiresAt: Date.now() + 15_000, rows, truncated };
+  adminCatalogCache.set(cacheKey, value);
+  if (adminCatalogCache.size > 20) adminCatalogCache.delete(adminCatalogCache.keys().next().value!);
+  return { ...value, filters };
+}
+
 async function loadAdminProfileStats() {
   const countQuery = () => supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true });
   const results = await Promise.all([
@@ -655,6 +720,46 @@ async function loadAdminProfileStats() {
 
 adminRouter.get('/profiles/stats', asyncHandler(async (_req, res) => {
   res.json({ profiles: [], stats: await loadAdminProfileStats() });
+}));
+
+adminRouter.get('/profiles/catalog/countries', asyncHandler(async (req, res) => {
+  const loaded = await loadAdminCatalogRows(req.query);
+  const cityQuery = normalizeAdminCatalogText(req.query.city_query).replace(/ue/g, 'u').replace(/oe/g, 'o').replace(/ae/g, 'a');
+  const rows = cityQuery ? loaded.rows.filter((row) => normalizeAdminCatalogText(row.work_city || row.city).replace(/ue/g, 'u').replace(/oe/g, 'o').replace(/ae/g, 'a').includes(cityQuery)) : loaded.rows;
+  const items = aggregateAdminProfileCountries(rows);
+  res.json({ items, total: items.length, page: 1, limit: items.length, has_more: loaded.truncated, filters: { ...loaded.filters, city_query: String(req.query.city_query || '') } });
+}));
+
+adminRouter.get('/profiles/catalog/cities', asyncHandler(async (req, res) => {
+  const country = String(req.query.country || '');
+  if (!country) return res.status(400).json({ error: 'country is required' });
+  const loaded = await loadAdminCatalogRows(req.query);
+  const items = aggregateAdminProfileCities(loaded.rows, country, String(req.query.city_query || ''));
+  res.json({ items, total: items.length, page: 1, limit: items.length, has_more: loaded.truncated, filters: { ...loaded.filters, country, city_query: String(req.query.city_query || '') } });
+}));
+
+adminRouter.get('/profiles/catalog/items', asyncHandler(async (req, res) => {
+  const country = String(req.query.country || '');
+  const city = normalizeAdminCatalogText(req.query.city);
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(10, Number(req.query.limit) || 50));
+  if (!country || !city) return res.status(400).json({ error: 'country and city are required' });
+  const loaded = await loadAdminCatalogRows(req.query);
+  const selected = selectAdminProfilePage(loaded.rows, country, city, page, limit);
+  if (!selected.ids.length) return res.json({ items: [], total: selected.total, page, limit, has_more: false, filters: { ...loaded.filters, country, city } });
+  const [{ data: profiles, error }, { data: images, error: imageError }] = await Promise.all([
+    supabaseAdmin.from('profiles').select('*').in('id', selected.ids),
+    supabaseAdmin.from('profile_images').select('id, profile_id, storage_path, is_primary, is_hidden, is_private, moderation_status, sort_order, created_at').in('profile_id', selected.ids).eq('is_primary', true).order('sort_order', { ascending: true })
+  ]);
+  if (error || imageError) return res.status(500).json({ error: (error || imageError)!.message });
+  const profileById = new Map((profiles || []).map((profile) => [profile.id, profile]));
+  const coverByProfile = new Map<string, any>();
+  for (const image of images || []) if (!coverByProfile.has(image.profile_id)) coverByProfile.set(image.profile_id, image);
+  const items = selected.ids.flatMap((id) => {
+    const profile = profileById.get(id);
+    return profile ? [withAdminImageUrls({ ...profile, profile_images: coverByProfile.has(id) ? [coverByProfile.get(id)] : [], visibility_audit: explainProfileVisibility(profile, {}) })] : [];
+  });
+  res.json({ items, total: selected.total, page, limit, has_more: selected.hasMore, filters: { ...loaded.filters, country, city } });
 }));
 
 adminRouter.get('/profiles', asyncHandler(async (req, res) => {
@@ -3917,6 +4022,7 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
   }).filter(([, value]) => value !== null));
   const cityLabel = optionalText(rawProfile.city_label || rawProfile.city || rawProfile.location, 100) || '';
   const resolvedCity = resolveCityLocation(cityLabel);
+  const importedCountry = resolveImportedCountry(rawProfile.country || rawProfile.work_country, cityLabel);
   const serviceGroups = rawProfile.service_groups && typeof rawProfile.service_groups === 'object' ? rawProfile.service_groups : {};
   const rawServices = Array.isArray(rawProfile.raw_services) ? rawProfile.raw_services.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 100) : [];
   const importedServices = [
@@ -3938,7 +4044,7 @@ function normalizeHermesPreviewProfile(rawProfile: Record<string, any>, sourceUr
     city: normalizeHermesCity(cityLabel),
     city_label: cityLabel,
     work_city: resolvedCity?.canonical_city || cityLabel,
-    work_country: resolvedCity?.country_code || null,
+    work_country: importedCountry || resolvedCity?.country_code || null,
     latitude: resolvedCity?.latitude ?? null,
     longitude: resolvedCity?.longitude ?? null,
     location_mode: 'city_only',
@@ -4026,12 +4132,14 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
     || firstMatch(text, /[^\n]{0,80}(?:1h|1 h|hour|stunde|godzina)/i);
   const importedPrice = parseImportedPrice(priceContext);
   const sourceCity = escortClub?.city || extractImportedProfileCity(html);
+  const sourceCountry = escortClub?.country || extractImportedProfileCountry(html);
 
   return {
     name: escortClub?.name || title || '',
     display_name: escortClub?.display_name || title || '',
     city: normalizeHermesCity(sourceCity),
     city_label: sourceCity,
+    country: sourceCountry,
     category: escortClub?.category || inferCategory(text),
     ...details,
     description: description || '',

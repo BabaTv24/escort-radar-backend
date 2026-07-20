@@ -10,7 +10,7 @@ export type ImportedDetails = {
 };
 
 export type EscortClubProfile = ImportedDetails & {
-  name: string; display_name: string; phone_id?: string; city?: string; city_label?: string; category: string;
+  name: string; display_name: string; phone_id?: string; city?: string; city_label?: string; country?: string; category: string;
   height?: number;
   description: string;
   opening_hours?: ImportedOpeningHours;
@@ -93,6 +93,53 @@ export function extractImportedProfileCity(html: string) {
   if (listingCities.length) return listingCities.at(-1) || '';
   return decodeImportHtml(scoped.match(/<[^>]+class=["'][^"']*(?:content-location|profile-location|profile-city)[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i)?.[1] || '')
     .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function extractImportedProfileCountry(html: string) {
+  for (const match of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const queue: unknown[] = [JSON.parse(decodeImportHtml(match[1]))];
+      while (queue.length) {
+        const item = queue.shift();
+        if (Array.isArray(item)) { queue.push(...item); continue; }
+        if (!item || typeof item !== 'object') continue;
+        const record = item as Record<string, unknown>;
+        const country = typeof record.addressCountry === 'object'
+          ? String((record.addressCountry as Record<string, unknown>).addressCountry || (record.addressCountry as Record<string, unknown>).name || '')
+          : String(record.addressCountry || '');
+        const normalized = normalizeImportedCountry(country);
+        if (normalized) return normalized;
+        queue.push(...Object.values(record));
+      }
+    } catch { /* malformed structured data is ignored */ }
+  }
+  const breadcrumb = html.match(/<(?:nav|ol|ul|div)\b[^>]*class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]*?)<\/(?:nav|ol|ul|div)>/i)?.[1] || '';
+  for (const match of breadcrumb.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)) {
+    const normalized = normalizeImportedCountry(decodeImportHtml(match[1]).replace(/<[^>]+>/g, ' '));
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+export function normalizeImportedCountry(value: unknown) {
+  const key = normalizeImportKey(value);
+  const aliases: Record<string, string> = {
+    de: 'DE', germany: 'DE', deutschland: 'DE', niemcy: 'DE',
+    pl: 'PL', poland: 'PL', polska: 'PL',
+    cz: 'CZ', czechia: 'CZ', 'czech republic': 'CZ', czechy: 'CZ', 'republika czeska': 'CZ',
+    nl: 'NL', netherlands: 'NL', nederland: 'NL', holandia: 'NL',
+    at: 'AT', austria: 'AT', osterreich: 'AT'
+  };
+  return aliases[key] || '';
+}
+
+export function resolveImportedCountry(country: unknown, city: unknown) {
+  const explicit = normalizeImportedCountry(country);
+  if (explicit) return explicit;
+  const cityKey = normalizeImportKey(city);
+  if (cityKey === 'bonn') return 'DE';
+  if (['prag', 'praga', 'praha', 'prague'].includes(cityKey)) return 'CZ';
+  return '';
 }
 
 export function canLinkExistingImportedUser(user: { app_metadata?: Record<string, unknown> }, marker: string) {

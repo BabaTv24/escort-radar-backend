@@ -8,6 +8,7 @@ import {
   groupAdminProfilesByCountry,
   groupAdminProfilesByCity,
   normalizeAdminProfileCitySearch,
+  normalizeAdminProfileCountry,
   profileIdsInCityGroups,
   profileIdsInCountryGroups,
   unknownAdminProfileCityKey,
@@ -59,6 +60,12 @@ test('city search is case and diacritic insensitive without fuzzy city merging',
   assert.equal(groups.length, 2);
   assert.equal(normalizeAdminProfileCitySearch('München'), normalizeAdminProfileCitySearch('Munchen'));
   assert.equal(normalizeAdminProfileCitySearch('Muenchen'), normalizeAdminProfileCitySearch('Munchen'));
+});
+
+test('presentation country fallback assigns Bonn and Prague variants without overriding an explicit country', () => {
+  assert.equal(normalizeAdminProfileCountry('', ' Bonn '), 'DE');
+  for (const city of ['Prag', 'Praga', 'Praha', 'Prague']) assert.equal(normalizeAdminProfileCountry('unknown', city), 'CZ');
+  assert.equal(normalizeAdminProfileCountry('PL', 'Bonn'), 'PL');
 });
 
 test('country hierarchy normalizes aliases, scopes duplicate city names and preserves every profile once', () => {

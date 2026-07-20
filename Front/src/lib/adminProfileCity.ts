@@ -27,7 +27,7 @@ const countryAliases: Record<string, string> = {
 };
 
 const countryNames: Record<string, Record<string, string>> = {
-  PL: { DE: 'Niemcy', PL: 'Polska', NL: 'Holandia', CZ: 'Czechy', AT: 'Austria' },
+  PL: { DE: 'Niemcy', PL: 'Polska', NL: 'Holandia', CZ: 'Republika Czeska', AT: 'Austria' },
   EN: { DE: 'Germany', PL: 'Poland', NL: 'Netherlands', CZ: 'Czechia', AT: 'Austria' },
   DE: { DE: 'Deutschland', PL: 'Polen', NL: 'Niederlande', CZ: 'Tschechien', AT: 'Österreich' }
 };
@@ -53,9 +53,14 @@ export function normalizeAdminProfileCitySearch(value: unknown) {
     .replace(/ß/g, 'ss');
 }
 
-export function normalizeAdminProfileCountry(value: unknown) {
+export function normalizeAdminProfileCountry(value: unknown, city?: unknown) {
   const normalized = normalizeAdminProfileCitySearch(value);
-  return countryAliases[normalized] || unknownAdminProfileCountryKey;
+  const explicit = countryAliases[normalized];
+  if (explicit) return explicit;
+  const cityKey = normalizeAdminProfileCitySearch(city);
+  if (cityKey === 'bonn') return 'DE';
+  if (['prag', 'praga', 'praha', 'prague', 'pragu'].includes(cityKey)) return 'CZ';
+  return unknownAdminProfileCountryKey;
 }
 
 export function adminProfileCountryName(code: string, language: string, unknownLabel: string) {
@@ -96,7 +101,7 @@ export function groupAdminProfilesByCountry(
   const groups = new Map<string, Profile[]>();
   for (const profile of profiles) {
     const row = profile as Profile & { country?: string | null };
-    const key = normalizeAdminProfileCountry(row.work_country || row.country);
+    const key = normalizeAdminProfileCountry(row.work_country || row.country, adminProfileCityName(profile));
     groups.set(key, [...(groups.get(key) || []), profile]);
   }
   return [...groups.entries()].map(([key, rows]) => ({
