@@ -14,6 +14,13 @@ export type AdminProfileFilters = {
 export type AdminProfilesPayload = {
   profiles: Profile[];
   stats: Record<string, number>;
+  pagination?: {
+    page_size: number;
+    pages_loaded: number;
+    loaded_profiles: number;
+    safety_limit: number;
+    truncated: boolean;
+  };
 };
 
 export const defaultAdminProfileFilters: AdminProfileFilters = {

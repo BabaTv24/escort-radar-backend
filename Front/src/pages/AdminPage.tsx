@@ -22,7 +22,7 @@ import { defaultAdminProfileFilters, profileMatchesAdminFilters, resolveAdminPro
 import { isDuplicateSourceUrlApiError, runCityImportQueue } from '../lib/cityImportQueue';
 import type { CityImportQueueItem } from '../lib/cityImportQueue';
 import { selectedIdsAfterBulkPublish } from '../lib/bulkProfilePublish';
-import { filterAdminProfileCityGroups, groupAdminProfilesByCity, normalizeAdminProfileCitySearch, profileIdsInCityGroups, updateAdminProfileSelection } from '../lib/adminProfileCity';
+import { filterAdminProfileCountryGroups, groupAdminProfilesByCountry, normalizeAdminProfileCitySearch, profileIdsInCityGroups, updateAdminProfileSelection } from '../lib/adminProfileCity';
 import { adminWindowLayoutResetEvent, profileControlWindowStorageKey, profileReviewWindowStorageKey } from '../lib/adminWindowLayout';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
@@ -239,6 +239,7 @@ export function AdminPage() {
   const [sponsoredProfiles, setSponsoredProfiles] = useState<Array<Profile & Record<string, any>>>([]);
   const [sponsoredProfileStats, setSponsoredProfileStats] = useState<Record<string, number>>({});
   const [profileLoadError, setProfileLoadError] = useState('');
+  const [profilePagination, setProfilePagination] = useState<{ loaded_profiles: number; safety_limit: number; truncated: boolean } | null>(null);
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
   const [moderationQueues, setModerationQueues] = useState<Record<string, Profile[]>>({});
   const [reports, setReports] = useState<AdminReport[]>([]);
@@ -343,7 +344,9 @@ export function AdminPage() {
   const [adminPlaceLoading, setAdminPlaceLoading] = useState(false);
   const [studioFilters, setStudioFilters] = useState({ ...defaultAdminProfileFilters });
   const [profileCityQuery, setProfileCityQuery] = useState('');
+  const [selectedProfileCountryKey, setSelectedProfileCountryKey] = useState('all');
   const [selectedProfileCityKey, setSelectedProfileCityKey] = useState('all');
+  const [expandedProfileCountryKeys, setExpandedProfileCountryKeys] = useState<string[]>([]);
   const [expandedProfileCityKeys, setExpandedProfileCityKeys] = useState<string[]>([]);
   const [windowLayoutResetNotice, setWindowLayoutResetNotice] = useState(false);
 
@@ -353,8 +356,8 @@ export function AdminPage() {
   const profileReturnSource = adminSearchParams.get('from') === 'subscriptions' ? 'subscriptions' : 'profiles';
   const isLoginRoute = location.pathname === '/admin/login';
   const filteredProfiles = useMemo(() => profiles.filter((profile) => profileMatchesAdminFilters(profile, query, { ...studioFilters, city: 'all' })), [profiles, query, studioFilters]);
-  const profileCityGroups = useMemo(() => groupAdminProfilesByCity(filteredProfiles, t('admin.profiles.unknownCity')), [filteredProfiles, lang, t]);
-  const visibleProfileCityGroups = useMemo(() => filterAdminProfileCityGroups(profileCityGroups, profileCityQuery, selectedProfileCityKey), [profileCityGroups, profileCityQuery, selectedProfileCityKey]);
+  const profileCountryGroups = useMemo(() => groupAdminProfilesByCountry(filteredProfiles, lang, t('admin.profiles.unknownCountry'), t('admin.profiles.unknownCity')), [filteredProfiles, lang, t]);
+  const visibleProfileCountryGroups = useMemo(() => filterAdminProfileCountryGroups(profileCountryGroups, profileCityQuery, selectedProfileCountryKey, selectedProfileCityKey), [profileCountryGroups, profileCityQuery, selectedProfileCountryKey, selectedProfileCityKey]);
   const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
   const adminWindowLabels = {
     minimize: t('admin.window.minimize'),
@@ -377,20 +380,28 @@ export function AdminPage() {
   }, [view]);
 
   useEffect(() => {
-    const availableKeys = new Set(profileCityGroups.map((group) => group.key));
-    if (selectedProfileCityKey !== 'all' && !availableKeys.has(selectedProfileCityKey)) {
+    const countryKeys = new Set(profileCountryGroups.map((country) => country.key));
+    const cityKeys = new Set(profileCountryGroups.flatMap((country) => country.cities.map((city) => `${country.key}:${city.key}`)));
+    if (selectedProfileCountryKey !== 'all' && !countryKeys.has(selectedProfileCountryKey)) setSelectedProfileCountryKey('all');
+    if (selectedProfileCityKey !== 'all' && !cityKeys.has(selectedProfileCityKey)) {
       setSelectedProfileCityKey('all');
       setProfileCityQuery('');
     }
-    setExpandedProfileCityKeys((current) => {
-      const retained = current.filter((key) => availableKeys.has(key));
-      if (selectedProfileCityKey !== 'all' && availableKeys.has(selectedProfileCityKey)) {
-        return retained.includes(selectedProfileCityKey) ? retained : [...retained, selectedProfileCityKey];
-      }
-      if (!retained.length && profileCityGroups[0]) return [profileCityGroups[0].key];
+    setExpandedProfileCountryKeys((current) => {
+      const retained = current.filter((key) => countryKeys.has(key));
+      if (!retained.length && profileCountryGroups[0]) return [profileCountryGroups[0].key];
       return retained;
     });
-  }, [profileCityGroups, selectedProfileCityKey]);
+    setExpandedProfileCityKeys((current) => {
+      const retained = current.filter((key) => cityKeys.has(key));
+      if (selectedProfileCityKey !== 'all' && cityKeys.has(selectedProfileCityKey)) {
+        return retained.includes(selectedProfileCityKey) ? retained : [...retained, selectedProfileCityKey];
+      }
+      const firstCountry = profileCountryGroups[0];
+      if (!retained.length && firstCountry?.cities[0]) return [`${firstCountry.key}:${firstCountry.cities[0].key}`];
+      return retained;
+    });
+  }, [profileCountryGroups, selectedProfileCountryKey, selectedProfileCityKey]);
 
   useEffect(() => {
     if (isLoginRoute) {
@@ -558,6 +569,7 @@ export function AdminPage() {
       if (view === 'profiles' || view === 'profile-studio') {
         const profileResult = await adminLoadRequest('adminProfiles', api.adminProfiles(accessToken), 30000);
         setProfiles(profileResult.profiles);
+        setProfilePagination(profileResult.pagination || null);
         setStats((current) => ({ ...current, ...profileResult.stats }));
         return;
       }
@@ -595,7 +607,7 @@ export function AdminPage() {
         adminLoadRequest('adminTokenStats', api.adminTokenStats(accessToken)),
         adminLoadRequest('adminClients', api.adminClients(accessToken, clientQueryString(clientFilters))),
         adminLoadRequest('adminUsers', api.adminUsers(accessToken)),
-        adminLoadRequest('adminProfiles', api.adminProfiles(accessToken), 30000),
+        adminLoadRequest('adminProfiles', view === 'dashboard' ? api.adminProfileStats(accessToken) : api.adminProfiles(accessToken), 30000),
         adminLoadRequest('adminSubscriptions', api.adminSubscriptions(accessToken)),
         adminLoadRequest('adminReports', api.adminReports(accessToken)),
         adminLoadRequest('adminBookings', api.adminBookings(accessToken)),
@@ -649,6 +661,7 @@ export function AdminPage() {
       setUsers(usersData.users);
       if (resolvedProfiles.ok) {
         setProfiles(resolvedProfiles.data.profiles);
+        setProfilePagination(resolvedProfiles.data.pagination || null);
       } else {
         console.error('Admin load failed: adminProfiles', resolvedProfiles.error);
         setProfileLoadError(resolvedProfiles.error);
@@ -905,6 +918,10 @@ export function AdminPage() {
     setExpandedProfileCityKeys((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
   }
 
+  function toggleProfileCountryExpanded(key: string) {
+    setExpandedProfileCountryKeys((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  }
+
   function resetAdminWindowLayout() {
     window.localStorage.removeItem(profileControlWindowStorageKey);
     window.localStorage.removeItem(profileReviewWindowStorageKey);
@@ -942,6 +959,7 @@ export function AdminPage() {
         }));
         const refreshed = await api.adminProfiles(token);
         setProfiles(refreshed.profiles);
+        setProfilePagination(refreshed.pagination || null);
         setStats((current) => ({ ...current, ...refreshed.stats }));
       } catch (error) {
         setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
@@ -2346,7 +2364,6 @@ export function AdminPage() {
     if (view === 'dashboard') {
       const registeredClients = stats.registered_clients || users.filter((user) => user.account_type === 'client').length;
       const activatedClients = stats.activated_clients || 0;
-      const sponsoredProfiles = profiles.filter((profile) => profile.is_sponsored || profile.acquisition_source === 'admin_sponsored').length;
       const bcCoinPackageSummary = t('admin.dashboard.bcCoinPackageSummary', {
         packages: stats.bc_coin_package_transactions || 0,
         sold: stats.bc_coin_sold_amount || 0,
@@ -2358,12 +2375,21 @@ export function AdminPage() {
         { label: t('admin.dashboard.bcCoinPackageRevenue'), value: formatEuro(stats.bc_coin_package_revenue_eur), badge: bcCoinPackageSummary },
         { label: t('admin.dashboard.clientActivations'), value: stats.client_activation_transactions || clientActivationPayments.length, badge: t('admin.dashboard.activatedClientsCount', { count: activatedClients }) },
         { label: t('admin.dashboard.activeUsers'), value: activatedClients || registeredClients, badge: t('admin.dashboard.registeredClientsCount', { count: registeredClients }) },
-        { label: t('admin.dashboard.activeProfiles'), value: stats.active_profiles || profiles.filter((profile) => profile.status === 'active').length, badge: t('admin.dashboard.availableProfilesCount', { count: stats.available_profiles || profiles.filter((profile) => profile.available_now).length }) },
-        { label: t('admin.dashboard.sponsoredProfiles'), value: sponsoredProfiles, badge: t('admin.dashboard.notRevenue') }
+        { label: t('admin.profiles.allProfiles'), value: stats.total_profiles ?? 0, badge: t('admin.dashboard.globalCount') },
+        { label: t('admin.dashboard.activeProfiles'), value: stats.active_profiles ?? 0, badge: t('admin.dashboard.activeProfilesDefinition') }
       ];
       return (
         <>
-          <section className="admin-metric-grid kpi-grid">{cards.map((card) => <AdminStatCard key={card.label} label={card.label} value={card.value} badge={card.badge} />)}</section>
+          <section className="admin-metric-grid kpi-grid">
+            {cards.map((card) => <AdminStatCard key={card.label} label={card.label} value={card.value} badge={card.badge} />)}
+            <AdminStatCard label={t('admin.dashboard.sponsoredProfiles')} value={stats.sponsored_total ?? 0} details={[
+              [t('admin.dashboard.adminApproved'), stats.sponsored_approved ?? 0],
+              [t('admin.dashboard.pendingApproval'), stats.sponsored_pending ?? 0],
+              [t('admin.dashboard.published'), stats.sponsored_published ?? 0],
+              [t('admin.dashboard.awaitingOwner'), stats.sponsored_awaiting_owner ?? 0],
+              ...(Number(stats.sponsored_other_moderation || 0) > 0 ? [[t('admin.dashboard.otherModeration'), stats.sponsored_other_moderation]] as Array<[string, unknown]> : [])
+            ]} />
+          </section>
           <section className="admin-chart-grid">
             <article className="admin-card">
               <h2>{t('admin.dashboard.recentRevenueEvents')}</h2>
@@ -2540,8 +2566,14 @@ export function AdminPage() {
 
     if (view === 'profiles' || view === 'profile-studio') {
       const selectedProfile = profiles.find((profile) => profile.id === studioForm.id);
-      const expandedVisibleGroups = visibleProfileCityGroups.filter((group) => expandedProfileCityKeys.includes(group.key));
+      const expandedVisibleGroups = visibleProfileCountryGroups.flatMap((country) => {
+        const countryExpanded = expandedProfileCountryKeys.includes(country.key) || Boolean(profileCityQuery) || selectedProfileCityKey !== 'all';
+        return countryExpanded ? country.cities.filter((city) => expandedProfileCityKeys.includes(`${country.key}:${city.key}`) || Boolean(profileCityQuery) || selectedProfileCityKey !== 'all') : [];
+      });
       const visibleProfileIds = profileIdsInCityGroups(expandedVisibleGroups);
+      const cityOptions = profileCountryGroups
+        .filter((country) => selectedProfileCountryKey === 'all' || country.key === selectedProfileCountryKey)
+        .flatMap((country) => country.cities.map((city) => ({ ...city, countryKey: country.key, countryName: country.name, scopedKey: `${country.key}:${city.key}` })));
       const renderStudioProfileTable = (rows: Profile[]) => <AdminTable rows={rows} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'public_visibility', 'availability', 'moderation', 'paid_status', 'photos', 'created_at']} labels={{
         ...tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'paid_status', 'created_at']),
         public_visibility: t('admin.profileTable.publicVisibility'),
@@ -2621,26 +2653,40 @@ export function AdminPage() {
             </section>}
             <div className="admin-profile-city-filter">
               <label>
+                <span>{t('admin.profiles.countries')}</span>
+                <select aria-label={t('admin.profiles.countries')} value={selectedProfileCountryKey} onChange={(event) => {
+                  setSelectedProfileCountryKey(event.target.value);
+                  setSelectedProfileCityKey('all');
+                  setProfileCityQuery('');
+                }}>
+                  <option value="all">{t('admin.profiles.allCountries')}</option>
+                  {profileCountryGroups.map((country) => <option key={country.key} value={country.key}>{country.name} ({country.profiles.length})</option>)}
+                </select>
+              </label>
+              <label>
                 <span>{t('admin.profiles.searchCity')}</span>
                 <input type="search" list="admin-profile-city-options" placeholder={t('admin.profiles.searchCityPlaceholder')} value={profileCityQuery} onChange={(event) => {
                   const value = event.target.value;
                   setProfileCityQuery(value);
-                  const exact = profileCityGroups.find((group) => normalizeAdminProfileCitySearch(group.name) === normalizeAdminProfileCitySearch(value));
-                  setSelectedProfileCityKey(exact?.key || 'all');
+                  const exact = cityOptions.find((city) => normalizeAdminProfileCitySearch(city.name) === normalizeAdminProfileCitySearch(value));
+                  setSelectedProfileCityKey(exact?.scopedKey || 'all');
+                  if (exact && selectedProfileCountryKey === 'all') setExpandedProfileCountryKeys((current) => current.includes(exact.countryKey) ? current : [...current, exact.countryKey]);
                 }} />
                 <datalist id="admin-profile-city-options">
-                  {profileCityGroups.map((group) => <option key={group.key} value={group.name} label={`${group.name} (${group.profiles.length})`} />)}
+                  {cityOptions.map((city) => <option key={city.scopedKey} value={city.name} label={`${city.countryName} · ${city.name} (${city.profiles.length})`} />)}
                 </datalist>
               </label>
               <select aria-label={t('admin.profiles.searchCity')} value={selectedProfileCityKey} onChange={(event) => {
                 const key = event.target.value;
                 setSelectedProfileCityKey(key);
-                setProfileCityQuery(key === 'all' ? '' : profileCityGroups.find((group) => group.key === key)?.name || '');
+                const city = cityOptions.find((item) => item.scopedKey === key);
+                setProfileCityQuery(key === 'all' ? '' : city?.name || '');
+                if (city) setExpandedProfileCountryKeys((current) => current.includes(city.countryKey) ? current : [...current, city.countryKey]);
               }}>
                 <option value="all">{t('admin.profiles.allCities')}</option>
-                {profileCityGroups.map((group) => <option key={group.key} value={group.key}>{group.name} ({group.profiles.length})</option>)}
+                {cityOptions.map((city) => <option key={city.scopedKey} value={city.scopedKey}>{selectedProfileCountryKey === 'all' ? `${city.countryName} · ` : ''}{city.name} ({city.profiles.length})</option>)}
               </select>
-              <button type="button" className="button" disabled={!profileCityQuery && selectedProfileCityKey === 'all'} onClick={() => { setProfileCityQuery(''); setSelectedProfileCityKey('all'); }}>{t('admin.actions.clearAll')}</button>
+              <button type="button" className="button" disabled={!profileCityQuery && selectedProfileCityKey === 'all' && selectedProfileCountryKey === 'all'} onClick={() => { setProfileCityQuery(''); setSelectedProfileCityKey('all'); setSelectedProfileCountryKey('all'); }}>{t('admin.actions.clearAll')}</button>
             </div>
             <div className="studio-filter-grid">
               <select value={studioFilters.type} onChange={(event) => setStudioFilters({ ...studioFilters, type: event.target.value })}>
@@ -2693,31 +2739,50 @@ export function AdminPage() {
                   ? t('admin.bulkPhotos.nonePending')
                   : t('admin.bulkPhotos.success', { approved: bulkProfilePhotosResult.approved, profiles: bulkProfilePhotosResult.matched_profiles })
             }</p>}
+            {profilePagination?.truncated ? <p className="error-text" role="status">{t('admin.profiles.listTruncated', { loaded: profilePagination.loaded_profiles, limit: profilePagination.safety_limit })}</p> : null}
             {profileLoadError ? (
               <div className="error-text" role="alert">
                 <p>{t('admin.profiles.loadError')}: {profileLoadError}</p>
                 <button className="button secondary" onClick={() => load()}><RefreshCw size={16} /> {t('admin.actions.refresh')}</button>
               </div>
-            ) : <div className="admin-profile-city-groups">
-              {visibleProfileCityGroups.map((group, groupIndex) => {
-                const expanded = expandedProfileCityKeys.includes(group.key);
-                const groupIds = group.profiles.map((profile) => profile.id);
-                const allSelected = groupIds.every((id) => selectedProfileIds.includes(id));
-                const panelId = `admin-profile-city-${groupIndex}`;
-                return <section className="admin-profile-city-card" key={group.key}>
-                  <div className="admin-profile-city-card-head">
-                    <button type="button" className="admin-profile-city-toggle" aria-expanded={expanded} aria-controls={panelId} onClick={() => toggleProfileCityExpanded(group.key)}>
+            ) : <div className="admin-profile-country-groups">
+              {visibleProfileCountryGroups.map((country, countryIndex) => {
+                const countryExpanded = expandedProfileCountryKeys.includes(country.key) || Boolean(profileCityQuery) || selectedProfileCityKey !== 'all';
+                const countryIds = country.profiles.map((profile) => profile.id);
+                const countrySelected = countryIds.length > 0 && countryIds.every((id) => selectedProfileIds.includes(id));
+                const countryPanelId = `admin-profile-country-${countryIndex}`;
+                return <section className="admin-profile-country-card" key={country.key}>
+                  <div className="admin-profile-country-card-head">
+                    <button type="button" className="admin-profile-country-toggle" aria-expanded={countryExpanded} aria-controls={countryPanelId} onClick={() => toggleProfileCountryExpanded(country.key)}>
                       <ChevronRight aria-hidden="true" />
-                      <span>{group.name}</span>
-                      <strong>{group.profiles.length}</strong>
-                      <small>{expanded ? t('admin.profiles.collapse') : t('admin.profiles.expand')}</small>
+                      <span>{country.name}</span>
+                      <strong>{t('admin.profiles.countryCount', { total: country.profiles.length, approved: country.approvedCount })}</strong>
+                      <small>{countryExpanded ? t('admin.profiles.collapse') : t('admin.profiles.expand')}</small>
                     </button>
-                    <label><input type="checkbox" checked={allSelected} onChange={(event) => setVisibleProfilesSelected(groupIds, event.target.checked)} /> {t('admin.profiles.selectVisibleInCity')}</label>
+                    <label><input type="checkbox" checked={countrySelected} onChange={(event) => setVisibleProfilesSelected(countryIds, event.target.checked)} /> {t('admin.profiles.selectVisibleInCountry')}</label>
                   </div>
-                  <div id={panelId} hidden={!expanded}>{expanded ? renderStudioProfileTable(group.profiles) : null}</div>
+                  <div id={countryPanelId} hidden={!countryExpanded} className="admin-profile-city-groups">{countryExpanded ? country.cities.map((city, cityIndex) => {
+                    const scopedCityKey = `${country.key}:${city.key}`;
+                    const cityExpanded = expandedProfileCityKeys.includes(scopedCityKey) || Boolean(profileCityQuery) || selectedProfileCityKey === scopedCityKey;
+                    const cityIds = city.profiles.map((profile) => profile.id);
+                    const citySelected = cityIds.length > 0 && cityIds.every((id) => selectedProfileIds.includes(id));
+                    const cityPanelId = `${countryPanelId}-city-${cityIndex}`;
+                    return <section className="admin-profile-city-card" key={scopedCityKey}>
+                      <div className="admin-profile-city-card-head">
+                        <button type="button" className="admin-profile-city-toggle" aria-expanded={cityExpanded} aria-controls={cityPanelId} onClick={() => toggleProfileCityExpanded(scopedCityKey)}>
+                          <ChevronRight aria-hidden="true" />
+                          <span>{city.name}</span>
+                          <strong>{t('admin.profiles.cityCount', { total: city.profiles.length, approved: city.approvedCount })}</strong>
+                          <small>{cityExpanded ? t('admin.profiles.collapse') : t('admin.profiles.expand')}</small>
+                        </button>
+                        <label><input type="checkbox" checked={citySelected} onChange={(event) => setVisibleProfilesSelected(cityIds, event.target.checked)} /> {t('admin.profiles.selectVisibleInCity')}</label>
+                      </div>
+                      <div id={cityPanelId} hidden={!cityExpanded}>{cityExpanded ? renderStudioProfileTable(city.profiles) : null}</div>
+                    </section>;
+                  }) : null}</div>
                 </section>;
               })}
-              {!visibleProfileCityGroups.length ? <p className="muted">{t('admin.table.empty')}</p> : null}
+              {!visibleProfileCountryGroups.length ? <p className="muted">{t('admin.table.empty')}</p> : null}
             </div>}
           </article>
           </AdminWindow>
@@ -3495,8 +3560,8 @@ function parseGooglePlace(place: any) {
   };
 }
 
-function AdminStatCard({ label, value, badge }: { label: string; value: unknown; badge?: string }) {
-  return <article className="admin-card stat"><span>{label}</span><strong>{String(value ?? 0)}</strong>{badge ? <small>{badge}</small> : null}</article>;
+function AdminStatCard({ label, value, badge, details }: { label: string; value: unknown; badge?: string; details?: Array<[string, unknown]> }) {
+  return <article className="admin-card stat"><span>{label}</span><strong>{String(value ?? 0)}</strong>{badge ? <small>{badge}</small> : null}{details?.length ? <dl className="admin-stat-details">{details.map(([detailLabel, detailValue]) => <div key={detailLabel}><dt>{detailLabel}</dt><dd>{String(detailValue ?? 0)}</dd></div>)}</dl> : null}</article>;
 }
 
 function MetricBlock({ label, value }: { label: string; value: unknown }) {

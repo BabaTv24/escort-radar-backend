@@ -180,7 +180,8 @@ export const api = {
     top_profiles?: Record<string, unknown>[];
   }>('/api/admin/stats', { token }),
   adminMe: (token: string) => request<{ admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/me', { token }),
-  adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number> }>(`/api/admin/profiles${params}`, { token }),
+  adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number>; pagination?: { page_size: number; pages_loaded: number; loaded_profiles: number; safety_limit: number; truncated: boolean } }>(`/api/admin/profiles${params}`, { token }),
+  adminProfileStats: (token: string) => request<{ profiles: Profile[]; stats: Record<string, number> }>('/api/admin/profiles/stats', { token }),
   adminSponsoredProfiles: (token: string) => request<{ sponsored_profiles: Array<Profile & Record<string, any>>; stats: Record<string, number> }>('/api/admin/sponsored-profiles', { token }),
   createSponsoredProfileInvite: (token: string, profileId: string) => request<{ claim_url: string; expires_at: string; sms_text: string }>(`/api/admin/sponsored-profiles/${profileId}/invite`, { method: 'POST', token }),
   adminClients: (token: string, params = '') => request<{ clients: Record<string, unknown>[]; total: number; page: number; page_size: number; bigbaba?: Record<string, unknown> | null }>(`/api/admin/clients${params}`, { token }),

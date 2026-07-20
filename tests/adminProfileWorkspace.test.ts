@@ -3,9 +3,13 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import type { Profile } from '../Front/src/types.ts';
 import {
+  filterAdminProfileCountryGroups,
   filterAdminProfileCityGroups,
+  groupAdminProfilesByCountry,
   groupAdminProfilesByCity,
+  normalizeAdminProfileCitySearch,
   profileIdsInCityGroups,
+  profileIdsInCountryGroups,
   unknownAdminProfileCityKey,
   updateAdminProfileSelection
 } from '../Front/src/lib/adminProfileCity.ts';
@@ -53,6 +57,32 @@ test('city search is case and diacritic insensitive without fuzzy city merging',
   ], 'Unknown city');
   assert.deepEqual(filterAdminProfileCityGroups(groups, 'KOLN').map((group) => group.name), ['Köln']);
   assert.equal(groups.length, 2);
+  assert.equal(normalizeAdminProfileCitySearch('München'), normalizeAdminProfileCitySearch('Munchen'));
+  assert.equal(normalizeAdminProfileCitySearch('Muenchen'), normalizeAdminProfileCitySearch('Munchen'));
+});
+
+test('country hierarchy normalizes aliases, scopes duplicate city names and preserves every profile once', () => {
+  const rows = [
+    profile('de-one', { work_country: 'Deutschland', work_city: 'Berlin', moderation_status: 'approved' }),
+    profile('de-two', { work_country: 'DE', work_city: 'Berlin', moderation_status: 'pending' }),
+    profile('pl-one', { work_country: 'Polska', work_city: 'Berlin', moderation_status: 'approved' }),
+    profile('nl-one', { work_country: 'Netherlands', work_city: 'Amsterdam', moderation_status: 'pending' }),
+    profile('unknown', { work_country: 'Moon', work_city: '' })
+  ];
+  const countries = groupAdminProfilesByCountry(rows, 'pl', 'Nieznany kraj', 'Nieznane miasto');
+  assert.deepEqual(countries.map((country) => [country.key, country.profiles.length, country.approvedCount]), [
+    ['NL', 1, 0],
+    ['DE', 2, 1],
+    ['PL', 1, 1],
+    ['__unknown_country__', 1, 1]
+  ]);
+  assert.equal(profileIdsInCountryGroups(countries).length, rows.length);
+  assert.equal(new Set(profileIdsInCountryGroups(countries)).size, rows.length);
+  countries.forEach((country) => assert.equal(country.cities.reduce((sum, city) => sum + city.profiles.length, 0), country.profiles.length));
+  const germanBerlin = filterAdminProfileCountryGroups(countries, 'berlin', 'DE');
+  const polishBerlin = filterAdminProfileCountryGroups(countries, 'berlin', 'PL');
+  assert.deepEqual(profileIdsInCountryGroups(germanBerlin), ['de-one', 'de-two']);
+  assert.deepEqual(profileIdsInCountryGroups(polishBerlin), ['pl-one']);
 });
 
 test('base publication and moderation suspension filters run before city grouping and counters', () => {
@@ -102,7 +132,8 @@ test('profile accordion and window behavior retain accessibility mobile and safe
   const adminPage = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
   const adminWindow = await readFile(new URL('../Front/src/components/AdminWindow.tsx', import.meta.url), 'utf8');
   const css = await readFile(new URL('../Front/src/styles.css', import.meta.url), 'utf8');
-  assert.match(adminPage, /aria-expanded=\{expanded\}[\s\S]*aria-controls=\{panelId\}/);
+  assert.match(adminPage, /aria-expanded=\{countryExpanded\}[\s\S]*aria-controls=\{countryPanelId\}/);
+  assert.match(adminPage, /aria-expanded=\{cityExpanded\}[\s\S]*aria-controls=\{cityPanelId\}/);
   assert.match(adminPage, /function toggleProfileCityExpanded[\s\S]*setExpandedProfileCityKeys/);
   assert.doesNotMatch(adminPage.slice(adminPage.indexOf('function toggleProfileCityExpanded'), adminPage.indexOf('async function runBulkAction')), /setSelectedProfileIds/);
   assert.match(adminPage, /studioDirty && !window\.confirm\(t\('admin\.window\.unsavedConfirm'\)\)/);
@@ -119,6 +150,10 @@ test('profile city and window controls have PL EN and DE translations', async ()
   const keys = [
     'admin.profiles.searchCity', 'admin.profiles.allCities', 'admin.profiles.unknownCity',
     'admin.profiles.profilesInCity', 'admin.profiles.selectVisibleInCity', 'admin.profiles.expand',
+    'admin.profiles.countries', 'admin.profiles.allCountries', 'admin.profiles.unknownCountry',
+    'admin.profiles.selectVisibleInCountry', 'admin.profiles.countryCount', 'admin.profiles.cityCount',
+    'admin.dashboard.adminApproved', 'admin.dashboard.pendingApproval', 'admin.dashboard.published',
+    'admin.dashboard.awaitingOwner', 'admin.table.available_now',
     'admin.profiles.collapse', 'admin.window.drag', 'admin.window.resize', 'admin.window.resetLayout',
     'admin.window.layoutReset'
   ];

@@ -622,24 +622,73 @@ adminRouter.get('/revenue', asyncHandler(async (_req, res) => {
   });
 }));
 
+async function loadAdminProfileStats() {
+  const countQuery = () => supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true });
+  const results = await Promise.all([
+    countQuery(),
+    countQuery().eq('status', 'active'),
+    countQuery().eq('status', 'pending'),
+    countQuery().or('status.eq.suspended,moderation_status.eq.suspended'),
+    countQuery().eq('is_test_account', true),
+    countQuery().eq('sponsorship_type', 'admin_sponsored'),
+    countQuery().eq('moderation_status', 'approved'),
+    countQuery().eq('moderation_status', 'pending'),
+    countQuery().eq('is_published', true),
+    countQuery().eq('owner_activation_status', 'awaiting_owner_activation'),
+    countQuery().eq('sponsorship_type', 'admin_sponsored').eq('moderation_status', 'approved'),
+    countQuery().eq('sponsorship_type', 'admin_sponsored').eq('moderation_status', 'pending'),
+    countQuery().eq('sponsorship_type', 'admin_sponsored').eq('is_published', true),
+    countQuery().eq('sponsorship_type', 'admin_sponsored').eq('owner_activation_status', 'awaiting_owner_activation')
+  ]);
+  const error = results.find((result) => result.error)?.error;
+  if (error) throw error;
+  const counts = results.map((result) => result.count || 0);
+  return {
+    total_profiles: counts[0], active_profiles: counts[1], pending_profiles: counts[2],
+    suspended_profiles: counts[3], test_accounts: counts[4], sponsored_total: counts[5],
+    approved_total: counts[6], pending_approval_total: counts[7], published_total: counts[8],
+    awaiting_owner_total: counts[9], sponsored_approved: counts[10], sponsored_pending: counts[11],
+    sponsored_other_moderation: Math.max(0, counts[5] - counts[10] - counts[11]),
+    sponsored_published: counts[12], sponsored_awaiting_owner: counts[13]
+  };
+}
+
+adminRouter.get('/profiles/stats', asyncHandler(async (_req, res) => {
+  res.json({ profiles: [], stats: await loadAdminProfileStats() });
+}));
+
 adminRouter.get('/profiles', asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.query.phone);
-  let query = supabaseAdmin
-    .from('profiles')
-    .select('*, profile_images(*)')
-    .order('admin_priority', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(300);
+  const pageSize = 200;
+  const safetyLimit = 5000;
+  const profiles: any[] = [];
+  let pagesLoaded = 0;
+  let lastPageWasFull = false;
 
-  if (phone) {
-    query = query.or(`primary_phone.eq.${phone},additional_phones.cs.{${phone}}`);
+  while (profiles.length < safetyLimit) {
+    const offset = profiles.length;
+    let query = supabaseAdmin
+      .from('profiles')
+      .select('*, profile_images(*)')
+      .order('admin_priority', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(offset, Math.min(offset + pageSize, safetyLimit) - 1);
+
+    if (phone) query = query.or(`primary_phone.eq.${phone},additional_phones.cs.{${phone}}`);
+    const { data: page, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
+    const rows = page || [];
+    profiles.push(...rows);
+    pagesLoaded += 1;
+    lastPageWasFull = rows.length === Math.min(pageSize, safetyLimit - offset);
+    if (!lastPageWasFull) break;
   }
 
-  const { data, error } = await query;
+  const globalStats = await loadAdminProfileStats();
 
-  if (error) return res.status(500).json({ error: error.message });
-
-  const ownerIds = [...new Set((data || []).map((profile) => profile.user_id).filter(Boolean))];
+  const ownerIds = [...new Set(profiles.map((profile) => profile.user_id).filter(Boolean))];
   const ownerEmailById = new Map<string, string>();
   if (ownerIds.length) {
     const { data: users } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -649,12 +698,18 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
   }
 
   const visibilityContext = { country: req.query.country, city: req.query.city, category: req.query.category };
-  const rows = (data || []).map((profile) => withAdminImageUrls({
+  const rows = profiles.map((profile) => withAdminImageUrls({
     ...profile,
     owner_email: profile.owner_email || (profile.user_id ? ownerEmailById.get(profile.user_id) || null : null),
     visibility_audit: explainProfileVisibility(profile, visibilityContext)
   }));
-  res.json(buildAdminProfilesResponse(rows));
+  res.json(buildAdminProfilesResponse(rows, globalStats, {
+    page_size: pageSize,
+    pages_loaded: pagesLoaded,
+    loaded_profiles: rows.length,
+    safety_limit: safetyLimit,
+    truncated: rows.length === safetyLimit && lastPageWasFull
+  }));
 }));
 
 adminRouter.get('/profiles/visibility-audit', asyncHandler(async (req, res) => {
