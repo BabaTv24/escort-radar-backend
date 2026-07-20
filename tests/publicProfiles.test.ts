@@ -1640,6 +1640,53 @@ test('Escort Club parser reads the real profile DOM sections without ads or SEO 
   assert.deepEqual(profile.images, ['https://static.escort.club/galleries/wolfie/1.jpg']);
 });
 
+test('Escort Club parser maps the German München profile format without recommended media', async () => {
+  const html = await readFile(new URL('./fixtures/escort-club-profile-220435-de.html', import.meta.url), 'utf8');
+  const sourceUrl = 'https://de.escort.club/erotikanzeigen/220435.html';
+  const profile = parseEscortClubProfile(html, sourceUrl);
+  assert.ok(profile);
+  assert.equal(profile.name, 'Agatha');
+  assert.equal(profile.city, 'München');
+  assert.equal(resolveCityLocation(profile.city)?.canonical_city, 'Muenchen');
+  assert.equal(resolveCityLocation(profile.city)?.country_code, 'DE');
+  assert.deepEqual({
+    gender: profile.gender,
+    orientation: profile.orientation,
+    age: profile.age,
+    height: profile.height_cm,
+    weight: profile.weight_kg,
+    bust: profile.bust,
+    travels: profile.travels
+  }, {
+    gender: 'female',
+    orientation: 'hetero',
+    age: 26,
+    height: 168,
+    weight: 63,
+    bust: '2, Natural',
+    travels: true
+  });
+  assert.deepEqual(profile.languages, ['de', 'en', 'fr']);
+  assert.deepEqual(profile.prices, {
+    price_30min: 50,
+    price_1h: 100,
+    price_2h: 180,
+    price_3h: 250,
+    price_night: 500
+  });
+  assert.equal(profile.currency, 'EUR');
+  assert.deepEqual(profile.services, ['masaz', 'seks_oralny']);
+  assert.equal(Object.keys(profile.opening_hours?.weekly || {}).length, 7);
+  for (const schedule of Object.values(profile.opening_hours?.weekly || {})) {
+    assert.deepEqual(schedule, { enabled: true, start: '00:00', end: '00:00' });
+  }
+  assert.deepEqual(profile.images, [
+    'https://static.escort.club/galleries/agatha/1.jpg',
+    'https://static.escort.club/galleries/agatha/2.jpg'
+  ]);
+  assert.equal(profile.images.some((url) => url.includes('/other/')), false);
+});
+
 test('Escort Club parser reads About me paragraphs and all profile availability days', async () => {
   const html = await readFile(new URL('./fixtures/escort-club-profile-233633.html', import.meta.url), 'utf8');
   const profile = parseEscortClubProfile(html, 'https://pl.escort.club/anons/233633.html');
@@ -1724,7 +1771,7 @@ test('Escort Club parser rejects SEO description, supports localized closed days
   assert.equal(rejected?.description, '');
   assert.deepEqual(rejected?.admin_warnings, ['description_boilerplate_rejected']);
 
-  const localized = parseEscortClubProfile(`<main><h1>Anna</h1><section><h2>Opening hours</h2><p>Monday 10:00 - 20:00</p><p>Dienstag geschlossen</p></section></main>`, 'https://de.escort.club/anons/2.html');
+  const localized = parseEscortClubProfile(`<main><h1>Anna</h1><section><h2>Opening hours</h2><p>Monday 10:00 - 20:00</p><p>Dienstag geschlossen</p></section></main>`, 'https://de.escort.club/erotikanzeigen/2.html');
   assert.equal(localized?.opening_hours?.timezone, 'Europe/Berlin');
   assert.deepEqual(localized?.opening_hours?.weekly.monday, { enabled: true, start: '10:00', end: '20:00' });
   assert.deepEqual(localized?.opening_hours?.weekly.tuesday, { enabled: false, start: null, end: null });

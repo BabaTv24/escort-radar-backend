@@ -20,6 +20,14 @@ test('city listing URL normalization removes tracking and fragments and keeps on
     normalizeCityListingUrl('https://pl.escort.club//anonse/towarzyskie/bydgoszcz?utm_source=test&sort=new#profiles'),
     'https://pl.escort.club/anonse/towarzyskie/bydgoszcz/?sort=new'
   );
+  assert.equal(
+    normalizeCityListingUrl('https://de.escort.club/erotikanzeigen/munchen'),
+    'https://de.escort.club/erotikanzeigen/munchen/'
+  );
+  assert.equal(
+    normalizeCityListingUrl('https://de.escort.club/erotikanzeigen/munchen/'),
+    'https://de.escort.club/erotikanzeigen/munchen/'
+  );
 });
 
 test('profile source URL normalization matches query hash host and trailing slash variants', () => {
@@ -28,6 +36,10 @@ test('profile source URL normalization matches query hash host and trailing slas
     'https://pl.escort.club/anons/140605.html?sort=new'
   );
   assert.equal(normalizeProfileSourceUrl('http://example.com:80/profile/'), 'http://example.com/profile');
+  assert.equal(
+    normalizeProfileSourceUrl('HTTPS://DE.ESCORT.CLUB:443/erotikanzeigen/220435.html/?utm_source=city#kontakt'),
+    'https://de.escort.club/erotikanzeigen/220435.html'
+  );
 });
 
 test('duplicate database errors are recognized only for normalized source URL uniqueness', () => {
@@ -52,6 +64,18 @@ test('city discovery rejects credentials, unsupported hosts and private SSRF tar
     () => normalizeCityListingUrl('https://example.com/anonse/towarzyskie/test/'),
     (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'unsupported_host'
   );
+  assert.throws(
+    () => normalizeCityListingUrl('https://fr.escort.club/anonse/test/'),
+    (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'unsupported_host'
+  );
+  assert.throws(
+    () => normalizeCityListingUrl('http://de.escort.club/erotikanzeigen/munchen/'),
+    (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'invalid_url'
+  );
+  assert.throws(
+    () => normalizeCityListingUrl('https://de.escort.club/erotikanzeigen/220435.html'),
+    (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'unsupported_listing'
+  );
 });
 
 test('city profile extraction resolves relative links, normalizes and deduplicates a saved HTML sample', () => {
@@ -62,7 +86,7 @@ test('city profile extraction resolves relative links, normalizes and deduplicat
     </div>
     <div class="item-col"><span class="item-info"></span><a href="https://pl.escort.club/anons/140605.html">Anna duplicate</a></div>
     <div class="item-col"><span class="item-info"></span>
-    <a href="https://de.escort.club/anons/247251.html?fbclid=tracking">Wolfie</a>
+    <a href="https://de.escort.club/erotikanzeigen/247251.html?fbclid=tracking">Wolfie</a>
     </div>
     <a href="/anons/add">Add profile</a>
     <a href="/anons/abc.html">Invalid profile id</a>
@@ -73,7 +97,7 @@ test('city profile extraction resolves relative links, normalizes and deduplicat
   </div></section></body></html>`;
   assert.deepEqual(extractEscortClubProfileUrls(html, listingUrl), [
     'https://pl.escort.club/anons/140605.html',
-    'https://de.escort.club/anons/247251.html'
+    'https://de.escort.club/erotikanzeigen/247251.html'
   ]);
 });
 
@@ -83,6 +107,32 @@ test('escort.club profile URL requires a numeric id and html pathname', () => {
   assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anons/abc.html'), false);
   assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anons/247251'), false);
   assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anonse/247251.html'), false);
+  assert.equal(isEscortClubProfileUrl('https://de.escort.club/erotikanzeigen/220435.html'), true);
+  assert.equal(isEscortClubProfileUrl('https://de.escort.club/erotikanzeigen/munchen/'), false);
+  assert.equal(isEscortClubProfileUrl('https://de.escort.club/anons/220435.html'), false);
+  assert.equal(isEscortClubProfileUrl('https://fr.escort.club/anons/220435.html'), false);
+  assert.equal(isEscortClubProfileUrl('http://de.escort.club/erotikanzeigen/220435.html'), false);
+});
+
+test('München discovery reads only the German main result container', async () => {
+  const html = await readFile(new URL('./fixtures/escort-club-muenchen-listing.html', import.meta.url), 'utf8');
+  const munichUrl = 'https://de.escort.club/erotikanzeigen/munchen/';
+  const extraction = extractEscortClubListing(html, munichUrl, 30);
+  assert.equal(extraction.found_count, 2);
+  assert.deepEqual(extraction.profile_urls, [
+    'https://de.escort.club/erotikanzeigen/220435.html',
+    'https://de.escort.club/erotikanzeigen/220436.html'
+  ]);
+  assert.equal(extraction.profile_urls.some((url) => /330001|440001|999999/.test(url)), false);
+
+  const result = await discoverCityProfiles({ listing_url: 'https://de.escort.club/erotikanzeigen/munchen', max_profiles: 30 }, {
+    fetchResource: async (url) => {
+      assert.equal(url, munichUrl);
+      return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+    }
+  });
+  assert.equal(result.listing_url, munichUrl);
+  assert.equal(result.found_count, 2);
 });
 
 test('city discovery applies safe default 30 and hard maximum 50', () => {
@@ -149,14 +199,40 @@ test('paginated discovery scans only result containers and deduplicates profiles
   assert.deepEqual(result.warnings, []);
 });
 
-test('city discovery returns no_profiles_found without making a real request', async () => {
+test('city discovery reports a changed structure without making a real request', async () => {
   const fetchResource = async () => new Response('<html><body><a href="/login">Login</a></body></html>', {
     status: 200,
     headers: { 'content-type': 'text/html; charset=utf-8' }
   });
   await assert.rejects(
     discoverCityProfiles({ listing_url: listingUrl }, { fetchResource }),
-    (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'no_profiles_found'
+    (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'listing_structure_changed'
+  );
+});
+
+test('city discovery distinguishes source HTTP errors from anti-bot responses', async () => {
+  await assert.rejects(
+    discoverCityProfiles({ listing_url: listingUrl }, { fetchResource: async () => new Response('Not found', { status: 404, headers: { 'content-type': 'text/html' } }) }),
+    (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'source_http_error'
+  );
+  await assert.rejects(
+    discoverCityProfiles({ listing_url: listingUrl }, { fetchResource: async () => new Response('Blocked', { status: 403, headers: { 'content-type': 'text/html' } }) }),
+    (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'captcha_or_protection_detected'
+  );
+});
+
+test('city discovery distinguishes an empty listing from a changed HTML structure', async () => {
+  const response = (html: string) => async () => new Response(html, {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' }
+  });
+  await assert.rejects(
+    discoverCityProfiles({ listing_url: listingUrl }, { fetchResource: response('<section>Lista wyników: 0</section><section class="content-sec -index"><h1>Anonse erotyczne Bydgoszcz</h1><p>Brak ogłoszeń</p></section>') }),
+    (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'empty_listing'
+  );
+  await assert.rejects(
+    discoverCityProfiles({ listing_url: listingUrl }, { fetchResource: response('<main><h1>Anonse erotyczne Bydgoszcz</h1><a href="/new-profile-layout/1">Changed</a></main>') }),
+    (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'listing_structure_changed'
   );
 });
 

@@ -27,6 +27,7 @@ import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
 import { canLinkExistingImportedUser, extractImportPairs, extractImportedProfileCity, extractPublicPhone, extractServiceTagCandidates, mapImportedServiceValues, normalizeImportedCity, normalizeImportedCurrency, normalizeImportedDetails, normalizeImportedPhone, parseEscortClubProfile, parseImportedPrice } from '../hermesImport.js';
+import { isSupportedEscortClubHost, isSupportedEscortClubProfileUrl } from '../escortClubUrls.js';
 import { assertPublicImportDns as secureAssertPublicImportDns, fetchPublicImportResource as secureFetchPublicImportResource, readImportResponseLimited as secureReadImportResponseLimited, validatePublicImportUrl as secureValidatePublicImportUrl } from '../publicImportSecurity.js';
 import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
 import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfile.js';
@@ -948,7 +949,7 @@ adminRouter.post('/import-city/discover', asyncHandler(async (req, res) => {
     res.json(result);
   } catch (error) {
     if (error instanceof CityImportDiscoveryError) {
-      const status = ['fetch_timeout', 'fetch_failed', 'captcha_or_protection_detected', 'html_too_large'].includes(error.code) ? 502 : 400;
+      const status = ['fetch_timeout', 'fetch_failed', 'source_http_error', 'captcha_or_protection_detected', 'html_too_large'].includes(error.code) ? 502 : 400;
       return res.status(status).json({ error: error.code, reason: error.message });
     }
     throw error;
@@ -3747,7 +3748,26 @@ export function validatePublicImportUrl(value: string) {
 }
 
 export async function fetchPublicImportResource(value: string, init: RequestInit, redirects = 0): Promise<Response> {
+  if (isSupportedEscortClubProfileUrl(value)) return fetchSupportedEscortClubResource(value, init, redirects, true);
   return secureFetchPublicImportResource(value, init, redirects);
+}
+
+async function fetchSupportedEscortClubResource(value: string, init: RequestInit, redirects = 0, requireProfilePath = false): Promise<Response> {
+  const safetyError = validatePublicImportUrl(value);
+  if (safetyError) throw new Error(safetyError);
+  const parsed = new URL(value);
+  if (parsed.protocol !== 'https:' || !isSupportedEscortClubHost(parsed.hostname)
+    || (requireProfilePath && !isSupportedEscortClubProfileUrl(parsed))) {
+    throw new Error('Unsafe Escort Club redirect blocked');
+  }
+  await assertPublicImportDns(value);
+  const response = await fetch(value, { ...init, redirect: 'manual' });
+  if (response.status < 300 || response.status >= 400) return response;
+  if (redirects >= 3) throw new Error('Too many redirects');
+  const location = response.headers.get('location');
+  if (!location) throw new Error('Redirect did not include a location');
+  const next = new URL(location, value).toString();
+  return fetchSupportedEscortClubResource(next, init, redirects + 1, requireProfilePath);
 }
 
 export async function readImportResponseLimited(response: Response, maxBytes: number) {
@@ -3990,12 +4010,12 @@ function buildHermesProfilePreview(html: string, sourceUrl: string, warnings: st
 async function fetchEscortClubPublicPhone(html: string, sourceUrl: string, warnings: string[]) {
   let url: URL;
   try { url = new URL(sourceUrl); } catch { return ''; }
-  if (url.hostname !== 'escort.club' && !url.hostname.endsWith('.escort.club')) return '';
+  if (!isSupportedEscortClubProfileUrl(url)) return '';
   const profileId = html.match(/data-phone-id=["'](\d+)["']/i)?.[1];
   if (!profileId) return '';
   try {
     const endpoint = new URL('/includes/ajax.show-phone.php', url.origin).toString();
-    const response = await fetchPublicImportResource(endpoint, {
+    const response = await fetchSupportedEscortClubResource(endpoint, {
       method: 'POST',
       headers: {
         accept: 'application/json, text/javascript, */*; q=0.01',

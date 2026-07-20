@@ -1,5 +1,6 @@
 import { allowedServiceKeys } from './serviceCatalog.js';
 import { normalizeProfileEthnicity, normalizeProfileGender, normalizeProfileOrientation } from './validation.js';
+import { isSupportedEscortClubProfileUrl } from './escortClubUrls.js';
 
 export type ImportedDetails = {
   gender?: string; orientation?: string; age?: number; height_cm?: number; weight_kg?: number;
@@ -86,6 +87,10 @@ export function extractImportedProfileCity(html: string) {
   const scoped = html.match(/<(?:main|article)\b[^>]*>([\s\S]*?)<\/(?:main|article)>/i)?.[1]
     || html.replace(/<(?:nav|aside|footer)\b[\s\S]*?<\/(?:nav|aside|footer)>/gi, '')
       .replace(/<[^>]+class=["'][^"']*(?:recommended|popular-cities)[^"']*["'][^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+  const listingCities = [...scoped.matchAll(/<a\b[^>]*href=["'][^"']*\/(?:anonse\/towarzyskie|erotikanzeigen)\/[^/"']+\/["'][^>]*>([\s\S]*?)<\/a>/gi)]
+    .map((match) => decodeImportHtml(match[1]).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  if (listingCities.length) return listingCities.at(-1) || '';
   return decodeImportHtml(scoped.match(/<[^>]+class=["'][^"']*(?:content-location|profile-location|profile-city)[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i)?.[1] || '')
     .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -95,15 +100,15 @@ export function canLinkExistingImportedUser(user: { app_metadata?: Record<string
 }
 
 const labelAliases: Record<string, keyof Omit<ImportedDetails, 'unknown_fields'>> = {
-  plec: 'gender', geschlecht: 'gender', gender: 'gender',
+  plec: 'gender', sex: 'gender', geschlecht: 'gender', gender: 'gender',
   orientacja: 'orientation', orientierung: 'orientation', orientation: 'orientation',
   wiek: 'age', alter: 'age', age: 'age',
-  wzrost: 'height_cm', grosse: 'height_cm', groesse: 'height_cm', height: 'height_cm',
-  waga: 'weight_kg', gewicht: 'weight_kg', weight: 'weight_kg',
-  biust: 'bust', brust: 'bust', bust: 'bust',
+  wzrost: 'height_cm', hohe: 'height_cm', grosse: 'height_cm', groesse: 'height_cm', height: 'height_cm',
+  waga: 'weight_kg', 'das gewicht': 'weight_kg', gewicht: 'weight_kg', weight: 'weight_kg',
+  biust: 'bust', buste: 'bust', brust: 'bust', bust: 'bust',
   oczy: 'eyes', augen: 'eyes', eyes: 'eyes', augenfarbe: 'eyes',
   wlosy: 'hair', haare: 'hair', hair: 'hair', haarfarbe: 'hair',
-  wyjazdy: 'travel', besuche: 'travel', travel: 'travel', outcall: 'travel',
+  wyjazdy: 'travel', reisen: 'travel', besuche: 'travel', travel: 'travel', outcall: 'travel',
   jezyki: 'languages', sprachen: 'languages', languages: 'languages',
   etnicznosc: 'ethnicity', ethnizitat: 'ethnicity', ethnicity: 'ethnicity',
   narodowosc: 'nationality', nationalitat: 'nationality', nationality: 'nationality',
@@ -212,8 +217,7 @@ export function extractServiceTagCandidates(html: string) {
 export function parseEscortClubProfile(html: string, sourceUrl: string): EscortClubProfile | null {
   let parsedUrl: URL;
   try { parsedUrl = new URL(sourceUrl); } catch { return null; }
-  const host = parsedUrl.hostname.toLowerCase();
-  if (host !== 'escort.club' && !host.endsWith('.escort.club')) return null;
+  if (!isSupportedEscortClubProfileUrl(parsedUrl)) return null;
 
   const clean = (value: unknown) => decodeImportHtml(String(value || ''))
     .replace(/<script\b[\s\S]*?<\/script>/gi, ' ').replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
@@ -387,14 +391,14 @@ function importedPriceKeyForLabel(value: string): ImportedPriceKey | null {
   if (/(?:^|\s)(?:60\s*(?:min|minut)|1\s*(?:godz|godzina|h\b|hour|stund))/.test(label)) return 'price_1h';
   if (/(?:^|\s)(?:120\s*(?:min|minut)|2\s*(?:godz|godziny|h\b|hours?|stunden?))/.test(label)) return 'price_2h';
   if (/(?:^|\s)(?:180\s*(?:min|minut)|3\s*(?:godz|godziny|h\b|hours?|stunden?))/.test(label)) return 'price_3h';
-  if (/(?:noc|cala noc|overnight|night|ubernachtung)/.test(label)) return 'price_night';
+  if (/(?:noc|cala noc|nacht|overnight|night|ubernachtung)/.test(label)) return 'price_night';
   return null;
 }
 
 const aboutLabels = new Set(['o mnie', 'about me', 'uber mich']);
 const sectionBoundaryLabels = new Set([
-  'wiecej informacji', 'dodatkowe informacje', 'more information', 'additional information', 'mehr informationen',
-  'godziny dostepnosci', 'availability hours', 'opening hours', 'offnungszeiten',
+  'wiecej informacji', 'dodatkowe informacje', 'more information', 'additional information', 'mehr informationen', 'zusatzliche information',
+  'godziny dostepnosci', 'availability hours', 'opening hours', 'offnungszeiten', 'arbeitsstunden',
   'opinie', 'reviews', 'bewertungen', 'uslugi', 'services', 'leistungen'
 ]);
 
@@ -455,7 +459,7 @@ const importedDayAliases: Array<[ImportedDayKey, string[]]> = [
 ];
 
 function extractEscortClubOpeningHours(root: ImportHtmlNode, sourceUrl: URL, city: string): ImportedOpeningHours | undefined {
-  const openingLabels = new Set(['godziny dostepnosci','availability hours','opening hours','offnungszeiten']);
+  const openingLabels = new Set(['godziny dostepnosci','availability hours','opening hours','offnungszeiten','arbeitsstunden']);
   const heading = walkImportNodes(root).find((node) => isSemanticLabelNode(node) && openingLabels.has(importNodeKey(node)));
   if (!heading) return undefined;
   let anchor = heading;
@@ -474,12 +478,17 @@ function extractEscortClubOpeningHours(root: ImportHtmlNode, sourceUrl: URL, cit
 
 function parseOpeningHourLines(value: string) {
   const result: Partial<Record<ImportedDayKey, { enabled: boolean; start: string | null; end: string | null }>> = {};
-  for (const rawLine of value.split(/\r?\n/)) {
-    const line = normalizeImportKey(rawLine).replace(/\s+/g, ' ').trim();
+  const lines = value.split(/\r?\n/).map((line) => normalizeImportKey(line).replace(/\s+/g, ' ').trim()).filter(Boolean);
+  for (let index = 0; index < lines.length; index += 1) {
+    let line = lines[index];
     if (!line) continue;
+    if (importedDayAliases.some(([, aliases]) => aliases.includes(line.replace(/[.,:]$/, ''))) && lines[index + 1]) {
+      line = `${line} ${lines[index + 1]}`;
+      index += 1;
+    }
     let matchedDay = false;
     for (const [day, aliases] of importedDayAliases) {
-      const dayMatch = line.match(new RegExp(`^(?:${aliases.join('|')})(?:[.,:]?\\s+|$)`));
+      const dayMatch = line.match(new RegExp(`^(?:${aliases.join('|')})(?:[.,:]\\s*|\\s+|$)`));
       if (!dayMatch) continue;
       matchedDay = true;
       const rest = line.slice(dayMatch[0].length).replace(/^\s+/, '');
@@ -504,7 +513,7 @@ function parseOpeningHourLines(value: string) {
 
 function isImportedAllDay(value: string) {
   const normalized = normalizeImportKey(value).replace(/\s+/g, ' ').trim();
-  return /^(?:caly czas|cala dobe|24\s*h|24\s*\/\s*7|all day|全天|ganztagig|rund um die uhr)\b/.test(normalized);
+  return /^(?:caly czas|cala dobe|24\s*h|24\s*\/\s*7|all day|全天|die ganze zeit|ganztagig|rund um die uhr)\b/.test(normalized);
 }
 
 function escortClubTimezone(sourceUrl: URL, city: string) {
@@ -516,21 +525,21 @@ function escortClubTimezone(sourceUrl: URL, city: string) {
 }
 
 function decodeImportHtml(value: string) {
-  const named: Record<string, string> = { amp: '&', quot: '"', apos: "'", nbsp: ' ', eogon: 'ę', Eogon: 'Ę', lstrok: 'ł', Lstrok: 'Ł', oacute: 'ó', Oacute: 'Ó', sacute: 'ś', Sacute: 'Ś', zacute: 'ź', Zacute: 'Ź', zdot: 'ż', Zdot: 'Ż', cacute: 'ć', Cacute: 'Ć', nacute: 'ń', Nacute: 'Ń', aogon: 'ą', Aogon: 'Ą', euro: '€' };
+  const named: Record<string, string> = { amp: '&', quot: '"', apos: "'", nbsp: ' ', eogon: 'ę', Eogon: 'Ę', lstrok: 'ł', Lstrok: 'Ł', oacute: 'ó', Oacute: 'Ó', sacute: 'ś', Sacute: 'Ś', zacute: 'ź', Zacute: 'Ź', zdot: 'ż', Zdot: 'Ż', cacute: 'ć', Cacute: 'Ć', nacute: 'ń', Nacute: 'Ń', aogon: 'ą', Aogon: 'Ą', auml: 'ä', Auml: 'Ä', ouml: 'ö', Ouml: 'Ö', uuml: 'ü', Uuml: 'Ü', szlig: 'ß', euro: '€' };
   return value.replace(/&#(x?[0-9a-f]+);?/gi, (_match, code: string) => String.fromCodePoint(code[0].toLowerCase() === 'x' ? parseInt(code.slice(1), 16) : parseInt(code, 10)))
     .replace(/&([a-z][a-z0-9]+);/gi, (match, name: string) => named[name] ?? match);
 }
 
 function normalizeOrientation(value: string) {
   const key = normalizeImportKey(value);
-  if (/hetero|heterosexuell|straight/.test(key)) return 'heterosexual';
-  if (/homo|homosexuell|gay/.test(key)) return 'homosexual';
-  if (/^bi$|bisexuell|bisexual/.test(key)) return 'bisexual';
+  if (/hetero|heterosexuell|straight/.test(key)) return 'hetero';
+  if (/homo|homosexuell|gay/.test(key)) return 'homo';
+  if (/^bi$|bisexuell|bisexual/.test(key)) return 'bi';
   return value;
 }
 
 function normalizeLanguages(value: string) {
-  const aliases: Record<string, string> = { angielski: 'en', englisch: 'en', english: 'en', niemiecki: 'de', deutsch: 'de', german: 'de', polski: 'pl', polnisch: 'pl', polish: 'pl' };
+  const aliases: Record<string, string> = { angielski: 'en', englisch: 'en', english: 'en', niemiecki: 'de', deutsch: 'de', german: 'de', polski: 'pl', polnisch: 'pl', polish: 'pl', franzosisch: 'fr', spanisch: 'es', italienisch: 'it', portugiesisch: 'pt', russisch: 'ru' };
   return [...new Set(value.split(/[,;/|]/).map((item) => aliases[normalizeImportKey(item)] || normalizeImportKey(item)).filter(Boolean))].slice(0, 8);
 }
 

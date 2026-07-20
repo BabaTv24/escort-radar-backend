@@ -3,6 +3,12 @@ import {
   readImportResponseLimited,
   validatePublicImportUrl
 } from './publicImportSecurity.js';
+import {
+  escortClubProfileId,
+  isSupportedEscortClubHost,
+  isSupportedEscortClubListingUrl,
+  isSupportedEscortClubProfileUrl
+} from './escortClubUrls.js';
 
 export type CityImportDiscoveryErrorCode =
   | 'invalid_url'
@@ -11,8 +17,11 @@ export type CityImportDiscoveryErrorCode =
   | 'blocked_address'
   | 'fetch_timeout'
   | 'fetch_failed'
+  | 'source_http_error'
   | 'captcha_or_protection_detected'
   | 'no_profiles_found'
+  | 'empty_listing'
+  | 'listing_structure_changed'
   | 'html_too_large';
 
 export class CityImportDiscoveryError extends Error {
@@ -72,7 +81,7 @@ export function normalizeCityListingUrl(value: string) {
   }
 
   if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
-    throw new CityImportDiscoveryError('invalid_url', 'Only HTTP/HTTPS URLs without credentials are supported');
+    throw new CityImportDiscoveryError('invalid_url', 'Only HTTPS URLs without credentials are supported');
   }
 
   const publicUrlError = validatePublicImportUrl(parsed.toString());
@@ -81,12 +90,13 @@ export function normalizeCityListingUrl(value: string) {
   }
 
   const hostname = parsed.hostname.toLowerCase();
-  if (!isEscortClubHost(hostname)) {
+  if (!isSupportedEscortClubHost(hostname)) {
     throw new CityImportDiscoveryError('unsupported_host', 'Only public escort.club city listings are supported');
   }
-
-  const pathSegments = parsed.pathname.split('/').filter(Boolean);
-  if (pathSegments[0]?.toLowerCase() !== 'anonse' || pathSegments.length < 3) {
+  if (parsed.protocol !== 'https:') {
+    throw new CityImportDiscoveryError('invalid_url', 'Only HTTPS escort.club city listings are supported');
+  }
+  if (!isSupportedEscortClubListingUrl(parsed)) {
     throw new CityImportDiscoveryError('unsupported_listing', 'The URL must point to an escort.club city listing');
   }
 
@@ -142,7 +152,9 @@ export function extractEscortClubListing(html: string, listingUrl: string, maxPr
 
   const externalIds = new Set<string>();
   const normalizedUrls = new Set<string>();
-  for (const card of findResultCards(mainContainer.node)) {
+  const resultCards = findResultCards(mainContainer.node);
+  if (!resultCards.length && (declaredCount === 0 || detectEmptyListing(mainContainer.node))) warnings.push('empty_listing');
+  for (const card of resultCards) {
     const city = extractCardCity(card);
     if (city && city !== expectedCity) continue;
     const href = profileHrefFromCard(card);
@@ -154,7 +166,7 @@ export function extractEscortClubListing(html: string, listingUrl: string, maxPr
       continue;
     }
     if (!isEscortClubProfileUrl(candidate)) continue;
-    const externalId = candidate.pathname.match(/^\/anons\/(\d+)[.]html$/i)?.[1];
+    const externalId = escortClubProfileId(candidate);
     if (!externalId || externalIds.has(externalId)) continue;
     const normalizedUrl = normalizeProfileSourceUrl(candidate.toString());
     if (normalizedUrls.has(normalizedUrl)) continue;
@@ -182,10 +194,7 @@ export function isEscortClubProfileUrl(value: string | URL) {
   } catch {
     return false;
   }
-  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return false;
-  if (!isEscortClubHost(parsed.hostname.toLowerCase())) return false;
-  const pathname = parsed.pathname.toLowerCase().replace(/\/{2,}/g, '/');
-  return /^\/anons\/\d+[.]html$/.test(pathname);
+  return isSupportedEscortClubProfileUrl(parsed);
 }
 
 export async function discoverCityProfiles(
@@ -221,7 +230,7 @@ export async function discoverCityProfiles(
       if ([403, 429, 503].includes(response.status)) {
         throw new CityImportDiscoveryError('captcha_or_protection_detected', `Listing access was blocked with HTTP ${response.status}`);
       }
-      throw new CityImportDiscoveryError('fetch_failed', `City listing returned HTTP ${response.status}`);
+      throw new CityImportDiscoveryError('source_http_error', `City listing returned HTTP ${response.status}`);
     }
 
     const contentType = response.headers.get('content-type') || '';
@@ -246,7 +255,13 @@ export async function discoverCityProfiles(
 
   const firstExtraction = extractEscortClubListing(await fetchListingHtml(listingUrl), listingUrl, limit);
   if (!firstExtraction.profile_urls.length) {
-    throw new CityImportDiscoveryError('no_profiles_found', 'No public profile links were found on this city listing');
+    if (firstExtraction.warnings.includes('main_results_container_not_found')) {
+      throw new CityImportDiscoveryError('listing_structure_changed', 'The city listing HTML no longer contains a recognized main results container');
+    }
+    if (firstExtraction.declared_count === 0 || firstExtraction.warnings.includes('empty_listing')) {
+      throw new CityImportDiscoveryError('empty_listing', 'The city listing is valid but currently contains no profiles');
+    }
+    throw new CityImportDiscoveryError('listing_structure_changed', 'The main city results container did not contain recognized public profile cards');
   }
   const profileUrls: string[] = [];
   const externalIds = new Set<string>();
@@ -365,7 +380,7 @@ function findMainResultsContainer(nodes: DiscoveryHtmlNode[], expectedCity: stri
   for (const heading of headings) {
     let current = heading.parent;
     while (current && current.tag !== 'root') {
-      if (['section', 'main', 'article'].includes(current.tag) && findResultCards(current).length) {
+      if (['section', 'main', 'article'].includes(current.tag) && (findResultCards(current).length || detectEmptyListing(current))) {
         const reliableClass = hasDiscoveryClass(current, 'content-sec') || hasDiscoveryClass(current, 'results') || hasDiscoveryClass(current, 'listing-results');
         return { node: current, reliable: reliableClass || current.tag === 'section' || current.tag === 'main' };
       }
@@ -409,11 +424,15 @@ function profileLinksInNode(node: DiscoveryHtmlNode) {
   return walkDiscoveryNodes(node)
     .filter((child) => child.tag === 'a')
     .map((child) => discoveryAttribute(child, 'href'))
-    .filter((href) => /(?:^|\/)anons\/\d+[.]html(?:[?#]|$)/i.test(href));
+    .filter((href) => /(?:^|\/)(?:anons|erotikanzeigen)\/\d+[.]html(?:[?#]|$)/i.test(href));
 }
 
 function profileExternalId(value: string) {
-  return value.match(/(?:^|\/)anons\/(\d+)[.]html(?:[?#]|$)/i)?.[1] || '';
+  try {
+    return escortClubProfileId(new URL(value)) || '';
+  } catch {
+    return value.match(/(?:^|\/)(?:anons|erotikanzeigen)\/(\d+)[.]html(?:[?#]|$)/i)?.[1] || '';
+  }
 }
 
 function profileHrefFromCard(card: DiscoveryHtmlNode) {
@@ -445,6 +464,11 @@ function extractDeclaredResultCount(html: string) {
   return null;
 }
 
+function detectEmptyListing(container: DiscoveryHtmlNode) {
+  const text = normalizeDiscoveryText(discoveryNodeText(container));
+  return /(?:brakogloszen|brakwynikow|niemaogloszen|keineanzeigen|keineerotikanzeigen|keineergebnisse|noprofiles|noresults)/.test(text);
+}
+
 function extractPaginationUrls(nodes: DiscoveryHtmlNode[], base: URL) {
   const paginationContainers = nodes.filter((node) => {
     const className = discoveryAttribute(node, 'class');
@@ -469,15 +493,14 @@ function extractPaginationUrls(nodes: DiscoveryHtmlNode[], base: URL) {
   return [...unique];
 }
 
-function isEscortClubHost(hostname: string) {
-  return hostname === 'escort.club' || hostname.endsWith('.escort.club');
-}
-
 async function fetchCityListingResource(value: string, init: RequestInit, redirects = 0): Promise<Response> {
   const safetyError = validatePublicImportUrl(value);
   if (safetyError) throw new Error(safetyError);
   const parsed = new URL(value);
-  if (!isEscortClubHost(parsed.hostname.toLowerCase())) {
+  if (parsed.protocol !== 'https:') {
+    throw new CityImportDiscoveryError('blocked_address', 'City listing redirect must use HTTPS');
+  }
+  if (!isSupportedEscortClubHost(parsed.hostname.toLowerCase())) {
     throw new CityImportDiscoveryError('unsupported_host', 'City listing redirect left the supported escort.club host');
   }
   await assertPublicImportDns(value);
@@ -510,8 +533,13 @@ function decodeHtmlAttribute(value: string) {
     .replace(/&amp;/gi, '&')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&auml;/gi, 'ä')
+    .replace(/&ouml;/gi, 'ö')
+    .replace(/&uuml;/gi, 'ü')
+    .replace(/&szlig;/gi, 'ß')
     .replace(/&#x2f;/gi, '/')
-    .replace(/&#47;/g, '/');
+    .replace(/&#47;/g, '/')
+    .replace(/&#(x?[0-9a-f]+);?/gi, (_match, code: string) => String.fromCodePoint(code[0].toLowerCase() === 'x' ? parseInt(code.slice(1), 16) : parseInt(code, 10)));
 }
 
 function detectAccessProtection(html: string) {

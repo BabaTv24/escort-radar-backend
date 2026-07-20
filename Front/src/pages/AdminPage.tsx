@@ -1134,7 +1134,7 @@ export function AdminPage() {
       setSelectedCityProfileUrls(result.profile_urls);
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : t('states.requestFailed');
-      const knownCode = ['invalid_url', 'unsupported_host', 'unsupported_listing', 'blocked_address', 'fetch_timeout', 'fetch_failed', 'captcha_or_protection_detected', 'no_profiles_found', 'html_too_large']
+      const knownCode = ['invalid_url', 'unsupported_host', 'unsupported_listing', 'blocked_address', 'fetch_timeout', 'fetch_failed', 'source_http_error', 'captcha_or_protection_detected', 'no_profiles_found', 'empty_listing', 'listing_structure_changed', 'html_too_large']
         .find((code) => rawMessage.startsWith(code));
       setCityImportError(knownCode ? t(`admin.cityImport.errors.${knownCode}`) : rawMessage);
     } finally {
