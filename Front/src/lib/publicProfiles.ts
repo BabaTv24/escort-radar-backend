@@ -5,6 +5,7 @@ import { normalizeProfileCategory } from './geo';
 const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | boolean> }).env || {};
 const API_URL = String(viteEnv.VITE_API_URL || 'http://localhost:4000');
 const PUBLIC_PROFILES_PATH = '/api/profiles';
+const PUBLIC_PROFILES_TIMEOUT_MS = 15_000;
 
 type ApiProfile = Record<string, unknown>;
 
@@ -57,14 +58,27 @@ export async function getPublicProfiles(params: URLSearchParams | string = '', o
 
   const controller = new AbortController();
   const startedAt = performance.now();
+  const timeoutId = setTimeout(() => {
+    controller.abort(new DOMException(`Public profiles request timed out after ${PUBLIC_PROFILES_TIMEOUT_MS}ms`, 'TimeoutError'));
+  }, PUBLIC_PROFILES_TIMEOUT_MS);
   const pending = fetchPublicProfiles(url, controller.signal)
     .then((profiles) => {
       if (cacheTtlMs > 0) publicProfilesCache.set(url, { expiresAt: Date.now() + cacheTtlMs, profiles });
       options.onMetrics?.(publicProfilesMetrics.get(url) || null);
-      if (viteEnv.DEV) console.info('[public-profiles:metrics]', { url, duration_ms: Math.round(performance.now() - startedAt), profiles: profiles.length });
+      if (viteEnv.DEV) {
+        const metrics = publicProfilesMetrics.get(url);
+        console.info('[public-profiles:metrics]', {
+          url,
+          client_duration_ms: Math.round(performance.now() - startedAt),
+          server_duration_ms: metrics?.duration_ms ?? null,
+          response_bytes: metrics?.response_bytes ?? null,
+          profiles: profiles.length
+        });
+      }
       return profiles;
     })
     .finally(() => {
+      clearTimeout(timeoutId);
       if (publicProfilesInFlight.get(url)?.promise === pending) publicProfilesInFlight.delete(url);
     });
   publicProfilesInFlight.set(url, { promise: pending });

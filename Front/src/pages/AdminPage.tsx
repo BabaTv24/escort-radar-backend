@@ -178,7 +178,6 @@ const sections = [
       ['photos', '/admin/photos', Camera, 'admin.nav.photos'],
       ['moderation', '/admin/moderation', Shield, 'admin.nav.moderation'],
       ['reports', '/admin/reports', Ban, 'admin.nav.reports'],
-      ['sponsored-profiles', '/admin/sponsored-profiles', Sparkles, 'admin.nav.sponsoredProfiles'],
       ['profile-studio', '/admin/profile-studio', Sparkles, 'admin.nav.sponsoredProfiles']
     ]
   },

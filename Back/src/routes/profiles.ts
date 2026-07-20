@@ -126,7 +126,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .filter((profile) => radarMode || !categoryFilter || normalizeProfileCategory(profile.category) === categoryFilter);
   const preparedRadarPool = radarMode ? prepareRadarCandidatePool(data, pagesFetched, truncated) : null;
   const profiles = (preparedRadarPool
-    ? preparedRadarPool.candidates.map(({ profile, location }) => sanitizePublicProfile(withImageUrls(profile), location))
+    ? preparedRadarPool.candidates.map(({ profile, location }) => sanitizePublicProfile(withImageUrls(profile), location, 1))
     : filteredRecords.map((profile) => sanitizePublicProfile(withImageUrls(profile))))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
 
@@ -467,9 +467,9 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
   };
 }
 
-function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile)) {
+function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile), imageLimit = 4) {
   const { phone, primary_phone, additional_phones, whatsapp, telegram, admin_note, subscription_note, source_url, import_source, imported_at, source_url_normalized, latitude, longitude, work_place_label, exact_address: _omittedExactAddress, ...publicProfile } = profile;
-  const visibleImages = (publicProfile.profile_images || []).slice(0, 4);
+  const visibleImages = (publicProfile.profile_images || []).slice(0, imageLimit);
   const visibility = normalizeEffectiveLocationVisibility(publicProfile.location_mode, publicProfile.location_visibility);
   const postalCode = visibility === 'hidden' ? null : publicProfile.postal_code;
   // Legacy DB modes: approximate/city_only/exact_hidden. UI modes exact/postal_area/city_only/hidden are mapped before save.
