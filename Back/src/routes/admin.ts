@@ -3377,6 +3377,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
   const resolvedCity = resolveCityLocation(body.work_city || city);
   const suppliedWorkCountry = optionalText(body.work_country || body.country, 80);
   const suppliedWorkCity = optionalText(body.work_city || body.city, 100);
+  const importedWorkCountry = resolveImportedCountry(suppliedWorkCountry || resolvedCity?.country_code, suppliedWorkCity || resolvedCity?.canonical_city || city);
   const locationMode = ['exact_hidden', 'approximate', 'city_only'].includes(String(body.location_mode || 'city_only')) ? String(body.location_mode || 'city_only') : 'city_only';
   const importedCityOnly = allowImportedCity && locationMode === 'city_only' ? resolvedCity : null;
 
@@ -3392,7 +3393,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
       display_name: displayName,
       city,
       area: optionalText(body.area, 80),
-      work_country: allowImportedCity ? resolvedCity?.country_code || suppliedWorkCountry || null : suppliedWorkCountry || resolvedCity?.country_code || null,
+      work_country: allowImportedCity ? importedWorkCountry || null : suppliedWorkCountry || resolvedCity?.country_code || null,
       work_city: allowImportedCity ? resolvedCity?.canonical_city || suppliedWorkCity : suppliedWorkCity || resolvedCity?.canonical_city || adminCityLabel(city),
       work_area: optionalText(body.work_area, 120) || optionalText(body.area, 80),
       postal_code: optionalText(body.postal_code, 20),
@@ -4618,14 +4619,16 @@ function parseCsv(input: string) {
 
 function normalizeImportRow(input: Record<string, unknown>): Record<string, any> {
   const booleanValue = (value: unknown) => ['1', 'true', 'yes', 'y', 'tak', 'ja'].includes(String(value || '').trim().toLowerCase());
+  const workCity = String(input.city || input.work_city || 'Berlin').trim();
+  const workCountry = resolveImportedCountry(input.country || input.work_country, workCity) || 'DE';
   return {
     ...input,
     email: String(input.email || '').trim().toLowerCase(),
     owner_email: String(input.email || '').trim().toLowerCase(),
     display_name: String(input.display_name || '').trim(),
     phone: String(input.phone || '').trim(),
-    work_country: String(input.country || input.work_country || 'DE').trim(),
-    work_city: String(input.city || input.work_city || 'Berlin').trim(),
+    work_country: workCountry,
+    work_city: workCity,
     city: String(input.city || 'berlin').trim().toLowerCase(),
     work_area: String(input.area || input.work_area || '').trim(),
     services: String(input.services || '').split(/[;,|]/).map((item) => item.trim()).filter(Boolean),

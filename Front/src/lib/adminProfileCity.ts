@@ -26,6 +26,16 @@ const countryAliases: Record<string, string> = {
   at: 'AT', austria: 'AT', osterreich: 'AT'
 };
 
+const polishCityCountryOverrides = new Set([
+  'bydgoszcz',
+  'kolobrzeg',
+  'koszalin',
+  'stargard',
+  'stargard szczecinski',
+  'szczecin',
+  'poznan'
+]);
+
 const countryNames: Record<string, Record<string, string>> = {
   PL: { DE: 'Niemcy', PL: 'Polska', NL: 'Holandia', CZ: 'Republika Czeska', AT: 'Austria' },
   EN: { DE: 'Germany', PL: 'Poland', NL: 'Netherlands', CZ: 'Czechia', AT: 'Austria' },
@@ -54,10 +64,11 @@ export function normalizeAdminProfileCitySearch(value: unknown) {
 }
 
 export function normalizeAdminProfileCountry(value: unknown, city?: unknown) {
+  const cityKey = normalizeAdminProfileCitySearch(city);
+  if (polishCityCountryOverrides.has(cityKey)) return 'PL';
   const normalized = normalizeAdminProfileCitySearch(value);
   const explicit = countryAliases[normalized];
   if (explicit) return explicit;
-  const cityKey = normalizeAdminProfileCitySearch(city);
   if (cityKey === 'bonn') return 'DE';
   if (['prag', 'praga', 'praha', 'prague', 'pragu'].includes(cityKey)) return 'CZ';
   return unknownAdminProfileCountryKey;

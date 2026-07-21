@@ -1,3 +1,5 @@
+import { resolvePolishCityCountryOverride } from './profileCountry.js';
+
 export const UNKNOWN_ADMIN_COUNTRY = '__unknown_country__';
 export const UNKNOWN_ADMIN_CITY = '__unknown_city__';
 
@@ -31,9 +33,11 @@ export function normalizeAdminCatalogText(value: unknown) {
 }
 
 export function resolveAdminProfileCountry(row: Pick<AdminProfileCatalogRow, 'work_country' | 'work_city' | 'city'>) {
+  const city = normalizeAdminCatalogText(row.work_city || row.city);
+  const controlledOverride = resolvePolishCityCountryOverride(city);
+  if (controlledOverride) return controlledOverride;
   const explicit = countryAliases[normalizeAdminCatalogText(row.work_country)];
   if (explicit) return explicit;
-  const city = normalizeAdminCatalogText(row.work_city || row.city);
   return cityCountryFallback[city] || UNKNOWN_ADMIN_COUNTRY;
 }
 

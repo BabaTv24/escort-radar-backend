@@ -1,6 +1,7 @@
 import { allowedServiceKeys } from './serviceCatalog.js';
 import { normalizeProfileEthnicity, normalizeProfileGender, normalizeProfileOrientation } from './validation.js';
 import { isSupportedEscortClubProfileUrl } from './escortClubUrls.js';
+import { resolvePolishCityCountryOverride } from './profileCountry.js';
 
 export type ImportedDetails = {
   gender?: string; orientation?: string; age?: number; height_cm?: number; weight_kg?: number;
@@ -134,6 +135,8 @@ export function normalizeImportedCountry(value: unknown) {
 }
 
 export function resolveImportedCountry(country: unknown, city: unknown) {
+  const controlledOverride = resolvePolishCityCountryOverride(city);
+  if (controlledOverride) return controlledOverride;
   const explicit = normalizeImportedCountry(country);
   if (explicit) return explicit;
   const cityKey = normalizeImportKey(city);

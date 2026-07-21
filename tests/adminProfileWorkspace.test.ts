@@ -66,6 +66,10 @@ test('presentation country fallback assigns Bonn and Prague variants without ove
   assert.equal(normalizeAdminProfileCountry('', ' Bonn '), 'DE');
   for (const city of ['Prag', 'Praga', 'Praha', 'Prague']) assert.equal(normalizeAdminProfileCountry('unknown', city), 'CZ');
   assert.equal(normalizeAdminProfileCountry('PL', 'Bonn'), 'PL');
+  for (const city of ['Bydgoszcz', 'Kołobrzeg', 'Kolobrzeg', 'Koszalin', 'Stargard', 'Stargard Szczeciński', 'Stargard Szczecinski', 'Szczecin', 'Poznań', 'Poznan']) {
+    assert.equal(normalizeAdminProfileCountry('DE', city), 'PL', city);
+  }
+  assert.equal(normalizeAdminProfileCountry('DE', 'Bonn'), 'DE');
 });
 
 test('country hierarchy normalizes aliases, scopes duplicate city names and preserves every profile once', () => {

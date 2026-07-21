@@ -18,3 +18,12 @@ test('importer does not derive country from the escort.club language subdomain',
   assert.match(preview, /resolveImportedCountry\(rawProfile\.country \|\| rawProfile\.work_country, cityLabel\)/);
   assert.doesNotMatch(preview, /hostname|startsWith\('de\.'\)/);
 });
+
+test('importer prevents DE from being stored for controlled Polish city variants', () => {
+  for (const city of ['Bydgoszcz', 'Kołobrzeg', 'Kolobrzeg', 'Koszalin', 'Stargard', 'Stargard Szczeciński', 'Stargard Szczecinski', 'Szczecin', 'Poznań', 'Poznan']) {
+    assert.equal(resolveImportedCountry('DE', city), 'PL', city);
+  }
+  assert.equal(resolveImportedCountry('DE', 'Bonn'), 'DE');
+  assert.equal(resolveImportedCountry('', 'Prag'), 'CZ');
+  assert.equal(resolveImportedCountry('', 'Praha'), 'CZ');
+});

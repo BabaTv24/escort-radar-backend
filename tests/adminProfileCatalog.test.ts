@@ -18,6 +18,15 @@ test('Bonn and Prague variants fall back to DE and CZ while an explicit valid co
   assert.equal(resolveAdminProfileCountry({ work_country: 'Moon', work_city: 'Elsewhere' }), '__unknown_country__');
 });
 
+test('controlled Polish cities override an incorrectly stored DE country', () => {
+  for (const city of ['Bydgoszcz', 'Kołobrzeg', 'Kolobrzeg', 'Koszalin', 'Stargard', 'Stargard Szczeciński', 'Stargard Szczecinski', 'Szczecin', 'Poznań', 'Poznan']) {
+    assert.equal(resolveAdminProfileCountry({ work_country: 'DE', work_city: city }), 'PL', city);
+  }
+  assert.equal(resolveAdminProfileCountry({ work_country: 'DE', work_city: 'Bonn' }), 'DE');
+  assert.equal(resolveAdminProfileCountry({ work_country: '', work_city: 'Prag' }), 'CZ');
+  assert.equal(resolveAdminProfileCountry({ work_country: '', work_city: 'Praha' }), 'CZ');
+});
+
 test('country and city aggregates preserve approved pending and unknown totals', () => {
   const rows = [
     { id: '1', work_country: '', work_city: 'Bonn', moderation_status: 'approved' },
