@@ -14,8 +14,15 @@ import {
 } from '../Back/src/cityImportDiscovery.ts';
 
 const listingUrl = 'https://pl.escort.club/anonse/towarzyskie/bydgoszcz/';
+const poznanProductionUrl = 'https://pol.escort.club/anonse/towarzyskie/poznan/?province=30&district=&filter_price_type=&filter_price_eur=0%3B5000&filter_age=18%3B1';
 
 test('city listing URL normalization removes tracking and fragments and keeps one trailing slash', () => {
+  const normalizedPoznan = new URL(normalizeCityListingUrl(poznanProductionUrl));
+  assert.equal(normalizedPoznan.origin, 'https://pol.escort.club');
+  assert.equal(normalizedPoznan.pathname, '/anonse/towarzyskie/poznan/');
+  assert.deepEqual(Object.fromEntries(normalizedPoznan.searchParams), {
+    district: '', filter_age: '18;1', filter_price_eur: '0;5000', filter_price_type: '', province: '30'
+  });
   assert.equal(
     normalizeCityListingUrl('https://pl.escort.club//anonse/towarzyskie/bydgoszcz?utm_source=test&sort=new#profiles'),
     'https://pl.escort.club/anonse/towarzyskie/bydgoszcz/?sort=new'
@@ -64,6 +71,13 @@ test('city discovery rejects credentials, unsupported hosts and private SSRF tar
     () => normalizeCityListingUrl('https://example.com/anonse/towarzyskie/test/'),
     (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'unsupported_host'
   );
+  for (const value of [
+    'https://pol.escort.club.example.com/anonse/towarzyskie/poznan/',
+    'https://escort.club.evil.com/anonse/towarzyskie/poznan/',
+    'https://user:secret@pol.escort.club/anonse/towarzyskie/poznan/'
+  ]) {
+    assert.throws(() => normalizeCityListingUrl(value), (error: unknown) => error instanceof CityImportDiscoveryError && ['unsupported_host', 'invalid_url'].includes(error.code));
+  }
   assert.throws(
     () => normalizeCityListingUrl('https://fr.escort.club/anonse/test/'),
     (error: unknown) => error instanceof CityImportDiscoveryError && error.code === 'unsupported_host'
@@ -102,6 +116,7 @@ test('city profile extraction resolves relative links, normalizes and deduplicat
 });
 
 test('escort.club profile URL requires a numeric id and html pathname', () => {
+  assert.equal(isEscortClubProfileUrl('https://pol.escort.club/anons/247251.html'), true);
   assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anons/247251.html'), true);
   assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anons/add'), false);
   assert.equal(isEscortClubProfileUrl('https://pl.escort.club/anons/abc.html'), false);
