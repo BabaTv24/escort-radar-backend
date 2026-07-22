@@ -62,6 +62,7 @@ import { supabaseAdminDeletionPinStore } from '../adminDeletionPinStore.js';
 import { runBulkProfilePublish } from '../bulkProfilePublish.js';
 import { runBulkPhotoModeration, validateBulkPhotoModerationInput } from '../bulkPhotoModeration.js';
 import { buildProfilePhotoApprovalResult, validateProfilePhotoApprovalInput } from '../bulkProfilePhotoApproval.js';
+import { buildProfileExport, loadAllProfilesForExport, profileExportFilename, profileExportPageSize } from '../adminProfileExport.js';
 
 export const adminRouter = Router();
 
@@ -815,6 +816,28 @@ adminRouter.get('/profiles', asyncHandler(async (req, res) => {
     safety_limit: safetyLimit,
     truncated: rows.length === safetyLimit && lastPageWasFull
   }));
+}));
+
+adminRouter.get('/profiles/export', asyncHandler(async (_req, res) => {
+  const exportedAt = new Date();
+  const profiles = await loadAllProfilesForExport(async (afterId, pageSize) => {
+    let query = supabaseAdmin
+      .from('profiles')
+      .select('*, profile_images(*)')
+      .order('id', { ascending: true })
+      .limit(pageSize);
+    if (afterId) query = query.gt('id', afterId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  }, profileExportPageSize);
+  const payload = buildProfileExport(profiles, exportedAt);
+
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${profileExportFilename(exportedAt)}"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(JSON.stringify(payload));
 }));
 
 adminRouter.get('/profiles/visibility-audit', asyncHandler(async (req, res) => {

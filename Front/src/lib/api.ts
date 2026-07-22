@@ -80,6 +80,34 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return response.json();
 }
 
+export function adminProfileExportDownloadFilename(disposition: string | null, now = new Date()) {
+  const encoded = (disposition || '').match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const plain = (disposition || '').match(/filename="?([^";]+)"?/i)?.[1];
+  let candidate = plain || '';
+  if (encoded) {
+    try {
+      candidate = decodeURIComponent(encoded);
+    } catch {
+      candidate = '';
+    }
+  }
+  if (/^escort-radar-profiles-backup-\d{4}-\d{2}-\d{2}-\d{4}\.json$/.test(candidate)) return candidate;
+  const iso = now.toISOString();
+  return `escort-radar-profiles-backup-${iso.slice(0, 10)}-${iso.slice(11, 16).replace(':', '')}.json`;
+}
+
+export function saveDownloadedFile(blob: Blob, filename: string, documentRef: Document = document, urlRef: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'> = URL) {
+  const objectUrl = urlRef.createObjectURL(blob);
+  const link = documentRef.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  link.style.display = 'none';
+  documentRef.body.appendChild(link);
+  link.click();
+  link.remove();
+  urlRef.revokeObjectURL(objectUrl);
+}
+
 export const api = {
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
   authMe: (token: string) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business'; role?: string; app_metadata?: Record<string, unknown> }; client_profile: ClientProfile | null }>('/api/auth/me', { token }),
@@ -181,6 +209,17 @@ export const api = {
   }>('/api/admin/stats', { token }),
   adminMe: (token: string) => request<{ admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/me', { token }),
   adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number>; pagination?: { page_size: number; pages_loaded: number; loaded_profiles: number; safety_limit: number; truncated: boolean } }>(`/api/admin/profiles${params}`, { token }),
+  exportAdminProfiles: async (token: string) => {
+    const response = await fetch(`${API_URL}/api/admin/profiles/export`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({ error: 'Profile export failed' }));
+      throw new ApiError(String(payload.error || 'Profile export failed'), response.status, payload);
+    }
+    return { blob: await response.blob(), filename: adminProfileExportDownloadFilename(response.headers.get('Content-Disposition')) };
+  },
   adminProfileStats: (token: string) => request<{ profiles: Profile[]; stats: Record<string, number> }>('/api/admin/profiles/stats', { token }),
   adminProfileCountries: (token: string, params = '') => request<{ items: Array<{ key: string; total: number; approved: number; pending: number }>; total: number; page: number; limit: number; has_more: boolean; filters: Record<string, unknown> }>(`/api/admin/profiles/catalog/countries${params}`, { token }),
   adminProfileCities: (token: string, params: string) => request<{ items: Array<{ key: string; name: string; total: number; approved: number; pending: number }>; total: number; page: number; limit: number; has_more: boolean; filters: Record<string, unknown> }>(`/api/admin/profiles/catalog/cities${params}`, { token }),
@@ -240,11 +279,6 @@ export const api = {
   sendAdminProfileResetEmail: (token: string, id: string) => request<{ sent: boolean; email_to: string; subject: string; email_body: string; link: string; reason?: string }>(`/api/admin/profiles/${id}/send-reset-email`, {
     method: 'POST',
     token
-  }),
-  importAdminProfiles: (token: string, form: FormData) => request<{ report: { created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } }>('/api/admin/profiles/import', {
-    method: 'POST',
-    token,
-    body: form
   }),
   updateAdminProfile: (token: string, id: string, body: Partial<Profile>) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, {
     method: 'PUT',

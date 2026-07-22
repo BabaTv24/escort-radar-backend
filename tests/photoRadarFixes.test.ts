@@ -117,7 +117,9 @@ test('admin profiles use a scoped request and photo moderation never requests th
 
   const profileBranch = loadSource.slice(profileBranchStart, photoBranchStart);
   const photoBranch = loadSource.slice(photoBranchStart, fullLoadStart);
-  assert.deepEqual(profileBranch.match(/api\.[A-Za-z]+/g), ['api.adminProfiles']);
+  assert.deepEqual(profileBranch.match(/api\.[A-Za-z]+/g), ['api.adminProfileStats']);
+  assert.match(profileBranch, /loadProfileCatalogCountries\(accessToken, true\)/);
+  assert.doesNotMatch(profileBranch, /api\.adminProfiles\(|api\.profiles\(/);
   assert.deepEqual(photoBranch.match(/api\.[A-Za-z]+/g), ['api.adminPhotos']);
   assert.match(profileBranch, /return;/);
   assert.match(photoBranch, /return;/);

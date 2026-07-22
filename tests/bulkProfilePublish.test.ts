@@ -91,8 +91,11 @@ test('frontend removes published IDs and preserves skipped and failed selections
 
 test('admin UI renders publish summary and refreshes profiles after bulk publish', async () => {
   const source = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  const bulkPublishSource = source.slice(source.indexOf("if (operation === 'publish')"), source.indexOf('await action(async () =>', source.indexOf("if (operation === 'publish')")));
   assert.match(source, /BulkPublishSummary/);
-  assert.match(source, /await api\.adminProfiles\(token\)/);
+  assert.match(bulkPublishSource, /const refreshed = await api\.adminProfileStats\(token\)/);
+  assert.match(bulkPublishSource, /await loadProfileCatalogCountries\(token, true\)/);
+  assert.doesNotMatch(bulkPublishSource, /api\.adminProfiles\(/);
   assert.match(source, /disabled=\{bulkPublishBusy\}/);
   assert.match(source, /selectedIdsAfterBulkPublish/);
 });

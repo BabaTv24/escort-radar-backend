@@ -1,8 +1,8 @@
 import { isValidElement, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
-import { ApiError, api } from '../lib/api';
+import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Download, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
+import { ApiError, api, saveDownloadedFile } from '../lib/api';
 import { adminSession } from '../lib/adminSession';
 import type { BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
@@ -279,8 +279,7 @@ export function AdminPage() {
   const [accountEmailBody, setAccountEmailBody] = useState('');
   const [accountSecurity, setAccountSecurity] = useState<Record<string, any> | null>(null);
   const [accountActionLoading, setAccountActionLoading] = useState<'create' | 'temp' | 'magic' | 'reset' | 'send-login' | 'send-reset' | 'security' | ''>('');
-  const [profileImportFile, setProfileImportFile] = useState<File | null>(null);
-  const [profileImportReport, setProfileImportReport] = useState<{ created: number; skipped: number; failed: number; errors: Array<{ row: number; email?: string; error: string }> } | null>(null);
+  const [profileExportBusy, setProfileExportBusy] = useState(false);
   const [cityImportOpen, setCityImportOpen] = useState(false);
   const [cityImportUrl, setCityImportUrl] = useState('');
   const [cityImportLoading, setCityImportLoading] = useState(false);
@@ -1501,20 +1500,18 @@ export function AdminPage() {
     return refreshed.profile;
   }
 
-  async function importProfiles() {
-    if (!profileImportFile) return;
-    const form = new FormData();
-    form.append('file', profileImportFile);
-    setStudioSaving(true);
+  async function exportProfiles() {
+    if (profileExportBusy) return;
+    setProfileExportBusy(true);
+    setMessage('');
     try {
-      const result = await api.importAdminProfiles(token, form);
-      setProfileImportReport(result.report);
-      setMessage(t('admin.accounts.importFinished'));
-      await load();
+      const file = await api.exportAdminProfiles(token);
+      saveDownloadedFile(file.blob, file.filename);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      const reason = error instanceof Error ? error.message : t('states.requestFailed');
+      setMessage(`${t('admin.profiles.exportError')} ${reason}`);
     } finally {
-      setStudioSaving(false);
+      setProfileExportBusy(false);
     }
   }
 
@@ -2736,18 +2733,9 @@ export function AdminPage() {
                 <button className="button primary" onClick={openHermesImporter}><Sparkles size={15} /> {t('admin.hermes.importProfiles')}</button>
                 <button className="button primary" onClick={() => setCityImportOpen(true)}>{t('admin.cityImport.title')}</button>
                 <button className="button" onClick={openNewProfileEditor}>{t('admin.actions.newProfile')}</button>
-                <label className="admin-action-btn">
-                  {t('admin.accounts.importProfiles')}
-                  <input hidden type="file" accept=".csv,.xlsx,.xls" onChange={(event) => setProfileImportFile(event.target.files?.[0] || null)} />
-                </label>
-                <button className="button" disabled={!profileImportFile || studioSaving} onClick={importProfiles}>{profileImportFile?.name || t('admin.accounts.import')}</button>
+                <button className="button" disabled={profileExportBusy} onClick={exportProfiles}><Download size={15} /> {profileExportBusy ? t('admin.profiles.exporting') : t('admin.profiles.export')}</button>
               </div>
             </div>
-            {profileImportReport && <section className="admin-card">
-              <h3>{t('admin.accounts.importReport')}</h3>
-              <p>{t('admin.accounts.importSummary', { created: profileImportReport.created, skipped: profileImportReport.skipped, failed: profileImportReport.failed })}</p>
-              {profileImportReport.errors.length ? <ul>{profileImportReport.errors.map((error) => <li key={`${error.row}-${error.email || ''}`}>{t('admin.accounts.importRowError', { row: error.row, email: error.email || '-', error: error.error })}</li>)}</ul> : null}
-            </section>}
             <div className="admin-profile-city-filter">
               <label>
                 <span>{t('admin.profiles.countries')}</span>
