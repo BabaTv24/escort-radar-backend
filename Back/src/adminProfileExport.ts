@@ -85,3 +85,8 @@ export function profileExportFilename(exportedAt = new Date()) {
   const iso = exportedAt.toISOString();
   return `escort-radar-profiles-backup-${iso.slice(0, 10)}-${iso.slice(11, 16).replace(':', '')}.json`;
 }
+
+export function selectedProfileExportFilename(exportedAt = new Date()) {
+  const iso = exportedAt.toISOString();
+  return `escort-radar-profiles-selected-${iso.slice(0, 10)}-${iso.slice(11, 16).replace(':', '')}.json`;
+}

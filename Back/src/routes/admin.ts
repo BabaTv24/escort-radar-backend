@@ -34,6 +34,7 @@ import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfi
 import { applyManualPaymentOrder } from '../manualPayments.js';
 import { loadBcCoinPackages, normalizeBcCoinPackagePayload } from '../bcCoinPackages.js';
 import { resolveCityLocation } from '../locations.js';
+import { resolveAdminProfileSelection, validateAdminProfileSelection } from '../adminProfileSelection.js';
 import {
   buildAdminClient,
   enrichClientActivationPayments,
@@ -62,7 +63,7 @@ import { supabaseAdminDeletionPinStore } from '../adminDeletionPinStore.js';
 import { runBulkProfilePublish } from '../bulkProfilePublish.js';
 import { runBulkPhotoModeration, validateBulkPhotoModerationInput } from '../bulkPhotoModeration.js';
 import { buildProfilePhotoApprovalResult, validateProfilePhotoApprovalInput } from '../bulkProfilePhotoApproval.js';
-import { buildProfileExport, loadAllProfilesForExport, profileExportFilename, profileExportPageSize } from '../adminProfileExport.js';
+import { buildProfileExport, loadAllProfilesForExport, profileExportFilename, profileExportPageSize, selectedProfileExportFilename } from '../adminProfileExport.js';
 
 export const adminRouter = Router();
 
@@ -688,6 +689,46 @@ async function loadAdminCatalogRows(rawQuery: Record<string, any>) {
   return { ...value, filters };
 }
 
+function adminProfileSelectionFromBody(body: Record<string, any>) {
+  return validateAdminProfileSelection(body.selection || {
+    mode: 'explicit',
+    profile_ids: Array.isArray(body.profile_ids) ? body.profile_ids : []
+  });
+}
+
+async function resolveAdminProfileSelectionBody(body: Record<string, any>) {
+  const validated = adminProfileSelectionFromBody(body);
+  if (!validated.selection) return { error: validated.error || 'selection_invalid', ids: [] as string[] };
+  const ids = await resolveAdminProfileSelection(validated.selection, async (filters, afterId, pageSize) => {
+    let query = supabaseAdmin
+      .from('profiles')
+      .select('id, work_country, work_city, city')
+      .order('id', { ascending: true })
+      .limit(pageSize);
+    query = applyAdminCatalogFilters(query, filters);
+    if (afterId) query = query.gt('id', afterId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  });
+  if (validated.selection.mode === 'explicit') {
+    const existingIds: string[] = [];
+    for (const idChunk of adminProfileIdChunks(ids)) {
+      const { data, error } = await supabaseAdmin.from('profiles').select('id').in('id', idChunk);
+      if (error) throw error;
+      existingIds.push(...(data || []).map((profile) => profile.id));
+    }
+    return { selection: validated.selection, ids: existingIds };
+  }
+  return { selection: validated.selection, ids };
+}
+
+function adminProfileIdChunks(ids: string[], size = 500) {
+  const chunks: string[][] = [];
+  for (let offset = 0; offset < ids.length; offset += size) chunks.push(ids.slice(offset, offset + size));
+  return chunks;
+}
+
 async function loadAdminProfileStats() {
   const countQuery = () => supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true });
   const results = await Promise.all([
@@ -721,6 +762,13 @@ async function loadAdminProfileStats() {
 
 adminRouter.get('/profiles/stats', asyncHandler(async (_req, res) => {
   res.json({ profiles: [], stats: await loadAdminProfileStats() });
+}));
+
+adminRouter.post('/profiles/selection/resolve', asyncHandler(async (req, res) => {
+  const resolved = await resolveAdminProfileSelectionBody(req.body || {});
+  if (resolved.error) return res.status(400).json({ error: resolved.error });
+  if (!resolved.ids.length) return res.status(400).json({ error: 'selection_empty' });
+  res.json({ profile_ids: resolved.ids, total_count: resolved.ids.length });
 }));
 
 adminRouter.get('/profiles/catalog/countries', asyncHandler(async (req, res) => {
@@ -836,6 +884,38 @@ adminRouter.get('/profiles/export', asyncHandler(async (_req, res) => {
 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${profileExportFilename(exportedAt)}"`);
+  res.setHeader('X-Profile-Count', String(payload.profile_count));
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(JSON.stringify(payload));
+}));
+
+adminRouter.post('/profiles/export-selection', asyncHandler(async (req, res) => {
+  const resolved = await resolveAdminProfileSelectionBody(req.body || {});
+  if (resolved.error) return res.status(400).json({ error: resolved.error });
+  if (!resolved.ids.length) return res.status(400).json({ error: 'selection_empty' });
+
+  const profiles: Record<string, unknown>[] = [];
+  for (const ids of adminProfileIdChunks(resolved.ids)) {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('*, profile_images(*)')
+      .in('id', ids)
+      .order('id', { ascending: true });
+    if (error) throw error;
+    profiles.push(...(data || []));
+  }
+  profiles.sort((left, right) => String(left.id).localeCompare(String(right.id)));
+  const exportedAt = new Date();
+  const payload = {
+    ...buildProfileExport(profiles, exportedAt),
+    export_scope: resolved.selection?.mode === 'all_filtered'
+      ? { mode: 'all_filtered', filters: resolved.selection.filters, excluded_profile_ids: resolved.selection.excluded_profile_ids }
+      : { mode: 'explicit' }
+  };
+
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${selectedProfileExportFilename(exportedAt)}"`);
+  res.setHeader('X-Profile-Count', String(payload.profile_count));
   res.setHeader('Cache-Control', 'no-store');
   res.send(JSON.stringify(payload));
 }));
@@ -2316,12 +2396,11 @@ adminRouter.post('/profiles/:id/images', adminUpload.single('image'), asyncHandl
 }));
 
 adminRouter.post('/profiles/bulk', asyncHandler(async (req, res) => {
-  const rawIds = Array.isArray(req.body.profile_ids) ? req.body.profile_ids : [];
-  if (rawIds.length > 200) return res.status(400).json({ error: 'profile_ids_limit_exceeded' });
-  const ids: string[] = [...new Set<string>(rawIds.map((id: unknown) => String(id)).filter(Boolean))];
+  const resolved = await resolveAdminProfileSelectionBody(req.body || {});
+  if (resolved.error) return res.status(400).json({ error: resolved.error });
+  const ids = resolved.ids;
   const operation = String(req.body.operation || req.body.action || '');
-  if (!ids.length) return res.status(400).json({ error: 'profile_ids are required' });
-  if (ids.some((id) => !isUuid(id))) return res.status(400).json({ error: 'invalid_profile_id' });
+  if (!ids.length) return res.status(400).json({ error: 'selection_empty' });
 
   const patch: Record<string, unknown> = {};
   if (operation === 'approve') {
@@ -2330,13 +2409,14 @@ adminRouter.post('/profiles/bulk', asyncHandler(async (req, res) => {
     patch.reviewed_by = req.user?.email || req.user?.id || null;
     patch.reviewed_at = new Date().toISOString();
   } else if (operation === 'publish') {
-    const { data: profiles, error: profilesError } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .in('id', ids);
-    if (profilesError) return res.status(400).json({ error: profilesError.message });
+    const profiles: any[] = [];
+    for (const idChunk of adminProfileIdChunks(ids)) {
+      const { data, error } = await supabaseAdmin.from('profiles').select('*').in('id', idChunk);
+      if (error) return res.status(400).json({ error: error.message });
+      profiles.push(...(data || []));
+    }
 
-    const result = await runBulkProfilePublish(ids, profiles || [], async (profileId) => {
+    const result = await runBulkProfilePublish(ids, profiles, async (profileId) => {
       const { data, error } = await supabaseAdmin
         .from('profiles')
         .update({ is_published: true })
@@ -2372,33 +2452,44 @@ adminRouter.post('/profiles/bulk', asyncHandler(async (req, res) => {
     patch.subscription_note = optionalText(req.body.note, 2000);
   } else if (operation === 'delete') {
     if (!await authorizeAdminDeletion(req, res, ids.length, 'bulk_profile_delete_denied')) return;
-    const { data: images } = await supabaseAdmin.from('profile_images').select('storage_path').in('profile_id', ids);
-    const storagePaths = (images || []).map((image) => image.storage_path).filter(Boolean);
+    const storagePaths: string[] = [];
+    for (const idChunk of adminProfileIdChunks(ids)) {
+      const { data: images, error: imageError } = await supabaseAdmin.from('profile_images').select('storage_path').in('profile_id', idChunk);
+      if (imageError) return res.status(400).json({ error: imageError.message });
+      storagePaths.push(...(images || []).map((image) => image.storage_path).filter(Boolean));
+    }
     if (storagePaths.length) await supabaseAdmin.storage.from(config.storageBucket).remove(storagePaths);
-    const { data: deletedProfiles, error } = await supabaseAdmin.from('profiles').delete().in('id', ids).select('id');
-    if (error) return res.status(400).json({ error: error.message });
-    const processedProfileIds = (deletedProfiles || []).map((profile) => profile.id);
+    const processedProfileIds: string[] = [];
+    for (const idChunk of adminProfileIdChunks(ids)) {
+      const { data, error } = await supabaseAdmin.from('profiles').delete().in('id', idChunk).select('id');
+      if (error) return res.status(400).json({ error: error.message });
+      processedProfileIds.push(...(data || []).map((profile) => profile.id));
+    }
     await logAdminSecurityAction(req, 'bulk_profile_delete_success', { profile_count: processedProfileIds.length, profile_ids: processedProfileIds });
     return res.json({ updated: processedProfileIds.length, operation, processed_profile_ids: processedProfileIds });
   } else {
     return res.status(400).json({ error: 'Invalid bulk operation' });
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .update(patch)
-    .in('id', ids)
-    .select('*, profile_images(*)');
-  if (error) return res.status(400).json({ error: error.message });
+  const data: any[] = [];
+  for (const idChunk of adminProfileIdChunks(ids)) {
+    const result = await supabaseAdmin
+      .from('profiles')
+      .update(patch)
+      .in('id', idChunk)
+      .select('*, profile_images(*)');
+    if (result.error) return res.status(400).json({ error: result.error.message });
+    data.push(...(result.data || []));
+  }
   if (operation === 'subscription_status') {
-    await Promise.all((data || []).map((profile) => upsertManualSubscription(profile, req.user?.email || req.user?.id || null)));
+    await Promise.all(data.map((profile) => upsertManualSubscription(profile, req.user?.email || req.user?.id || null)));
   }
   await logAdminAction(req.user?.email, `profiles_bulk_${operation}`, 'profile', null, { profile_ids: ids, ...patch });
   res.json({
-    updated: data?.length || 0,
+    updated: data.length,
     operation,
-    profiles: (data || []).map(withAdminImageUrls),
-    processed_profile_ids: (data || []).map((profile) => profile.id)
+    profiles: resolved.selection?.mode === 'explicit' && ids.length <= 200 ? data.map(withAdminImageUrls) : undefined,
+    processed_profile_ids: data.map((profile) => profile.id)
   });
 }));
 

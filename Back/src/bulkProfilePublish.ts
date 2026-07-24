@@ -64,18 +64,21 @@ export async function runBulkProfilePublish(
     else results.set(profileId, { profile_id: profileId, status });
   }
 
-  await Promise.all(publishableIds.map(async (profileId) => {
-    try {
-      await publishProfile(profileId);
-      results.set(profileId, { profile_id: profileId, status: 'published' });
-    } catch (error) {
-      results.set(profileId, {
-        profile_id: profileId,
-        status: 'failed',
-        error: error instanceof Error ? error.message : 'publish_failed'
-      });
-    }
-  }));
+  const concurrency = 25;
+  for (let offset = 0; offset < publishableIds.length; offset += concurrency) {
+    await Promise.all(publishableIds.slice(offset, offset + concurrency).map(async (profileId) => {
+      try {
+        await publishProfile(profileId);
+        results.set(profileId, { profile_id: profileId, status: 'published' });
+      } catch (error) {
+        results.set(profileId, {
+          profile_id: profileId,
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'publish_failed'
+        });
+      }
+    }));
+  }
 
   const items = profileIds.map((profileId) => results.get(profileId) || ({ profile_id: profileId, status: 'failed' as const }));
   const published = countStatus(items, 'published');

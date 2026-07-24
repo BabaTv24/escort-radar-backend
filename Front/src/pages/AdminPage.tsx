@@ -2,7 +2,7 @@ import { isValidElement, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Download, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
-import { ApiError, api, saveDownloadedFile } from '../lib/api';
+import { ApiError, adminProfileExportFilenameForScope, api, chooseAdminProfileExportDestination, saveAdminProfileExport } from '../lib/api';
 import { adminSession } from '../lib/adminSession';
 import type { BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
@@ -22,8 +22,20 @@ import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories'
 import { defaultAdminProfileFilters, resolveAdminProfilesResult } from '../lib/adminProfiles';
 import { isDuplicateSourceUrlApiError, runCityImportQueue } from '../lib/cityImportQueue';
 import type { CityImportQueueItem } from '../lib/cityImportQueue';
-import { selectedIdsAfterBulkPublish } from '../lib/bulkProfilePublish';
-import { adminProfileCountryName, adminProfileSelectionState, normalizeAdminProfileCitySearch, runAdminProfileSelectionRequest, toggleAdminProfileSelection, uniqueAdminProfileIds, updateAdminProfileSelection } from '../lib/adminProfileCity';
+import { adminProfileCountryName, adminProfileSelectionState, normalizeAdminProfileCitySearch } from '../lib/adminProfileCity';
+import {
+  adminProfileSelectionCount,
+  adminProfileSelectionFilterKey,
+  adminProfileSelectionRequest,
+  emptyAdminProfileSelection,
+  isAdminProfileSelected,
+  removeProcessedAdminProfiles,
+  resetAllFilteredSelectionForFilters,
+  selectAllFilteredProfiles,
+  setAdminProfileScopeSelected,
+  toggleAdminProfileInSelection
+} from '../lib/adminProfileSelection';
+import type { AdminProfileSelection, AdminProfileSelectionFilters } from '../lib/adminProfileSelection';
 import { adminWindowLayoutResetEvent, profileControlWindowStorageKey, profileReviewWindowStorageKey } from '../lib/adminWindowLayout';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
@@ -281,6 +293,8 @@ export function AdminPage() {
   const [accountSecurity, setAccountSecurity] = useState<Record<string, any> | null>(null);
   const [accountActionLoading, setAccountActionLoading] = useState<'create' | 'temp' | 'magic' | 'reset' | 'send-login' | 'send-reset' | 'security' | ''>('');
   const [profileExportBusy, setProfileExportBusy] = useState(false);
+  const [profileExportOpen, setProfileExportOpen] = useState(false);
+  const [profileExportPreparingCount, setProfileExportPreparingCount] = useState(0);
   const [cityImportOpen, setCityImportOpen] = useState(false);
   const [cityImportUrl, setCityImportUrl] = useState('');
   const [cityImportLoading, setCityImportLoading] = useState(false);
@@ -323,7 +337,8 @@ export function AdminPage() {
   const [studioServiceSearch, setStudioServiceSearch] = useState('');
   const [studioServiceCategory, setStudioServiceCategory] = useState('all');
   const [expandedServiceCategories, setExpandedServiceCategories] = useState<Record<string, boolean>>({});
-  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+  const [profileSelection, setProfileSelection] = useState<AdminProfileSelection>(emptyAdminProfileSelection);
+  const [profileCountrySelectionIds, setProfileCountrySelectionIds] = useState<Record<string, string[]>>({});
   const [bulkPublishBusy, setBulkPublishBusy] = useState(false);
   const [bulkPublishResult, setBulkPublishResult] = useState<BulkProfilePublishResponse | null>(null);
   const [bulkProfilePhotosOpen, setBulkProfilePhotosOpen] = useState(false);
@@ -360,6 +375,32 @@ export function AdminPage() {
   const selectedProfileQueryId = adminSearchParams.get('profile') || '';
   const profileReturnSource = adminSearchParams.get('from') === 'subscriptions' ? 'subscriptions' : 'profiles';
   const isLoginRoute = location.pathname === '/admin/login';
+  const selectedCityParts = selectedProfileCityKey === 'all' ? [] : selectedProfileCityKey.split(':');
+  const profileSelectionFilters = useMemo<AdminProfileSelectionFilters>(() => ({
+    q: query.trim(),
+    type: studioFilters.type,
+    published: studioFilters.published as AdminProfileSelectionFilters['published'],
+    suspended: studioFilters.suspended as AdminProfileSelectionFilters['suspended'],
+    seed: studioFilters.seed as AdminProfileSelectionFilters['seed'],
+    verified: studioFilters.verified as AdminProfileSelectionFilters['verified'],
+    premium_tier: studioFilters.premium_tier,
+    owner_email: studioFilters.owner_email.trim(),
+    city_query: profileCityQuery.trim(),
+    country: selectedProfileCountryKey === 'all' ? (selectedCityParts[0] || '') : selectedProfileCountryKey,
+    city: selectedCityParts[1] || ''
+  }), [query, studioFilters, profileCityQuery, selectedProfileCountryKey, selectedProfileCityKey]);
+  const profileSelectionFiltersKey = adminProfileSelectionFilterKey(profileSelectionFilters);
+  const totalMatchingProfileCount = useMemo(() => {
+    if (selectedCityParts.length === 2) {
+      return profileCatalogCities[selectedCityParts[0]]?.find((city) => city.key === selectedCityParts[1])?.total || 0;
+    }
+    if (selectedProfileCountryKey !== 'all') {
+      return profileCatalogCountries.find((country) => country.key === selectedProfileCountryKey)?.total || 0;
+    }
+    return profileCatalogCountries.reduce((sum, country) => sum + country.total, 0);
+  }, [profileCatalogCountries, profileCatalogCities, selectedProfileCountryKey, selectedProfileCityKey]);
+  const selectedProfileCount = adminProfileSelectionCount(profileSelection);
+  const selectedProfileIds = profiles.filter((profile) => isAdminProfileSelected(profileSelection, profile.id)).map((profile) => profile.id);
   const profileCountryGroups = useMemo(() => profileCatalogCountries
     .filter((country) => selectedProfileCountryKey === 'all' || country.key === selectedProfileCountryKey)
     .map((country) => {
@@ -394,6 +435,15 @@ export function AdminPage() {
     setSelectedPhotoIds([]);
     setBulkPhotoResult(null);
   }, [view]);
+
+  useEffect(() => {
+    setProfileCountrySelectionIds({});
+    const reset = resetAllFilteredSelectionForFilters(profileSelection, profileSelectionFilters);
+    if (reset.reset) {
+      setProfileSelection(reset.selection);
+      setMessage(t('admin.profiles.selectionReset'));
+    }
+  }, [profileSelectionFiltersKey]);
 
   useEffect(() => {
     const countryKeys = new Set(profileCountryGroups.map((country) => country.key));
@@ -1004,12 +1054,40 @@ export function AdminPage() {
     navigate('/admin/profiles');
   }
 
-  function toggleBulkProfile(id: string) {
-    setSelectedProfileIds((current) => toggleAdminProfileSelection(current, id));
+  function toggleBulkProfile(id: string, country: string) {
+    setProfileSelection((current) => toggleAdminProfileInSelection(current, id));
+    if (!profileCountrySelectionIds[country]) void resolveCountryProfileIds(country);
   }
 
   function setVisibleProfilesSelected(ids: string[], selected: boolean) {
-    setSelectedProfileIds((current) => updateAdminProfileSelection(current, ids, selected));
+    setProfileSelection((current) => setAdminProfileScopeSelected(current, ids, selected));
+  }
+
+  function setAllMatchingProfilesSelected(selected: boolean) {
+    setProfileSelection(selected
+      ? selectAllFilteredProfiles(profileSelectionFilters, totalMatchingProfileCount)
+      : emptyAdminProfileSelection);
+  }
+
+  async function resolveCountryProfileIds(country: string) {
+    const cached = profileCountrySelectionIds[country];
+    if (cached) return cached;
+    const response = await api.resolveAdminProfileSelection(token, {
+      mode: 'all_filtered',
+      filters: { ...profileSelectionFilters, country, city: '' },
+      excluded_profile_ids: []
+    });
+    setProfileCountrySelectionIds((current) => ({ ...current, [country]: response.profile_ids }));
+    return response.profile_ids;
+  }
+
+  async function setCountryProfilesSelected(country: string, selected: boolean) {
+    try {
+      const ids = await resolveCountryProfileIds(country);
+      setProfileSelection((current) => setAdminProfileScopeSelected(current, ids, selected));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+    }
   }
 
   function toggleProfileCityExpanded(key: string) {
@@ -1029,7 +1107,7 @@ export function AdminPage() {
   }
 
   async function runBulkAction(operation: string, extra: Record<string, unknown> = {}) {
-    if (!selectedProfileIds.length) {
+    if (!selectedProfileCount) {
       setMessage(t('admin.bulk.noneSelected'));
       return;
     }
@@ -1037,18 +1115,18 @@ export function AdminPage() {
       await openBulkDeleteConfirmation();
       return;
     }
-    const confirmed = window.confirm(t('admin.bulk.confirm', { count: selectedProfileIds.length }));
+    const confirmed = window.confirm(t('admin.bulk.confirm', { count: selectedProfileCount }));
     if (!confirmed) return;
     if (operation === 'publish') {
       if (bulkPublishBusy) return;
-      const requestedIds = uniqueAdminProfileIds(selectedProfileIds);
       setBulkPublishBusy(true);
       setBulkPublishResult(null);
       try {
-        const response = await api.bulkAdminProfiles(token, { operation, profile_ids: requestedIds, ...extra });
+        const response = await api.bulkAdminProfiles(token, { operation, selection: adminProfileSelectionRequest(profileSelection), ...extra });
         if (response.operation !== 'publish' || !('items' in response)) throw new Error('invalid_bulk_publish_response');
         setBulkPublishResult(response);
-        setSelectedProfileIds((current) => selectedIdsAfterBulkPublish(current, response));
+        const processedIds = response.items.filter((item) => item.status === 'published').map((item) => item.profile_id);
+        setProfileSelection((current) => removeProcessedAdminProfiles(current, processedIds));
         setMessage(t('admin.bulk.publishSummary', {
           published: response.published,
           already: response.already_published,
@@ -1065,19 +1143,16 @@ export function AdminPage() {
       }
       return;
     }
-    const requestedIds = uniqueAdminProfileIds(selectedProfileIds);
     await action(async () => {
-      await runAdminProfileSelectionRequest(
-        () => api.bulkAdminProfiles(token, { operation, profile_ids: requestedIds, ...extra }),
-        (response) => 'items' in response ? [] : response.processed_profile_ids || response.profiles?.map((profile) => profile.id) || [],
-        (updater) => setSelectedProfileIds(updater)
-      );
+      const response = await api.bulkAdminProfiles(token, { operation, selection: adminProfileSelectionRequest(profileSelection), ...extra });
+      const processedIds = 'items' in response ? [] : response.processed_profile_ids || response.profiles?.map((profile) => profile.id) || [];
+      setProfileSelection((current) => removeProcessedAdminProfiles(current, processedIds));
     });
   }
 
   function openBulkProfilePhotoApproval() {
-    if (!selectedProfileIds.length || bulkProfilePhotosBusy) return;
-    if (selectedProfileIds.length > 100) {
+    if (!selectedProfileCount || bulkProfilePhotosBusy) return;
+    if (selectedProfileCount > 100) {
       setMessage(t('admin.bulkPhotos.maxProfiles'));
       return;
     }
@@ -1092,17 +1167,15 @@ export function AdminPage() {
   }
 
   async function confirmBulkProfilePhotoApproval() {
-    if (!selectedProfileIds.length || selectedProfileIds.length > 100 || bulkProfilePhotosBusy) return;
-    const requestedProfileIds = uniqueAdminProfileIds(selectedProfileIds);
+    if (!selectedProfileCount || selectedProfileCount > 100 || bulkProfilePhotosBusy) return;
     setBulkProfilePhotosBusy(true);
     setBulkProfilePhotosError('');
     setBulkProfilePhotosResult(null);
     try {
-      const result = await runAdminProfileSelectionRequest(
-        () => api.approveProfileImagesByProfiles(token, requestedProfileIds),
-        (response) => response.profiles.filter((profile) => profile.status === 'matched' && profile.failed === 0).map((profile) => profile.profile_id),
-        (updater) => setSelectedProfileIds(updater)
-      );
+      const resolved = await api.resolveAdminProfileSelection(token, adminProfileSelectionRequest(profileSelection));
+      const result = await api.approveProfileImagesByProfiles(token, resolved.profile_ids);
+      const processedIds = result.profiles.filter((profile) => profile.status === 'matched' && profile.failed === 0).map((profile) => profile.profile_id);
+      setProfileSelection((current) => removeProcessedAdminProfiles(current, processedIds));
       setBulkProfilePhotosResult(result);
       const updatedProfileIds = new Set(result.profiles.filter((profile) => profile.status === 'matched' && profile.failed === 0).map((profile) => profile.profile_id));
       setProfiles((current) => current.map((profile) => updatedProfileIds.has(profile.id)
@@ -1177,12 +1250,13 @@ export function AdminPage() {
     setBulkDeleteBusy(true);
     setBulkDeleteError('');
     try {
-      const requestedProfileIds = uniqueAdminProfileIds(selectedProfileIds);
-      await runAdminProfileSelectionRequest(
-        () => api.bulkAdminProfiles(token, { operation: 'delete', profile_ids: requestedProfileIds, deletion_pin: bulkDeletePin }),
-        (response) => 'items' in response ? [] : response.processed_profile_ids || response.profiles?.map((profile) => profile.id) || [],
-        (updater) => setSelectedProfileIds(updater)
-      );
+      const response = await api.bulkAdminProfiles(token, {
+        operation: 'delete',
+        selection: adminProfileSelectionRequest(profileSelection),
+        deletion_pin: bulkDeletePin
+      });
+      const processedIds = 'items' in response ? [] : response.processed_profile_ids || response.profiles?.map((profile) => profile.id) || [];
+      setProfileSelection((current) => removeProcessedAdminProfiles(current, processedIds));
       setBulkDeletePin('');
       setBulkDeleteOpen(false);
       await load();
@@ -1513,18 +1587,50 @@ export function AdminPage() {
     return refreshed.profile;
   }
 
-  async function exportProfiles() {
+  async function exportProfiles(scope: 'selected' | 'filtered' | 'backup') {
     if (profileExportBusy) return;
-    setProfileExportBusy(true);
-    setMessage('');
+    const expectedCount = scope === 'selected'
+      ? selectedProfileCount
+      : scope === 'filtered'
+        ? totalMatchingProfileCount
+        : Number(stats.total_profiles || 0);
+    const picker = (window as typeof window & {
+      showSaveFilePicker?: (options: Record<string, unknown>) => Promise<import('../lib/api').AdminProfileExportFileHandle>;
+    }).showSaveFilePicker;
+    let destination;
     try {
-      const file = await api.exportAdminProfiles(token);
-      saveDownloadedFile(file.blob, file.filename);
+      destination = await chooseAdminProfileExportDestination(
+        adminProfileExportFilenameForScope(null, scope === 'backup' ? 'backup' : 'selected'),
+        picker ? picker.bind(window) : undefined
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      return;
+    }
+    if (destination.mode === 'cancelled') {
+      setProfileExportOpen(false);
+      return;
+    }
+    setProfileExportPreparingCount(expectedCount);
+    setProfileExportBusy(true);
+    setMessage(t('admin.profiles.exportPreparing', { count: expectedCount }));
+    try {
+      const file = scope === 'backup'
+        ? await api.exportAdminProfiles(token)
+        : await api.exportAdminProfileSelection(token, adminProfileSelectionRequest(
+            scope === 'selected'
+              ? profileSelection
+              : selectAllFilteredProfiles(profileSelectionFilters, totalMatchingProfileCount)
+          ));
+      await saveAdminProfileExport(file.blob, file.filename, destination);
+      setMessage(t('admin.profiles.exportSaved', { count: file.profileCount || expectedCount }));
+      setProfileExportOpen(false);
     } catch (error) {
       const reason = error instanceof Error ? error.message : t('states.requestFailed');
       setMessage(`${t('admin.profiles.exportError')} ${reason}`);
     } finally {
       setProfileExportBusy(false);
+      setProfileExportPreparingCount(0);
     }
   }
 
@@ -2218,9 +2324,9 @@ export function AdminPage() {
 
       {bulkDeleteOpen && (
         <div className="admin-modal-backdrop" onClick={closeBulkDeleteConfirmation}>
-          <AdminWindow id="admin-bulk-profile-delete" title={t('admin.securityPin.deleteTitle', { count: selectedProfileIds.length })} labels={adminWindowLabels} className="admin-modal critical-delete-modal" onClose={closeBulkDeleteConfirmation}>
+          <AdminWindow id="admin-bulk-profile-delete" title={t('admin.securityPin.deleteTitle', { count: selectedProfileCount })} labels={adminWindowLabels} className="admin-modal critical-delete-modal" onClose={closeBulkDeleteConfirmation}>
             <p className="error-text"><strong>{t('admin.securityPin.irreversible')}</strong></p>
-            <p>{t('admin.securityPin.deleteCount', { count: selectedProfileIds.length })}</p>
+            <p>{t('admin.securityPin.deleteCount', { count: selectedProfileCount })}</p>
             <ul className="critical-delete-preview">
               {profiles.filter((profile) => selectedProfileIds.includes(profile.id)).slice(0, 5).map((profile) => (
                 <li key={profile.id}>{profile.display_name || formatShortId(profile.id)} <small>{formatShortId(profile.id)}</small></li>
@@ -2245,11 +2351,25 @@ export function AdminPage() {
         </div>
       )}
 
+      {profileExportOpen && (
+        <div className="admin-modal-backdrop" onClick={() => { if (!profileExportBusy) setProfileExportOpen(false); }}>
+          <AdminWindow id="admin-profile-export" title={t('admin.profiles.export')} labels={adminWindowLabels} className="admin-modal" onClose={() => { if (!profileExportBusy) setProfileExportOpen(false); }}>
+            {profileExportBusy ? <p role="status">{t('admin.profiles.exportPreparing', { count: profileExportPreparingCount })}</p> : null}
+            <div className="admin-actions-row">
+              <button type="button" className="button primary" disabled={profileExportBusy || !selectedProfileCount} onClick={() => void exportProfiles('selected')}>{t('admin.profiles.exportSelected', { count: selectedProfileCount })}</button>
+              <button type="button" className="button" disabled={profileExportBusy || !totalMatchingProfileCount} onClick={() => void exportProfiles('filtered')}>{t('admin.profiles.exportFiltered', { count: totalMatchingProfileCount })}</button>
+              <button type="button" className="button" disabled={profileExportBusy} onClick={() => void exportProfiles('backup')}>{t('admin.profiles.exportBackup')}</button>
+              <button type="button" className="button" disabled={profileExportBusy} onClick={() => setProfileExportOpen(false)}>{t('admin.buttons.cancel')}</button>
+            </div>
+          </AdminWindow>
+        </div>
+      )}
+
       {bulkProfilePhotosOpen && (
         <div className="admin-modal-backdrop" onClick={closeBulkProfilePhotoApproval}>
           <AdminWindow id="admin-bulk-profile-photo-approval" title={t('admin.bulkPhotos.title')} labels={adminWindowLabels} className="admin-modal" onClose={closeBulkProfilePhotoApproval}>
-            <p>{t('admin.bulkPhotos.confirm', { count: selectedProfileIds.length })}</p>
-            <p><strong>{t('admin.bulkPhotos.profileCount', { count: selectedProfileIds.length })}</strong></p>
+            <p>{t('admin.bulkPhotos.confirm', { count: selectedProfileCount })}</p>
+            <p><strong>{t('admin.bulkPhotos.profileCount', { count: selectedProfileCount })}</strong></p>
             <ul className="critical-delete-preview">
               {profiles.filter((profile) => selectedProfileIds.includes(profile.id)).slice(0, 5).map((profile) => (
                 <li key={profile.id}>{profile.display_name || formatShortId(profile.id)}</li>
@@ -2673,16 +2793,12 @@ export function AdminPage() {
 
     if (view === 'profiles' || view === 'profile-studio') {
       const selectedProfile = profiles.find((profile) => profile.id === studioForm.id);
-      const expandedVisibleGroups = visibleProfileCountryGroups.flatMap((country) => {
-        const countryExpanded = expandedProfileCountryKeys.includes(country.key);
-        return countryExpanded ? country.cities.filter((city) => expandedProfileCityKeys.includes(`${country.key}:${city.key}`)) : [];
-      });
-      const visibleProfileIds = [...new Set(expandedVisibleGroups.flatMap((group) => group.profiles.map((profile) => profile.id)))];
-      const visibleSelection = adminProfileSelectionState(selectedProfileIds, visibleProfileIds);
+      const allMatchingChecked = totalMatchingProfileCount > 0 && selectedProfileCount === totalMatchingProfileCount;
+      const allMatchingIndeterminate = selectedProfileCount > 0 && selectedProfileCount < totalMatchingProfileCount;
       const cityOptions = profileCountryGroups
         .filter((country) => selectedProfileCountryKey === 'all' || country.key === selectedProfileCountryKey)
         .flatMap((country) => country.cities.map((city) => ({ ...city, countryKey: country.key, countryName: country.name, scopedKey: `${country.key}:${city.key}` })));
-      const renderStudioProfileTable = (rows: Profile[]) => <AdminTable rows={rows} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'public_visibility', 'availability', 'moderation', 'paid_status', 'photos', 'created_at']} labels={{
+      const renderStudioProfileTable = (rows: Profile[], countryKey: string) => <AdminTable rows={rows} columns={['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'public_visibility', 'availability', 'moderation', 'paid_status', 'photos', 'created_at']} labels={{
         ...tableLabels(t, ['cover', 'id', 'display_name', 'owner_email', 'city', 'category', 'paid_status', 'created_at']),
         public_visibility: t('admin.profileTable.publicVisibility'),
         availability: t('admin.profileTable.availability'),
@@ -2695,7 +2811,7 @@ export function AdminPage() {
         photos: t('admin.profileTable.photosHelp')
       }} format={(key, value, profile) => {
         if (key === 'cover') return <AdminProfileThumb profile={profile} />;
-        if (key === 'id') return <AdminSelectionCheckbox className="admin-check-cell" checked={selectedProfileIds.includes(profile.id)} onChange={() => toggleBulkProfile(profile.id)} ariaLabel={t('admin.bulk.toggleProfile')} label={formatShortId(profile.id)} />;
+        if (key === 'id') return <AdminSelectionCheckbox className="admin-check-cell" checked={isAdminProfileSelected(profileSelection, profile.id)} onChange={() => toggleBulkProfile(profile.id, countryKey)} ariaLabel={t('admin.bulk.toggleProfile')} label={formatShortId(profile.id)} />;
         if (key === 'city') return profile.work_city || value;
         if (key === 'category') return option(String(value || 'other'));
         if (key === 'public_visibility') return <ProfileVisibilityAudit audit={profile.visibility_audit} compact />;
@@ -2747,7 +2863,7 @@ export function AdminPage() {
                 <button className="button primary" onClick={openHermesImporter}><Sparkles size={15} /> {t('admin.hermes.importProfiles')}</button>
                 <button className="button primary" onClick={() => setCityImportOpen(true)}>{t('admin.cityImport.title')}</button>
                 <button className="button" onClick={openNewProfileEditor}>{t('admin.actions.newProfile')}</button>
-                <button className="button" disabled={profileExportBusy} onClick={exportProfiles}><Download size={15} /> {profileExportBusy ? t('admin.profiles.exporting') : t('admin.profiles.export')}</button>
+                <button className="button" disabled={profileExportBusy} onClick={() => setProfileExportOpen(true)}><Download size={15} /> {profileExportBusy ? t('admin.profiles.exporting') : t('admin.profiles.export')}</button>
               </div>
             </div>
             <div className="admin-profile-city-filter">
@@ -2818,9 +2934,9 @@ export function AdminPage() {
               <input placeholder={t('admin.filters.ownerEmail')} value={studioFilters.owner_email} onChange={(event) => setStudioFilters({ ...studioFilters, owner_email: event.target.value })} />
             </div>
             <div className="admin-bulk-bar">
-              <AdminSelectionCheckbox checked={visibleSelection.checked} indeterminate={visibleSelection.indeterminate} disabled={!visibleProfileIds.length} onChange={(checked) => setVisibleProfilesSelected(visibleProfileIds, checked)} label={t('admin.bulk.selected', { count: selectedProfileIds.length })} />
+              <AdminSelectionCheckbox checked={allMatchingChecked} indeterminate={allMatchingIndeterminate} disabled={!totalMatchingProfileCount} onChange={setAllMatchingProfilesSelected} label={<>{t('admin.profiles.selectAllResults', { count: totalMatchingProfileCount })} · {t('admin.bulk.selected', { count: selectedProfileCount })}</>} />
               <Action onClick={() => runBulkAction('approve')}>{t('admin.bulk.approve')}</Action>
-              <Action disabled={!selectedProfileIds.length || bulkProfilePhotosBusy} onClick={openBulkProfilePhotoApproval}>{bulkProfilePhotosBusy ? t('admin.bulkPhotos.inProgress') : t('admin.bulkPhotos.actionWithCount', { count: selectedProfileIds.length })}</Action>
+              <Action disabled={!selectedProfileCount || bulkProfilePhotosBusy} onClick={openBulkProfilePhotoApproval}>{bulkProfilePhotosBusy ? t('admin.bulkPhotos.inProgress') : t('admin.bulkPhotos.actionWithCount', { count: selectedProfileCount })}</Action>
               <Action disabled={bulkPublishBusy} onClick={() => runBulkAction('publish')}>{bulkPublishBusy ? t('admin.bulk.publishing') : t('admin.bulk.publish')}</Action>
               <Action onClick={() => runBulkAction('unpublish')}>{t('admin.bulk.unpublish')}</Action>
               <Action onClick={() => runBulkAction('suspend')}>{t('admin.bulk.suspend')}</Action>
@@ -2846,8 +2962,14 @@ export function AdminPage() {
             ) : <div className="admin-profile-country-groups">
               {visibleProfileCountryGroups.map((country, countryIndex) => {
                 const countryExpanded = expandedProfileCountryKeys.includes(country.key);
-                const countryIds = country.profiles.map((profile) => profile.id);
-                const countrySelection = adminProfileSelectionState(selectedProfileIds, countryIds);
+                const resolvedCountryIds = profileCountrySelectionIds[country.key] || [];
+                const countryIds = resolvedCountryIds.length ? resolvedCountryIds : country.profiles.map((profile) => profile.id);
+                const countrySelection = countryIds.length
+                  ? adminProfileSelectionState(countryIds.filter((id) => isAdminProfileSelected(profileSelection, id)), countryIds)
+                  : {
+                      checked: profileSelection.mode === 'all_filtered' && profileSelection.excluded_profile_ids.length === 0,
+                      indeterminate: profileSelection.mode === 'all_filtered' && profileSelection.excluded_profile_ids.length > 0 && selectedProfileCount > 0
+                    };
                 const countryPanelId = `admin-profile-country-${countryIndex}`;
                 return <section className="admin-profile-country-card" key={country.key}>
                   <div className="admin-profile-country-card-head">
@@ -2857,13 +2979,13 @@ export function AdminPage() {
                       <strong>{t('admin.profiles.countryCount', { total: country.total, approved: country.approvedCount })} · {t('admin.profiles.pendingCount', { count: country.pending })}</strong>
                       <small>{countryExpanded ? t('admin.profiles.collapse') : t('admin.profiles.expand')}</small>
                     </button>
-                    <AdminSelectionCheckbox checked={countrySelection.checked} indeterminate={countrySelection.indeterminate} disabled={!countryIds.length} onChange={(checked) => setVisibleProfilesSelected(countryIds, checked)} label={t('admin.profiles.selectLoadedInCountry')} />
+                    <AdminSelectionCheckbox checked={countrySelection.checked} indeterminate={countrySelection.indeterminate} disabled={!country.total} onChange={(checked) => void setCountryProfilesSelected(country.key, checked)} label={t('admin.profiles.selectAllInCountry', { count: country.total })} />
                   </div>
                   <div id={countryPanelId} hidden={!countryExpanded} className="admin-profile-city-groups">{countryExpanded ? country.cities.map((city, cityIndex) => {
                     const scopedCityKey = `${country.key}:${city.key}`;
                     const cityExpanded = expandedProfileCityKeys.includes(scopedCityKey);
                     const cityIds = city.profiles.map((profile) => profile.id);
-                    const citySelection = adminProfileSelectionState(selectedProfileIds, cityIds);
+                    const citySelection = adminProfileSelectionState(cityIds.filter((id) => isAdminProfileSelected(profileSelection, id)), cityIds);
                     const cityPanelId = `${countryPanelId}-city-${cityIndex}`;
                     return <section className="admin-profile-city-card" key={scopedCityKey}>
                       <div className="admin-profile-city-card-head">
@@ -2875,7 +2997,7 @@ export function AdminPage() {
                         </button>
                         <AdminSelectionCheckbox checked={citySelection.checked} indeterminate={citySelection.indeterminate} disabled={!cityIds.length} onChange={(checked) => setVisibleProfilesSelected(cityIds, checked)} label={t('admin.profiles.selectVisibleInCity')} />
                       </div>
-                      <div id={cityPanelId} hidden={!cityExpanded}>{cityExpanded ? <>{renderStudioProfileTable(city.profiles)}{profileCatalogPages[scopedCityKey]?.has_more ? <button className="button admin-profile-load-more" disabled={profileCatalogPages[scopedCityKey]?.loading} onClick={() => void loadProfileCatalogPage(token, country.key, city.key, (profileCatalogPages[scopedCityKey]?.page || 0) + 1)}>{profileCatalogPages[scopedCityKey]?.loading ? t('states.loading') : t('admin.profiles.loadMore')}</button> : null}</> : null}</div>
+                      <div id={cityPanelId} hidden={!cityExpanded}>{cityExpanded ? <>{renderStudioProfileTable(city.profiles, country.key)}{profileCatalogPages[scopedCityKey]?.has_more ? <button className="button admin-profile-load-more" disabled={profileCatalogPages[scopedCityKey]?.loading} onClick={() => void loadProfileCatalogPage(token, country.key, city.key, (profileCatalogPages[scopedCityKey]?.page || 0) + 1)}>{profileCatalogPages[scopedCityKey]?.loading ? t('states.loading') : t('admin.profiles.loadMore')}</button> : null}</> : null}</div>
                     </section>;
                   }) : null}</div>
                 </section>;

@@ -88,6 +88,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export function adminProfileExportDownloadFilename(disposition: string | null, now = new Date()) {
+  return adminProfileExportFilenameForScope(disposition, 'backup', now);
+}
+
+export function adminProfileExportFilenameForScope(disposition: string | null, scope: 'backup' | 'selected', now = new Date()) {
   const encoded = (disposition || '').match(/filename\*=UTF-8''([^;]+)/i)?.[1];
   const plain = (disposition || '').match(/filename="?([^";]+)"?/i)?.[1];
   let candidate = plain || '';
@@ -98,9 +102,9 @@ export function adminProfileExportDownloadFilename(disposition: string | null, n
       candidate = '';
     }
   }
-  if (/^escort-radar-profiles-backup-\d{4}-\d{2}-\d{2}-\d{4}\.json$/.test(candidate)) return candidate;
+  if (new RegExp(`^escort-radar-profiles-${scope}-\\d{4}-\\d{2}-\\d{2}-\\d{4}\\.json$`).test(candidate)) return candidate;
   const iso = now.toISOString();
-  return `escort-radar-profiles-backup-${iso.slice(0, 10)}-${iso.slice(11, 16).replace(':', '')}.json`;
+  return `escort-radar-profiles-${scope}-${iso.slice(0, 10)}-${iso.slice(11, 16).replace(':', '')}.json`;
 }
 
 export function saveDownloadedFile(blob: Blob, filename: string, documentRef: Document = document, urlRef: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'> = URL) {
@@ -130,6 +134,68 @@ async function profileExportErrorPayload(response: Response, fallback: string) {
   }
   const message = safeProfileExportResponseMessage(await response.text().catch(() => ''));
   return { message: message || fallback, payload: { error: message || fallback } };
+}
+
+async function parseAdminProfileExportResponse(response: Response, scope: 'backup' | 'selected') {
+  if (!response.ok) {
+    const error = await profileExportErrorPayload(response, 'Profile export failed');
+    throw new ApiError(error.message, response.status, error.payload);
+  }
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+    const error = await profileExportErrorPayload(response, `Unexpected profile export Content-Type: ${contentType || 'missing'}`);
+    throw new ApiError(error.message, response.status, error.payload);
+  }
+  const blob = await response.blob();
+  return {
+    blob,
+    filename: adminProfileExportFilenameForScope(response.headers.get('Content-Disposition'), scope),
+    profileCount: Number(response.headers.get('X-Profile-Count') || 0)
+  };
+}
+
+export type AdminProfileExportFileHandle = {
+  createWritable: () => Promise<{ write: (value: Blob) => Promise<void>; close: () => Promise<void> }>;
+};
+
+export type AdminProfileExportDestination =
+  | { mode: 'picker'; handle: AdminProfileExportFileHandle }
+  | { mode: 'download' }
+  | { mode: 'cancelled' };
+
+export async function chooseAdminProfileExportDestination(
+  suggestedName: string,
+  picker?: (options: Record<string, unknown>) => Promise<AdminProfileExportFileHandle>
+): Promise<AdminProfileExportDestination> {
+  if (!picker) return { mode: 'download' };
+  try {
+    const handle = await picker({
+      suggestedName,
+      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+    });
+    return { mode: 'picker', handle };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return { mode: 'cancelled' };
+    throw error;
+  }
+}
+
+export async function saveAdminProfileExport(
+  blob: Blob,
+  filename: string,
+  destination: AdminProfileExportDestination,
+  documentRef?: Document,
+  urlRef?: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'>
+) {
+  if (destination.mode === 'cancelled') return false;
+  if (destination.mode === 'picker') {
+    const writable = await destination.handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return true;
+  }
+  saveDownloadedFile(blob, filename, documentRef || document, urlRef || URL);
+  return true;
 }
 
 export const api = {
@@ -238,17 +304,22 @@ export const api = {
       cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!response.ok) {
-      const error = await profileExportErrorPayload(response, 'Profile export failed');
-      throw new ApiError(error.message, response.status, error.payload);
-    }
-    const contentType = response.headers.get('Content-Type') || '';
-    if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
-      const error = await profileExportErrorPayload(response, `Unexpected profile export Content-Type: ${contentType || 'missing'}`);
-      throw new ApiError(error.message, response.status, error.payload);
-    }
-    return { blob: await response.blob(), filename: adminProfileExportDownloadFilename(response.headers.get('Content-Disposition')) };
+    return parseAdminProfileExportResponse(response, 'backup');
   },
+  exportAdminProfileSelection: async (token: string, selection: Record<string, unknown>) => {
+    const response = await fetch(`${API_URL}/api/admin/profiles/export-selection`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selection })
+    });
+    return parseAdminProfileExportResponse(response, 'selected');
+  },
+  resolveAdminProfileSelection: (token: string, selection: Record<string, unknown>) => request<{ profile_ids: string[]; total_count: number }>('/api/admin/profiles/selection/resolve', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ selection })
+  }),
   adminProfileStats: (token: string) => request<{ profiles: Profile[]; stats: Record<string, number> }>('/api/admin/profiles/stats', { token }),
   adminProfileCountries: (token: string, params = '') => request<{ items: Array<{ key: string; total: number; approved: number; pending: number }>; total: number; page: number; limit: number; has_more: boolean; filters: Record<string, unknown> }>(`/api/admin/profiles/catalog/countries${params}`, { token }),
   adminProfileCities: (token: string, params: string) => request<{ items: Array<{ key: string; name: string; total: number; approved: number; pending: number }>; total: number; page: number; limit: number; has_more: boolean; filters: Record<string, unknown> }>(`/api/admin/profiles/catalog/cities${params}`, { token }),

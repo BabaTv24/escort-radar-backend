@@ -97,7 +97,8 @@ test('admin UI renders publish summary and refreshes profiles after bulk publish
   assert.match(bulkPublishSource, /await loadProfileCatalogCountries\(token, true\)/);
   assert.doesNotMatch(bulkPublishSource, /api\.adminProfiles\(/);
   assert.match(source, /disabled=\{bulkPublishBusy\}/);
-  assert.match(source, /selectedIdsAfterBulkPublish/);
+  assert.match(bulkPublishSource, /removeProcessedAdminProfiles/);
+  assert.match(bulkPublishSource, /selection: adminProfileSelectionRequest\(profileSelection\)/);
 });
 
 test('generic bulk operations return processed profile IDs and frontend preserves unprocessed selection', async () => {
@@ -106,8 +107,8 @@ test('generic bulk operations return processed profile IDs and frontend preserve
   const backendBulk = backend.slice(backend.indexOf("adminRouter.post('/profiles/bulk'"), backend.indexOf("adminRouter.patch('/profiles/:profileId/images/reorder'"));
   const frontendBulk = frontend.slice(frontend.indexOf('async function runBulkAction'), frontend.indexOf('function openBulkProfilePhotoApproval'));
   assert.match(backendBulk, /processed_profile_ids/);
-  assert.match(frontendBulk, /uniqueAdminProfileIds\(selectedProfileIds\)/);
-  assert.match(frontendBulk, /runAdminProfileSelectionRequest/);
+  assert.match(frontendBulk, /selection: adminProfileSelectionRequest\(profileSelection\)/);
+  assert.match(frontendBulk, /removeProcessedAdminProfiles/);
   assert.equal((frontendBulk.match(/api\.bulkAdminProfiles\(/g) || []).length, 2);
 });
 

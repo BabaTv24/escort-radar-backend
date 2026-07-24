@@ -75,13 +75,13 @@ test('profile control sends one unique profile_ids request and clears only succe
   const start = page.indexOf('async function confirmBulkProfilePhotoApproval');
   const end = page.indexOf('async function refreshDeletionPinStatus', start);
   const branch = page.slice(start, end);
-  assert.match(page, /disabled=\{!selectedProfileIds\.length \|\| bulkProfilePhotosBusy\}/);
+  assert.match(page, /disabled=\{!selectedProfileCount \|\| bulkProfilePhotosBusy\}/);
   assert.match(page, /admin\.bulkPhotos\.actionWithCount/);
   assert.match(page, /admin-bulk-profile-photo-approval/);
-  assert.match(branch, /api\.approveProfileImagesByProfiles\(token, requestedProfileIds\)/);
-  assert.match(branch, /const requestedProfileIds = uniqueAdminProfileIds\(selectedProfileIds\)/);
+  assert.match(branch, /api\.resolveAdminProfileSelection\(token, adminProfileSelectionRequest\(profileSelection\)\)/);
+  assert.match(branch, /api\.approveProfileImagesByProfiles\(token, resolved\.profile_ids\)/);
   assert.doesNotMatch(branch, /for \(|Promise\.all|bulkModerateProfileImages|setLoading\(|await load\(|api\.adminProfiles|api\.adminPhotos/);
-  assert.match(branch, /runAdminProfileSelectionRequest/);
+  assert.match(branch, /removeProcessedAdminProfiles/);
   assert.match(branch, /profile\.status === 'matched' && profile\.failed === 0/);
   assert.equal((branch.match(/setProfiles\(/g) || []).length, 1);
   assert.match(branch, /moderation_status === 'pending'/);

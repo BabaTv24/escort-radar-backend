@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import express from 'express';
-import { buildProfileExport, loadAllProfilesForExport, profileExportFilename } from '../Back/src/adminProfileExport.ts';
-import { adminProfileExportDownloadFilename, api, saveDownloadedFile } from '../Front/src/lib/api.ts';
+import { buildProfileExport, loadAllProfilesForExport, profileExportFilename, selectedProfileExportFilename } from '../Back/src/adminProfileExport.ts';
+import { adminProfileExportDownloadFilename, api, chooseAdminProfileExportDestination, saveAdminProfileExport } from '../Front/src/lib/api.ts';
 
 async function listen(app: express.Express) {
   const server = await new Promise<ReturnType<express.Express['listen']>>((resolve) => {
@@ -23,7 +23,9 @@ test('admin profile export endpoint uses existing admin authorization and return
   const authSource = await readFile(new URL('../Back/src/middleware/auth.ts', import.meta.url), 'utf8');
   assert.match(source, /adminRouter\.use\(verifyAdminJwt, requireAdmin\)/);
   assert.match(source, /adminRouter\.get\('\/profiles\/export'/);
+  assert.match(source, /adminRouter\.post\('\/profiles\/export-selection'/);
   assert.ok(source.indexOf('adminRouter.use(verifyAdminJwt, requireAdmin)') < source.indexOf("adminRouter.get('/profiles/export'"));
+  assert.ok(source.indexOf("adminRouter.post('/profiles/export-selection'") < source.indexOf("adminRouter.get('/profiles/:id'"));
   assert.match(authSource, /export function requireAdmin[\s\S]*role === 'admin'[\s\S]*if \(!isAdmin\)[\s\S]*status\(403\)[\s\S]*Admin access required/);
 
   process.env.SUPABASE_URL ||= 'https://example.supabase.co';
@@ -117,7 +119,7 @@ test('frontend downloads the export with the backend filename', async () => {
     const link = { href: '', download: '', style: {}, click() { clicked = true; downloadedAs = this.download; }, remove() {} };
     const documentRef = { createElement: () => link, body: { appendChild() {} } } as any;
     const urlRef = { createObjectURL: () => 'blob:test', revokeObjectURL() {} };
-    saveDownloadedFile(file.blob, file.filename, documentRef, urlRef);
+    await saveAdminProfileExport(file.blob, file.filename, { mode: 'download' }, documentRef, urlRef);
     assert.equal(clicked, true);
     assert.equal(authorization, 'Bearer admin-token');
     assert.equal(downloadedAs, 'escort-radar-profiles-backup-2026-07-21-0907.json');
@@ -149,4 +151,60 @@ test('frontend rejects HTML and an unexpected content type instead of downloadin
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('selected export posts the selection and uses the selected Content-Disposition filename', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: any = null;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ profile_count: 2 }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${selectedProfileExportFilename(new Date('2026-07-21T09:07:00.000Z'))}"`,
+        'X-Profile-Count': '2'
+      }
+    });
+  };
+  try {
+    const selection = { mode: 'explicit', profile_ids: ['one', 'two'] };
+    const file = await api.exportAdminProfileSelection('admin-token', selection);
+    assert.deepEqual(requestBody, { selection });
+    assert.equal(file.filename, 'escort-radar-profiles-selected-2026-07-21-0907.json');
+    assert.equal(file.profileCount, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('backend exposes export filename and profile count headers to the production frontend', async () => {
+  const server = await readFile(new URL('../Back/src/server.ts', import.meta.url), 'utf8');
+  assert.match(server, /exposedHeaders:\s*\['Content-Disposition', 'X-Profile-Count'\]/);
+});
+
+test('showSaveFilePicker writes the Blob and cancellation is not an application error', async () => {
+  const blob = new Blob(['{"ok":true}'], { type: 'application/json' });
+  let written: Blob | null = null;
+  let closed = false;
+  const destination = await chooseAdminProfileExportDestination('selected.json', async (options) => {
+    assert.equal(options.suggestedName, 'selected.json');
+    return {
+      async createWritable() {
+        return {
+          async write(value: Blob) { written = value; },
+          async close() { closed = true; }
+        };
+      }
+    };
+  });
+  assert.equal(await saveAdminProfileExport(blob, 'selected.json', destination), true);
+  assert.equal(written, blob);
+  assert.equal(closed, true);
+
+  const cancelled = await chooseAdminProfileExportDestination('selected.json', async () => {
+    throw new DOMException('cancelled', 'AbortError');
+  });
+  assert.deepEqual(cancelled, { mode: 'cancelled' });
+  assert.equal(await saveAdminProfileExport(blob, 'selected.json', cancelled), false);
 });

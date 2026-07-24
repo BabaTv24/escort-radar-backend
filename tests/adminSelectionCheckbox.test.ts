@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { AdminSelectionCheckbox } from '../Front/src/components/AdminSelectionCheckbox.tsx';
 import { toggleAdminProfileSelection } from '../Front/src/lib/adminProfileCity.ts';
+import { adminProfileSelectionCount, emptyAdminProfileSelection, selectAllFilteredProfiles } from '../Front/src/lib/adminProfileSelection.ts';
+import type { AdminProfileSelection, AdminProfileSelectionFilters } from '../Front/src/lib/adminProfileSelection.ts';
 
 test('single profile checkbox toggles the stable ID without duplicates and stops row click propagation', () => {
   let selectedIds: string[] = [];
@@ -91,4 +93,42 @@ test('range checkbox sets the native indeterminate property and supports checked
   act(() => {
     renderer!.unmount();
   });
+});
+
+test('main checkbox selects all 1369 backend-counted results while country panels stay collapsed', () => {
+  const filters: AdminProfileSelectionFilters = {
+    q: '', type: 'all', published: 'all', suspended: 'all', seed: 'all',
+    verified: 'all', premium_tier: 'all', owner_email: '', city_query: '', country: '', city: ''
+  };
+  let selection: AdminProfileSelection = emptyAdminProfileSelection;
+
+  function Harness() {
+    const [current, setCurrent] = useState<AdminProfileSelection>(emptyAdminProfileSelection);
+    selection = current;
+    const count = adminProfileSelectionCount(current);
+    return React.createElement(AdminSelectionCheckbox, {
+      checked: count === 1369,
+      indeterminate: count > 0 && count < 1369,
+      onChange: (checked) => setCurrent(checked ? selectAllFilteredProfiles(filters, 1369) : emptyAdminProfileSelection),
+      label: `Select all results (1369); selected ${count}`
+    });
+  }
+
+  let renderer: TestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = TestRenderer.create(React.createElement(Harness));
+  });
+  assert.equal(renderer!.root.findAllByProps({ 'data-country-panel': true }).length, 0);
+  act(() => {
+    renderer!.root.findByType('input').props.onChange({ currentTarget: { checked: true } });
+  });
+  assert.equal(selection.mode, 'all_filtered');
+  assert.equal(adminProfileSelectionCount(selection), 1369);
+  assert.equal(renderer!.root.findByType('input').props.checked, true);
+
+  act(() => {
+    renderer!.root.findByType('input').props.onChange({ currentTarget: { checked: false } });
+  });
+  assert.deepEqual(selection, emptyAdminProfileSelection);
+  act(() => renderer!.unmount());
 });
