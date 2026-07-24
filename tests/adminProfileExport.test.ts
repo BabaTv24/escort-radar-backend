@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import express from 'express';
 import { buildProfileExport, loadAllProfilesForExport, profileExportFilename, selectedProfileExportFilename } from '../Back/src/adminProfileExport.ts';
-import { adminProfileExportDownloadFilename, api } from '../Front/src/lib/api.ts';
+import { AdminProfileExportError, adminProfileExportDownloadFilename, api } from '../Front/src/lib/api.ts';
 
 async function listen(app: express.Express) {
   const server = await new Promise<ReturnType<express.Express['listen']>>((resolve) => {
@@ -132,8 +132,8 @@ test('frontend rejects HTML and an unexpected content type instead of downloadin
       headers: { 'Content-Type': 'text/html; charset=utf-8' }
     });
     await assert.rejects(api.exportAdminProfiles('admin-token'), (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.match(error.message, /Login|Content-Type/);
+      assert.ok(error instanceof AdminProfileExportError);
+      assert.equal(error.code, 'invalid_content_type');
       return true;
     });
 
@@ -174,5 +174,5 @@ test('selected export posts the selection and uses the selected Content-Disposit
 
 test('backend exposes export filename and profile count headers to the production frontend', async () => {
   const server = await readFile(new URL('../Back/src/server.ts', import.meta.url), 'utf8');
-  assert.match(server, /exposedHeaders:\s*\['Content-Disposition', 'X-Profile-Count'\]/);
+  assert.match(server, /exposedHeaders:\s*\['Content-Disposition', 'X-Profile-Count', 'Content-Length'\]/);
 });

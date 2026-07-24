@@ -25,7 +25,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   const isSupabase = url.hostname.includes('supabase.co') || url.hostname.includes('supabase.in');
   const isApi = url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/') || url.pathname.startsWith('/storage/');
-  if (url.origin !== self.location.origin || isApi || isSupabase) {
+  // Let the browser own cross-origin API streams. Proxying them through the
+  // service worker adds an unnecessary response-body lifecycle boundary.
+  if (url.origin !== self.location.origin) return;
+  if (isApi || isSupabase) {
     event.respondWith(fetch(event.request, { cache: 'no-store' }));
     return;
   }

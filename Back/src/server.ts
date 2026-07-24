@@ -36,7 +36,7 @@ app.use(cors({
     return callback(new Error('CORS origin not allowed'));
   },
   credentials: true,
-  exposedHeaders: ['Content-Disposition', 'X-Profile-Count']
+  exposedHeaders: ['Content-Disposition', 'X-Profile-Count', 'Content-Length']
 }));
 app.use('/api/stripe', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookRouter);
 app.use(express.json({ limit: '1mb' }));

@@ -132,10 +132,10 @@ async function parseAdminProfileExportResponse(response: Response, scope: 'backu
   }
   const contentType = response.headers.get('Content-Type') || '';
   if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
-    const error = await profileExportErrorPayload(response, `Unexpected profile export Content-Type: ${contentType || 'missing'}`);
-    throw new ApiError(error.message, response.status, error.payload);
+    throw new AdminProfileExportError('invalid_content_type', response.status, 'body');
   }
   const blob = await response.blob();
+  if (blob.size === 0) throw new AdminProfileExportError('empty_blob', response.status, 'body');
   return {
     blob,
     filename: adminProfileExportFilenameForScope(response.headers.get('Content-Disposition'), scope),
@@ -146,6 +146,76 @@ async function parseAdminProfileExportResponse(response: Response, scope: 'backu
 export type AdminProfileExportFileHandle = {
   createWritable: () => Promise<{ write: (value: Blob) => Promise<void>; close: () => Promise<void> }>;
 };
+
+export const ADMIN_PROFILE_EXPORT_TIMEOUT_MS = 120_000;
+
+export type AdminProfileExportErrorCode = 'timeout' | 'cancelled' | 'network' | 'invalid_content_type' | 'empty_blob';
+
+export class AdminProfileExportError extends Error {
+  constructor(
+    public readonly code: AdminProfileExportErrorCode,
+    public readonly status: number | null = null,
+    public readonly stage: 'fetch' | 'body' = 'fetch'
+  ) {
+    super(code);
+    this.name = 'AdminProfileExportError';
+  }
+}
+
+export type AdminProfileExportRequestOptions = {
+  signal?: AbortSignal;
+  onBlobReady?: (blob: Blob) => void;
+};
+
+type AdminProfileExportRuntime = {
+  fetch: typeof fetch;
+  setTimeout: typeof globalThis.setTimeout;
+  clearTimeout: typeof globalThis.clearTimeout;
+};
+
+export async function requestAdminProfileExport(
+  path: string,
+  init: RequestInit,
+  scope: 'backup' | 'selected',
+  options: AdminProfileExportRequestOptions = {},
+  runtime: AdminProfileExportRuntime = {
+    fetch: globalThis.fetch,
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout
+  }
+) {
+  const controller = new AbortController();
+  let timedOut = false;
+  let stage: 'fetch' | 'body' = 'fetch';
+  const abortFromCaller = () => controller.abort();
+  if (options.signal?.aborted) abortFromCaller();
+  else options.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  const timeoutId = runtime.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, ADMIN_PROFILE_EXPORT_TIMEOUT_MS);
+
+  try {
+    const response = await runtime.fetch(`${API_URL}${path}`, {
+      cache: 'no-store',
+      ...init,
+      signal: controller.signal
+    });
+    stage = 'body';
+    const file = await parseAdminProfileExportResponse(response, scope);
+    options.onBlobReady?.(file.blob);
+    return file;
+  } catch (error) {
+    if (error instanceof ApiError || error instanceof AdminProfileExportError) throw error;
+    if (controller.signal.aborted) {
+      throw new AdminProfileExportError(timedOut ? 'timeout' : 'cancelled', null, stage);
+    }
+    throw new AdminProfileExportError('network', null, stage);
+  } finally {
+    runtime.clearTimeout(timeoutId);
+    options.signal?.removeEventListener('abort', abortFromCaller);
+  }
+}
 
 export const api = {
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
@@ -248,21 +318,17 @@ export const api = {
   }>('/api/admin/stats', { token }),
   adminMe: (token: string) => request<{ admin: { id: string; email?: string; role?: string; admin?: boolean } }>('/api/admin/me', { token }),
   adminProfiles: (token: string, params = '') => request<{ profiles: Profile[]; stats: Record<string, number>; pagination?: { page_size: number; pages_loaded: number; loaded_profiles: number; safety_limit: number; truncated: boolean } }>(`/api/admin/profiles${params}`, { token }),
-  exportAdminProfiles: async (token: string) => {
-    const response = await fetch(`${API_URL}/api/admin/profiles/export`, {
-      cache: 'no-store',
+  exportAdminProfiles: (token: string, options?: AdminProfileExportRequestOptions) => {
+    return requestAdminProfileExport('/api/admin/profiles/export', {
       headers: { Authorization: `Bearer ${token}` }
-    });
-    return parseAdminProfileExportResponse(response, 'backup');
+    }, 'backup', options);
   },
-  exportAdminProfileSelection: async (token: string, selection: Record<string, unknown>) => {
-    const response = await fetch(`${API_URL}/api/admin/profiles/export-selection`, {
+  exportAdminProfileSelection: (token: string, selection: Record<string, unknown>, options?: AdminProfileExportRequestOptions) => {
+    return requestAdminProfileExport('/api/admin/profiles/export-selection', {
       method: 'POST',
-      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ selection })
-    });
-    return parseAdminProfileExportResponse(response, 'selected');
+    }, 'selected', options);
   },
   resolveAdminProfileSelection: (token: string, selection: Record<string, unknown>) => request<{ profile_ids: string[]; total_count: number }>('/api/admin/profiles/selection/resolve', {
     method: 'POST',

@@ -2,7 +2,7 @@ import { isValidElement, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Download, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
-import { ApiError, api } from '../lib/api';
+import { AdminProfileExportError, ApiError, api } from '../lib/api';
 import { adminSession } from '../lib/adminSession';
 import type { BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
@@ -311,6 +311,8 @@ export function AdminPage() {
   const [profileExportError, setProfileExportError] = useState<{ status: number | null; message: string } | null>(null);
   const [profileExportStatus, setProfileExportStatus] = useState('');
   const profileExportObjectUrlRef = useRef<string | null>(null);
+  const profileExportAbortRef = useRef<AbortController | null>(null);
+  const profileExportRequestIdRef = useRef(0);
   const [cityImportOpen, setCityImportOpen] = useState(false);
   const [cityImportUrl, setCityImportUrl] = useState('');
   const [cityImportLoading, setCityImportLoading] = useState(false);
@@ -461,6 +463,8 @@ export function AdminPage() {
   }, [view]);
 
   useEffect(() => () => {
+    profileExportAbortRef.current?.abort();
+    profileExportAbortRef.current = null;
     releaseAdminProfileExportObjectUrl(profileExportObjectUrlRef.current);
     profileExportObjectUrlRef.current = null;
   }, []);
@@ -1623,17 +1627,24 @@ export function AdminPage() {
   }
 
   function closeProfileExport() {
-    if (profileExportBusy) return;
+    profileExportRequestIdRef.current += 1;
+    profileExportAbortRef.current?.abort();
+    profileExportAbortRef.current = null;
     clearPreparedProfileExport();
     setProfileExportError(null);
     setProfileExportStatus('');
     setProfileExportScope(null);
     setProfileExportPreparingCount(0);
+    setProfileExportBusy(false);
     setProfileExportOpen(false);
   }
 
   async function prepareProfileExport(scope: AdminProfileExportScope) {
-    if (profileExportBusy) return;
+    profileExportAbortRef.current?.abort();
+    const controller = new AbortController();
+    profileExportAbortRef.current = controller;
+    const requestId = profileExportRequestIdRef.current + 1;
+    profileExportRequestIdRef.current = requestId;
     const expectedCount = scope === 'selected'
       ? selectedProfileCount
       : scope === 'filtered'
@@ -1646,15 +1657,22 @@ export function AdminPage() {
     setProfileExportPreparingCount(expectedCount);
     setProfileExportBusy(true);
     try {
+      let objectUrl = '';
+      const requestOptions = {
+        signal: controller.signal,
+        onBlobReady: (blob: Blob) => {
+          objectUrl = replaceAdminProfileExportObjectUrl(blob, profileExportObjectUrlRef.current);
+          profileExportObjectUrlRef.current = objectUrl;
+        }
+      };
       const file = scope === 'all'
-        ? await api.exportAdminProfiles(token)
+        ? await api.exportAdminProfiles(token, requestOptions)
         : await api.exportAdminProfileSelection(token, adminProfileSelectionRequest(
             scope === 'selected'
               ? profileSelection
               : selectAllFilteredProfiles(profileSelectionFilters, totalMatchingProfileCount)
-          ));
-      const objectUrl = replaceAdminProfileExportObjectUrl(file.blob, profileExportObjectUrlRef.current);
-      profileExportObjectUrlRef.current = objectUrl;
+          ), requestOptions);
+      if (requestId !== profileExportRequestIdRef.current) return;
       setPreparedProfileExport({
         blob: file.blob,
         objectUrl,
@@ -1662,12 +1680,28 @@ export function AdminPage() {
         profileCount: file.profileCount || expectedCount
       });
     } catch (error) {
+      if (requestId !== profileExportRequestIdRef.current) return;
+      if (import.meta.env.DEV && error instanceof AdminProfileExportError) {
+        console.error('[admin profile export]', { code: error.code, status: error.status, stage: error.stage });
+      }
+      const message = error instanceof AdminProfileExportError
+        ? t(`admin.profiles.exportError.${error.code}`)
+        : error instanceof Error
+          ? error.message
+          : t('states.requestFailed');
       setProfileExportError({
-        status: error instanceof ApiError ? error.status : null,
-        message: error instanceof Error ? error.message : t('states.requestFailed')
+        status: error instanceof ApiError
+          ? error.status
+          : error instanceof AdminProfileExportError
+            ? error.status
+            : null,
+        message
       });
     } finally {
-      setProfileExportBusy(false);
+      if (requestId === profileExportRequestIdRef.current) {
+        profileExportAbortRef.current = null;
+        setProfileExportBusy(false);
+      }
     }
   }
 

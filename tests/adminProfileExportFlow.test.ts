@@ -205,7 +205,7 @@ test('AdminPage keeps preparation and API errors in the modal with retry', async
   const source = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
   assert.match(source, /setProfileExportBusy\(true\)[\s\S]*await api\.exportAdmin/);
   assert.match(source, /profileExportError[\s\S]*exportPrepareFailed[\s\S]*admin\.buttons\.retry/);
-  assert.match(source, /replaceAdminProfileExportObjectUrl\(file\.blob/);
+  assert.match(source, /onBlobReady:[\s\S]*replaceAdminProfileExportObjectUrl\(blob/);
   assert.doesNotMatch(source, /await saveAdminProfileExport/);
   assert.match(source, /useEffect\(\(\) => \(\) => \{[\s\S]*releaseAdminProfileExportObjectUrl/);
 });
