@@ -107,18 +107,6 @@ export function adminProfileExportFilenameForScope(disposition: string | null, s
   return `escort-radar-profiles-${scope}-${iso.slice(0, 10)}-${iso.slice(11, 16).replace(':', '')}.json`;
 }
 
-export function saveDownloadedFile(blob: Blob, filename: string, documentRef: Document = document, urlRef: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'> = URL) {
-  const objectUrl = urlRef.createObjectURL(blob);
-  const link = documentRef.createElement('a');
-  link.href = objectUrl;
-  link.download = filename;
-  link.style.display = 'none';
-  documentRef.body.appendChild(link);
-  link.click();
-  link.remove();
-  urlRef.revokeObjectURL(objectUrl);
-}
-
 function safeProfileExportResponseMessage(value: string) {
   return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
 }
@@ -127,8 +115,9 @@ async function profileExportErrorPayload(response: Response, fallback: string) {
   const contentType = response.headers.get('Content-Type') || '';
   if (/^application\/json(?:\s*;|$)/i.test(contentType)) {
     const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    const message = safeProfileExportResponseMessage(String(payload?.error || fallback)) || fallback;
     return {
-      message: String(payload?.error || fallback),
+      message,
       payload: payload || { error: fallback }
     };
   }
@@ -157,46 +146,6 @@ async function parseAdminProfileExportResponse(response: Response, scope: 'backu
 export type AdminProfileExportFileHandle = {
   createWritable: () => Promise<{ write: (value: Blob) => Promise<void>; close: () => Promise<void> }>;
 };
-
-export type AdminProfileExportDestination =
-  | { mode: 'picker'; handle: AdminProfileExportFileHandle }
-  | { mode: 'download' }
-  | { mode: 'cancelled' };
-
-export async function chooseAdminProfileExportDestination(
-  suggestedName: string,
-  picker?: (options: Record<string, unknown>) => Promise<AdminProfileExportFileHandle>
-): Promise<AdminProfileExportDestination> {
-  if (!picker) return { mode: 'download' };
-  try {
-    const handle = await picker({
-      suggestedName,
-      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
-    });
-    return { mode: 'picker', handle };
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') return { mode: 'cancelled' };
-    throw error;
-  }
-}
-
-export async function saveAdminProfileExport(
-  blob: Blob,
-  filename: string,
-  destination: AdminProfileExportDestination,
-  documentRef?: Document,
-  urlRef?: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'>
-) {
-  if (destination.mode === 'cancelled') return false;
-  if (destination.mode === 'picker') {
-    const writable = await destination.handle.createWritable();
-    await writable.write(blob);
-    await writable.close();
-    return true;
-  }
-  saveDownloadedFile(blob, filename, documentRef || document, urlRef || URL);
-  return true;
-}
 
 export const api = {
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),

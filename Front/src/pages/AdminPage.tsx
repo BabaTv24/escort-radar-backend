@@ -2,7 +2,7 @@ import { isValidElement, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Download, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
-import { ApiError, adminProfileExportFilenameForScope, api, chooseAdminProfileExportDestination, saveAdminProfileExport } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { adminSession } from '../lib/adminSession';
 import type { BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
 import { WorkPointMap } from '../components/WorkPointMap';
@@ -17,6 +17,7 @@ import { useI18n } from '../i18n';
 import { AdminReferralTree } from '../components/AdminReferralTree';
 import { AdminWindow, AdminWindowProvider } from '../components/AdminWindow';
 import { AdminSelectionCheckbox } from '../components/AdminSelectionCheckbox';
+import { AdminProfileExportReady } from '../components/AdminProfileExportReady';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
 import { defaultAdminProfileFilters, resolveAdminProfilesResult } from '../lib/adminProfiles';
@@ -36,6 +37,16 @@ import {
   toggleAdminProfileInSelection
 } from '../lib/adminProfileSelection';
 import type { AdminProfileSelection, AdminProfileSelectionFilters } from '../lib/adminProfileSelection';
+import {
+  adminProfileExportFiltersActive,
+  adminProfileExportOptions,
+  adminProfileSelectionMatchesFilters,
+  isAdminProfileExportPickerAbort,
+  releaseAdminProfileExportObjectUrl,
+  replaceAdminProfileExportObjectUrl,
+  savePreparedAdminProfileExportAs
+} from '../lib/adminProfileExportFlow';
+import type { AdminProfileExportScope, PreparedAdminProfileExport } from '../lib/adminProfileExportFlow';
 import { adminWindowLayoutResetEvent, profileControlWindowStorageKey, profileReviewWindowStorageKey } from '../lib/adminWindowLayout';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
@@ -295,6 +306,11 @@ export function AdminPage() {
   const [profileExportBusy, setProfileExportBusy] = useState(false);
   const [profileExportOpen, setProfileExportOpen] = useState(false);
   const [profileExportPreparingCount, setProfileExportPreparingCount] = useState(0);
+  const [profileExportScope, setProfileExportScope] = useState<AdminProfileExportScope | null>(null);
+  const [preparedProfileExport, setPreparedProfileExport] = useState<PreparedAdminProfileExport | null>(null);
+  const [profileExportError, setProfileExportError] = useState<{ status: number | null; message: string } | null>(null);
+  const [profileExportStatus, setProfileExportStatus] = useState('');
+  const profileExportObjectUrlRef = useRef<string | null>(null);
   const [cityImportOpen, setCityImportOpen] = useState(false);
   const [cityImportUrl, setCityImportUrl] = useState('');
   const [cityImportLoading, setCityImportLoading] = useState(false);
@@ -400,6 +416,14 @@ export function AdminPage() {
     return profileCatalogCountries.reduce((sum, country) => sum + country.total, 0);
   }, [profileCatalogCountries, profileCatalogCities, selectedProfileCountryKey, selectedProfileCityKey]);
   const selectedProfileCount = adminProfileSelectionCount(profileSelection);
+  const totalProfileCount = Number(stats.total_profiles || 0);
+  const profileExportOptions = adminProfileExportOptions({
+    selectedCount: selectedProfileCount,
+    filteredCount: totalMatchingProfileCount,
+    totalCount: totalProfileCount,
+    filtersActive: adminProfileExportFiltersActive(profileSelectionFilters),
+    selectionMatchesFilters: adminProfileSelectionMatchesFilters(profileSelection, profileSelectionFilters)
+  });
   const selectedProfileIds = profiles.filter((profile) => isAdminProfileSelected(profileSelection, profile.id)).map((profile) => profile.id);
   const profileCountryGroups = useMemo(() => profileCatalogCountries
     .filter((country) => selectedProfileCountryKey === 'all' || country.key === selectedProfileCountryKey)
@@ -435,6 +459,11 @@ export function AdminPage() {
     setSelectedPhotoIds([]);
     setBulkPhotoResult(null);
   }, [view]);
+
+  useEffect(() => () => {
+    releaseAdminProfileExportObjectUrl(profileExportObjectUrlRef.current);
+    profileExportObjectUrlRef.current = null;
+  }, []);
 
   useEffect(() => {
     setProfileCountrySelectionIds({});
@@ -1587,51 +1616,78 @@ export function AdminPage() {
     return refreshed.profile;
   }
 
-  async function exportProfiles(scope: 'selected' | 'filtered' | 'backup') {
+  function clearPreparedProfileExport() {
+    releaseAdminProfileExportObjectUrl(profileExportObjectUrlRef.current);
+    profileExportObjectUrlRef.current = null;
+    setPreparedProfileExport(null);
+  }
+
+  function closeProfileExport() {
+    if (profileExportBusy) return;
+    clearPreparedProfileExport();
+    setProfileExportError(null);
+    setProfileExportStatus('');
+    setProfileExportScope(null);
+    setProfileExportPreparingCount(0);
+    setProfileExportOpen(false);
+  }
+
+  async function prepareProfileExport(scope: AdminProfileExportScope) {
     if (profileExportBusy) return;
     const expectedCount = scope === 'selected'
       ? selectedProfileCount
       : scope === 'filtered'
         ? totalMatchingProfileCount
-        : Number(stats.total_profiles || 0);
-    const picker = (window as typeof window & {
-      showSaveFilePicker?: (options: Record<string, unknown>) => Promise<import('../lib/api').AdminProfileExportFileHandle>;
-    }).showSaveFilePicker;
-    let destination;
-    try {
-      destination = await chooseAdminProfileExportDestination(
-        adminProfileExportFilenameForScope(null, scope === 'backup' ? 'backup' : 'selected'),
-        picker ? picker.bind(window) : undefined
-      );
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
-      return;
-    }
-    if (destination.mode === 'cancelled') {
-      setProfileExportOpen(false);
-      return;
-    }
+        : totalProfileCount;
+    clearPreparedProfileExport();
+    setProfileExportScope(scope);
+    setProfileExportError(null);
+    setProfileExportStatus('');
     setProfileExportPreparingCount(expectedCount);
     setProfileExportBusy(true);
-    setMessage(t('admin.profiles.exportPreparing', { count: expectedCount }));
     try {
-      const file = scope === 'backup'
+      const file = scope === 'all'
         ? await api.exportAdminProfiles(token)
         : await api.exportAdminProfileSelection(token, adminProfileSelectionRequest(
             scope === 'selected'
               ? profileSelection
               : selectAllFilteredProfiles(profileSelectionFilters, totalMatchingProfileCount)
           ));
-      await saveAdminProfileExport(file.blob, file.filename, destination);
-      setMessage(t('admin.profiles.exportSaved', { count: file.profileCount || expectedCount }));
-      setProfileExportOpen(false);
+      const objectUrl = replaceAdminProfileExportObjectUrl(file.blob, profileExportObjectUrlRef.current);
+      profileExportObjectUrlRef.current = objectUrl;
+      setPreparedProfileExport({
+        blob: file.blob,
+        objectUrl,
+        filename: file.filename,
+        profileCount: file.profileCount || expectedCount
+      });
     } catch (error) {
-      const reason = error instanceof Error ? error.message : t('states.requestFailed');
-      setMessage(`${t('admin.profiles.exportError')} ${reason}`);
+      setProfileExportError({
+        status: error instanceof ApiError ? error.status : null,
+        message: error instanceof Error ? error.message : t('states.requestFailed')
+      });
     } finally {
       setProfileExportBusy(false);
-      setProfileExportPreparingCount(0);
     }
+  }
+
+  function savePreparedProfileExport() {
+    if (!preparedProfileExport) return;
+    const picker = (window as typeof window & {
+      showSaveFilePicker?: (options: Record<string, unknown>) => Promise<import('../lib/api').AdminProfileExportFileHandle>;
+    }).showSaveFilePicker;
+    if (typeof picker !== 'function') return;
+    setProfileExportStatus('');
+    void savePreparedAdminProfileExportAs(
+      preparedProfileExport.blob,
+      preparedProfileExport.filename,
+      picker.bind(window)
+    ).then(() => {
+      setProfileExportStatus(t('admin.profiles.exportFileSaved'));
+    }).catch((error) => {
+      if (isAdminProfileExportPickerAbort(error)) return;
+      setProfileExportStatus(error instanceof Error ? error.message : t('states.requestFailed'));
+    });
   }
 
   async function analyseHermesLink() {
@@ -2352,15 +2408,57 @@ export function AdminPage() {
       )}
 
       {profileExportOpen && (
-        <div className="admin-modal-backdrop" onClick={() => { if (!profileExportBusy) setProfileExportOpen(false); }}>
-          <AdminWindow id="admin-profile-export" title={t('admin.profiles.export')} labels={adminWindowLabels} className="admin-modal" onClose={() => { if (!profileExportBusy) setProfileExportOpen(false); }}>
-            {profileExportBusy ? <p role="status">{t('admin.profiles.exportPreparing', { count: profileExportPreparingCount })}</p> : null}
-            <div className="admin-actions-row">
-              <button type="button" className="button primary" disabled={profileExportBusy || !selectedProfileCount} onClick={() => void exportProfiles('selected')}>{t('admin.profiles.exportSelected', { count: selectedProfileCount })}</button>
-              <button type="button" className="button" disabled={profileExportBusy || !totalMatchingProfileCount} onClick={() => void exportProfiles('filtered')}>{t('admin.profiles.exportFiltered', { count: totalMatchingProfileCount })}</button>
-              <button type="button" className="button" disabled={profileExportBusy} onClick={() => void exportProfiles('backup')}>{t('admin.profiles.exportBackup')}</button>
-              <button type="button" className="button" disabled={profileExportBusy} onClick={() => setProfileExportOpen(false)}>{t('admin.buttons.cancel')}</button>
-            </div>
+        <div className="admin-modal-backdrop" onClick={closeProfileExport}>
+          <AdminWindow id="admin-profile-export" title={t('admin.profiles.export')} labels={adminWindowLabels} className="admin-modal" onClose={closeProfileExport}>
+            {profileExportBusy ? (
+              <>
+                <h3>{t('admin.profiles.exportPreparingFile')}</h3>
+                <p role="status">{t('admin.profiles.exportPreparingCount', { count: profileExportPreparingCount })}</p>
+              </>
+            ) : profileExportError ? (
+              <>
+                <h3>{t('admin.profiles.exportPrepareFailed')}</h3>
+                {profileExportError.status !== null ? <p>{t('admin.profiles.exportHttpStatus', { status: profileExportError.status })}</p> : null}
+                <p className="error-text" role="alert">{profileExportError.message}</p>
+                <div className="admin-actions-row">
+                  <button type="button" className="button primary" onClick={() => { if (profileExportScope) void prepareProfileExport(profileExportScope); }}>{t('admin.buttons.retry')}</button>
+                  <button type="button" className="button" onClick={closeProfileExport}>{t('admin.buttons.close')}</button>
+                </div>
+              </>
+            ) : preparedProfileExport ? (
+              <AdminProfileExportReady
+                file={preparedProfileExport}
+                canSaveAs={typeof (window as typeof window & { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function'}
+                labels={{
+                  ready: t('admin.profiles.exportFileReady'),
+                  profileCount: t('admin.profiles.exportProfileCount'),
+                  filename: t('admin.profiles.exportFilename'),
+                  fileSize: t('admin.profiles.exportFileSize'),
+                  download: t('admin.profiles.exportDownload'),
+                  saveAs: t('admin.profiles.exportSaveAs'),
+                  close: t('admin.buttons.close')
+                }}
+                statusMessage={profileExportStatus}
+                onDownload={() => setProfileExportStatus(t('admin.profiles.exportDownloadStarted'))}
+                onSaveAs={savePreparedProfileExport}
+                onClose={closeProfileExport}
+              />
+            ) : (
+              <div className="admin-actions-row">
+                {profileExportOptions.map((option, index) => (
+                  <button
+                    key={option.scope}
+                    type="button"
+                    className={index === 0 ? 'button primary' : 'button'}
+                    disabled={option.count === 0}
+                    onClick={() => void prepareProfileExport(option.scope)}
+                  >
+                    {t(`admin.profiles.exportScope.${option.scope}`, { count: option.count })}
+                  </button>
+                ))}
+                <button type="button" className="button" onClick={closeProfileExport}>{t('admin.buttons.cancel')}</button>
+              </div>
+            )}
           </AdminWindow>
         </div>
       )}
