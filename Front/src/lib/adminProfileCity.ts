@@ -166,8 +166,43 @@ export function profileIdsInCountryGroups(groups: AdminProfileCountryGroup[]) {
 }
 
 export function updateAdminProfileSelection(current: string[], visibleIds: string[], selected: boolean) {
-  const visible = new Set(visibleIds);
-  return selected ? [...new Set([...current, ...visibleIds])] : current.filter((id) => !visible.has(id));
+  const visible = new Set(uniqueAdminProfileIds(visibleIds));
+  return selected ? uniqueAdminProfileIds([...current, ...visible]) : uniqueAdminProfileIds(current).filter((id) => !visible.has(id));
+}
+
+export function uniqueAdminProfileIds(ids: string[]) {
+  return [...new Set(ids.filter(Boolean))];
+}
+
+export function toggleAdminProfileSelection(current: string[], profileId: string) {
+  const unique = uniqueAdminProfileIds(current);
+  return unique.includes(profileId) ? unique.filter((id) => id !== profileId) : [...unique, profileId];
+}
+
+export function adminProfileSelectionState(current: string[], visibleIds: string[]) {
+  const selected = new Set(uniqueAdminProfileIds(current));
+  const visible = uniqueAdminProfileIds(visibleIds);
+  const selectedVisibleCount = visible.filter((id) => selected.has(id)).length;
+  return {
+    checked: visible.length > 0 && selectedVisibleCount === visible.length,
+    indeterminate: selectedVisibleCount > 0 && selectedVisibleCount < visible.length
+  };
+}
+
+export function selectionAfterProcessedProfiles(current: string[], processedIds: string[]) {
+  const processed = new Set(uniqueAdminProfileIds(processedIds));
+  return uniqueAdminProfileIds(current).filter((id) => !processed.has(id));
+}
+
+export async function runAdminProfileSelectionRequest<T>(
+  request: () => Promise<T>,
+  processedIds: (result: T) => string[],
+  updateSelection: (updater: (current: string[]) => string[]) => void
+) {
+  const result = await request();
+  const processed = uniqueAdminProfileIds(processedIds(result));
+  updateSelection((current) => selectionAfterProcessedProfiles(current, processed));
+  return result;
 }
 
 function isBetterDisplayName(candidate: string, current: string) {

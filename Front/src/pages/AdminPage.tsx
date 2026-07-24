@@ -16,13 +16,14 @@ type HermesImportPreview = HermesProfilePreview & {
 import { useI18n } from '../i18n';
 import { AdminReferralTree } from '../components/AdminReferralTree';
 import { AdminWindow, AdminWindowProvider } from '../components/AdminWindow';
+import { AdminSelectionCheckbox } from '../components/AdminSelectionCheckbox';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
 import { defaultAdminProfileFilters, resolveAdminProfilesResult } from '../lib/adminProfiles';
 import { isDuplicateSourceUrlApiError, runCityImportQueue } from '../lib/cityImportQueue';
 import type { CityImportQueueItem } from '../lib/cityImportQueue';
 import { selectedIdsAfterBulkPublish } from '../lib/bulkProfilePublish';
-import { adminProfileCountryName, normalizeAdminProfileCitySearch, updateAdminProfileSelection } from '../lib/adminProfileCity';
+import { adminProfileCountryName, adminProfileSelectionState, normalizeAdminProfileCitySearch, runAdminProfileSelectionRequest, toggleAdminProfileSelection, uniqueAdminProfileIds, updateAdminProfileSelection } from '../lib/adminProfileCity';
 import { adminWindowLayoutResetEvent, profileControlWindowStorageKey, profileReviewWindowStorageKey } from '../lib/adminWindowLayout';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
@@ -1004,7 +1005,7 @@ export function AdminPage() {
   }
 
   function toggleBulkProfile(id: string) {
-    setSelectedProfileIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    setSelectedProfileIds((current) => toggleAdminProfileSelection(current, id));
   }
 
   function setVisibleProfilesSelected(ids: string[], selected: boolean) {
@@ -1040,7 +1041,7 @@ export function AdminPage() {
     if (!confirmed) return;
     if (operation === 'publish') {
       if (bulkPublishBusy) return;
-      const requestedIds = [...selectedProfileIds];
+      const requestedIds = uniqueAdminProfileIds(selectedProfileIds);
       setBulkPublishBusy(true);
       setBulkPublishResult(null);
       try {
@@ -1064,9 +1065,13 @@ export function AdminPage() {
       }
       return;
     }
+    const requestedIds = uniqueAdminProfileIds(selectedProfileIds);
     await action(async () => {
-      await api.bulkAdminProfiles(token, { operation, profile_ids: selectedProfileIds, ...extra });
-      setSelectedProfileIds([]);
+      await runAdminProfileSelectionRequest(
+        () => api.bulkAdminProfiles(token, { operation, profile_ids: requestedIds, ...extra }),
+        (response) => 'items' in response ? [] : response.processed_profile_ids || response.profiles?.map((profile) => profile.id) || [],
+        (updater) => setSelectedProfileIds(updater)
+      );
     });
   }
 
@@ -1088,12 +1093,16 @@ export function AdminPage() {
 
   async function confirmBulkProfilePhotoApproval() {
     if (!selectedProfileIds.length || selectedProfileIds.length > 100 || bulkProfilePhotosBusy) return;
-    const requestedProfileIds = [...selectedProfileIds];
+    const requestedProfileIds = uniqueAdminProfileIds(selectedProfileIds);
     setBulkProfilePhotosBusy(true);
     setBulkProfilePhotosError('');
     setBulkProfilePhotosResult(null);
     try {
-      const result = await api.approveProfileImagesByProfiles(token, requestedProfileIds);
+      const result = await runAdminProfileSelectionRequest(
+        () => api.approveProfileImagesByProfiles(token, requestedProfileIds),
+        (response) => response.profiles.filter((profile) => profile.status === 'matched' && profile.failed === 0).map((profile) => profile.profile_id),
+        (updater) => setSelectedProfileIds(updater)
+      );
       setBulkProfilePhotosResult(result);
       const updatedProfileIds = new Set(result.profiles.filter((profile) => profile.status === 'matched' && profile.failed === 0).map((profile) => profile.profile_id));
       setProfiles((current) => current.map((profile) => updatedProfileIds.has(profile.id)
@@ -1168,9 +1177,13 @@ export function AdminPage() {
     setBulkDeleteBusy(true);
     setBulkDeleteError('');
     try {
-      await api.bulkAdminProfiles(token, { operation: 'delete', profile_ids: selectedProfileIds, deletion_pin: bulkDeletePin });
+      const requestedProfileIds = uniqueAdminProfileIds(selectedProfileIds);
+      await runAdminProfileSelectionRequest(
+        () => api.bulkAdminProfiles(token, { operation: 'delete', profile_ids: requestedProfileIds, deletion_pin: bulkDeletePin }),
+        (response) => 'items' in response ? [] : response.processed_profile_ids || response.profiles?.map((profile) => profile.id) || [],
+        (updater) => setSelectedProfileIds(updater)
+      );
       setBulkDeletePin('');
-      setSelectedProfileIds([]);
       setBulkDeleteOpen(false);
       await load();
     } catch (error) {
@@ -2665,6 +2678,7 @@ export function AdminPage() {
         return countryExpanded ? country.cities.filter((city) => expandedProfileCityKeys.includes(`${country.key}:${city.key}`)) : [];
       });
       const visibleProfileIds = [...new Set(expandedVisibleGroups.flatMap((group) => group.profiles.map((profile) => profile.id)))];
+      const visibleSelection = adminProfileSelectionState(selectedProfileIds, visibleProfileIds);
       const cityOptions = profileCountryGroups
         .filter((country) => selectedProfileCountryKey === 'all' || country.key === selectedProfileCountryKey)
         .flatMap((country) => country.cities.map((city) => ({ ...city, countryKey: country.key, countryName: country.name, scopedKey: `${country.key}:${city.key}` })));
@@ -2681,7 +2695,7 @@ export function AdminPage() {
         photos: t('admin.profileTable.photosHelp')
       }} format={(key, value, profile) => {
         if (key === 'cover') return <AdminProfileThumb profile={profile} />;
-        if (key === 'id') return <label className="admin-check-cell"><input type="checkbox" checked={selectedProfileIds.includes(profile.id)} onChange={() => toggleBulkProfile(profile.id)} aria-label={t('admin.bulk.toggleProfile')} />{formatShortId(profile.id)}</label>;
+        if (key === 'id') return <AdminSelectionCheckbox className="admin-check-cell" checked={selectedProfileIds.includes(profile.id)} onChange={() => toggleBulkProfile(profile.id)} ariaLabel={t('admin.bulk.toggleProfile')} label={formatShortId(profile.id)} />;
         if (key === 'city') return profile.work_city || value;
         if (key === 'category') return option(String(value || 'other'));
         if (key === 'public_visibility') return <ProfileVisibilityAudit audit={profile.visibility_audit} compact />;
@@ -2804,7 +2818,7 @@ export function AdminPage() {
               <input placeholder={t('admin.filters.ownerEmail')} value={studioFilters.owner_email} onChange={(event) => setStudioFilters({ ...studioFilters, owner_email: event.target.value })} />
             </div>
             <div className="admin-bulk-bar">
-              <label><input type="checkbox" checked={visibleProfileIds.length > 0 && visibleProfileIds.every((id) => selectedProfileIds.includes(id))} onChange={(event) => setVisibleProfilesSelected(visibleProfileIds, event.target.checked)} /> {t('admin.bulk.selected', { count: selectedProfileIds.length })}</label>
+              <AdminSelectionCheckbox checked={visibleSelection.checked} indeterminate={visibleSelection.indeterminate} disabled={!visibleProfileIds.length} onChange={(checked) => setVisibleProfilesSelected(visibleProfileIds, checked)} label={t('admin.bulk.selected', { count: selectedProfileIds.length })} />
               <Action onClick={() => runBulkAction('approve')}>{t('admin.bulk.approve')}</Action>
               <Action disabled={!selectedProfileIds.length || bulkProfilePhotosBusy} onClick={openBulkProfilePhotoApproval}>{bulkProfilePhotosBusy ? t('admin.bulkPhotos.inProgress') : t('admin.bulkPhotos.actionWithCount', { count: selectedProfileIds.length })}</Action>
               <Action disabled={bulkPublishBusy} onClick={() => runBulkAction('publish')}>{bulkPublishBusy ? t('admin.bulk.publishing') : t('admin.bulk.publish')}</Action>
@@ -2833,7 +2847,7 @@ export function AdminPage() {
               {visibleProfileCountryGroups.map((country, countryIndex) => {
                 const countryExpanded = expandedProfileCountryKeys.includes(country.key);
                 const countryIds = country.profiles.map((profile) => profile.id);
-                const countrySelected = countryIds.length > 0 && countryIds.every((id) => selectedProfileIds.includes(id));
+                const countrySelection = adminProfileSelectionState(selectedProfileIds, countryIds);
                 const countryPanelId = `admin-profile-country-${countryIndex}`;
                 return <section className="admin-profile-country-card" key={country.key}>
                   <div className="admin-profile-country-card-head">
@@ -2843,13 +2857,13 @@ export function AdminPage() {
                       <strong>{t('admin.profiles.countryCount', { total: country.total, approved: country.approvedCount })} · {t('admin.profiles.pendingCount', { count: country.pending })}</strong>
                       <small>{countryExpanded ? t('admin.profiles.collapse') : t('admin.profiles.expand')}</small>
                     </button>
-                    <label><input type="checkbox" checked={countrySelected} disabled={!countryIds.length} onChange={(event) => setVisibleProfilesSelected(countryIds, event.target.checked)} /> {t('admin.profiles.selectLoadedInCountry')}</label>
+                    <AdminSelectionCheckbox checked={countrySelection.checked} indeterminate={countrySelection.indeterminate} disabled={!countryIds.length} onChange={(checked) => setVisibleProfilesSelected(countryIds, checked)} label={t('admin.profiles.selectLoadedInCountry')} />
                   </div>
                   <div id={countryPanelId} hidden={!countryExpanded} className="admin-profile-city-groups">{countryExpanded ? country.cities.map((city, cityIndex) => {
                     const scopedCityKey = `${country.key}:${city.key}`;
                     const cityExpanded = expandedProfileCityKeys.includes(scopedCityKey);
                     const cityIds = city.profiles.map((profile) => profile.id);
-                    const citySelected = cityIds.length > 0 && cityIds.every((id) => selectedProfileIds.includes(id));
+                    const citySelection = adminProfileSelectionState(selectedProfileIds, cityIds);
                     const cityPanelId = `${countryPanelId}-city-${cityIndex}`;
                     return <section className="admin-profile-city-card" key={scopedCityKey}>
                       <div className="admin-profile-city-card-head">
@@ -2859,7 +2873,7 @@ export function AdminPage() {
                           <strong>{t('admin.profiles.cityCount', { total: city.total, approved: city.approvedCount })} · {t('admin.profiles.pendingCount', { count: city.pending })}</strong>
                           <small>{cityExpanded ? t('admin.profiles.collapse') : t('admin.profiles.expand')}</small>
                         </button>
-                        <label><input type="checkbox" checked={citySelected} onChange={(event) => setVisibleProfilesSelected(cityIds, event.target.checked)} /> {t('admin.profiles.selectVisibleInCity')}</label>
+                        <AdminSelectionCheckbox checked={citySelection.checked} indeterminate={citySelection.indeterminate} disabled={!cityIds.length} onChange={(checked) => setVisibleProfilesSelected(cityIds, checked)} label={t('admin.profiles.selectVisibleInCity')} />
                       </div>
                       <div id={cityPanelId} hidden={!cityExpanded}>{cityExpanded ? <>{renderStudioProfileTable(city.profiles)}{profileCatalogPages[scopedCityKey]?.has_more ? <button className="button admin-profile-load-more" disabled={profileCatalogPages[scopedCityKey]?.loading} onClick={() => void loadProfileCatalogPage(token, country.key, city.key, (profileCatalogPages[scopedCityKey]?.page || 0) + 1)}>{profileCatalogPages[scopedCityKey]?.loading ? t('states.loading') : t('admin.profiles.loadMore')}</button> : null}</> : null}</div>
                     </section>;

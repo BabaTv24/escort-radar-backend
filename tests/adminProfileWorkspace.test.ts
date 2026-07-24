@@ -7,11 +7,16 @@ import {
   filterAdminProfileCityGroups,
   groupAdminProfilesByCountry,
   groupAdminProfilesByCity,
+  adminProfileSelectionState,
   normalizeAdminProfileCitySearch,
   normalizeAdminProfileCountry,
   profileIdsInCityGroups,
   profileIdsInCountryGroups,
+  runAdminProfileSelectionRequest,
+  selectionAfterProcessedProfiles,
+  toggleAdminProfileSelection,
   unknownAdminProfileCityKey,
+  uniqueAdminProfileIds,
   updateAdminProfileSelection
 } from '../Front/src/lib/adminProfileCity.ts';
 import { defaultAdminProfileFilters, profileMatchesAdminFilters } from '../Front/src/lib/adminProfiles.ts';
@@ -115,6 +120,43 @@ test('selecting one city is additive and collapsing cannot remove existing selec
   assert.deepEqual(selected, ['outside', 'berlin-1', 'berlin-2']);
   assert.deepEqual(updateAdminProfileSelection(selected, [], false), selected);
   assert.deepEqual(updateAdminProfileSelection(selected, ['berlin-1', 'berlin-2'], false), ['outside']);
+});
+
+test('profile selection state is unique, scoped and preserves IDs across refresh and partial success', () => {
+  const selected = toggleAdminProfileSelection(['outside', 'outside'], 'visible-1');
+  assert.deepEqual(selected, ['outside', 'visible-1']);
+  assert.deepEqual(uniqueAdminProfileIds([...selected, 'visible-1', 'visible-2']), ['outside', 'visible-1', 'visible-2']);
+  assert.deepEqual(adminProfileSelectionState(selected, ['visible-1', 'visible-2']), { checked: false, indeterminate: true });
+  assert.deepEqual(adminProfileSelectionState(['visible-1', 'visible-2'], ['visible-1', 'visible-2']), { checked: true, indeterminate: false });
+  assert.deepEqual(adminProfileSelectionState(['outside'], ['visible-1', 'visible-2']), { checked: false, indeterminate: false });
+
+  const afterScopedRefresh = updateAdminProfileSelection(selected, [], false);
+  assert.deepEqual(afterScopedRefresh, selected);
+  assert.deepEqual(selectionAfterProcessedProfiles([...afterScopedRefresh, 'failed'], ['visible-1']), ['outside', 'failed']);
+});
+
+test('bulk selection request preserves all IDs on API error and removes only confirmed IDs on partial success', async () => {
+  let selection = ['done', 'failed', 'outside'];
+  const updateSelection = (updater: (current: string[]) => string[]) => {
+    selection = updater(selection);
+  };
+
+  await assert.rejects(
+    runAdminProfileSelectionRequest(
+      async () => { throw new Error('api_failed'); },
+      () => ['done'],
+      updateSelection
+    ),
+    /api_failed/
+  );
+  assert.deepEqual(selection, ['done', 'failed', 'outside']);
+
+  await runAdminProfileSelectionRequest(
+    async () => ({ processed: ['done'] }),
+    (result) => result.processed,
+    updateSelection
+  );
+  assert.deepEqual(selection, ['failed', 'outside']);
 });
 
 test('window bounds storage is versioned and corrupted values are ignored', () => {

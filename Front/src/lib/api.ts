@@ -51,6 +51,13 @@ export type BulkProfilePublishResponse = {
   items: Array<{ profile_id: string; status: BulkProfilePublishStatus; error?: string }>;
 };
 
+export type BulkAdminProfilesResponse = {
+  updated: number;
+  operation: string;
+  profiles?: Profile[];
+  processed_profile_ids?: string[];
+};
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
@@ -106,6 +113,23 @@ export function saveDownloadedFile(blob: Blob, filename: string, documentRef: Do
   link.click();
   link.remove();
   urlRef.revokeObjectURL(objectUrl);
+}
+
+function safeProfileExportResponseMessage(value: string) {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+
+async function profileExportErrorPayload(response: Response, fallback: string) {
+  const contentType = response.headers.get('Content-Type') || '';
+  if (/^application\/json(?:\s*;|$)/i.test(contentType)) {
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    return {
+      message: String(payload?.error || fallback),
+      payload: payload || { error: fallback }
+    };
+  }
+  const message = safeProfileExportResponseMessage(await response.text().catch(() => ''));
+  return { message: message || fallback, payload: { error: message || fallback } };
 }
 
 export const api = {
@@ -215,8 +239,13 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!response.ok) {
-      const payload = await response.json().catch(() => ({ error: 'Profile export failed' }));
-      throw new ApiError(String(payload.error || 'Profile export failed'), response.status, payload);
+      const error = await profileExportErrorPayload(response, 'Profile export failed');
+      throw new ApiError(error.message, response.status, error.payload);
+    }
+    const contentType = response.headers.get('Content-Type') || '';
+    if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+      const error = await profileExportErrorPayload(response, `Unexpected profile export Content-Type: ${contentType || 'missing'}`);
+      throw new ApiError(error.message, response.status, error.payload);
     }
     return { blob: await response.blob(), filename: adminProfileExportDownloadFilename(response.headers.get('Content-Disposition')) };
   },
@@ -300,7 +329,7 @@ export const api = {
     token,
     body: JSON.stringify(body)
   }),
-  bulkAdminProfiles: (token: string, body: Record<string, unknown>) => request<{ updated: number; operation: string; profiles?: Profile[] } | BulkProfilePublishResponse>('/api/admin/profiles/bulk', {
+  bulkAdminProfiles: (token: string, body: Record<string, unknown>) => request<BulkAdminProfilesResponse | BulkProfilePublishResponse>('/api/admin/profiles/bulk', {
     method: 'POST',
     token,
     body: JSON.stringify(body)

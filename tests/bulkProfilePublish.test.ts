@@ -100,6 +100,17 @@ test('admin UI renders publish summary and refreshes profiles after bulk publish
   assert.match(source, /selectedIdsAfterBulkPublish/);
 });
 
+test('generic bulk operations return processed profile IDs and frontend preserves unprocessed selection', async () => {
+  const backend = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  const frontend = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
+  const backendBulk = backend.slice(backend.indexOf("adminRouter.post('/profiles/bulk'"), backend.indexOf("adminRouter.patch('/profiles/:profileId/images/reorder'"));
+  const frontendBulk = frontend.slice(frontend.indexOf('async function runBulkAction'), frontend.indexOf('function openBulkProfilePhotoApproval'));
+  assert.match(backendBulk, /processed_profile_ids/);
+  assert.match(frontendBulk, /uniqueAdminProfileIds\(selectedProfileIds\)/);
+  assert.match(frontendBulk, /runAdminProfileSelectionRequest/);
+  assert.equal((frontendBulk.match(/api\.bulkAdminProfiles\(/g) || []).length, 2);
+});
+
 test('bulk publish does not require deletion PIN while bulk delete still does', async () => {
   const source = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
   const publishBranch = source.slice(source.indexOf("operation === 'publish'"), source.indexOf("operation === 'unpublish'"));

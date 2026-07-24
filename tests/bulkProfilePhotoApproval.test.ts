@@ -70,7 +70,7 @@ test('one protected endpoint performs one set-based pending-only update and one 
   assert.doesNotMatch(branch, /is_primary|is_cover|sort_order|is_hidden|is_private|storage_path|storage\.remove/);
 });
 
-test('profile control sends one profile_ids request without global loading or clearing selection', async () => {
+test('profile control sends one unique profile_ids request and clears only successfully processed selection', async () => {
   const page = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
   const start = page.indexOf('async function confirmBulkProfilePhotoApproval');
   const end = page.indexOf('async function refreshDeletionPinStatus', start);
@@ -79,9 +79,10 @@ test('profile control sends one profile_ids request without global loading or cl
   assert.match(page, /admin\.bulkPhotos\.actionWithCount/);
   assert.match(page, /admin-bulk-profile-photo-approval/);
   assert.match(branch, /api\.approveProfileImagesByProfiles\(token, requestedProfileIds\)/);
-  assert.match(branch, /const requestedProfileIds = \[\.\.\.selectedProfileIds\]/);
+  assert.match(branch, /const requestedProfileIds = uniqueAdminProfileIds\(selectedProfileIds\)/);
   assert.doesNotMatch(branch, /for \(|Promise\.all|bulkModerateProfileImages|setLoading\(|await load\(|api\.adminProfiles|api\.adminPhotos/);
-  assert.doesNotMatch(branch, /setSelectedProfileIds/);
+  assert.match(branch, /runAdminProfileSelectionRequest/);
+  assert.match(branch, /profile\.status === 'matched' && profile\.failed === 0/);
   assert.equal((branch.match(/setProfiles\(/g) || []).length, 1);
   assert.match(branch, /moderation_status === 'pending'/);
 });

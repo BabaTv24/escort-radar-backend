@@ -102,10 +102,14 @@ test('profile export has the required structure, exact count, image references a
 test('frontend downloads the export with the backend filename', async () => {
   const filename = profileExportFilename(new Date('2026-07-21T09:07:00.000Z'));
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response('{}', {
-    status: 200,
-    headers: { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${filename}"` }
-  });
+  let authorization = '';
+  globalThis.fetch = async (_input, init) => {
+    authorization = new Headers(init?.headers).get('Authorization') || '';
+    return new Response('{}', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="${filename}"` }
+    });
+  };
   try {
     const file = await api.exportAdminProfiles('admin-token');
     let clicked = false;
@@ -115,9 +119,33 @@ test('frontend downloads the export with the backend filename', async () => {
     const urlRef = { createObjectURL: () => 'blob:test', revokeObjectURL() {} };
     saveDownloadedFile(file.blob, file.filename, documentRef, urlRef);
     assert.equal(clicked, true);
+    assert.equal(authorization, 'Bearer admin-token');
     assert.equal(downloadedAs, 'escort-radar-profiles-backup-2026-07-21-0907.json');
     assert.equal(adminProfileExportDownloadFilename('attachment; filename="../../unsafe.json"', new Date('2026-07-21T09:07:00.000Z')), filename);
     assert.equal(adminProfileExportDownloadFilename(null, new Date('2026-07-21T09:07:00.000Z')), filename);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('frontend rejects HTML and an unexpected content type instead of downloading it as JSON', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response('<html><title>Login</title></html>', {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    });
+    await assert.rejects(api.exportAdminProfiles('admin-token'), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Login|Content-Type/);
+      return true;
+    });
+
+    globalThis.fetch = async () => new Response('gateway failure', {
+      status: 502,
+      headers: { 'Content-Type': 'text/plain' }
+    });
+    await assert.rejects(api.exportAdminProfiles('admin-token'), /gateway failure/);
   } finally {
     globalThis.fetch = originalFetch;
   }

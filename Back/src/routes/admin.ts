@@ -2375,10 +2375,11 @@ adminRouter.post('/profiles/bulk', asyncHandler(async (req, res) => {
     const { data: images } = await supabaseAdmin.from('profile_images').select('storage_path').in('profile_id', ids);
     const storagePaths = (images || []).map((image) => image.storage_path).filter(Boolean);
     if (storagePaths.length) await supabaseAdmin.storage.from(config.storageBucket).remove(storagePaths);
-    const { error } = await supabaseAdmin.from('profiles').delete().in('id', ids);
+    const { data: deletedProfiles, error } = await supabaseAdmin.from('profiles').delete().in('id', ids).select('id');
     if (error) return res.status(400).json({ error: error.message });
-    await logAdminSecurityAction(req, 'bulk_profile_delete_success', { profile_count: ids.length, profile_ids: ids });
-    return res.json({ updated: ids.length, operation });
+    const processedProfileIds = (deletedProfiles || []).map((profile) => profile.id);
+    await logAdminSecurityAction(req, 'bulk_profile_delete_success', { profile_count: processedProfileIds.length, profile_ids: processedProfileIds });
+    return res.json({ updated: processedProfileIds.length, operation, processed_profile_ids: processedProfileIds });
   } else {
     return res.status(400).json({ error: 'Invalid bulk operation' });
   }
@@ -2393,7 +2394,12 @@ adminRouter.post('/profiles/bulk', asyncHandler(async (req, res) => {
     await Promise.all((data || []).map((profile) => upsertManualSubscription(profile, req.user?.email || req.user?.id || null)));
   }
   await logAdminAction(req.user?.email, `profiles_bulk_${operation}`, 'profile', null, { profile_ids: ids, ...patch });
-  res.json({ updated: data?.length || 0, operation, profiles: (data || []).map(withAdminImageUrls) });
+  res.json({
+    updated: data?.length || 0,
+    operation,
+    profiles: (data || []).map(withAdminImageUrls),
+    processed_profile_ids: (data || []).map((profile) => profile.id)
+  });
 }));
 
 adminRouter.patch('/profiles/:profileId/images/reorder', asyncHandler(async (req, res) => {
