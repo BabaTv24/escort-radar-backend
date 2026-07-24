@@ -7,6 +7,7 @@ import { AdminProfileExportReady } from '../Front/src/components/AdminProfileExp
 import {
   adminProfileExportFiltersActive,
   adminProfileExportOptions,
+  adminProfileExportPickerFor,
   adminProfileSelectionMatchesFilters,
   isAdminProfileExportPickerAbort,
   releaseAdminProfileExportObjectUrl,
@@ -96,11 +97,13 @@ test('new prepared Blob creates an object URL and only replaces a previous URL',
   const revoked: string[] = [];
   const created: Blob[] = [];
   const urlApi = {
-    createObjectURL(blob: Blob) {
+    createObjectURL(this: unknown, blob: Blob) {
+      assert.equal(this, urlApi);
       created.push(blob);
       return `blob:${created.length}`;
     },
-    revokeObjectURL(url: string) {
+    revokeObjectURL(this: unknown, url: string) {
+      assert.equal(this, urlApi);
       revoked.push(url);
     }
   };
@@ -176,11 +179,15 @@ test('Save As calls the picker synchronously before its promise resolves and wri
   let resolveHandle!: (handle: any) => void;
   let written: Blob | null = null;
   const pickerPromise = new Promise<any>((resolve) => { resolveHandle = resolve; });
-  const saving = savePreparedAdminProfileExportAs(blob, 'ready.json', (options) => {
-    pickerCalled = true;
-    assert.equal(options.suggestedName, 'ready.json');
-    return pickerPromise;
-  });
+  const pickerOwner = {
+    showSaveFilePicker(this: unknown, options: Record<string, unknown>) {
+      if (this !== pickerOwner) throw new TypeError('Illegal invocation');
+      pickerCalled = true;
+      assert.equal(options.suggestedName, 'ready.json');
+      return pickerPromise;
+    }
+  };
+  const saving = savePreparedAdminProfileExportAs(blob, 'ready.json', adminProfileExportPickerFor(pickerOwner));
   assert.equal(pickerCalled, true);
   resolveHandle({
     async createWritable() {

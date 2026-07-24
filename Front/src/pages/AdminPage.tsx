@@ -40,6 +40,7 @@ import type { AdminProfileSelection, AdminProfileSelectionFilters } from '../lib
 import {
   adminProfileExportFiltersActive,
   adminProfileExportOptions,
+  adminProfileExportPickerFor,
   adminProfileSelectionMatchesFilters,
   isAdminProfileExportPickerAbort,
   releaseAdminProfileExportObjectUrl,
@@ -1661,8 +1662,12 @@ export function AdminPage() {
       const requestOptions = {
         signal: controller.signal,
         onBlobReady: (blob: Blob) => {
-          objectUrl = replaceAdminProfileExportObjectUrl(blob, profileExportObjectUrlRef.current);
-          profileExportObjectUrlRef.current = objectUrl;
+          try {
+            objectUrl = replaceAdminProfileExportObjectUrl(blob, profileExportObjectUrlRef.current);
+            profileExportObjectUrlRef.current = objectUrl;
+          } catch {
+            throw new AdminProfileExportError('network', null, 'object_url');
+          }
         }
       };
       const file = scope === 'all'
@@ -1681,8 +1686,12 @@ export function AdminPage() {
       });
     } catch (error) {
       if (requestId !== profileExportRequestIdRef.current) return;
-      if (import.meta.env.DEV && error instanceof AdminProfileExportError) {
-        console.error('[admin profile export]', { code: error.code, status: error.status, stage: error.stage });
+      if (import.meta.env.DEV) {
+        console.error('[admin profile export]', {
+          stage: error instanceof AdminProfileExportError ? error.stage : 'prepare',
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+          error_message: error instanceof Error ? error.message : String(error)
+        });
       }
       const message = error instanceof AdminProfileExportError
         ? t(`admin.profiles.exportError.${error.code}`)
@@ -1711,15 +1720,25 @@ export function AdminPage() {
       showSaveFilePicker?: (options: Record<string, unknown>) => Promise<import('../lib/api').AdminProfileExportFileHandle>;
     }).showSaveFilePicker;
     if (typeof picker !== 'function') return;
+    const browserWindow = window as typeof window & {
+      showSaveFilePicker: (options: Record<string, unknown>) => Promise<import('../lib/api').AdminProfileExportFileHandle>;
+    };
     setProfileExportStatus('');
     void savePreparedAdminProfileExportAs(
       preparedProfileExport.blob,
       preparedProfileExport.filename,
-      picker.bind(window)
+      adminProfileExportPickerFor(browserWindow)
     ).then(() => {
       setProfileExportStatus(t('admin.profiles.exportFileSaved'));
     }).catch((error) => {
       if (isAdminProfileExportPickerAbort(error)) return;
+      if (import.meta.env.DEV) {
+        console.error('[admin profile export]', {
+          stage: 'save_picker',
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+          error_message: error instanceof Error ? error.message : String(error)
+        });
+      }
       setProfileExportStatus(error instanceof Error ? error.message : t('states.requestFailed'));
     });
   }

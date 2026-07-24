@@ -155,7 +155,7 @@ export class AdminProfileExportError extends Error {
   constructor(
     public readonly code: AdminProfileExportErrorCode,
     public readonly status: number | null = null,
-    public readonly stage: 'fetch' | 'body' = 'fetch'
+    public readonly stage: 'prepare' | 'fetch' | 'body' | 'object_url' | 'save_picker' = 'fetch'
   ) {
     super(code);
     this.name = 'AdminProfileExportError';
@@ -169,20 +169,24 @@ export type AdminProfileExportRequestOptions = {
 
 type AdminProfileExportRuntime = {
   fetch: typeof fetch;
-  setTimeout: typeof globalThis.setTimeout;
-  clearTimeout: typeof globalThis.clearTimeout;
+  setTimeout: (handler: () => void, timeoutMs: number) => ReturnType<typeof globalThis.setTimeout>;
+  clearTimeout: (timeoutId: ReturnType<typeof globalThis.setTimeout>) => void;
 };
+
+export function adminProfileExportBrowserRuntime(): AdminProfileExportRuntime {
+  return {
+    fetch: (...args) => globalThis.fetch(...args),
+    setTimeout: (handler, timeoutMs) => globalThis.setTimeout(handler, timeoutMs),
+    clearTimeout: (timeoutId) => globalThis.clearTimeout(timeoutId)
+  };
+}
 
 export async function requestAdminProfileExport(
   path: string,
   init: RequestInit,
   scope: 'backup' | 'selected',
   options: AdminProfileExportRequestOptions = {},
-  runtime: AdminProfileExportRuntime = {
-    fetch: globalThis.fetch,
-    setTimeout: globalThis.setTimeout,
-    clearTimeout: globalThis.clearTimeout
-  }
+  runtime: AdminProfileExportRuntime = adminProfileExportBrowserRuntime()
 ) {
   const controller = new AbortController();
   let timedOut = false;

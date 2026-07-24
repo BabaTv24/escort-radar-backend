@@ -102,6 +102,12 @@ export function savePreparedAdminProfileExportAs(
   });
 }
 
+export function adminProfileExportPickerFor(owner: {
+  showSaveFilePicker: (options: Record<string, unknown>) => Promise<AdminProfileExportFileHandle>;
+}) {
+  return (options: Record<string, unknown>) => owner.showSaveFilePicker(options);
+}
+
 export function isAdminProfileExportPickerAbort(error: unknown) {
   return error instanceof DOMException && error.name === 'AbortError';
 }

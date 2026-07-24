@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   ADMIN_PROFILE_EXPORT_TIMEOUT_MS,
   AdminProfileExportError,
+  adminProfileExportBrowserRuntime,
   api,
   requestAdminProfileExport
 } from '../Front/src/lib/api.ts';
@@ -59,6 +60,47 @@ test('profile export has a dedicated 120 second timeout that stays active throug
   assert.equal(file.blob.size > 0, true);
   assert.equal(objectUrlCreatedWhileTimerActive, true);
   assert.equal(timerCleared, true);
+});
+
+test('browser runtime preserves native receivers and starts exactly one export request', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let fetchCalls = 0;
+  let timerCalls = 0;
+  let clearCalls = 0;
+  (globalThis as any).fetch = function nativeLikeFetch(this: unknown) {
+    if (this !== globalThis) throw new TypeError('Illegal invocation');
+    fetchCalls += 1;
+    return Promise.resolve(exportResponse(new Blob(['{"ok":true}'])));
+  };
+  (globalThis as any).setTimeout = function nativeLikeSetTimeout(this: unknown) {
+    if (this !== globalThis) throw new TypeError('Illegal invocation');
+    timerCalls += 1;
+    return 73;
+  };
+  (globalThis as any).clearTimeout = function nativeLikeClearTimeout(this: unknown, timeoutId: number) {
+    if (this !== globalThis) throw new TypeError('Illegal invocation');
+    assert.equal(timeoutId, 73);
+    clearCalls += 1;
+  };
+  try {
+    const file = await requestAdminProfileExport(
+      '/api/admin/profiles/export',
+      {},
+      'backup',
+      {},
+      adminProfileExportBrowserRuntime()
+    );
+    assert.equal(file.blob.size > 0, true);
+    assert.equal(fetchCalls, 1);
+    assert.equal(timerCalls, 1);
+    assert.equal(clearCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
 });
 
 test('a simulated nine-second response is not aborted by an eight-second timer', async () => {
@@ -197,6 +239,17 @@ test('retry and close enforce one active export request in AdminPage', async () 
 test('production service worker does not proxy cross-origin export bodies', async () => {
   const source = await readFile(new URL('../Front/public/sw.js', import.meta.url), 'utf8');
   assert.match(source, /if \(url\.origin !== self\.location\.origin\) return;/);
+});
+
+test('frontend build version is derived from the current git commit without a hardcoded SHA', async () => {
+  const [config, main] = await Promise.all([
+    readFile(new URL('../Front/vite.config.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/main.tsx', import.meta.url), 'utf8')
+  ]);
+  assert.match(config, /execSync\('git rev-parse --short HEAD'/);
+  assert.match(config, /__ESCORT_RADAR_GIT_COMMIT__/);
+  assert.match(main, /commit:\s*__ESCORT_RADAR_GIT_COMMIT__/);
+  assert.doesNotMatch(config + main, /02cb31f/);
 });
 
 test('backend relies on byte-safe Express send and exposes all export headers', async () => {
