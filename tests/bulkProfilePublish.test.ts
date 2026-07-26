@@ -91,14 +91,15 @@ test('frontend removes published IDs and preserves skipped and failed selections
 
 test('admin UI renders publish summary and refreshes profiles after bulk publish', async () => {
   const source = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
-  const bulkPublishSource = source.slice(source.indexOf("if (operation === 'publish')"), source.indexOf('await action(async () =>', source.indexOf("if (operation === 'publish')")));
+  const bulkPublishSource = source.slice(source.indexOf('async function runResolvedProfileBulkOperation'), source.indexOf('function openBulkProfilePhotoApproval'));
   assert.match(source, /BulkPublishSummary/);
   assert.match(bulkPublishSource, /const refreshed = await api\.adminProfileStats\(token\)/);
   assert.match(bulkPublishSource, /await loadProfileCatalogCountries\(token, true\)/);
   assert.doesNotMatch(bulkPublishSource, /api\.adminProfiles\(/);
   assert.match(source, /disabled=\{bulkPublishBusy\}/);
   assert.match(bulkPublishSource, /removeProcessedAdminProfiles/);
-  assert.match(bulkPublishSource, /selection: adminProfileSelectionRequest\(profileSelection\)/);
+  assert.match(bulkPublishSource, /selection: \{ mode: 'explicit', profile_ids: \[\.\.\.chunk\] \}/);
+  assert.match(bulkPublishSource, /batchSize: 100/);
 });
 
 test('generic bulk operations return processed profile IDs and frontend preserves unprocessed selection', async () => {
@@ -107,9 +108,11 @@ test('generic bulk operations return processed profile IDs and frontend preserve
   const backendBulk = backend.slice(backend.indexOf("adminRouter.post('/profiles/bulk'"), backend.indexOf("adminRouter.patch('/profiles/:profileId/images/reorder'"));
   const frontendBulk = frontend.slice(frontend.indexOf('async function runBulkAction'), frontend.indexOf('function openBulkProfilePhotoApproval'));
   assert.match(backendBulk, /processed_profile_ids/);
-  assert.match(frontendBulk, /selection: adminProfileSelectionRequest\(profileSelection\)/);
+  assert.match(frontendBulk, /resolveProfileOperationSnapshot/);
+  assert.match(frontendBulk, /selection: \{ mode: 'explicit', profile_ids: \[\.\.\.chunk\] \}/);
+  assert.match(frontendBulk, /executeAdminBatches/);
   assert.match(frontendBulk, /removeProcessedAdminProfiles/);
-  assert.equal((frontendBulk.match(/api\.bulkAdminProfiles\(/g) || []).length, 2);
+  assert.equal((frontendBulk.match(/api\.bulkAdminProfiles\(/g) || []).length, 1);
 });
 
 test('bulk publish does not require deletion PIN while bulk delete still does', async () => {

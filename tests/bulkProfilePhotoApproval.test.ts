@@ -70,7 +70,7 @@ test('one protected endpoint performs one set-based pending-only update and one 
   assert.doesNotMatch(branch, /is_primary|is_cover|sort_order|is_hidden|is_private|storage_path|storage\.remove/);
 });
 
-test('profile control sends one unique profile_ids request and clears only successfully processed selection', async () => {
+test('profile control snapshots the selection, batches by 100 and clears only successfully processed selection', async () => {
   const page = await readFile(new URL('../Front/src/pages/AdminPage.tsx', import.meta.url), 'utf8');
   const start = page.indexOf('async function confirmBulkProfilePhotoApproval');
   const end = page.indexOf('async function refreshDeletionPinStatus', start);
@@ -78,9 +78,12 @@ test('profile control sends one unique profile_ids request and clears only succe
   assert.match(page, /disabled=\{!selectedProfileCount \|\| bulkProfilePhotosBusy\}/);
   assert.match(page, /admin\.bulkPhotos\.actionWithCount/);
   assert.match(page, /admin-bulk-profile-photo-approval/);
-  assert.match(branch, /api\.resolveAdminProfileSelection\(token, adminProfileSelectionRequest\(profileSelection\)\)/);
-  assert.match(branch, /api\.approveProfileImagesByProfiles\(token, resolved\.profile_ids\)/);
-  assert.doesNotMatch(branch, /for \(|Promise\.all|bulkModerateProfileImages|setLoading\(|await load\(|api\.adminProfiles|api\.adminPhotos/);
+  assert.match(branch, /resolveProfileOperationSnapshot\('profile-approve-photos'\)/);
+  assert.match(branch, /executeAdminBatches/);
+  assert.match(branch, /items: snapshot\.ids/);
+  assert.match(branch, /batchSize: 100/);
+  assert.match(branch, /api\.approveProfileImagesByProfiles\(token, \[\.\.\.chunk\]\)/);
+  assert.doesNotMatch(branch, /Promise\.all|bulkModerateProfileImages|setLoading\(|await load\(|api\.adminProfiles|api\.adminPhotos/);
   assert.match(branch, /removeProcessedAdminProfiles/);
   assert.match(branch, /profile\.status === 'matched' && profile\.failed === 0/);
   assert.equal((branch.match(/setProfiles\(/g) || []).length, 1);

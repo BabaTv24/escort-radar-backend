@@ -1,7 +1,7 @@
 import { isValidElement, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Download, Eye, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
+import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Download, Eye, LoaderCircle, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { AdminProfileExportError, ApiError, api } from '../lib/api';
 import { adminSession } from '../lib/adminSession';
 import type { BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
@@ -18,6 +18,7 @@ import { AdminReferralTree } from '../components/AdminReferralTree';
 import { AdminWindow, AdminWindowProvider } from '../components/AdminWindow';
 import { AdminSelectionCheckbox } from '../components/AdminSelectionCheckbox';
 import { AdminProfileExportReady } from '../components/AdminProfileExportReady';
+import { AdminOperationCenter } from '../components/AdminOperationCenter';
 import { activePublicCategoryOptions, categoryOptions } from '../data/filterOptions';
 import { isActivePublicCategory, normalizeCategoryKey } from '../lib/categories';
 import { defaultAdminProfileFilters, resolveAdminProfilesResult } from '../lib/adminProfiles';
@@ -49,6 +50,13 @@ import {
 } from '../lib/adminProfileExportFlow';
 import type { AdminProfileExportScope, PreparedAdminProfileExport } from '../lib/adminProfileExportFlow';
 import { adminWindowLayoutResetEvent, profileControlWindowStorageKey, profileReviewWindowStorageKey } from '../lib/adminWindowLayout';
+import {
+  executeAdminBatches,
+  finalAdminOperationStatus,
+  sanitizeAdminOperationMessage,
+  useAdminOperations
+} from '../lib/adminOperations';
+import type { AdminBatchProgress } from '../lib/adminOperations';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
 import { berlinDistrictOptions, resolveBerlinPostalDistrict, resolveManualSearcherLocation } from '../lib/geo';
@@ -249,6 +257,14 @@ export function AdminPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t, option, lang, setLang } = useI18n();
+  const {
+    operations: adminOperations,
+    startOperation,
+    updateOperation,
+    dismissOperation,
+    activeOperation
+  } = useAdminOperations();
+  const operationLaunchRef = useRef(new Set<string>());
 
   const [stats, setStats] = useState<AdminStats>({});
   const [tokenStats, setTokenStats] = useState<Record<string, number>>({});
@@ -314,6 +330,7 @@ export function AdminPage() {
   const profileExportObjectUrlRef = useRef<string | null>(null);
   const profileExportAbortRef = useRef<AbortController | null>(null);
   const profileExportRequestIdRef = useRef(0);
+  const profileExportOperationIdRef = useRef<string | null>(null);
   const [cityImportOpen, setCityImportOpen] = useState(false);
   const [cityImportUrl, setCityImportUrl] = useState('');
   const [cityImportLoading, setCityImportLoading] = useState(false);
@@ -456,6 +473,17 @@ export function AdminPage() {
   const cityImportImported = cityImportQueueItems.filter((item) => item.status === 'imported').length;
   const cityImportSkipped = cityImportQueueItems.filter((item) => item.status === 'skipped_duplicate').length;
   const cityImportFailed = cityImportQueueItems.filter((item) => item.status === 'failed').length;
+
+  function operationButtonContent(type: string, fallback: ReactNode) {
+    const operation = activeOperation(type);
+    if (!operation) return fallback;
+    return (
+      <>
+        <LoaderCircle className="admin-operation-spinner" size={15} aria-hidden="true" />
+        <span>{operation.total === null ? t('admin.operations.preparing') : `${operation.completed}/${operation.total}`}</span>
+      </>
+    );
+  }
 
   useEffect(() => {
     if (view === 'photos') return;
@@ -920,35 +948,121 @@ export function AdminPage() {
     setSelectedPhotoIds((current) => current.includes(imageId) ? current.filter((id) => id !== imageId) : [...current, imageId]);
   }
 
+  function updateOperationFromProgress(operationId: string, progress: AdminBatchProgress, details?: Record<string, number>) {
+    updateOperation(operationId, {
+      status: 'running',
+      phaseKey: 'admin.operations.phase.processing',
+      completed: progress.completed,
+      succeeded: progress.succeeded,
+      skipped: progress.skipped,
+      failed: progress.failed,
+      completedBatches: progress.completedBatches,
+      errors: progress.errors || [],
+      details: { ...(progress.details || {}), ...(details || {}) }
+    });
+  }
+
+  function operationLaunchKey(type: string, parameters: Record<string, unknown> = {}) {
+    return `${type}:${JSON.stringify(adminProfileSelectionRequest(profileSelection))}:${JSON.stringify(parameters)}`;
+  }
+
+  async function resolveProfileOperationSnapshot(type: string, parameters: Record<string, unknown> = {}) {
+    const launchKey = operationLaunchKey(type, parameters);
+    if (operationLaunchRef.current.has(launchKey)) {
+      setMessage(t('admin.operations.duplicateBlocked'));
+      return null;
+    }
+    operationLaunchRef.current.add(launchKey);
+    try {
+      const resolved = await api.resolveAdminProfileSelection(token, adminProfileSelectionRequest(profileSelection));
+      return { ids: Object.freeze([...resolved.profile_ids]), launchKey };
+    } catch (error) {
+      operationLaunchRef.current.delete(launchKey);
+      throw error;
+    }
+  }
+
   async function runBulkPhotoAction(operation: 'approve' | 'reject') {
     if (!selectedPhotoIds.length || bulkPhotoBusy) return;
+    const snapshot = Object.freeze([...new Set(selectedPhotoIds)]);
+    const conflictProfileIds = [...new Set(snapshot.map((imageId) =>
+      String(photos.find((photo) => String(photo.id) === imageId)?.profile_id || `image:${imageId}`)
+    ))];
+    const started = startOperation({
+      type: `photo-${operation}`,
+      labelKey: operation === 'approve' ? 'admin.operations.type.approvePhotos' : 'admin.operations.type.rejectPhotos',
+      targetKind: 'profile',
+      conflictGroup: 'profile-mutation',
+      targetIds: conflictProfileIds,
+      total: snapshot.length,
+      indeterminate: false,
+      parameters: { operation, image_ids: [...snapshot].sort() }
+    });
+    if (!started.operation) {
+      setMessage(t(started.reason === 'duplicate' ? 'admin.operations.duplicateBlocked' : 'admin.operations.conflictBlocked'));
+      return;
+    }
+    const operationId = started.operation.id;
     setBulkPhotoBusy(true);
     setBulkPhotoResult(null);
     try {
       const result: BulkPhotoModerationResponse = { requested: 0, approved: 0, rejected: 0, skipped: 0, failed: 0, items: [] };
-      for (let offset = 0; offset < selectedPhotoIds.length; offset += 100) {
-        const chunk = selectedPhotoIds.slice(offset, offset + 100);
-        try {
-          const chunkResult = await api.bulkModerateProfileImages(token, chunk, operation);
+      const progress = await executeAdminBatches({
+        items: snapshot,
+        batchSize: 100,
+        continueOnError: true,
+        errorTargetId: (id) => id,
+        errorStage: 'photo_moderation',
+        execute: async (chunk) => {
+          const chunkResult = await api.bulkModerateProfileImages(token, [...chunk], operation);
           result.requested += chunkResult.requested;
           result.approved += chunkResult.approved;
           result.rejected += chunkResult.rejected;
           result.skipped += chunkResult.skipped;
           result.failed += chunkResult.failed;
           result.items.push(...chunkResult.items);
-        } catch (error) {
-          result.requested += chunk.length;
-          result.failed += chunk.length;
-          result.items.push(...chunk.map((image_id) => ({ image_id, status: 'failed' as const, reason: error instanceof Error ? error.message : 'request_failed' })));
-        }
+          return {
+            succeeded: operation === 'approve' ? chunkResult.approved : chunkResult.rejected,
+            skipped: chunkResult.skipped,
+            failed: chunkResult.failed,
+            errors: chunkResult.items.filter((item) => item.status === 'failed').map((item) => ({
+              targetId: item.image_id,
+              stage: 'photo_moderation',
+              message: sanitizeAdminOperationMessage(item.reason)
+            }))
+          };
+        },
+        onProgress: (next) => updateOperationFromProgress(operationId, next)
+      });
+      for (const error of progress.errors || []) {
+        if (!error.targetId || result.items.some((item) => item.image_id === error.targetId)) continue;
+        result.requested += 1;
+        result.failed += 1;
+        result.items.push({ image_id: error.targetId, status: 'failed', reason: error.message });
       }
       setBulkPhotoResult(result);
       const failedIds = new Set(result.items.filter((item) => item.status === 'failed').map((item) => item.image_id));
       setSelectedPhotoIds((current) => current.filter((id) => failedIds.has(id)));
       const refreshed = await api.adminPhotos(token);
       setPhotos(refreshed.photos as Record<string, any>[]);
+      updateOperation(operationId, {
+        status: finalAdminOperationStatus(progress),
+        phaseKey: 'admin.operations.phase.finished',
+        completed: progress.completed,
+        succeeded: progress.succeeded,
+        skipped: progress.skipped,
+        failed: progress.failed,
+        completedBatches: progress.completedBatches,
+        errors: progress.errors || []
+      });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      updateOperation(operationId, {
+        status: 'failed',
+        phaseKey: 'admin.operations.phase.finished',
+        failed: snapshot.length,
+        errors: [{ stage: 'photo_moderation', message: sanitizeAdminOperationMessage(error) }]
+      });
     } finally {
       setBulkPhotoBusy(false);
     }
@@ -1151,45 +1265,134 @@ export function AdminPage() {
     }
     const confirmed = window.confirm(t('admin.bulk.confirm', { count: selectedProfileCount }));
     if (!confirmed) return;
-    if (operation === 'publish') {
-      if (bulkPublishBusy) return;
-      setBulkPublishBusy(true);
-      setBulkPublishResult(null);
-      try {
-        const response = await api.bulkAdminProfiles(token, { operation, selection: adminProfileSelectionRequest(profileSelection), ...extra });
-        if (response.operation !== 'publish' || !('items' in response)) throw new Error('invalid_bulk_publish_response');
-        setBulkPublishResult(response);
-        const processedIds = response.items.filter((item) => item.status === 'published').map((item) => item.profile_id);
-        setProfileSelection((current) => removeProcessedAdminProfiles(current, processedIds));
+    await runResolvedProfileBulkOperation(operation, extra);
+  }
+
+  async function runResolvedProfileBulkOperation(operation: string, extra: Record<string, unknown> = {}) {
+    const labelKeys: Record<string, string> = {
+      approve: 'admin.operations.type.approveProfiles',
+      publish: 'admin.operations.type.publishProfiles',
+      unpublish: 'admin.operations.type.unpublishProfiles',
+      suspend: 'admin.operations.type.suspendProfiles',
+      premium_tier: 'admin.operations.type.setPremium',
+      subscription_status: 'admin.operations.type.setSubscription',
+      delete: 'admin.operations.type.deleteProfiles'
+    };
+    const parameters = { operation, ...extra, deletion_pin: undefined };
+    let snapshot: { ids: readonly string[]; launchKey: string } | null = null;
+    try {
+      snapshot = await resolveProfileOperationSnapshot(`profile-${operation}`, parameters);
+      if (!snapshot) return null;
+      const started = startOperation({
+        type: `profile-${operation}`,
+        labelKey: labelKeys[operation] || 'admin.operations.type.profileOperation',
+        targetKind: 'profile',
+        conflictGroup: 'profile-mutation',
+        targetIds: [...snapshot.ids],
+        total: snapshot.ids.length,
+        indeterminate: false,
+        parameters
+      });
+      if (!started.operation) {
+        setMessage(t(started.reason === 'duplicate' ? 'admin.operations.duplicateBlocked' : 'admin.operations.conflictBlocked'));
+        return null;
+      }
+      const operationId = started.operation.id;
+      if (operation === 'publish') {
+        setBulkPublishBusy(true);
+        setBulkPublishResult(null);
+      }
+      const processedIds = new Set<string>();
+      const publishResult: BulkProfilePublishResponse = {
+        operation: 'publish',
+        requested: 0,
+        published: 0,
+        already_published: 0,
+        skipped: 0,
+        failed: 0,
+        updated: 0,
+        items: []
+      };
+      const progress = await executeAdminBatches({
+        items: snapshot.ids,
+        batchSize: 100,
+        continueOnError: true,
+        errorTargetId: (id) => id,
+        errorStage: `profile_${operation}`,
+        execute: async (chunk) => {
+          const response = await api.bulkAdminProfiles(token, {
+            operation,
+            selection: { mode: 'explicit', profile_ids: [...chunk] },
+            ...extra
+          });
+          if (operation === 'publish') {
+            if (response.operation !== 'publish' || !('items' in response)) throw new Error('invalid_bulk_publish_response');
+            publishResult.requested += response.requested;
+            publishResult.published += response.published;
+            publishResult.already_published += response.already_published;
+            publishResult.skipped += response.skipped;
+            publishResult.failed += response.failed;
+            publishResult.updated += response.updated;
+            publishResult.items.push(...response.items);
+            response.items.filter((item) => item.status === 'published').forEach((item) => processedIds.add(item.profile_id));
+            return {
+              succeeded: response.published,
+              skipped: response.already_published + response.skipped,
+              failed: response.failed,
+              errors: response.items.filter((item) => item.status === 'failed').map((item) => ({
+                targetId: item.profile_id,
+                stage: 'publish',
+                message: sanitizeAdminOperationMessage(item.error || 'publish_failed')
+              }))
+            };
+          }
+          const successfulIds = 'items' in response ? [] : response.processed_profile_ids || response.profiles?.map((profile) => profile.id) || [];
+          successfulIds.forEach((id) => processedIds.add(id));
+          return {
+            succeeded: successfulIds.length,
+            skipped: Math.max(0, chunk.length - successfulIds.length),
+            failed: 0
+          };
+        },
+        onProgress: (next) => updateOperationFromProgress(operationId, next)
+      });
+      updateOperation(operationId, {
+        status: finalAdminOperationStatus(progress),
+        phaseKey: 'admin.operations.phase.finished',
+        completed: progress.completed,
+        succeeded: progress.succeeded,
+        skipped: progress.skipped,
+        failed: progress.failed,
+        completedBatches: progress.completedBatches,
+        errors: progress.errors || []
+      });
+      setProfileSelection((current) => removeProcessedAdminProfiles(current, [...processedIds]));
+      if (operation === 'publish') {
+        setBulkPublishResult(publishResult);
         setMessage(t('admin.bulk.publishSummary', {
-          published: response.published,
-          already: response.already_published,
-          skipped: response.skipped,
-          failed: response.failed
+          published: publishResult.published,
+          already: publishResult.already_published,
+          skipped: publishResult.skipped,
+          failed: publishResult.failed
         }));
         const refreshed = await api.adminProfileStats(token);
         setStats((current) => ({ ...current, ...refreshed.stats }));
         await loadProfileCatalogCountries(token, true);
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
-      } finally {
-        setBulkPublishBusy(false);
+      } else {
+        await load();
       }
-      return;
+      return progress;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      return null;
+    } finally {
+      if (snapshot) operationLaunchRef.current.delete(snapshot.launchKey);
+      if (operation === 'publish') setBulkPublishBusy(false);
     }
-    await action(async () => {
-      const response = await api.bulkAdminProfiles(token, { operation, selection: adminProfileSelectionRequest(profileSelection), ...extra });
-      const processedIds = 'items' in response ? [] : response.processed_profile_ids || response.profiles?.map((profile) => profile.id) || [];
-      setProfileSelection((current) => removeProcessedAdminProfiles(current, processedIds));
-    });
   }
 
   function openBulkProfilePhotoApproval() {
     if (!selectedProfileCount || bulkProfilePhotosBusy) return;
-    if (selectedProfileCount > 100) {
-      setMessage(t('admin.bulkPhotos.maxProfiles'));
-      return;
-    }
     setBulkProfilePhotosError('');
     setBulkProfilePhotosOpen(true);
   }
@@ -1201,17 +1404,83 @@ export function AdminPage() {
   }
 
   async function confirmBulkProfilePhotoApproval() {
-    if (!selectedProfileCount || selectedProfileCount > 100 || bulkProfilePhotosBusy) return;
+    if (!selectedProfileCount || bulkProfilePhotosBusy) return;
     setBulkProfilePhotosBusy(true);
     setBulkProfilePhotosError('');
     setBulkProfilePhotosResult(null);
+    let snapshot: { ids: readonly string[]; launchKey: string } | null = null;
     try {
-      const resolved = await api.resolveAdminProfileSelection(token, adminProfileSelectionRequest(profileSelection));
-      const result = await api.approveProfileImagesByProfiles(token, resolved.profile_ids);
-      const processedIds = result.profiles.filter((profile) => profile.status === 'matched' && profile.failed === 0).map((profile) => profile.profile_id);
-      setProfileSelection((current) => removeProcessedAdminProfiles(current, processedIds));
+      snapshot = await resolveProfileOperationSnapshot('profile-approve-photos');
+      if (!snapshot) return;
+      const started = startOperation({
+        type: 'profile-approve-photos',
+        labelKey: 'admin.operations.type.approveProfilePhotos',
+        targetKind: 'profile',
+        conflictGroup: 'profile-mutation',
+        targetIds: [...snapshot.ids],
+        total: snapshot.ids.length,
+        indeterminate: false
+      });
+      if (!started.operation) {
+        setBulkProfilePhotosError(t(started.reason === 'duplicate' ? 'admin.operations.duplicateBlocked' : 'admin.operations.conflictBlocked'));
+        return;
+      }
+      const operationId = started.operation.id;
+      const updatedProfileIds = new Set<string>();
+      const result: BulkProfilePhotoApprovalResponse = {
+        requested_profiles: 0,
+        matched_profiles: 0,
+        pending_found: 0,
+        approved: 0,
+        already_approved: 0,
+        failed: 0,
+        profiles: []
+      };
+      const progress = await executeAdminBatches({
+        items: snapshot.ids,
+        batchSize: 100,
+        continueOnError: true,
+        errorTargetId: (id) => id,
+        errorStage: 'approve_profile_photos',
+        execute: async (chunk) => {
+          const chunkResult = await api.approveProfileImagesByProfiles(token, [...chunk]);
+          result.requested_profiles += chunkResult.requested_profiles;
+          result.matched_profiles += chunkResult.matched_profiles;
+          result.pending_found += chunkResult.pending_found;
+          result.approved += chunkResult.approved;
+          result.already_approved += chunkResult.already_approved;
+          result.failed += chunkResult.failed;
+          result.profiles.push(...chunkResult.profiles);
+          const successful = chunkResult.profiles.filter((profile) => profile.status === 'matched' && profile.failed === 0);
+          successful.forEach((profile) => updatedProfileIds.add(profile.profile_id));
+          const failedProfiles = chunkResult.profiles.filter((profile) => profile.failed > 0);
+          return {
+            succeeded: successful.length,
+            skipped: chunkResult.profiles.filter((profile) => profile.status === 'not_found').length,
+            failed: failedProfiles.length,
+            errors: failedProfiles.map((profile) => ({
+              targetId: profile.profile_id,
+              stage: 'approve_profile_photos',
+              message: 'photo_update_failed'
+            })),
+            details: { approvedPhotos: chunkResult.approved, alreadyApprovedPhotos: chunkResult.already_approved }
+          };
+        },
+        onProgress: (next) => updateOperationFromProgress(operationId, next)
+      });
+      updateOperation(operationId, {
+        status: finalAdminOperationStatus(progress),
+        phaseKey: 'admin.operations.phase.finished',
+        completed: progress.completed,
+        succeeded: progress.succeeded,
+        skipped: progress.skipped,
+        failed: progress.failed,
+        completedBatches: progress.completedBatches,
+        errors: progress.errors || [],
+        details: progress.details
+      });
+      setProfileSelection((current) => removeProcessedAdminProfiles(current, [...updatedProfileIds]));
       setBulkProfilePhotosResult(result);
-      const updatedProfileIds = new Set(result.profiles.filter((profile) => profile.status === 'matched' && profile.failed === 0).map((profile) => profile.profile_id));
       setProfiles((current) => current.map((profile) => updatedProfileIds.has(profile.id)
         ? { ...profile, profile_images: profile.profile_images?.map((image) => image.moderation_status === 'pending' ? { ...image, moderation_status: 'approved' } : image) }
         : profile));
@@ -1222,6 +1491,7 @@ export function AdminPage() {
     } catch (error) {
       setBulkProfilePhotosError(error instanceof Error ? error.message : t('states.requestFailed'));
     } finally {
+      if (snapshot) operationLaunchRef.current.delete(snapshot.launchKey);
       setBulkProfilePhotosBusy(false);
     }
   }
@@ -1284,16 +1554,17 @@ export function AdminPage() {
     setBulkDeleteBusy(true);
     setBulkDeleteError('');
     try {
-      const response = await api.bulkAdminProfiles(token, {
-        operation: 'delete',
-        selection: adminProfileSelectionRequest(profileSelection),
-        deletion_pin: bulkDeletePin
-      });
-      const processedIds = 'items' in response ? [] : response.processed_profile_ids || response.profiles?.map((profile) => profile.id) || [];
-      setProfileSelection((current) => removeProcessedAdminProfiles(current, processedIds));
+      const result = await runResolvedProfileBulkOperation('delete', { deletion_pin: bulkDeletePin });
+      if (!result) {
+        setBulkDeleteError(t('states.requestFailed'));
+        return;
+      }
+      if (result.failed > 0 && result.succeeded === 0) {
+        setBulkDeleteError(result.errors?.[0]?.message || t('states.requestFailed'));
+        return;
+      }
       setBulkDeletePin('');
       setBulkDeleteOpen(false);
-      await load();
     } catch (error) {
       setBulkDeletePin('');
       if (error instanceof ApiError && error.payload?.error === 'deletion_pin_not_configured') {
@@ -1399,13 +1670,44 @@ export function AdminPage() {
   async function startCityImportQueue() {
     const urls = selectedCityProfileUrls.slice(0, 30);
     if (!urls.length || cityImportActive) return;
+    const started = startOperation({
+      type: 'city-import',
+      labelKey: 'admin.operations.type.cityImport',
+      targetKind: 'global',
+      conflictGroup: 'city-import',
+      targetIds: urls,
+      total: urls.length,
+      indeterminate: false
+    });
+    if (!started.operation) {
+      setCityImportError(t(started.reason === 'duplicate' ? 'admin.operations.duplicateBlocked' : 'admin.operations.conflictBlocked'));
+      return;
+    }
+    const operationId = started.operation.id;
     cityImportStopRequested.current = false;
     setCityImportActive(true);
     try {
-      await runCityImportQueue({
+      const finalItems = await runCityImportQueue({
         urls,
         shouldStop: () => cityImportStopRequested.current,
-        onChange: setCityImportQueueItems,
+        onChange: (items) => {
+          setCityImportQueueItems(items);
+          const completed = items.filter((item) => ['imported', 'skipped_duplicate', 'failed'].includes(item.status)).length;
+          updateOperation(operationId, {
+            status: 'running',
+            phaseKey: 'admin.operations.phase.importing',
+            completed,
+            succeeded: items.filter((item) => item.status === 'imported').length,
+            skipped: items.filter((item) => item.status === 'skipped_duplicate').length,
+            failed: items.filter((item) => item.status === 'failed').length,
+            completedBatches: completed,
+            errors: items.filter((item) => item.status === 'failed').map((item) => ({
+              targetId: item.url,
+              stage: 'city_import',
+              message: sanitizeAdminOperationMessage(item.error)
+            }))
+          });
+        },
         importItem: async (profileUrl) => {
           const preview = await api.importProfilePreview(token, profileUrl);
           const result = await api.importProfileCreate(token, {
@@ -1418,7 +1720,32 @@ export function AdminPage() {
           return { status: 'imported' as const, profileId: result.profile_id };
         }
       });
+      const completed = finalItems.filter((item) => ['imported', 'skipped_duplicate', 'failed'].includes(item.status)).length;
+      const result = {
+        succeeded: finalItems.filter((item) => item.status === 'imported').length,
+        skipped: finalItems.filter((item) => item.status === 'skipped_duplicate').length,
+        failed: finalItems.filter((item) => item.status === 'failed').length
+      };
+      updateOperation(operationId, {
+        status: completed < finalItems.length && cityImportStopRequested.current ? 'cancelled' : finalAdminOperationStatus(result),
+        phaseKey: 'admin.operations.phase.finished',
+        completed,
+        ...result,
+        errors: finalItems.filter((item) => item.status === 'failed').map((item) => ({
+          targetId: item.url,
+          stage: 'city_import',
+          message: sanitizeAdminOperationMessage(item.error)
+        }))
+      });
       await load();
+    } catch (error) {
+      updateOperation(operationId, {
+        status: 'failed',
+        phaseKey: 'admin.operations.phase.finished',
+        failed: urls.length,
+        errors: [{ stage: 'city_import', message: sanitizeAdminOperationMessage(error) }]
+      });
+      setCityImportError(sanitizeAdminOperationMessage(error));
     } finally {
       setCityImportActive(false);
     }
@@ -1628,6 +1955,15 @@ export function AdminPage() {
   }
 
   function closeProfileExport() {
+    if (profileExportBusy && profileExportOperationIdRef.current) {
+      updateOperation(profileExportOperationIdRef.current, {
+        status: 'failed',
+        phaseKey: 'admin.operations.phase.finished',
+        failed: profileExportPreparingCount,
+        errors: [{ stage: 'export', message: t('admin.profiles.exportError.cancelled') }]
+      });
+    }
+    profileExportOperationIdRef.current = null;
     profileExportRequestIdRef.current += 1;
     profileExportAbortRef.current?.abort();
     profileExportAbortRef.current = null;
@@ -1641,16 +1977,35 @@ export function AdminPage() {
   }
 
   async function prepareProfileExport(scope: AdminProfileExportScope) {
-    profileExportAbortRef.current?.abort();
-    const controller = new AbortController();
-    profileExportAbortRef.current = controller;
-    const requestId = profileExportRequestIdRef.current + 1;
-    profileExportRequestIdRef.current = requestId;
     const expectedCount = scope === 'selected'
       ? selectedProfileCount
       : scope === 'filtered'
         ? totalMatchingProfileCount
         : totalProfileCount;
+    const targetIds = scope === 'selected' && profileSelection.mode === 'explicit'
+      ? profileSelection.profile_ids
+      : [`scope:${scope}`];
+    const started = startOperation({
+      type: `profile-export-${scope}`,
+      labelKey: 'admin.operations.type.exportProfiles',
+      targetKind: 'global',
+      conflictGroup: 'profile-export',
+      targetIds,
+      total: expectedCount,
+      indeterminate: true,
+      parameters: { scope, selection: scope === 'selected' ? adminProfileSelectionRequest(profileSelection) : undefined }
+    });
+    if (!started.operation) {
+      setProfileExportError({ status: null, message: t(started.reason === 'duplicate' ? 'admin.operations.duplicateBlocked' : 'admin.operations.conflictBlocked') });
+      return;
+    }
+    const operationId = started.operation.id;
+    profileExportOperationIdRef.current = operationId;
+    profileExportAbortRef.current?.abort();
+    const controller = new AbortController();
+    profileExportAbortRef.current = controller;
+    const requestId = profileExportRequestIdRef.current + 1;
+    profileExportRequestIdRef.current = requestId;
     clearPreparedProfileExport();
     setProfileExportScope(scope);
     setProfileExportError(null);
@@ -1684,6 +2039,14 @@ export function AdminPage() {
         filename: file.filename,
         profileCount: file.profileCount || expectedCount
       });
+      updateOperation(operationId, {
+        status: 'completed',
+        phaseKey: 'admin.operations.phase.finished',
+        indeterminate: false,
+        completed: file.profileCount || expectedCount,
+        succeeded: file.profileCount || expectedCount,
+        completedBatches: 1
+      });
     } catch (error) {
       if (requestId !== profileExportRequestIdRef.current) return;
       if (import.meta.env.DEV) {
@@ -1706,9 +2069,20 @@ export function AdminPage() {
             : null,
         message
       });
+      updateOperation(operationId, {
+        status: 'failed',
+        phaseKey: 'admin.operations.phase.finished',
+        indeterminate: false,
+        failed: expectedCount,
+        errors: [{
+          stage: error instanceof AdminProfileExportError ? error.stage : 'export',
+          message: sanitizeAdminOperationMessage(message)
+        }]
+      });
     } finally {
       if (requestId === profileExportRequestIdRef.current) {
         profileExportAbortRef.current = null;
+        profileExportOperationIdRef.current = null;
         setProfileExportBusy(false);
       }
     }
@@ -1766,6 +2140,21 @@ export function AdminPage() {
   async function createHermesDraft() {
     const sourceUrl = hermesPreview?.source_url || hermesUrl.trim();
     if (!hermesPreview || !sourceUrl) return;
+    const started = startOperation({
+      type: 'profile-import',
+      labelKey: 'admin.operations.type.profileImport',
+      targetKind: 'global',
+      conflictGroup: 'profile-import',
+      targetIds: [sourceUrl],
+      total: 1,
+      indeterminate: true,
+      parameters: { sourceUrl }
+    });
+    if (!started.operation) {
+      setMessage(t(started.reason === 'duplicate' ? 'admin.operations.duplicateBlocked' : 'admin.operations.conflictBlocked'));
+      return;
+    }
+    const operationId = started.operation.id;
     setHermesBusy(true);
     setMessage('');
     try {
@@ -1784,6 +2173,18 @@ export function AdminPage() {
       setHermesStatus('idle');
       setHermesWarnings(result.warnings || []);
       setMessage(`${t('admin.hermes.createdDraft')} ID: ${result.profile_id}. ${t('admin.hermes.importedImages', { count: result.images_imported ?? result.imported_images ?? 0, failed: result.images_failed ?? result.failed_images ?? 0 })}`);
+      updateOperation(operationId, {
+        status: (result.images_failed ?? result.failed_images ?? 0) > 0 ? 'partially_completed' : 'completed',
+        phaseKey: 'admin.operations.phase.finished',
+        indeterminate: false,
+        completed: 1,
+        succeeded: 1,
+        completedBatches: 1,
+        details: {
+          importedPhotos: result.images_imported ?? result.imported_images ?? 0,
+          failedPhotos: result.images_failed ?? result.failed_images ?? 0
+        }
+      });
       editStudioProfile(result.profile);
       setProfilePanelMode('overview');
       navigate(`/admin/profiles?profile=${encodeURIComponent(result.profile.id)}`, { replace: false });
@@ -1792,6 +2193,19 @@ export function AdminPage() {
       setMessage(isDuplicateSourceUrlApiError(error)
         ? t('admin.cityImport.status.skipped_duplicate')
         : error instanceof Error ? error.message : t('states.requestFailed'));
+      updateOperation(operationId, {
+        status: isDuplicateSourceUrlApiError(error) ? 'partially_completed' : 'failed',
+        phaseKey: 'admin.operations.phase.finished',
+        indeterminate: false,
+        completed: 1,
+        skipped: isDuplicateSourceUrlApiError(error) ? 1 : 0,
+        failed: isDuplicateSourceUrlApiError(error) ? 0 : 1,
+        errors: isDuplicateSourceUrlApiError(error) ? [] : [{
+          targetId: sourceUrl,
+          stage: 'profile_import',
+          message: sanitizeAdminOperationMessage(error)
+        }]
+      });
     } finally {
       setHermesBusy(false);
     }
@@ -2417,6 +2831,8 @@ export function AdminPage() {
           </div>
         </header>
 
+        <AdminOperationCenter operations={adminOperations} onDismiss={dismissOperation} t={t} />
+
         {message && <p className="error-text">{message}</p>}
         {view === 'profiles' || view === 'profile-studio' ? renderView() : (
           <AdminWindow
@@ -2453,7 +2869,7 @@ export function AdminPage() {
             )}
             {bulkDeleteError ? <p className="error-text" role="alert">{bulkDeleteError}</p> : null}
             <div className="admin-actions-row">
-              <button type="button" className="button danger" disabled={bulkDeleteBusy || !deletionPinStatus?.configured || !/^\d{6}$/.test(bulkDeletePin)} onClick={confirmBulkProfileDelete}>{bulkDeleteBusy ? t('states.loading') : t('admin.securityPin.deleteProfiles')}</button>
+              <button type="button" className="button danger" disabled={bulkDeleteBusy || !deletionPinStatus?.configured || !/^\d{6}$/.test(bulkDeletePin)} onClick={confirmBulkProfileDelete}>{operationButtonContent('profile-delete', t('admin.securityPin.deleteProfiles'))}</button>
               <button type="button" className="button" disabled={bulkDeleteBusy} onClick={closeBulkDeleteConfirmation}>{t('admin.buttons.cancel')}</button>
             </div>
           </AdminWindow>
@@ -2529,7 +2945,7 @@ export function AdminPage() {
             {bulkProfilePhotosError ? <p className="error-text" role="alert">{bulkProfilePhotosError}</p> : null}
             {bulkProfilePhotosBusy ? <p role="status">{t('admin.bulkPhotos.inProgress')}</p> : null}
             <div className="admin-actions-row">
-              <button type="button" className="button primary" disabled={bulkProfilePhotosBusy} onClick={confirmBulkProfilePhotoApproval}>{bulkProfilePhotosBusy ? t('admin.bulkPhotos.inProgress') : t('admin.bulkPhotos.confirmAction')}</button>
+              <button type="button" className="button primary" disabled={bulkProfilePhotosBusy} onClick={confirmBulkProfilePhotoApproval}>{operationButtonContent('profile-approve-photos', t('admin.bulkPhotos.confirmAction'))}</button>
               <button type="button" className="button" disabled={bulkProfilePhotosBusy} onClick={closeBulkProfilePhotoApproval}>{t('admin.buttons.cancel')}</button>
             </div>
           </AdminWindow>
@@ -2618,7 +3034,7 @@ export function AdminPage() {
               </div>
             ) : null}
             <div className="admin-actions-row">
-              <button type="button" className="button primary" disabled={cityImportActive || selectedCityProfileUrls.length === 0 || selectedCityProfileUrls.length > 30} onClick={startCityImportQueue}>{t('admin.cityImport.startImport')}</button>
+              <button type="button" className="button primary" disabled={cityImportActive || selectedCityProfileUrls.length === 0 || selectedCityProfileUrls.length > 30} onClick={startCityImportQueue}>{operationButtonContent('city-import', t('admin.cityImport.startImport'))}</button>
               {cityImportActive ? <button type="button" className="button" onClick={() => { cityImportStopRequested.current = true; }}>{t('admin.cityImport.stopImport')}</button> : null}
               <button type="button" className="button" disabled={cityImportActive} onClick={requestCloseCityImport}>{t('admin.window.close')}</button>
             </div>
@@ -2698,7 +3114,7 @@ export function AdminPage() {
                 ) : null}
                 {hermesPreview.raw_visible_text ? <AdminField label={t('admin.hermes.rawVisibleText')}><textarea className="hermes-raw-text" value={hermesPreview.raw_visible_text} onChange={(event) => updateHermesPreview({ raw_visible_text: event.target.value })} /></AdminField> : null}
                 <div className="admin-actions-row">
-                  <button className="button primary" disabled={hermesBusy || !hermesPreview || !(hermesPreview.source_url || hermesUrl.trim())} onClick={createHermesDraft}>{t('admin.hermes.createSponsoredDraft')}</button>
+                  <button className="button primary" disabled={hermesBusy || !hermesPreview || !(hermesPreview.source_url || hermesUrl.trim())} onClick={createHermesDraft}>{operationButtonContent('profile-import', t('admin.hermes.createSponsoredDraft'))}</button>
                   <button className="button" onClick={requestCloseHermesImporter}>{t('admin.buttons.cancel')}</button>
                 </div>
               </>
@@ -3086,16 +3502,16 @@ export function AdminPage() {
             </div>
             <div className="admin-bulk-bar">
               <AdminSelectionCheckbox checked={allMatchingChecked} indeterminate={allMatchingIndeterminate} disabled={!totalMatchingProfileCount} onChange={setAllMatchingProfilesSelected} label={<>{t('admin.profiles.selectAllResults', { count: totalMatchingProfileCount })} · {t('admin.bulk.selected', { count: selectedProfileCount })}</>} />
-              <Action onClick={() => runBulkAction('approve')}>{t('admin.bulk.approve')}</Action>
-              <Action disabled={!selectedProfileCount || bulkProfilePhotosBusy} onClick={openBulkProfilePhotoApproval}>{bulkProfilePhotosBusy ? t('admin.bulkPhotos.inProgress') : t('admin.bulkPhotos.actionWithCount', { count: selectedProfileCount })}</Action>
-              <Action disabled={bulkPublishBusy} onClick={() => runBulkAction('publish')}>{bulkPublishBusy ? t('admin.bulk.publishing') : t('admin.bulk.publish')}</Action>
-              <Action onClick={() => runBulkAction('unpublish')}>{t('admin.bulk.unpublish')}</Action>
-              <Action onClick={() => runBulkAction('suspend')}>{t('admin.bulk.suspend')}</Action>
+              <Action disabled={Boolean(activeOperation('profile-approve'))} onClick={() => runBulkAction('approve')}>{operationButtonContent('profile-approve', t('admin.bulk.approve'))}</Action>
+              <Action disabled={!selectedProfileCount || bulkProfilePhotosBusy} onClick={openBulkProfilePhotoApproval}>{operationButtonContent('profile-approve-photos', t('admin.bulkPhotos.actionWithCount', { count: selectedProfileCount }))}</Action>
+              <Action disabled={bulkPublishBusy} onClick={() => runBulkAction('publish')}>{operationButtonContent('profile-publish', t('admin.bulk.publish'))}</Action>
+              <Action disabled={Boolean(activeOperation('profile-unpublish'))} onClick={() => runBulkAction('unpublish')}>{operationButtonContent('profile-unpublish', t('admin.bulk.unpublish'))}</Action>
+              <Action disabled={Boolean(activeOperation('profile-suspend'))} onClick={() => runBulkAction('suspend')}>{operationButtonContent('profile-suspend', t('admin.bulk.suspend'))}</Action>
               <select value={bulkPremiumTier} onChange={(event) => setBulkPremiumTier(event.target.value)}>{['standard', 'gold', 'elite', 'diamond'].map((tier) => <option key={tier} value={tier}>{t(`admin.status.${tier}`)}</option>)}</select>
-              <Action onClick={() => runBulkAction('premium_tier', { premium_tier: bulkPremiumTier })}>{t('admin.bulk.setPremiumTier')}</Action>
+              <Action disabled={Boolean(activeOperation('profile-premium_tier'))} onClick={() => runBulkAction('premium_tier', { premium_tier: bulkPremiumTier })}>{operationButtonContent('profile-premium_tier', t('admin.bulk.setPremiumTier'))}</Action>
               <select value={bulkSubscriptionStatus} onChange={(event) => setBulkSubscriptionStatus(event.target.value)}>{['requested', 'trial', 'active', 'expired', 'suspended', 'cancelled', 'test'].map((status) => <option key={status} value={status}>{t(`admin.status.${status}`)}</option>)}</select>
-              <Action onClick={() => runBulkAction('subscription_status', { subscription_status: bulkSubscriptionStatus })}>{t('admin.bulk.setSubscriptionStatus')}</Action>
-              <Action danger onClick={() => runBulkAction('delete')}>{t('admin.bulk.delete')}</Action>
+              <Action disabled={Boolean(activeOperation('profile-subscription_status'))} onClick={() => runBulkAction('subscription_status', { subscription_status: bulkSubscriptionStatus })}>{operationButtonContent('profile-subscription_status', t('admin.bulk.setSubscriptionStatus'))}</Action>
+              <Action danger disabled={Boolean(activeOperation('profile-delete'))} onClick={() => runBulkAction('delete')}>{operationButtonContent('profile-delete', t('admin.bulk.delete'))}</Action>
             </div>
             {bulkPublishResult && <BulkPublishSummary result={bulkPublishResult} t={t} />}
             {bulkProfilePhotosResult && <p className={bulkProfilePhotosResult.failed ? 'error-text' : 'admin-muted'} role="status">{
@@ -3500,8 +3916,8 @@ export function AdminPage() {
                 <span>{t('admin.photos.selectAllPending')}</span>
               </label>
               <strong>{t('admin.photos.selectedCount', { count: selectedPhotoIds.length })}</strong>
-              <button className="button" disabled={!selectedPhotoIds.length || bulkPhotoBusy} onClick={() => runBulkPhotoAction('approve')}>{bulkPhotoBusy ? t('states.loading') : t('admin.photos.approveSelected')}</button>
-              <button className="button danger" disabled={!selectedPhotoIds.length || bulkPhotoBusy} onClick={() => runBulkPhotoAction('reject')}>{bulkPhotoBusy ? t('states.loading') : t('admin.photos.rejectSelected')}</button>
+              <button className="button" disabled={!selectedPhotoIds.length || bulkPhotoBusy} onClick={() => runBulkPhotoAction('approve')}>{operationButtonContent('photo-approve', t('admin.photos.approveSelected'))}</button>
+              <button className="button danger" disabled={!selectedPhotoIds.length || bulkPhotoBusy} onClick={() => runBulkPhotoAction('reject')}>{operationButtonContent('photo-reject', t('admin.photos.rejectSelected'))}</button>
             </div>
             {bulkPhotoResult && <p className="admin-photo-bulk-result" role="status">{t('admin.photos.bulkSummary', {
               approved: bulkPhotoResult.approved,
