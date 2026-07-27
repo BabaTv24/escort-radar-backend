@@ -74,7 +74,7 @@ export function Layout() {
   }
 
   return (
-    <div className="app-shell" translate="no">
+    <div className={`app-shell${isCityRoute ? ' radar-app-shell' : ''}`} translate="no">
       <header className="market-header">
         <Link to="/" className="brand-logo" translate="no">
           <img className="brand-logo-img" src="/Logo_Escort_5.png" alt="" />
@@ -162,7 +162,7 @@ export function Layout() {
       <main>
         <Outlet />
       </main>
-      <nav className="luxury-bottom-nav" aria-label="Mobile navigation">
+      <nav className={`luxury-bottom-nav${isCityRoute ? ' radar-route-nav' : ''}`} aria-label="Mobile navigation">
         <Link className={cityMatch ? 'active' : ''} to={`/city/${currentCity}${activeCategory ? `?category=${activeCategory}` : ''}`}>
           <Radar size={18} />
           <span>{t('nav.radar')}</span>

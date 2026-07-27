@@ -417,7 +417,7 @@ export function CityPage() {
           />
         </label>
 
-        <label className="premium-field compact-field">
+        <label className="premium-field compact-field radar-filter-status-field">
           <span>{t('radar.status')}</span>
           <select
             className={getStatusSelectClass(draftFilters.availability_status)}
@@ -441,7 +441,7 @@ export function CityPage() {
             </div>
           )}
 
-        <label className="premium-field compact-field">
+        <label className="premium-field compact-field radar-filter-category-field">
           <span>{t('filters.category')}</span>
           <select value={draftFilters.category} disabled={advancedFiltersLocked} onChange={(event) => updateFilter('category', event.target.value)}>
             <option value="">{t('filters.allCategories')}</option>
@@ -449,7 +449,7 @@ export function CityPage() {
           </select>
         </label>
 
-        <label className="premium-field compact-field">
+        <label className="premium-field compact-field radar-filter-price-field">
           <span>{t('filters.price')}</span>
           <input type="number" placeholder={t('filters.priceMax')} value={draftFilters.price_max} disabled={advancedFiltersLocked} onChange={(event) => updateFilter('price_max', event.target.value)} />
         </label>
@@ -521,14 +521,23 @@ export function CityPage() {
         description={`Explore privacy-first verified 18+ nightlife profiles in ${cityLabel}, with availability signals, city radar and moderated public listings.`}
         canonical={`https://escort-radar.fun/city/${urlCitySlug}`}
       />
-      <section className="radar-search-header radar-city-header">
+      <section className="radar-premium-shell">
+      <header className="radar-search-header radar-city-header">
         <div className="radar-search-title">
-          <p className="eyebrow">{t('city.eyebrow')}</p>
-          <h1>{cityLabel} Radar</h1>
+          <p className="eyebrow">{cityLabel} · {t('city.eyebrow')}</p>
+          <h1>Radar Search</h1>
           <p>{t('search.showingSummary', { city: cityLabel, category: categoryLabel, count: sortedProfiles.length })}</p>
           {appliedFilters.category && <span className="active-category-badge">{option(appliedFilters.category)}</span>}
         </div>
-        <div className="radar-search-controls">
+        <div className="radar-search-stats">
+          <span><strong>{sortedProfiles.length}</strong> {t('city.activeProfiles')}</span>
+          <span><strong>{onlineCount}</strong> {t('status.onlineNow')}</span>
+          <span><strong>{availableTodayCount}</strong> {t('status.availableToday')}</span>
+        </div>
+      </header>
+
+      <div className="radar-premium-workspace">
+        <div className="radar-sidebar-location">
           <GlobalLocationSearch
             initialCountry={countryCode}
             initialCity={cityLabel}
@@ -538,18 +547,8 @@ export function CityPage() {
             showPlaceSearch={false}
             showPopularCities={false}
           />
-          <button className="button mobile-filter-trigger er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" type="button" onClick={() => setFiltersOpen(true)}>
-            <SlidersHorizontal size={17} /> <span>{t('city.filter')}</span>
-          </button>
         </div>
-        <div className="radar-search-stats">
-          <span><strong>{sortedProfiles.length}</strong> {t('city.activeProfiles')}</span>
-          <span><strong>{onlineCount}</strong> {t('status.onlineNow')}</span>
-          <span><strong>{availableTodayCount}</strong> {t('status.availableToday')}</span>
-        </div>
-      </section>
-
-      <section id="city-radar" className="radar-map-stage radar-main-stage">
+        <section id="city-radar" className="radar-map-stage radar-main-stage">
         <RadarPanel
           profiles={profiles}
           radius={draftFilters.radius}
@@ -565,6 +564,21 @@ export function CityPage() {
           mapApiKey={googleMapsApiKey}
           profilesWithoutLocationCount={profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length}
         />
+        </section>
+        <div className="radar-sidebar-filters">
+          {isClientActivated ? renderFilters('desktop') : renderLockedFilters()}
+        </div>
+        <div className="radar-mobile-actions">
+          <button className="button mobile-filter-trigger er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" onClick={() => setFiltersOpen(true)}>
+            <SlidersHorizontal size={17} /> <span>{t('city.filter')}</span>
+          </button>
+          <button className="button primary radar-primary-search er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={applyDraftFilters}>
+            <Search size={17} /> <span>{t('buttons.apply')}</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="radar-premium-messages">
         {diagnosticMode ? (
           <aside className="radar-diagnostics" role="status">
             <strong>Radar diagnostics</strong>
@@ -593,13 +607,8 @@ export function CityPage() {
             <Link className="button primary er-btn er-glass-btn er-glass-btn--pink er-glass-btn--md" to="/dashboard#favorites"><span>{t('favorites.favorites')}</span></Link>
           </section>
         )}
+      </div>
       </section>
-
-      {isClientActivated ? (
-        <section className="radar-filters-section">
-          {renderFilters('desktop')}
-        </section>
-      ) : renderLockedFilters()}
 
       <section className="radar-results-section">
         <div className="listing-toolbar radar-results-toolbar radar-results-header">
