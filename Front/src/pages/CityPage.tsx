@@ -9,7 +9,7 @@ import { activePublicCategoryOptions, categoryOptions, defaultServiceMenuNames, 
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import type { GeoPoint } from '../lib/geo';
-import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatRadiusMeters, getCityCenter, getSearcherLocationWithFallback, readSavedRadarRadius, readSavedSearchLocation, resolveProfileRadarLocation, saveRadarRadius, saveSearchLocationToStorage } from '../lib/geo';
+import { MAX_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatRadiusMeters, getCityCenter, getSearcherLocationWithFallback, readSavedRadarRadius, readSavedSearchLocation, resolveProfileRadarLocation, saveRadarRadius, saveSearchLocationToStorage } from '../lib/geo';
 import { getPublicProfiles } from '../lib/publicProfiles';
 import type { PublicProfilesMetrics } from '../lib/publicProfiles';
 import { getOperatorStatus, selectRadarProfiles } from '../lib/homeRadar';
@@ -72,6 +72,7 @@ export function CityPage() {
   const [favoriteProfileIds, setFavoriteProfileIds] = useState<Set<string>>(new Set());
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
   const [hasClientSession, setHasClientSession] = useState(false);
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [clientActivationState, setClientActivationState] = useState<'client_free' | 'client_activated'>('client_free');
   const marketplaceCarouselRef = useRef<HTMLDivElement | null>(null);
   const marketplacePauseTimeoutRef = useRef<number | null>(null);
@@ -95,11 +96,14 @@ export function CityPage() {
     let cancelled = false;
     supabase.auth.getSession().then(async ({ data }) => {
       const accessToken = data.session?.access_token;
+      const appMetadata = data.session?.user.app_metadata || {};
       if (!cancelled) setHasClientSession(Boolean(accessToken));
+      if (!cancelled) setHasAdminAccess(appMetadata.role === 'admin' || appMetadata.admin === true);
       if (!accessToken) {
         if (!cancelled) {
           setFavoriteProfileIds(new Set());
           setFavoritesLoaded(true);
+          setHasAdminAccess(false);
           setClientActivationState('client_free');
         }
         const saved = readSavedSearchLocation();
@@ -215,11 +219,10 @@ export function CityPage() {
   }, [profiles, radarMatches.length, serverRadarMetrics]);
   const topProfiles = sortedProfiles.slice(0, 12);
   const marketplaceCarouselProfiles = sortedProfiles;
-  const onlineCount = sortedProfiles.filter((profile) => getOperatorStatus(profile) === 'ONLINE_NOW' || profile.available_now).length;
-  const availableTodayCount = sortedProfiles.filter((profile) => ['ONLINE_NOW', 'AVAILABLE_TODAY'].includes(getOperatorStatus(profile)) || profile.availability_status === 'available').length;
   const categoryLabel = appliedFilters.category ? option(appliedFilters.category) : t('filters.allCategories');
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const isClientActivated = clientActivationState === 'client_activated';
+  const hasPremiumFilterAccess = isClientActivated || hasAdminAccess;
 
   useEffect(() => {
     marketplaceCarouselRef.current?.scrollTo({ left: 0, behavior: 'auto' });
@@ -322,7 +325,19 @@ export function CityPage() {
 
   function applyDraftFilters() {
     const canonicalCategory = normalizeCategoryKey(draftFilters.category);
-    const next = { ...draftFilters, category: canonicalCategory };
+    const next = {
+      ...draftFilters,
+      category: canonicalCategory,
+      ...(hasPremiumFilterAccess ? {} : {
+        price_max: '',
+        visit_types: [],
+        service_tags: [],
+        tag_ids: [],
+        services: [],
+        service_search: ''
+      })
+    };
+    setDraftFilters(next);
     setAppliedFilters(next);
     const nextParams = new URLSearchParams(searchParams);
     if (canonicalCategory) nextParams.set('category', canonicalCategory);
@@ -387,7 +402,8 @@ export function CityPage() {
   }
 
   function renderFilters(mode: 'desktop' | 'mobile') {
-    const advancedFiltersLocked = false;
+    const loginTarget = `/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
+    const premiumTarget = hasClientSession ? '/pricing?product=client_activation' : loginTarget;
     return (
       <section className={`filter-panel marketplace-filter-panel ${mode === 'mobile' ? 'mobile' : ''}`}>
         <div className="filter-panel-head">
@@ -402,22 +418,16 @@ export function CityPage() {
           ) : null}
         </div>
 
-        <label className="radar-radius-slider premium-filter-group">
-          <span className="radar-radius-slider-head">
-            <span>{t('radar.radius')}</span>
-            <strong>{formatRadiusMeters(draftFilters.radius)}</strong>
-          </span>
-          <input
-            type="range"
-            min={MIN_RADAR_RADIUS_METERS}
-            max={MAX_RADAR_RADIUS_METERS}
-            step={10}
-            value={draftFilters.radius}
-            onChange={(event) => updateRadarFilter('radius', Number(event.target.value))}
-          />
-        </label>
+        <div className="radar-basic-filters">
+          <label className="premium-field compact-field radar-filter-category-field">
+            <span>{t('filters.category')}</span>
+            <select value={draftFilters.category} onChange={(event) => updateFilter('category', event.target.value)}>
+              <option value="">{t('filters.allCategories')}</option>
+              {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
+            </select>
+          </label>
 
-        <label className="premium-field compact-field radar-filter-status-field">
+        {mode === 'mobile' ? <label className="premium-field compact-field radar-filter-status-field">
           <span>{t('radar.status')}</span>
           <select
             className={getStatusSelectClass(draftFilters.availability_status)}
@@ -430,86 +440,60 @@ export function CityPage() {
             <option value="BUSY">{t('status.busy')}</option>
             <option value="OFFLINE">{t('status.offline')}</option>
           </select>
-        </label>
+        </label> : null}
+        </div>
 
-        <div className={advancedFiltersLocked ? 'premium-filter-locked radar-advanced-filters locked' : 'radar-advanced-filters'}>
-          {advancedFiltersLocked && (
-            <div className="premium-filter-lock-panel">
-              <strong>{t('clientOffice.activateTitle')}</strong>
-              <span>{t('activation.activationTokenBonusDescription')}</span>
-              <Link className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('clientOffice.activateCta')}</span></Link>
+        {hasPremiumFilterAccess ? (
+          <div className="radar-premium-filter-group">
+            <button
+              className="button ghost more-filter-button radar-premium-filter-toggle er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm"
+              type="button"
+              aria-expanded={showAdvanced}
+              onClick={() => setShowAdvanced((value) => !value)}
+            >
+              <SlidersHorizontal size={17} />
+              <span>{t('city.moreFilters')} · Premium</span>
+            </button>
+
+            <div className={showAdvanced ? 'radar-advanced-filters open' : 'radar-advanced-filters'}>
+              <label className="premium-field compact-field radar-filter-price-field">
+                <span>{t('filters.price')}</span>
+                <input type="number" placeholder={t('filters.priceMax')} value={draftFilters.price_max} onChange={(event) => updateFilter('price_max', event.target.value)} />
+              </label>
+
+              <MultiSelect title={t('filters.visitType')} values={draftFilters.visit_types} options={visitTypeOptions} onToggle={(value) => updateFilter('visit_types', toggleArrayValue(draftFilters.visit_types, value))} />
+
+              <ServiceSelect
+                search={draftFilters.service_search}
+                selectedCount={draftFilters.services.length + draftFilters.service_tags.length + draftFilters.tag_ids.length}
+                values={draftFilters.services}
+                options={defaultServiceMenuNames}
+                onSearch={(value) => updateFilter('service_search', value)}
+                onToggle={(value) => updateFilter('services', toggleArrayValue(draftFilters.services, value))}
+              />
+
+              <MultiSelect title={t('filters.serviceTags')} values={draftFilters.service_tags} options={[]} onToggle={(value) => updateFilter('service_tags', toggleArrayValue(draftFilters.service_tags, value))} />
+              <TagSelect title={t('tags.title')} tags={platformTags} values={draftFilters.tag_ids} onToggle={(value) => updateFilter('tag_ids', toggleArrayValue(draftFilters.tag_ids, value))} />
             </div>
-          )}
+          </div>
+        ) : (
+          <section className="radar-premium-gate">
+            <LockKeyhole size={20} />
+            <div>
+              <strong>{t('city.moreFilters')} · Premium</strong>
+              <small>{t('clientOffice.activateCta')}</small>
+            </div>
+            <Link className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" to={premiumTarget}>
+              <span>{hasClientSession ? t('clientOffice.activateCta') : t('buttons.login')}</span>
+            </Link>
+          </section>
+        )}
 
-        <label className="premium-field compact-field radar-filter-category-field">
-          <span>{t('filters.category')}</span>
-          <select value={draftFilters.category} disabled={advancedFiltersLocked} onChange={(event) => updateFilter('category', event.target.value)}>
-            <option value="">{t('filters.allCategories')}</option>
-            {activePublicCategoryOptions.map((item) => <option key={item} value={item}>{option(item)}</option>)}
-          </select>
-        </label>
-
-        <label className="premium-field compact-field radar-filter-price-field">
-          <span>{t('filters.price')}</span>
-          <input type="number" placeholder={t('filters.priceMax')} value={draftFilters.price_max} disabled={advancedFiltersLocked} onChange={(event) => updateFilter('price_max', event.target.value)} />
-        </label>
-
-        <MultiSelect title={t('filters.visitType')} values={draftFilters.visit_types} options={visitTypeOptions} disabled={advancedFiltersLocked} onToggle={(value) => updateFilter('visit_types', toggleArrayValue(draftFilters.visit_types, value))} />
-
-        <ServiceSelect
-          search={draftFilters.service_search}
-          selectedCount={draftFilters.services.length + draftFilters.service_tags.length + draftFilters.tag_ids.length}
-          values={draftFilters.services}
-          options={defaultServiceMenuNames}
-          disabled={advancedFiltersLocked}
-          onSearch={(value) => updateFilter('service_search', value)}
-          onToggle={(value) => updateFilter('services', toggleArrayValue(draftFilters.services, value))}
-        />
-
-        <button className="button ghost more-filter-button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" type="button" disabled={advancedFiltersLocked} onClick={() => setShowAdvanced((value) => !value)}>
-          <SlidersHorizontal size={17} /> <span>{t('city.moreFilters')}</span>
-        </button>
-
-        <div className={showAdvanced ? 'advanced-filters open compact-advanced-filters' : 'advanced-filters compact-advanced-filters'}>
-          <MultiSelect title={t('filters.serviceTags')} values={draftFilters.service_tags} options={[]} disabled={advancedFiltersLocked} onToggle={(value) => updateFilter('service_tags', toggleArrayValue(draftFilters.service_tags, value))} />
-          <TagSelect title={t('tags.title')} tags={platformTags} values={draftFilters.tag_ids} disabled={advancedFiltersLocked} onToggle={(value) => updateFilter('tag_ids', toggleArrayValue(draftFilters.tag_ids, value))} />
-        </div>
-        </div>
-
-        <div className="filter-actions">
+        {mode === 'mobile' ? <div className="filter-actions">
           <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={applyDraftFilters}><span>{t('buttons.apply')}</span></button>
           <button className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={resetFilters}><span>{t('buttons.reset')}</span></button>
           <span>{t('radar.inRange', { count: radarProfiles.length })}</span>
-        </div>
-      </section>
-    );
-  }
-
-  function renderLockedFilters() {
-    const loginTarget = `/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
-    return (
-      <section className="radar-filters-section radar-filters-section-locked">
-        <div className="premium-lock-overlay">
-          <LockKeyhole size={30} />
-          <p className="eyebrow">Premium Radar Filters</p>
-          <h3>{t('clientOffice.activateTitle')}</h3>
-          <p>
-            Aktywuj konto klienta za 0,99 EUR, aby korzystać z promienia, statusu, kategorii, ceny, typu wizyty, usług i tagów premium.
-          </p>
-          <div className="premium-lock-actions">
-            <Link className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/dashboard"><span>{t('clientOffice.activateCta')}</span></Link>
-            {!hasClientSession && <Link className="button secondary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to={loginTarget}><span>{t('buttons.login')}</span></Link>}
-          </div>
-        </div>
-
-        <div className="locked-filter-preview" aria-hidden="true">
-          <span>{t('radar.radius')} <strong>{formatRadiusMeters(draftFilters.radius)}</strong></span>
-          <span>{t('radar.status')}</span>
-          <span>{t('filters.category')}</span>
-          <span>{t('filters.price')}</span>
-          <span>{t('filters.visitType')}</span>
-          <span>{t('filters.services')}</span>
-        </div>
+        </div> : null}
       </section>
     );
   }
@@ -525,14 +509,10 @@ export function CityPage() {
       <header className="radar-search-header radar-city-header">
         <div className="radar-search-title">
           <p className="eyebrow">{cityLabel} · {t('city.eyebrow')}</p>
-          <h1>Radar Search</h1>
+          <h1>{t('radar.searchTitle')}</h1>
           <p>{t('search.showingSummary', { city: cityLabel, category: categoryLabel, count: sortedProfiles.length })}</p>
           {appliedFilters.category && <span className="active-category-badge">{option(appliedFilters.category)}</span>}
-        </div>
-        <div className="radar-search-stats">
-          <span><strong>{sortedProfiles.length}</strong> {t('city.activeProfiles')}</span>
-          <span><strong>{onlineCount}</strong> {t('status.onlineNow')}</span>
-          <span><strong>{availableTodayCount}</strong> {t('status.availableToday')}</span>
+          <span className="radar-mobile-location-pill">{searcherLocation.label || cityLabel}</span>
         </div>
       </header>
 
@@ -566,14 +546,23 @@ export function CityPage() {
         />
         </section>
         <div className="radar-sidebar-filters">
-          {isClientActivated ? renderFilters('desktop') : renderLockedFilters()}
+          {renderFilters('desktop')}
+        </div>
+        <div className="radar-sidebar-actions">
+          <button className="button radar-reset-search er-btn er-glass-btn er-glass-btn--sm" type="button" onClick={resetFilters}>
+            <span>{t('buttons.reset')}</span>
+          </button>
+          <button className="button primary radar-primary-search er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={applyDraftFilters}>
+            <Search size={17} /> <span>{t('radar.searchCta')}</span>
+          </button>
+          <small>{t('radar.inRange', { count: radarProfiles.length })}</small>
         </div>
         <div className="radar-mobile-actions">
           <button className="button mobile-filter-trigger er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" onClick={() => setFiltersOpen(true)}>
-            <SlidersHorizontal size={17} /> <span>{t('city.filter')}</span>
+            <SlidersHorizontal size={17} /> <span>{t('city.filtersTitle')}</span>
           </button>
           <button className="button primary radar-primary-search er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={applyDraftFilters}>
-            <Search size={17} /> <span>{t('buttons.apply')}</span>
+            <Search size={17} /> <span>{t('radar.searchCta')}</span>
           </button>
         </div>
       </div>
@@ -699,7 +688,7 @@ export function CityPage() {
       <div className={filtersOpen ? 'mobile-filter-sheet open' : 'mobile-filter-sheet'} role="dialog" aria-modal="true" aria-label={t('city.profileFilters')}>
         <button className="mobile-filter-backdrop" type="button" aria-label={t('city.closeFilters')} onClick={() => setFiltersOpen(false)} />
         <div className="mobile-filter-panel">
-          {isClientActivated ? renderFilters('mobile') : renderLockedFilters()}
+          {renderFilters('mobile')}
         </div>
       </div>
     </div>

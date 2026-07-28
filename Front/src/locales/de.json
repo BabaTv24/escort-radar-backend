@@ -280,6 +280,8 @@
   "adminOps.abuseReports": "Missbrauchsmeldungen",
   "radar.eyebrow": "Live Radar",
   "radar.title": "Entdecke Profile im Radius",
+  "radar.searchTitle": "Radarsuche",
+  "radar.searchCta": "Suchen",
   "radar.subtitle": "Ein schneller Premium-Radar für Status, Entfernung und diskrete Bereiche.",
   "radar.radius": "Radius",
   "radar.status": "Status",

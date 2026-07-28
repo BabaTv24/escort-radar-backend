@@ -1132,10 +1132,43 @@ test('city page keeps listing profiles as radar input and does not pre-empty the
   assert.match(radarPanelSource, /type="range"/);
   assert.match(radarPanelSource, /min=\{MIN_RADAR_RADIUS_METERS\}/);
   assert.match(radarPanelSource, /max=\{MAX_RADAR_RADIUS_METERS\}/);
-  assert.match(cityPageSource, /type="range"/);
+  assert.doesNotMatch(cityPageSource, /type="range"/);
   assert.match(radarPanelSource, /\[RadarLocationResolve\]/);
   assert.match(geoSource, /safeDistanceKm/);
   assert.match(geoSource, /sort\(\(left, right\) => right\.length - left\.length\)/);
+});
+
+test('city radar keeps basic filters public and gates advanced filters with verified premium state', async () => {
+  const cityPageSource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
+  const [pl, de, en] = await Promise.all([
+    readFile(new URL('../Front/src/locales/pl.json', import.meta.url), 'utf8').then(JSON.parse),
+    readFile(new URL('../Front/src/locales/de.json', import.meta.url), 'utf8').then(JSON.parse),
+    readFile(new URL('../Front/src/locales/en.json', import.meta.url), 'utf8').then(JSON.parse)
+  ]);
+
+  assert.match(cityPageSource, /api\.clientActivationMe\(accessToken\)/);
+  assert.match(cityPageSource, /clientActivationData\.activation\.state/);
+  assert.match(cityPageSource, /appMetadata\.role === 'admin' \|\| appMetadata\.admin === true/);
+  assert.match(cityPageSource, /const hasPremiumFilterAccess = isClientActivated \|\| hasAdminAccess/);
+  assert.match(cityPageSource, /className="radar-basic-filters"/);
+  assert.match(cityPageSource, /className="[^"]*radar-filter-category-field/);
+  assert.match(cityPageSource, /className="premium-field compact-field radar-filter-status-field"/);
+  assert.match(cityPageSource, /hasPremiumFilterAccess \? \(/);
+  assert.match(cityPageSource, /className="radar-premium-gate"/);
+  assert.match(cityPageSource, /\/pricing\?product=client_activation/);
+  assert.match(cityPageSource, /t\('radar\.searchTitle'\)/);
+  assert.match(cityPageSource, /t\('radar\.searchCta'\)/);
+  assert.match(cityPageSource, /t\('city\.filtersTitle'\)/);
+  assert.doesNotMatch(cityPageSource, />Search Now<|>Radar Search</);
+  assert.doesNotMatch(cityPageSource, /locked-filter-preview|renderLockedFilters/);
+  assert.deepEqual(
+    [pl['radar.searchCta'], de['radar.searchCta'], en['radar.searchCta']],
+    ['Szukaj', 'Suchen', 'Search Now']
+  );
+  assert.deepEqual(
+    [pl['city.filtersTitle'], de['city.filtersTitle'], en['city.filtersTitle']],
+    ['Filtry', 'Filter', 'Filters']
+  );
 });
 
 test('admin profile update synchronizes work city and clears stale Berlin location data', async () => {
