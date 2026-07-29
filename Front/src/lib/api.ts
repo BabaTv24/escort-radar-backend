@@ -64,23 +64,45 @@ export type FunPageAdvertisementImage = {
 };
 
 export type AdminFunPageAdvertisement = {
+  id: string;
   active: boolean;
-  desktopImage: FunPageAdvertisementImage | null;
-  mobileImage: FunPageAdvertisementImage | null;
+  image: FunPageAdvertisementImage | null;
   targetUrl: string | null;
   altText: string;
   openInNewTab: boolean;
   startsAt: string | null;
   endsAt: string | null;
-  updatedAt: string | null;
+  position: number;
 };
 
 export type PublicFunPageAdvertisement = {
-  desktopImageUrl: string;
-  mobileImageUrl: string | null;
+  id: string;
+  imageUrl: string;
   targetUrl: string | null;
   altText: string;
   openInNewTab: boolean;
+};
+
+export type FunPageTicker = {
+  active: boolean;
+  text: string;
+  speed: 'slow' | 'normal' | 'fast';
+  targetUrl: string | null;
+  openInNewTab: boolean;
+};
+
+export type AdminFunPagePromotionSettings = {
+  version: 2;
+  rotationIntervalSeconds: number;
+  advertisements: AdminFunPageAdvertisement[];
+  ticker: FunPageTicker;
+  updatedAt: string | null;
+};
+
+export type PublicFunPagePromotions = {
+  advertisements: PublicFunPageAdvertisement[];
+  rotationIntervalSeconds: number;
+  ticker: FunPageTicker | null;
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -247,7 +269,7 @@ export async function requestAdminProfileExport(
 }
 
 export const api = {
-  funPageAdvertisement: () => request<{ advertisement: PublicFunPageAdvertisement | null }>('/api/funpage-advertisement'),
+  funPageAdvertisement: () => request<PublicFunPagePromotions>('/api/funpage-advertisement'),
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
   authMe: (token: string) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business'; role?: string; app_metadata?: Record<string, unknown> }; client_profile: ClientProfile | null }>('/api/auth/me', { token }),
   updateClientProfile: (token: string, body: Partial<ClientProfile>) => request<{ client_profile: ClientProfile }>('/api/auth/client-profile', {
@@ -488,15 +510,34 @@ export const api = {
   adminRevenue: (token: string) => request<{ stats: AdminStats; payments: Record<string, unknown>[] }>('/api/admin/revenue', { token }),
   adminBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/admin/bookings', { token }),
   adminSettings: (token: string) => request<{ settings: Record<string, unknown> }>('/api/admin/settings', { token }),
-  adminFunPageAdvertisement: (token: string) => request<{ advertisement: AdminFunPageAdvertisement }>('/api/admin/funpage-advertisement', { token }),
-  saveAdminFunPageAdvertisement: (token: string, form: FormData) => request<{ advertisement: AdminFunPageAdvertisement; warning?: string }>('/api/admin/funpage-advertisement', {
+  adminFunPageAdvertisement: (token: string) => request<{ settings: AdminFunPagePromotionSettings }>('/api/admin/funpage-advertisement', { token }),
+  createAdminFunPageAdvertisement: (token: string) => request<{ advertisement: AdminFunPageAdvertisement; settings: AdminFunPagePromotionSettings }>('/api/admin/funpage-advertisement/advertisements', {
     method: 'POST',
+    token,
+    body: JSON.stringify({})
+  }),
+  saveAdminFunPageAdvertisement: (token: string, id: string, form: FormData) => request<{ advertisement: AdminFunPageAdvertisement; settings: AdminFunPagePromotionSettings; warning?: string }>(`/api/admin/funpage-advertisement/advertisements/${id}`, {
+    method: 'PATCH',
     token,
     body: form
   }),
-  deleteAdminFunPageAdvertisementImage: (token: string, variant: 'desktop' | 'mobile') => request<{ advertisement: AdminFunPageAdvertisement }>(`/api/admin/funpage-advertisement/${variant}`, {
+  deleteAdminFunPageAdvertisementImage: (token: string, id: string) => request<{ settings: AdminFunPagePromotionSettings }>(`/api/admin/funpage-advertisement/advertisements/${id}/image`, {
     method: 'DELETE',
     token
+  }),
+  deleteAdminFunPageAdvertisement: (token: string, id: string) => request<{ settings: AdminFunPagePromotionSettings }>(`/api/admin/funpage-advertisement/advertisements/${id}`, {
+    method: 'DELETE',
+    token
+  }),
+  reorderAdminFunPageAdvertisements: (token: string, advertisement_ids: string[]) => request<{ settings: AdminFunPagePromotionSettings }>('/api/admin/funpage-advertisement/order', {
+    method: 'PUT',
+    token,
+    body: JSON.stringify({ advertisement_ids })
+  }),
+  saveAdminFunPagePromotionConfiguration: (token: string, body: { rotationIntervalSeconds: number; ticker: FunPageTicker }) => request<{ settings: AdminFunPagePromotionSettings }>('/api/admin/funpage-advertisement/configuration', {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body)
   }),
   adminDeletionPinStatus: (token: string) => request<{ configured: boolean; updated_at: string | null }>('/api/admin/security/pin-status', { token }),
   setAdminDeletionPin: (token: string, body: { current_pin?: string; new_pin: string; confirm_pin: string }) => request<{ configured: true; updated_at: string }>('/api/admin/security/deletion-pin', {

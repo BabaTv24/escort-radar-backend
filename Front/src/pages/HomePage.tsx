@@ -12,8 +12,8 @@ import { EmptyState, ErrorState, LoadingState } from '../components/LoadingState
 import { Seo } from '../components/Seo';
 import { isSponsoredProfile, toLocationCitySlug } from '../lib/sponsoredProfiles';
 import { deriveHomeRadarView, getHomeRadarHref, loadHomeRadarCandidatePool } from '../lib/homeRadar';
-import { api, type PublicFunPageAdvertisement } from '../lib/api';
-import { advertisementMobileImage, safeAdvertisementHref } from '../lib/funPageAdvertisement';
+import { api, type FunPageTicker, type PublicFunPageAdvertisement, type PublicFunPagePromotions } from '../lib/api';
+import { advertisementRotationDelayMs, nextAdvertisementIndex, safeAdvertisementHref, shouldRotateAdvertisements } from '../lib/funPageAdvertisement';
 
 export function HomePage() {
   const { t } = useI18n();
@@ -24,7 +24,7 @@ export function HomePage() {
   const [radarStatus, setRadarStatus] = useState('all');
   const [searcherLocation, setSearcherLocation] = useState<GeoPoint | null>(() => readSavedSearchLocation());
   const [fallbackNotice, setFallbackNotice] = useState(false);
-  const [advertisement, setAdvertisement] = useState<PublicFunPageAdvertisement | null>(null);
+  const [promotions, setPromotions] = useState<PublicFunPagePromotions>({ advertisements: [], rotationIntervalSeconds: 6, ticker: null });
   const profilesAbortRef = useRef<AbortController | null>(null);
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const { sponsoredProfiles, nearbyProfiles } = deriveHomeRadarView(profiles, searcherLocation, radarStatus);
@@ -64,8 +64,8 @@ export function HomePage() {
   useEffect(() => {
     let active = true;
     api.funPageAdvertisement()
-      .then((result) => { if (active) setAdvertisement(result.advertisement); })
-      .catch(() => { if (active) setAdvertisement(null); });
+      .then((result) => { if (active) setPromotions(result); })
+      .catch(() => { if (active) setPromotions({ advertisements: [], rotationIntervalSeconds: 6, ticker: null }); });
     return () => { active = false; };
   }, []);
 
@@ -212,29 +212,77 @@ export function HomePage() {
       ) : <EmptyState title={t('home.available')} message={searcherLocation ? t('home.noProfilesWithin150') : t('radar.locationRequired')} />}
       </>}
 
-      {advertisement ? <FunPageAdvertisementBanner advertisement={advertisement} label={t('advertisement.label')} /> : null}
+      <FunPagePromotionArea promotions={promotions} advertisementLabel={t('advertisement.label')} />
     </div>
   );
 }
 
-export function FunPageAdvertisementBanner({ advertisement, label }: { advertisement: PublicFunPageAdvertisement; label: string }) {
-  const href = safeAdvertisementHref(advertisement.targetUrl);
-  const picture = (
-    <picture>
-      <source media="(max-width: 720px)" srcSet={advertisementMobileImage(advertisement)} />
-      <img src={advertisement.desktopImageUrl} alt={advertisement.altText} />
-    </picture>
+export function FunPagePromotionArea({ promotions, advertisementLabel }: { promotions: PublicFunPagePromotions; advertisementLabel: string }) {
+  const { advertisements, ticker, rotationIntervalSeconds } = promotions;
+  const [activeIndex, setActiveIndex] = useState(0);
+  const advertisementKey = advertisements.map((advertisement) => advertisement.id).join('|');
+
+  useEffect(() => {
+    setActiveIndex((current) => current < advertisements.length ? current : 0);
+    if (!shouldRotateAdvertisements(advertisements.length)) return;
+    const timer = window.setInterval(() => {
+      setActiveIndex((current) => nextAdvertisementIndex(current, advertisements.length));
+    }, advertisementRotationDelayMs(rotationIntervalSeconds));
+    return () => window.clearInterval(timer);
+  }, [advertisementKey, advertisements.length, rotationIntervalSeconds]);
+
+  if (!advertisements.length && !ticker) return null;
+  const advertisement = advertisements[activeIndex] || advertisements[0];
+  return (
+    <section className="funpage-promotions" aria-label={advertisementLabel}>
+      {ticker ? <FunPageScrollingTextBar ticker={ticker} /> : null}
+      {advertisement ? (
+        <div className="funpage-advertisement">
+          <span className="funpage-advertisement-label">{advertisementLabel}</span>
+          <FunPageAdvertisementBanner advertisement={advertisement} />
+          {advertisements.length > 1 ? (
+            <div className="funpage-advertisement-dots" aria-label={`${advertisements.length} ${advertisementLabel}`}>
+              {advertisements.map((item, index) => (
+                <button
+                  type="button"
+                  className={index === activeIndex ? 'is-active' : ''}
+                  aria-label={`${advertisementLabel} ${index + 1}`}
+                  aria-current={index === activeIndex ? 'true' : undefined}
+                  onClick={() => setActiveIndex(index)}
+                  key={item.id}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   );
+}
+
+export function FunPageAdvertisementBanner({ advertisement }: { advertisement: PublicFunPageAdvertisement }) {
+  const href = safeAdvertisementHref(advertisement.targetUrl);
+  const picture = <img key={advertisement.id} src={advertisement.imageUrl} alt={advertisement.altText} />;
   const content = href ? (
     <a href={href} target={advertisement.openInNewTab ? '_blank' : undefined} rel={advertisement.openInNewTab ? 'noopener noreferrer' : undefined}>
       {picture}
     </a>
   ) : picture;
+  return <div className="funpage-advertisement-slide" key={advertisement.id}>{content}</div>;
+}
+
+export function FunPageScrollingTextBar({ ticker }: { ticker: FunPageTicker }) {
+  const href = safeAdvertisementHref(ticker.targetUrl);
+  const content = (
+    <span className={`funpage-ticker-track funpage-ticker-track--${ticker.speed}`}>
+      <span>{ticker.text}</span>
+      <span aria-hidden="true">{ticker.text}</span>
+    </span>
+  );
   return (
-    <section className="funpage-advertisement" aria-label={label}>
-      <span className="funpage-advertisement-label">{label}</span>
-      {content}
-    </section>
+    <div className="funpage-ticker" aria-label={ticker.text}>
+      {href ? <a href={href} target={ticker.openInNewTab ? '_blank' : undefined} rel={ticker.openInNewTab ? 'noopener noreferrer' : undefined}>{content}</a> : content}
+    </div>
   );
 }
 

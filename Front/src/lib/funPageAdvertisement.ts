@@ -1,5 +1,3 @@
-import type { PublicFunPageAdvertisement } from './api';
-
 export function safeAdvertisementHref(value: string | null) {
   if (!value) return null;
   if (value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')) return value;
@@ -10,6 +8,15 @@ export function safeAdvertisementHref(value: string | null) {
   }
 }
 
-export function advertisementMobileImage(advertisement: PublicFunPageAdvertisement) {
-  return advertisement.mobileImageUrl || advertisement.desktopImageUrl;
+export function shouldRotateAdvertisements(count: number) {
+  return count > 1;
+}
+
+export function advertisementRotationDelayMs(seconds: number) {
+  const normalized = Number.isFinite(seconds) ? Math.min(30, Math.max(3, Math.round(seconds))) : 6;
+  return normalized * 1000;
+}
+
+export function nextAdvertisementIndex(current: number, count: number) {
+  return count > 1 ? (current + 1) % count : 0;
 }

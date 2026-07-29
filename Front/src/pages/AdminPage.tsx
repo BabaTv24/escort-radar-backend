@@ -4,7 +4,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Download, Eye, LoaderCircle, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { AdminProfileExportError, ApiError, api } from '../lib/api';
 import { adminSession } from '../lib/adminSession';
-import type { AdminFunPageAdvertisement, BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
+import type { BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
+import { AdminFunPagePromotions } from '../components/AdminFunPagePromotions';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BookingRequest, ClientPersonalProfile, HermesProfilePreview, MasterAdminWallet, Profile, Tag, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
@@ -84,14 +85,6 @@ const exposurePackageOptions = ['standard', 'gold', 'elite', 'diamond'];
 const adminAvailabilityStatusOptions = ['ONLINE_NOW', 'AVAILABLE_TODAY', 'BUSY', 'APPOINTMENT_ONLY', 'TRAVELING', 'OFFLINE'];
 const profileControlDefaultBounds = { x: 300, y: 100, width: 1200, height: 720 };
 const profileReviewDefaultBounds = { x: 360, y: 140, width: 960, height: 720 };
-const emptyAdvertisementForm = {
-  active: false,
-  targetUrl: '',
-  altText: '',
-  openInNewTab: false,
-  startsAt: '',
-  endsAt: ''
-};
 const emptyStudioForm = {
   id: '',
   owner_email: '',
@@ -413,15 +406,6 @@ export function AdminPage() {
   const [expandedProfileCountryKeys, setExpandedProfileCountryKeys] = useState<string[]>([]);
   const [expandedProfileCityKeys, setExpandedProfileCityKeys] = useState<string[]>([]);
   const [windowLayoutResetNotice, setWindowLayoutResetNotice] = useState(false);
-  const [advertisement, setAdvertisement] = useState<AdminFunPageAdvertisement | null>(null);
-  const [advertisementForm, setAdvertisementForm] = useState({ ...emptyAdvertisementForm });
-  const [advertisementDesktopFile, setAdvertisementDesktopFile] = useState<File | null>(null);
-  const [advertisementMobileFile, setAdvertisementMobileFile] = useState<File | null>(null);
-  const [advertisementDesktopPreview, setAdvertisementDesktopPreview] = useState('');
-  const [advertisementMobilePreview, setAdvertisementMobilePreview] = useState('');
-  const [advertisementInputKey, setAdvertisementInputKey] = useState(0);
-  const [advertisementSaving, setAdvertisementSaving] = useState(false);
-  const [advertisementStatus, setAdvertisementStatus] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   const view = getAdminView(location.pathname);
   const adminSearchParams = new URLSearchParams(location.search);
@@ -930,15 +914,6 @@ export function AdminPage() {
   useEffect(() => {
     if (!token || !['profiles', 'profile-studio', 'settings'].includes(view)) return;
     void refreshDeletionPinStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, view]);
-
-  useEffect(() => {
-    if (!token || view !== 'settings') return;
-    setAdvertisementStatus(null);
-    void api.adminFunPageAdvertisement(token)
-      .then(({ advertisement: value }) => applyAdvertisement(value))
-      .catch((error) => setAdvertisementStatus({ kind: 'error', message: error instanceof Error ? error.message : t('states.requestFailed') }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, view]);
 
@@ -1557,80 +1532,6 @@ export function AdminPage() {
     } finally {
       setDeletionPinForm({ current: '', next: '', confirm: '' });
       setDeletionPinSaving(false);
-    }
-  }
-
-  function applyAdvertisement(value: AdminFunPageAdvertisement) {
-    setAdvertisement(value);
-    setAdvertisementForm({
-      active: value.active,
-      targetUrl: value.targetUrl || '',
-      altText: value.altText || '',
-      openInNewTab: value.openInNewTab,
-      startsAt: toDateTimeLocal(value.startsAt),
-      endsAt: toDateTimeLocal(value.endsAt)
-    });
-    setAdvertisementDesktopFile(null);
-    setAdvertisementMobileFile(null);
-    setAdvertisementDesktopPreview(value.desktopImage?.publicUrl || '');
-    setAdvertisementMobilePreview(value.mobileImage?.publicUrl || '');
-    setAdvertisementInputKey((current) => current + 1);
-  }
-
-  function selectAdvertisementImage(variant: 'desktop' | 'mobile', file: File | null) {
-    if (!file) return;
-    const preview = URL.createObjectURL(file);
-    if (variant === 'desktop') {
-      if (advertisementDesktopFile && advertisementDesktopPreview.startsWith('blob:')) URL.revokeObjectURL(advertisementDesktopPreview);
-      setAdvertisementDesktopFile(file);
-      setAdvertisementDesktopPreview(preview);
-    } else {
-      if (advertisementMobileFile && advertisementMobilePreview.startsWith('blob:')) URL.revokeObjectURL(advertisementMobilePreview);
-      setAdvertisementMobileFile(file);
-      setAdvertisementMobilePreview(preview);
-    }
-    setAdvertisementStatus(null);
-  }
-
-  async function saveAdvertisement() {
-    setAdvertisementSaving(true);
-    setAdvertisementStatus(null);
-    try {
-      const form = new FormData();
-      form.set('settings', JSON.stringify({
-        active: advertisementForm.active,
-        targetUrl: advertisementForm.targetUrl.trim() || null,
-        altText: advertisementForm.altText.trim(),
-        openInNewTab: advertisementForm.openInNewTab,
-        startsAt: advertisementForm.startsAt || null,
-        endsAt: advertisementForm.endsAt || null
-      }));
-      if (advertisementDesktopFile) form.set('desktopImage', advertisementDesktopFile);
-      if (advertisementMobileFile) form.set('mobileImage', advertisementMobileFile);
-      const result = await api.saveAdminFunPageAdvertisement(token, form);
-      applyAdvertisement(result.advertisement);
-      setAdvertisementStatus({
-        kind: result.warning ? 'error' : 'success',
-        message: result.warning || t('admin.advertisement.saveSuccess')
-      });
-    } catch (error) {
-      setAdvertisementStatus({ kind: 'error', message: error instanceof Error ? error.message : t('admin.advertisement.saveError') });
-    } finally {
-      setAdvertisementSaving(false);
-    }
-  }
-
-  async function deleteAdvertisementImage(variant: 'desktop' | 'mobile') {
-    setAdvertisementSaving(true);
-    setAdvertisementStatus(null);
-    try {
-      const result = await api.deleteAdminFunPageAdvertisementImage(token, variant);
-      applyAdvertisement(result.advertisement);
-      setAdvertisementStatus({ kind: 'success', message: t('admin.advertisement.deleteSuccess') });
-    } catch (error) {
-      setAdvertisementStatus({ kind: 'error', message: error instanceof Error ? error.message : t('admin.advertisement.deleteError') });
-    } finally {
-      setAdvertisementSaving(false);
     }
   }
 
@@ -4068,57 +3969,7 @@ export function AdminPage() {
           </div>
           <button type="button" className="button" onClick={resetAdminWindowLayout}>{t('admin.window.resetLayout')}</button>
         </section>
-        <section className="admin-card admin-advertisement-settings">
-          <div className="profile-studio-head compact">
-            <div>
-              <p className="eyebrow">{t('admin.advertisement.eyebrow')}</p>
-              <h2>{t('admin.advertisement.title')}</h2>
-            </div>
-            <StatusBadge value={advertisementForm.active ? t('admin.advertisement.active') : t('admin.advertisement.inactive')} />
-          </div>
-          <label className="admin-check-row">
-            <input type="checkbox" checked={advertisementForm.active} disabled={advertisementSaving} onChange={(event) => setAdvertisementForm({ ...advertisementForm, active: event.target.checked })} />
-            {t('admin.advertisement.enabled')}
-          </label>
-          <div className="admin-advertisement-image-grid">
-            <div className="admin-advertisement-image-card">
-              <AdminField label={t('admin.advertisement.desktopImage')} help={t('admin.advertisement.imageHelp')}>
-                <input key={`desktop-${advertisementInputKey}`} type="file" accept="image/jpeg,image/png,image/webp" disabled={advertisementSaving} onChange={(event) => selectAdvertisementImage('desktop', event.target.files?.[0] || null)} />
-              </AdminField>
-              {advertisementDesktopPreview ? <img src={advertisementDesktopPreview} alt={t('admin.advertisement.desktopPreview')} /> : <p className="admin-muted">{t('admin.advertisement.noDesktopImage')}</p>}
-              <button type="button" className="button danger" disabled={advertisementSaving || !advertisement?.desktopImage} onClick={() => deleteAdvertisementImage('desktop')}>{t('admin.advertisement.deleteDesktop')}</button>
-            </div>
-            <div className="admin-advertisement-image-card">
-              <AdminField label={t('admin.advertisement.mobileImage')} help={t('admin.advertisement.mobileOptional')}>
-                <input key={`mobile-${advertisementInputKey}`} type="file" accept="image/jpeg,image/png,image/webp" disabled={advertisementSaving} onChange={(event) => selectAdvertisementImage('mobile', event.target.files?.[0] || null)} />
-              </AdminField>
-              {advertisementMobilePreview ? <img src={advertisementMobilePreview} alt={t('admin.advertisement.mobilePreview')} /> : <p className="admin-muted">{t('admin.advertisement.mobileFallback')}</p>}
-              <button type="button" className="button danger" disabled={advertisementSaving || !advertisement?.mobileImage} onClick={() => deleteAdvertisementImage('mobile')}>{t('admin.advertisement.deleteMobile')}</button>
-            </div>
-          </div>
-          <div className="admin-form-grid">
-            <AdminField label={t('admin.advertisement.targetUrl')} help={t('admin.advertisement.urlHelp')}>
-              <input type="url" maxLength={2048} value={advertisementForm.targetUrl} disabled={advertisementSaving} onChange={(event) => setAdvertisementForm({ ...advertisementForm, targetUrl: event.target.value })} />
-            </AdminField>
-            <AdminField label={t('admin.advertisement.altText')}>
-              <input maxLength={200} value={advertisementForm.altText} disabled={advertisementSaving} onChange={(event) => setAdvertisementForm({ ...advertisementForm, altText: event.target.value })} />
-            </AdminField>
-            <AdminField label={t('admin.advertisement.startsAt')}>
-              <input type="datetime-local" value={advertisementForm.startsAt} disabled={advertisementSaving} onChange={(event) => setAdvertisementForm({ ...advertisementForm, startsAt: event.target.value })} />
-            </AdminField>
-            <AdminField label={t('admin.advertisement.endsAt')}>
-              <input type="datetime-local" value={advertisementForm.endsAt} disabled={advertisementSaving} onChange={(event) => setAdvertisementForm({ ...advertisementForm, endsAt: event.target.value })} />
-            </AdminField>
-          </div>
-          <label className="admin-check-row">
-            <input type="checkbox" checked={advertisementForm.openInNewTab} disabled={advertisementSaving} onChange={(event) => setAdvertisementForm({ ...advertisementForm, openInNewTab: event.target.checked })} />
-            {t('admin.advertisement.openInNewTab')}
-          </label>
-          {advertisementStatus ? <p className={advertisementStatus.kind === 'success' ? 'success-text' : 'error-text'} role={advertisementStatus.kind === 'success' ? 'status' : 'alert'}>{advertisementStatus.message}</p> : null}
-          <button type="button" className="button primary" disabled={advertisementSaving} onClick={saveAdvertisement}>
-            {advertisementSaving ? t('states.loading') : t('admin.advertisement.save')}
-          </button>
-        </section>
+        <AdminFunPagePromotions token={token} />
         <section className="admin-card critical-pin-card">
           <div className="profile-studio-head compact">
             <div>

@@ -3,114 +3,189 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import type { NextFunction, Request, Response } from 'express';
 import {
-  isFunPageAdvertisementLive,
-  toPublicFunPageAdvertisement,
-  validateFunPageAdvertisementInput,
-  type FunPageAdvertisement
+  createEmptyFunPageAdvertisement,
+  normalizeFunPageAdvertisementSettings,
+  reorderAdvertisements,
+  toPublicFunPagePromotions,
+  validateAdvertisementInput,
+  validatePromotionsConfiguration,
+  type FunPageAdvertisement,
+  type FunPageAdvertisementSettings
 } from '../Back/src/funPageAdvertisement.ts';
-import { advertisementMobileImage, safeAdvertisementHref } from '../Front/src/lib/funPageAdvertisement.ts';
+import {
+  advertisementRotationDelayMs,
+  nextAdvertisementIndex,
+  safeAdvertisementHref,
+  shouldRotateAdvertisements
+} from '../Front/src/lib/funPageAdvertisement.ts';
 
-const baseAdvertisement: FunPageAdvertisement = {
-  active: true,
-  desktopImage: {
-    publicUrl: 'https://cdn.example.test/desktop.webp',
-    storagePath: 'funpage-advertisements/desktop/desktop.webp'
-  },
-  mobileImage: {
-    publicUrl: 'https://cdn.example.test/mobile.webp',
-    storagePath: 'funpage-advertisements/mobile/mobile.webp'
-  },
-  targetUrl: 'https://example.test/offer',
-  altText: 'Premium offer',
-  openInNewTab: true,
-  startsAt: null,
-  endsAt: null,
-  updatedAt: '2026-07-29T12:00:00.000Z'
-};
-
-test('administrator is authorized and a valid advertisement payload can be saved', async () => {
-  const result = validateFunPageAdvertisementInput({
-    active: true,
-    targetUrl: 'https://example.test/offer',
-    altText: 'Premium offer',
-    openInNewTab: true,
-    startsAt: '2026-07-01T00:00:00.000Z',
-    endsAt: '2026-08-01T00:00:00.000Z'
-  });
-  assert.equal(result.ok, true);
-
-  const { requireAdmin } = await loadAdminMiddleware();
-  let nextCalled = false;
-  requireAdmin(
-    { user: { id: 'admin', app_metadata: { role: 'admin' } } } as Request,
-    {} as Response,
-    (() => { nextCalled = true; }) as NextFunction
-  );
-  assert.equal(nextCalled, true);
+const image = (name: string) => ({
+  publicUrl: `https://cdn.example.test/${name}.webp`,
+  storagePath: `funpage-advertisements/${name}/${name}.webp`
 });
 
-test('a non-admin cannot change advertisement settings', async () => {
+function advertisement(id: string, position: number, patch: Partial<FunPageAdvertisement> = {}): FunPageAdvertisement {
+  return {
+    id,
+    active: true,
+    image: image(id),
+    targetUrl: 'https://example.test/offer',
+    altText: `Advertisement ${id}`,
+    openInNewTab: true,
+    startsAt: null,
+    endsAt: null,
+    position,
+    ...patch
+  };
+}
+
+function settings(advertisements: FunPageAdvertisement[]): FunPageAdvertisementSettings {
+  return {
+    version: 2,
+    rotationIntervalSeconds: 6,
+    advertisements,
+    ticker: { active: false, text: '', speed: 'normal', targetUrl: null, openInNewTab: false },
+    updatedAt: null
+  };
+}
+
+test('legacy single advertisement is converted without data loss and desktop becomes the shared image', () => {
+  const normalized = normalizeFunPageAdvertisementSettings({
+    active: true,
+    desktopImage: image('legacy-desktop'),
+    mobileImage: image('legacy-mobile'),
+    targetUrl: 'https://example.test/babatv',
+    altText: 'BabaTV',
+    openInNewTab: true,
+    startsAt: '2026-07-01T00:00:00.000Z',
+    endsAt: '2026-08-01T00:00:00.000Z',
+    updatedAt: '2026-07-20T00:00:00.000Z'
+  });
+  assert.equal(normalized.version, 2);
+  assert.equal(normalized.advertisements.length, 1);
+  assert.equal(normalized.advertisements[0].id, 'legacy-primary');
+  assert.deepEqual(normalized.advertisements[0].image, image('legacy-desktop'));
+  assert.equal(normalized.advertisements[0].targetUrl, 'https://example.test/babatv');
+  assert.equal(normalized.advertisements[0].altText, 'BabaTV');
+  assert.equal(normalized.advertisements[0].openInNewTab, true);
+  assert.equal(normalized.advertisements[0].active, true);
+});
+
+test('legacy mobile image is used only when the desktop image is missing', () => {
+  const normalized = normalizeFunPageAdvertisementSettings({ active: true, desktopImage: null, mobileImage: image('legacy-mobile') });
+  assert.deepEqual(normalized.advertisements[0].image, image('legacy-mobile'));
+});
+
+test('administrator can create second and later advertisements with stable unique IDs', () => {
+  const first = createEmptyFunPageAdvertisement(0);
+  const second = createEmptyFunPageAdvertisement(1);
+  const fiftieth = createEmptyFunPageAdvertisement(49);
+  assert.notEqual(first.id, second.id);
+  assert.notEqual(second.id, fiftieth.id);
+  assert.deepEqual([first.position, second.position, fiftieth.position], [0, 1, 49]);
+  const normalized = normalizeFunPageAdvertisementSettings({ version: 2, rotationIntervalSeconds: 6, advertisements: Array.from({ length: 50 }, (_, index) => advertisement(`ad-${index}`, index)), ticker: {} });
+  assert.equal(normalized.advertisements.length, 50);
+});
+
+test('administrator can reorder advertisements without changing IDs or data', () => {
+  const current = settings([advertisement('a', 0), advertisement('b', 1), advertisement('c', 2)]);
+  const result = reorderAdvertisements(current, ['c', 'a', 'b']);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.value.map((item) => [item.id, item.position]), [['c', 0], ['a', 1], ['b', 2]]);
+  assert.equal(result.value[0].altText, 'Advertisement c');
+});
+
+test('selected advertisement can be disabled or removed without changing the others', () => {
+  const current = settings([advertisement('a', 0), advertisement('b', 1), advertisement('c', 2)]);
+  const disabled = current.advertisements.map((item) => item.id === 'b' ? { ...item, active: false } : item);
+  const removed = disabled.filter((item) => item.id !== 'b').map((item, position) => ({ ...item, position }));
+  assert.deepEqual(disabled.map((item) => [item.id, item.active]), [['a', true], ['b', false], ['c', true]]);
+  assert.deepEqual(removed.map((item) => [item.id, item.position]), [['a', 0], ['c', 1]]);
+});
+
+test('a non-admin cannot change advertisement settings and admin routes remain protected', async () => {
   const { requireAdmin } = await loadAdminMiddleware();
   let status = 0;
-  let payload: unknown;
   const response = {
     status(value: number) { status = value; return this; },
-    json(value: unknown) { payload = value; return this; }
+    json() { return this; }
   } as unknown as Response;
   requireAdmin({ user: { id: 'client', app_metadata: { role: 'client' } } } as Request, response, (() => undefined) as NextFunction);
   assert.equal(status, 403);
-  assert.deepEqual(payload, { error: 'Admin access required' });
+  const adminSource = await readFile(new URL('../Back/src/routes/admin.ts', import.meta.url), 'utf8');
+  assert.ok(adminSource.indexOf('verifyAdminJwt, requireAdmin') < adminSource.indexOf("use('/funpage-advertisement'"));
 });
 
-test('public advertisement response contains only render-safe fields', () => {
-  const response = toPublicFunPageAdvertisement(baseAdvertisement, new Date('2026-07-29T12:00:00.000Z'));
-  assert.deepEqual(response, {
-    desktopImageUrl: 'https://cdn.example.test/desktop.webp',
-    mobileImageUrl: 'https://cdn.example.test/mobile.webp',
-    targetUrl: 'https://example.test/offer',
-    altText: 'Premium offer',
-    openInNewTab: true
-  });
+test('public response exposes only active scheduled render fields in saved order', () => {
+  const current = settings([
+    advertisement('later', 2),
+    advertisement('disabled', 1, { active: false }),
+    advertisement('first', 0),
+    advertisement('future', 3, { startsAt: '2026-08-01T00:00:00.000Z' }),
+    advertisement('expired', 4, { endsAt: '2026-07-01T00:00:00.000Z' })
+  ]);
+  current.ticker = { active: true, text: 'Plain text', speed: 'fast', targetUrl: '/pricing', openInNewTab: false };
+  const response = toPublicFunPagePromotions(current, new Date('2026-07-29T12:00:00.000Z'));
+  assert.deepEqual(response.advertisements.map((item) => item.id), ['first', 'later']);
   assert.equal(JSON.stringify(response).includes('storagePath'), false);
   assert.equal(JSON.stringify(response).includes('updatedAt'), false);
+  assert.deepEqual(response.ticker, current.ticker);
 });
 
-test('active advertisement is visible and disabled advertisement is hidden', () => {
-  assert.equal(isFunPageAdvertisementLive(baseAdvertisement, new Date('2026-07-29T12:00:00.000Z')), true);
-  assert.equal(isFunPageAdvertisementLive({ ...baseAdvertisement, active: false }, new Date('2026-07-29T12:00:00.000Z')), false);
+test('one active advertisement does not rotate and several rotate at the configured interval', () => {
+  assert.equal(shouldRotateAdvertisements(0), false);
+  assert.equal(shouldRotateAdvertisements(1), false);
+  assert.equal(shouldRotateAdvertisements(2), true);
+  assert.equal(advertisementRotationDelayMs(6), 6000);
+  assert.deepEqual([nextAdvertisementIndex(0, 3), nextAdvertisementIndex(1, 3), nextAdvertisementIndex(2, 3)], [1, 2, 0]);
 });
 
-test('advertisement before its start and after its end is hidden', () => {
-  const scheduled = { ...baseAdvertisement, startsAt: '2026-08-01T00:00:00.000Z', endsAt: '2026-08-31T23:59:59.000Z' };
-  assert.equal(isFunPageAdvertisementLive(scheduled, new Date('2026-07-29T12:00:00.000Z')), false);
-  assert.equal(isFunPageAdvertisementLive(scheduled, new Date('2026-09-01T00:00:00.000Z')), false);
+test('rotation intervals outside 3 to 30 seconds are rejected', () => {
+  const ticker = { active: false, text: '', speed: 'normal', targetUrl: null, openInNewTab: false };
+  assert.equal(validatePromotionsConfiguration({ rotationIntervalSeconds: 2, ticker }).ok, false);
+  assert.equal(validatePromotionsConfiguration({ rotationIntervalSeconds: 31, ticker }).ok, false);
+  assert.equal(validatePromotionsConfiguration({ rotationIntervalSeconds: 3, ticker }).ok, true);
+  assert.equal(validatePromotionsConfiguration({ rotationIntervalSeconds: 30, ticker }).ok, true);
 });
 
-test('mobile uses its dedicated image and falls back to desktop', () => {
-  const publicAdvertisement = toPublicFunPageAdvertisement(baseAdvertisement)!;
-  assert.equal(advertisementMobileImage(publicAdvertisement), 'https://cdn.example.test/mobile.webp');
-  assert.equal(advertisementMobileImage({ ...publicAdvertisement, mobileImageUrl: null }), 'https://cdn.example.test/desktop.webp');
-});
-
-test('unsafe target URLs are rejected on backend and frontend', () => {
-  const result = validateFunPageAdvertisementInput({
-    active: true,
-    targetUrl: 'javascript:alert(1)',
-    altText: '',
-    openInNewTab: false,
-    startsAt: null,
-    endsAt: null
-  });
-  assert.deepEqual(result, { ok: false, error: 'targetUrl must use https: or be an internal application path' });
+test('unsafe advertisement and ticker URLs are rejected', () => {
+  assert.equal(validateAdvertisementInput({ active: true, targetUrl: 'javascript:alert(1)', altText: '', openInNewTab: false, startsAt: null, endsAt: null }).ok, false);
+  assert.equal(validatePromotionsConfiguration({
+    rotationIntervalSeconds: 6,
+    ticker: { active: true, text: 'Safe text', speed: 'normal', targetUrl: 'data:text/html,bad', openInNewTab: false }
+  }).ok, false);
   assert.equal(safeAdvertisementHref('javascript:alert(1)'), null);
-  assert.equal(safeAdvertisementHref('/profile/123'), '/profile/123');
+  assert.equal(safeAdvertisementHref('/pricing'), '/pricing');
 });
 
-test('legacy Studio-Infrastruktur section is no longer rendered on FunPage', async () => {
+test('empty promotions render no space and ticker HTML is rendered only as text', async () => {
+  const homeSource = await readFile(new URL('../Front/src/pages/HomePage.tsx', import.meta.url), 'utf8');
+  assert.ok(homeSource.includes("if (!advertisements.length && !ticker) return null"));
+  assert.equal(homeSource.includes('dangerouslySetInnerHTML'), false);
+  assert.ok(homeSource.includes('{ticker.text}'));
+});
+
+test('ticker moves right-to-left and reduced motion disables forced animation', async () => {
+  const styles = await readFile(new URL('../Front/src/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /funpage-ticker-scroll[\s\S]*translateX\(-50%\)/);
+  assert.match(styles, /prefers-reduced-motion:\s*reduce[\s\S]*funpage-ticker-track[\s\S]*animation:\s*none/);
+  assert.match(styles, /funpage-ticker:hover[\s\S]*animation-play-state:\s*paused/);
+});
+
+test('admin has one advertisement image field and no desktop or mobile image fields', async () => {
+  const source = await readFile(new URL('../Front/src/components/AdminFunPagePromotions.tsx', import.meta.url), 'utf8');
+  assert.ok(source.includes("t('admin.advertisement.image')"));
+  assert.equal(source.includes('desktopImage'), false);
+  assert.equal(source.includes('mobileImage'), false);
+  assert.equal(source.includes('mobile image'), false);
+});
+
+test('legacy technology section does not return to FunPage', async () => {
   const source = await readFile(new URL('../Front/src/pages/HomePage.tsx', import.meta.url), 'utf8');
-  assert.equal(source.includes('footerSlides'), false);
   assert.equal(source.includes("t('baba.homeTitle')"), false);
   assert.equal(source.includes('Studio-Infrastruktur'), false);
+  assert.equal(source.includes('TECHNOLOGY BY BABA AI'), false);
 });
 
 async function loadAdminMiddleware() {
