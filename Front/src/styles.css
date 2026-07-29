@@ -9596,16 +9596,48 @@ textarea:focus {
 }
 
 .live-radar-section .radar-panel.compact {
-  grid-template-columns: minmax(290px, .76fr) minmax(560px, 1.24fr);
+  grid-template-columns: minmax(290px, .72fr) minmax(620px, 1.28fr);
   align-items: center;
+  gap: clamp(1.25rem, 2vw, 2rem);
+}
+
+.live-radar-section .radar-map-surface {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  place-items: center;
+  padding: 1.25rem;
+  box-sizing: border-box;
+}
+
+.live-radar-section :is(.radar-view-switch, .radar-map-tools, .radar-quick-filters) {
+  display: none;
 }
 
 .live-radar-section .radar-panel.compact .radar-visual {
-  width: min(100%, 680px);
+  width: min(calc(100% - 2.5rem), 760px);
   aspect-ratio: 1 / 1;
   min-height: 0;
   max-height: none;
+  margin-inline: auto;
+  overflow: visible !important;
   border-radius: 50% !important;
+}
+
+.live-radar-section .radar-cluster-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(244, 215, 127, .52);
+  color: #fff;
+  background: #2b1748;
+  box-shadow:
+    0 0 0 3px rgba(123, 77, 255, .12),
+    0 0 18px rgba(123, 77, 255, .26),
+    0 8px 20px rgba(0, 0, 0, .44);
+  font-size: .74rem;
+  line-height: 1;
+  animation: none;
 }
 
 .live-radar-section .live-radar-range {
@@ -10500,7 +10532,43 @@ textarea:focus {
     padding: 0 16px;
   }
 
-  .live-radar-section .radar-panel.compact .radar-visual,
+  .live-radar-section .radar-map-surface {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    padding: .25rem;
+    overflow: clip;
+    box-sizing: border-box;
+  }
+
+  .live-radar-section {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    min-width: 0;
+    margin-inline: auto;
+    box-sizing: border-box;
+  }
+
+  .live-radar-section .radar-panel.compact {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) !important;
+    box-sizing: border-box;
+  }
+
+  .live-radar-section .radar-panel.compact .radar-visual {
+    width: min(100%, calc(100vw - 64px)) !important;
+    max-width: calc(100vw - 64px);
+    min-width: 0;
+    aspect-ratio: 1 / 1;
+  }
+
+  .live-radar-section .radar-distance-ring em {
+    right: .45rem;
+    transform: translateY(-50%);
+  }
+
   .radar-map-stage .radar-visual {
     width: 100% !important;
     aspect-ratio: 1 / 1;
