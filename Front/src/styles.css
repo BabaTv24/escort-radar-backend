@@ -9596,7 +9596,8 @@ textarea:focus {
 }
 
 .live-radar-section .radar-panel.compact {
-  grid-template-columns: minmax(290px, .72fr) minmax(620px, 1.28fr);
+  min-width: 0;
+  grid-template-columns: minmax(290px, .72fr) minmax(0, 1.28fr);
   align-items: center;
   gap: clamp(1.25rem, 2vw, 2rem);
 }
@@ -9608,6 +9609,7 @@ textarea:focus {
   min-width: 0;
   place-items: center;
   padding: 1.25rem;
+  overflow: clip;
   box-sizing: border-box;
 }
 
@@ -10545,7 +10547,8 @@ textarea:focus {
     width: calc(100vw - 24px) !important;
     max-width: calc(100vw - 24px) !important;
     min-width: 0;
-    margin-inline: auto;
+    justify-self: start;
+    margin-inline: 0;
     box-sizing: border-box;
   }
 
