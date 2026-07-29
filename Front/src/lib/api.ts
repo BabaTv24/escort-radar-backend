@@ -58,6 +58,31 @@ export type BulkAdminProfilesResponse = {
   processed_profile_ids?: string[];
 };
 
+export type FunPageAdvertisementImage = {
+  publicUrl: string;
+  storagePath: string;
+};
+
+export type AdminFunPageAdvertisement = {
+  active: boolean;
+  desktopImage: FunPageAdvertisementImage | null;
+  mobileImage: FunPageAdvertisementImage | null;
+  targetUrl: string | null;
+  altText: string;
+  openInNewTab: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  updatedAt: string | null;
+};
+
+export type PublicFunPageAdvertisement = {
+  desktopImageUrl: string;
+  mobileImageUrl: string | null;
+  targetUrl: string | null;
+  altText: string;
+  openInNewTab: boolean;
+};
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
@@ -222,6 +247,7 @@ export async function requestAdminProfileExport(
 }
 
 export const api = {
+  funPageAdvertisement: () => request<{ advertisement: PublicFunPageAdvertisement | null }>('/api/funpage-advertisement'),
   profiles: (params = '') => request<{ profiles: Profile[] }>(`/api/profiles${params}`),
   authMe: (token: string) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business'; role?: string; app_metadata?: Record<string, unknown> }; client_profile: ClientProfile | null }>('/api/auth/me', { token }),
   updateClientProfile: (token: string, body: Partial<ClientProfile>) => request<{ client_profile: ClientProfile }>('/api/auth/client-profile', {
@@ -462,6 +488,16 @@ export const api = {
   adminRevenue: (token: string) => request<{ stats: AdminStats; payments: Record<string, unknown>[] }>('/api/admin/revenue', { token }),
   adminBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/admin/bookings', { token }),
   adminSettings: (token: string) => request<{ settings: Record<string, unknown> }>('/api/admin/settings', { token }),
+  adminFunPageAdvertisement: (token: string) => request<{ advertisement: AdminFunPageAdvertisement }>('/api/admin/funpage-advertisement', { token }),
+  saveAdminFunPageAdvertisement: (token: string, form: FormData) => request<{ advertisement: AdminFunPageAdvertisement; warning?: string }>('/api/admin/funpage-advertisement', {
+    method: 'POST',
+    token,
+    body: form
+  }),
+  deleteAdminFunPageAdvertisementImage: (token: string, variant: 'desktop' | 'mobile') => request<{ advertisement: AdminFunPageAdvertisement }>(`/api/admin/funpage-advertisement/${variant}`, {
+    method: 'DELETE',
+    token
+  }),
   adminDeletionPinStatus: (token: string) => request<{ configured: boolean; updated_at: string | null }>('/api/admin/security/pin-status', { token }),
   setAdminDeletionPin: (token: string, body: { current_pin?: string; new_pin: string; confirm_pin: string }) => request<{ configured: true; updated_at: string }>('/api/admin/security/deletion-pin', {
     method: 'PUT',

@@ -20,6 +20,7 @@ import { clientPersonalProfileRouter } from './routes/clientPersonalProfile.js';
 import { bcuRouter } from './routes/bcu.js';
 import { sponsoredProfilesRouter } from './routes/sponsoredProfiles.js';
 import { adminReferralsRouter, referralsRouter } from './routes/referrals.js';
+import { publicFunPageAdvertisementRouter } from './routes/funPageAdvertisement.js';
 
 const serverBuildTime = new Date().toISOString();
 const app = express();
@@ -67,6 +68,7 @@ app.get('/api/version', (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/profiles', profilesRouter);
+app.use('/api/funpage-advertisement', publicFunPageAdvertisementRouter);
 app.use('/api/uploads', uploadsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/admin', adminRouter);

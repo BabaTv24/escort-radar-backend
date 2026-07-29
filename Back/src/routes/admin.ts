@@ -64,6 +64,7 @@ import { runBulkProfilePublish } from '../bulkProfilePublish.js';
 import { runBulkPhotoModeration, validateBulkPhotoModerationInput } from '../bulkPhotoModeration.js';
 import { buildProfilePhotoApprovalResult, validateProfilePhotoApprovalInput } from '../bulkProfilePhotoApproval.js';
 import { buildProfileExport, loadAllProfilesForExport, profileExportFilename, profileExportPageSize, selectedProfileExportFilename } from '../adminProfileExport.js';
+import { adminFunPageAdvertisementRouter } from './funPageAdvertisement.js';
 
 export const adminRouter = Router();
 
@@ -204,6 +205,7 @@ adminRouter.post('/login', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.use(verifyAdminJwt, requireAdmin);
+adminRouter.use('/funpage-advertisement', adminFunPageAdvertisementRouter);
 
 adminRouter.get('/me', asyncHandler(async (req, res) => {
   res.json({

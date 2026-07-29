@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BadgeCheck, Building2, ChevronLeft, ChevronRight, Cpu, EyeOff, Map, RadioTower, Smartphone, PlusCircle, Network, ShieldCheck, ScanSearch } from 'lucide-react';
-import { cities } from '../data/cities';
+import { ChevronLeft, ChevronRight, RadioTower, PlusCircle } from 'lucide-react';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
@@ -13,6 +12,8 @@ import { EmptyState, ErrorState, LoadingState } from '../components/LoadingState
 import { Seo } from '../components/Seo';
 import { isSponsoredProfile, toLocationCitySlug } from '../lib/sponsoredProfiles';
 import { deriveHomeRadarView, getHomeRadarHref, loadHomeRadarCandidatePool } from '../lib/homeRadar';
+import { api, type PublicFunPageAdvertisement } from '../lib/api';
+import { advertisementMobileImage, safeAdvertisementHref } from '../lib/funPageAdvertisement';
 
 export function HomePage() {
   const { t } = useI18n();
@@ -23,9 +24,7 @@ export function HomePage() {
   const [radarStatus, setRadarStatus] = useState('all');
   const [searcherLocation, setSearcherLocation] = useState<GeoPoint | null>(() => readSavedSearchLocation());
   const [fallbackNotice, setFallbackNotice] = useState(false);
-  const [footerSlideIndex, setFooterSlideIndex] = useState(0);
-  const [isFooterCarouselPaused, setFooterCarouselPaused] = useState(false);
-  const footerCarouselRef = useRef<HTMLDivElement | null>(null);
+  const [advertisement, setAdvertisement] = useState<PublicFunPageAdvertisement | null>(null);
   const profilesAbortRef = useRef<AbortController | null>(null);
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const { sponsoredProfiles, nearbyProfiles } = deriveHomeRadarView(profiles, searcherLocation, radarStatus);
@@ -35,20 +34,6 @@ export function HomePage() {
   const paidProfiles = profiles.filter((profile) => !isSponsoredProfile(profile));
   const topProfiles = paidProfiles.slice(0, 8);
   const featured = (paidProfiles.length ? paidProfiles : profiles).slice(0, 8);
-  const footerSlides = [
-    { icon: <RadioTower />, title: t('home.features.available.title'), text: t('home.features.available.text') },
-    { icon: <EyeOff />, title: t('home.features.private.title'), text: t('home.features.private.text') },
-    { icon: <Smartphone />, title: t('home.features.mobile.title'), text: t('home.features.mobile.text') },
-    { icon: <Building2 />, title: t('home.features.clubs.title'), text: t('home.features.clubs.text') },
-    { icon: <BadgeCheck />, title: t('home.features.privacy.title'), text: t('home.features.privacy.text') },
-    { icon: <Map />, title: t('home.features.cities.title'), text: cities.map((city) => city.name).join(' / ') },
-    { icon: <BadgeCheck />, title: t('home.sections.vip'), text: t('home.sections.vipText') },
-    { icon: <Cpu />, title: t('baba.cards.moderation'), text: t('baba.cards.moderationText') },
-    { icon: <ScanSearch />, title: t('baba.cards.geo'), text: t('baba.cards.geoText') },
-    { icon: <Network />, title: t('baba.cards.marketplace'), text: t('baba.cards.marketplaceText') },
-    { icon: <ShieldCheck />, title: t('baba.cards.privacy'), text: t('baba.cards.privacyText') }
-  ];
-  const footerCarouselSlides = [...footerSlides, ...footerSlides.slice(0, 4)];
 
   const loadProfiles = useCallback(() => {
     profilesAbortRef.current?.abort();
@@ -77,19 +62,12 @@ export function HomePage() {
   }, [loadProfiles]);
 
   useEffect(() => {
-    if (isFooterCarouselPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const id = window.setInterval(() => {
-      setFooterSlideIndex((current) => (current + 1) % footerSlides.length);
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, [isFooterCarouselPaused, footerSlides.length]);
-
-  useEffect(() => {
-    const carousel = footerCarouselRef.current;
-    const target = carousel?.querySelector<HTMLElement>(`[data-footer-slide="${footerSlideIndex}"]`);
-    if (!carousel || !target) return;
-    carousel.scrollTo({ left: target.offsetLeft, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-  }, [footerSlideIndex]);
+    let active = true;
+    api.funPageAdvertisement()
+      .then((result) => { if (active) setAdvertisement(result.advertisement); })
+      .catch(() => { if (active) setAdvertisement(null); });
+    return () => { active = false; };
+  }, []);
 
   async function useLocation() {
     if (!navigator.geolocation) {
@@ -104,16 +82,6 @@ export function HomePage() {
       () => setFallbackNotice(true),
       { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 }
     );
-  }
-
-  function goToPreviousFooterSlide() {
-    setFooterCarouselPaused(true);
-    setFooterSlideIndex((current) => (current === 0 ? footerSlides.length - 1 : current - 1));
-  }
-
-  function goToNextFooterSlide() {
-    setFooterCarouselPaused(true);
-    setFooterSlideIndex((current) => (current + 1) % footerSlides.length);
   }
 
   return (
@@ -244,42 +212,29 @@ export function HomePage() {
       ) : <EmptyState title={t('home.available')} message={searcherLocation ? t('home.noProfilesWithin150') : t('radar.locationRequired')} />}
       </>}
 
-      <section
-        className="footer-presection premium-footer-info"
-        onMouseEnter={() => setFooterCarouselPaused(true)}
-        onMouseLeave={() => setFooterCarouselPaused(false)}
-        onFocus={() => setFooterCarouselPaused(true)}
-        onBlur={() => setFooterCarouselPaused(false)}
-      >
-        <div className="footer-carousel-header">
-          <div>
-            <p className="eyebrow">{t('baba.homeEyebrow')}</p>
-            <h2>{t('baba.homeTitle')}</h2>
-          </div>
-
-          <div className="footer-carousel-controls">
-            <button className="footer-carousel-control er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Previous slide" onClick={goToPreviousFooterSlide}>
-              <ChevronLeft size={18} />
-            </button>
-            <button className="footer-carousel-control er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" type="button" aria-label="Next slide" onClick={goToNextFooterSlide}>
-              <ChevronRight size={18} />
-            </button>
-          </div>
-        </div>
-
-        <div className="footer-carousel" aria-live="polite" ref={footerCarouselRef}>
-          <div className="footer-carousel-track">
-            {footerCarouselSlides.map((slide, index) => (
-              <article className="footer-carousel-card" tabIndex={0} data-footer-slide={index} key={`${slide.title}-${index}`}>
-                <div className="feature-icon">{slide.icon}</div>
-                <h3>{slide.title}</h3>
-                <p>{slide.text}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+      {advertisement ? <FunPageAdvertisementBanner advertisement={advertisement} label={t('advertisement.label')} /> : null}
     </div>
+  );
+}
+
+export function FunPageAdvertisementBanner({ advertisement, label }: { advertisement: PublicFunPageAdvertisement; label: string }) {
+  const href = safeAdvertisementHref(advertisement.targetUrl);
+  const picture = (
+    <picture>
+      <source media="(max-width: 720px)" srcSet={advertisementMobileImage(advertisement)} />
+      <img src={advertisement.desktopImageUrl} alt={advertisement.altText} />
+    </picture>
+  );
+  const content = href ? (
+    <a href={href} target={advertisement.openInNewTab ? '_blank' : undefined} rel={advertisement.openInNewTab ? 'noopener noreferrer' : undefined}>
+      {picture}
+    </a>
+  ) : picture;
+  return (
+    <section className="funpage-advertisement" aria-label={label}>
+      <span className="funpage-advertisement-label">{label}</span>
+      {content}
+    </section>
   );
 }
 
