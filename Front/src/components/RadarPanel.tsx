@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { List, LocateFixed, Map, Minus, Plus } from 'lucide-react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
@@ -153,7 +154,7 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
 
   return (
     <section className={compact ? 'radar-panel compact' : 'radar-panel'}>
-      <div className="radar-copy radar-control-panel">
+      <RadarSearchPanel>
         <div className="radar-heading-block">
           <p className="eyebrow">{t('radar.eyebrow')}</p>
           <h2>{t('radar.title')}</h2>
@@ -178,24 +179,6 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
             />
             <span className="radar-radius-scale"><small>10 m</small><small>150 km</small></span>
           </label>
-        </div>
-        <div className="radar-control-group radar-status-control">
-          <span>{t('radar.status')}</span>
-          <div className="segmented-pills">
-            {[
-              allStatus,
-              ...visibleRadarStatuses
-            ].map(([value, _statusClass, labelKey]) => (
-              <button
-                key={value}
-                className={`status-chip radar-filter-chip radar-filter-${value} ${value === 'favorites' ? 'status-chip-favorites' : ''} er-btn er-glass-btn er-glass-btn--sm ${getRadarFilterButtonClass(value)} ${status === value ? 'selected is-active er-glass-btn--active' : ''}`.trim()}
-                type="button"
-                onClick={() => onStatusChange(value)}
-              >
-                <span>{t(labelKey)}</span>
-              </button>
-            ))}
-          </div>
         </div>
         {hasRadarLocation && !isEditingLocation && (
           <div className="radar-saved-location radar-location-control">
@@ -245,9 +228,11 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
           ))}
         </div>
         {compact && <Link to={radarHref || `/city/${city}`} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('home.openRadar')}</span></Link>}
-      </div>
-      <div ref={radarVisualNode} className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
+      </RadarSearchPanel>
+      <RadarMap>
+        <RadarViewSwitch />
         {mapApiKey && effectiveLocation && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
+        <div ref={radarVisualNode} className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
         <div className="radar-distance-rings" aria-hidden="true">
           <span className="radar-distance-ring selected">
             <em>{formatRadiusMeters(radius)} {t('radar.radiusLabel').toLowerCase()}</em>
@@ -303,32 +288,91 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
             );
           }
 
-          const { profile, distanceKm, point, operatorStatus, statusClass } = cluster.items[0];
-          const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
-          const price = getPrice(profile, t);
-          const tooltipClass = getTooltipClass(point);
-          const distanceLabel = formatDistanceKm(distanceKm, t('radar.distanceUnavailable'));
-
-          return (
-            <Link
-              key={profile.id}
-              to={`/profile/${profile.id}`}
-              className={`radar-point radar-avatar-point ${statusClass} ${tooltipClass}`}
-              style={{ left: `${point.left}%`, top: `${point.top}%` }}
-            >
-              {primary?.public_url ? <img src={primary.public_url} alt="" loading="lazy" /> : <span>{getInitials(profile.display_name)}</span>}
-              <span className="radar-tooltip">
-                <strong>{profile.display_name}</strong>
-                <small>{distanceLabel}</small>
-                <small>{getPublicLocationLabel(profile, t)}</small>
-                <small>{operatorStatus.replaceAll('_', ' ')}</small>
-                <small>{price}</small>
-              </span>
-            </Link>
-          );
+          return <RadarProfileMarker key={cluster.items[0].profile.id} item={cluster.items[0]} t={t} />;
         })}
-      </div>
+        </div>
+        <div className="radar-map-tools" aria-label={t('radar.mapControls')}>
+          <button type="button" onClick={() => onRadiusChange(Math.min(radius + 10_000, MAX_RADAR_RADIUS_METERS))} aria-label={t('radar.increaseRadius')}><Plus size={18} /></button>
+          <button type="button" onClick={() => onRadiusChange(Math.max(radius - 10_000, MIN_RADAR_RADIUS_METERS))} aria-label={t('radar.decreaseRadius')}><Minus size={18} /></button>
+          {onUseLocation && <button type="button" onClick={onUseLocation} aria-label={t('radar.useGps')}><LocateFixed size={17} /></button>}
+        </div>
+        <RadarQuickFilters
+          statuses={[allStatus, ...visibleRadarStatuses]}
+          selectedStatus={status}
+          onStatusChange={onStatusChange}
+        />
+      </RadarMap>
     </section>
+  );
+}
+
+function RadarSearchPanel({ children }: { children: React.ReactNode }) {
+  return <div className="radar-copy radar-control-panel radar-search-panel">{children}</div>;
+}
+
+function RadarMap({ children }: { children: React.ReactNode }) {
+  return <div className="radar-map-surface">{children}</div>;
+}
+
+function RadarViewSwitch() {
+  const { t } = useI18n();
+  return (
+    <div className="radar-view-switch" aria-label={t('radar.viewSwitch')}>
+      <a href="#profiles"><List size={14} /> <span>{t('radar.listView')}</span></a>
+      <button className="selected" type="button" aria-pressed="true"><Map size={14} /> <span>{t('radar.mapView')}</span></button>
+    </div>
+  );
+}
+
+function RadarQuickFilters({ statuses, selectedStatus, onStatusChange }: {
+  statuses: ReadonlyArray<readonly [string, string, string]>;
+  selectedStatus: string;
+  onStatusChange: (status: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="radar-quick-filters" aria-label={t('radar.status')}>
+      {statuses.map(([value, statusClass, labelKey]) => (
+        <button
+          key={value}
+          className={`radar-quick-filter ${statusClass} ${selectedStatus === value ? 'selected' : ''}`.trim()}
+          type="button"
+          aria-pressed={selectedStatus === value}
+          onClick={() => onStatusChange(value)}
+        >
+          <i className={`dot ${statusClass}`} />
+          <span>{t(labelKey)}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RadarProfileMarker({ item, t }: {
+  item: ReturnType<typeof getRadarProfile>;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}) {
+  const { profile, distanceKm, point, operatorStatus, statusClass } = item;
+  const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
+  const price = getPrice(profile, t);
+  const tooltipClass = getTooltipClass(point);
+  const distanceLabel = formatDistanceKm(distanceKm, t('radar.distanceUnavailable'));
+
+  return (
+    <Link
+      to={`/profile/${profile.id}`}
+      className={`radar-point radar-avatar-point ${statusClass} ${tooltipClass}`}
+      style={{ left: `${point.left}%`, top: `${point.top}%` }}
+    >
+      {primary?.public_url ? <img src={primary.public_url} alt="" loading="lazy" /> : <span>{getInitials(profile.display_name)}</span>}
+      <span className="radar-tooltip">
+        <strong>{profile.display_name}</strong>
+        <small>{distanceLabel}</small>
+        <small>{getPublicLocationLabel(profile, t)}</small>
+        <small>{operatorStatus.replaceAll('_', ' ')}</small>
+        <small>{price}</small>
+      </span>
+    </Link>
   );
 }
 
