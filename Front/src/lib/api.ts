@@ -1,4 +1,5 @@
 import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, SponsoredChatMessage, SponsoredChatSession, SponsoredProfileDashboard, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import { API_URL } from './apiBase';
 
 export type BulkPhotoModerationResponse = {
   requested: number;
@@ -25,8 +26,6 @@ export type BulkProfilePhotoApprovalResponse = {
     failed: number;
   }>;
 };
-
-const API_URL = (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || 'http://localhost:4000';
 
 type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
 

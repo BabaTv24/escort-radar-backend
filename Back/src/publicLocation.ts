@@ -1,4 +1,6 @@
-import { normalizeCity, resolveCityLocation } from './locations.js';
+import { normalizeCity, normalizeCountry, resolveCityLocation } from './locations.js';
+
+export const CITY_ONLY_LAYOUT_SPACING_METERS = 350;
 
 export type EffectivePublicLocation = {
   latitude: number;
@@ -59,10 +61,13 @@ export function buildCityOnlyLayoutIndexes(profiles: Record<string, any>[]) {
     const visibility = normalizeEffectiveLocationVisibility(profile.location_mode, profile.location_visibility);
     if (visibility !== 'city_only') continue;
     const cityKey = normalizeCity(profile.work_city || profile.city);
-    if (!cityKey || !resolveCityLocation(cityKey)) continue;
-    const group = groups.get(cityKey) || [];
+    const city = resolveCityLocation(cityKey);
+    if (!cityKey || !city) continue;
+    const countryKey = normalizeCountry(profile.work_country) || city.country_code;
+    const groupKey = `${countryKey}|${cityKey}`;
+    const group = groups.get(groupKey) || [];
     group.push(profile);
-    groups.set(cityKey, group);
+    groups.set(groupKey, group);
   }
 
   const indexes = new Map<string, number>();
@@ -82,7 +87,7 @@ export function disperseCityOnlyLocation(latitude: number, longitude: number, in
     ring += 1;
   }
 
-  const radiusMeters = ring * 100;
+  const radiusMeters = ring * CITY_ONLY_LAYOUT_SPACING_METERS;
   const angle = 2 * Math.PI * slot / (ring * 6);
   const northMeters = Math.cos(angle) * radiusMeters;
   const eastMeters = Math.sin(angle) * radiusMeters;

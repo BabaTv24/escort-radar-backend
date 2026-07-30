@@ -39,7 +39,7 @@ test('complete radar pool is deterministic, deduplicated, cross-border and never
       { lat: point.latitude, lng: point.longitude },
       { lat: candidate.latitude, lng: candidate.longitude }
     ) || 0) * 1000)));
-  assert.ok(nearestNeighborMeters.every((distance) => distance >= 95 && distance <= 110));
+  assert.ok(nearestNeighborMeters.every((distance) => distance >= 300 && distance <= 400));
 
   const homeResult = selectRadarProfiles(profiles, szczecinCenter, 150_000, 'all');
   const cityResult = selectRadarProfiles(profiles, szczecinCenter, 150_000, 'all');

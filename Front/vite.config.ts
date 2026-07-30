@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { execSync } from 'node:child_process';
 
@@ -20,11 +20,25 @@ const buildTime = new Date().toISOString();
 const gitCommit = getGitCommit();
 const assetVersion = process.env.VITE_ASSET_VERSION || `${gitCommit}-${buildTime}`;
 
-export default defineConfig({
-  plugins: [react()],
-  define: {
-    __ESCORT_RADAR_GIT_COMMIT__: JSON.stringify(gitCommit),
-    __ESCORT_RADAR_BUILD_TIME__: JSON.stringify(buildTime),
-    __ESCORT_RADAR_ASSET_VERSION__: JSON.stringify(assetVersion),
-  },
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const apiTarget = env.VITE_API_URL || 'http://localhost:4000';
+  const apiProxy = {
+    '/api': {
+      target: apiTarget,
+      changeOrigin: true,
+      secure: true
+    }
+  };
+
+  return {
+    plugins: [react()],
+    define: {
+      __ESCORT_RADAR_GIT_COMMIT__: JSON.stringify(gitCommit),
+      __ESCORT_RADAR_BUILD_TIME__: JSON.stringify(buildTime),
+      __ESCORT_RADAR_ASSET_VERSION__: JSON.stringify(assetVersion),
+    },
+    server: { proxy: apiProxy },
+    preview: { proxy: apiProxy }
+  };
 });

@@ -1138,13 +1138,16 @@ test('city page keeps listing profiles as radar input and does not pre-empty the
   assert.match(geoSource, /sort\(\(left, right\) => right\.length - left\.length\)/);
 });
 
-test('city radar keeps the reference component boundaries and a circular canvas on desktop and mobile', async () => {
+test('city radar keeps the reference component boundaries and a circular MapLibre canvas on desktop and mobile', async () => {
   const radarPanelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
+  const radarMapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
   const stylesSource = await readFile(new URL('../Front/src/styles.css', import.meta.url), 'utf8');
 
-  for (const component of ['RadarSearchPanel', 'RadarMap', 'RadarProfileMarker', 'RadarViewSwitch', 'RadarQuickFilters']) {
+  for (const component of ['RadarSearchPanel', 'RadarMap', 'RadarViewSwitch', 'RadarQuickFilters']) {
     assert.match(radarPanelSource, new RegExp(`function ${component}\\(`));
   }
+  assert.match(radarPanelSource, /<RadarMapLibre/);
+  assert.match(radarMapSource, /export function RadarMapLibre\(/);
   assert.match(stylesSource, /\.radar-city-page \.radar-main-stage \.radar-map-surface \{/);
   assert.match(stylesSource, /\.radar-city-page \.radar-main-stage \.radar-visual \{[\s\S]*?aspect-ratio: 1;/);
   assert.match(stylesSource, /width: 326px !important;[\s\S]*?aspect-ratio: 1;[\s\S]*?border-radius: 50% !important;/);

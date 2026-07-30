@@ -1,129 +1,196 @@
-.radar-visual.awaiting-location .radar-sweep {
-  opacity: .46;
+.radar-visual-canvas {
+  z-index: 2;
+  pointer-events: none;
 }
 
-.radar-visual.awaiting-location .radar-core {
-  opacity: .72;
-}
-
-.radar-marker-cluster {
+.radar-maplibre-shell {
   position: absolute;
-  z-index: 13;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #090909;
 }
 
-.radar-marker-cluster.expanded {
-  z-index: 100;
-}
-
-.radar-cluster-button {
+.radar-map-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  padding: 0;
-  border: 2px solid #fff4d6;
-  border-radius: 50%;
-  background: #7b4dff;
-  box-shadow: 0 0 0 5px rgba(123, 77, 255, .2), 0 12px 30px rgba(0, 0, 0, .52);
-  color: #fff;
-  cursor: pointer;
-  font-weight: 900;
+  background: #090909;
+  color: #a99f8e;
 }
 
-.radar-cluster-button:focus-visible {
-  outline: 2px solid #f4d77f;
-  outline-offset: 3px;
-}
-
-.radar-cluster-list {
+.radar-maplibre-shell > .radar-maplibre {
   position: absolute;
-  left: 50%;
-  top: calc(100% + .75rem);
-  width: min(16rem, 72vw);
-  max-height: 10rem;
-  overflow-y: auto;
-  transform: translateX(-50%);
-  border: 1px solid rgba(247, 215, 123, .4);
-  border-radius: .6rem;
-  background: rgba(10, 5, 9, .98);
-  box-shadow: 0 20px 54px rgba(0, 0, 0, .72);
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.radar-marker-cluster.edge-left .radar-cluster-list {
-  left: -1rem;
-  transform: none;
+.radar-maplibre .maplibregl-control-container {
+  position: relative;
+  z-index: 18;
 }
 
-.radar-marker-cluster.edge-right .radar-cluster-list {
-  right: -1rem;
-  left: auto;
-  transform: none;
+.radar-maplibre .maplibregl-ctrl-group,
+.radar-maplibre .maplibregl-ctrl-attrib {
+  border: 1px solid rgba(244, 215, 127, .28);
+  background: rgba(8, 8, 8, .9);
+  color: #f8f0dc;
 }
 
-.radar-marker-cluster.edge-bottom .radar-cluster-list {
-  top: auto;
-  bottom: calc(100% + .75rem);
+.radar-maplibre .maplibregl-ctrl button {
+  background-color: rgba(8, 8, 8, .9);
 }
 
-.radar-cluster-profile {
+.radar-maplibre .maplibregl-ctrl button .maplibregl-ctrl-icon {
+  filter: invert(87%) sepia(45%) saturate(454%) hue-rotate(352deg) brightness(102%);
+}
+
+.radar-maplibre .maplibregl-ctrl-attrib a {
+  color: #f4d77f;
+}
+
+.radar-recenter {
+  position: absolute;
+  right: 10px;
+  bottom: 94px;
+  z-index: 20;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  align-items: center;
-  gap: .55rem;
-  padding: .5rem;
-  color: #fff4d6;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  padding: 0;
+  border: 1px solid rgba(244, 215, 127, .42);
+  border-radius: 4px;
+  background: rgba(8, 8, 8, .92);
+  color: #f4d77f;
+  cursor: pointer;
 }
 
-.radar-cluster-profile + .radar-cluster-profile {
-  border-top: 1px solid rgba(255, 255, 255, .08);
-}
-
-.radar-cluster-profile:hover,
-.radar-cluster-profile:focus-visible {
-  background: rgba(123, 77, 255, .2);
+.radar-recenter:hover,
+.radar-recenter:focus-visible {
+  border-color: #f4d77f;
   outline: none;
+  box-shadow: 0 0 0 2px rgba(244, 215, 127, .18);
 }
 
-.radar-cluster-profile strong,
-.radar-cluster-profile small {
-  display: block;
+.radar-map-error {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  width: min(25rem, calc(100% - 8rem));
+  gap: .7rem;
+  padding: .6rem .7rem;
+  transform: translateX(-50%);
+  border: 1px solid rgba(239, 92, 109, .55);
+  border-radius: .55rem;
+  background: rgba(12, 8, 9, .9);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .34);
+  color: #f8f0dc;
+  font-size: .75rem;
+}
+
+.radar-map-error button {
+  min-height: 30px;
+  margin-left: auto;
+  padding: 0 .7rem;
+  border: 1px solid rgba(244, 215, 127, .45);
+  border-radius: .5rem;
+  background: #d9a84e;
+  color: #090909;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.radar-maplibre-shell .radar-empty-state {
+  z-index: 16;
+  pointer-events: none;
+}
+
+.radar-visual-canvas .radar-distance-rings,
+.radar-visual-canvas .radar-sweep,
+.radar-visual-canvas .radar-core,
+.radar-visual-canvas::before,
+.radar-visual-canvas::after {
+  pointer-events: none;
+}
+
+.maplibregl-popup {
+  z-index: 40;
+}
+
+.maplibregl-popup-content {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(244, 215, 127, .42);
+  border-radius: .75rem;
+  background: #11100e;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, .7);
+  color: #f8f0dc;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: #11100e !important;
+  border-bottom-color: #11100e !important;
+}
+
+.maplibregl-popup-close-button {
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  color: #fff0ba;
+  font-size: 20px;
+}
+
+.radar-map-popup {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  width: 238px;
+  min-height: 104px;
+}
+
+.radar-map-popup > img {
+  width: 76px;
+  height: 100%;
+  min-height: 104px;
+  object-fit: cover;
+}
+
+.radar-map-popup > div {
+  display: grid;
+  align-content: center;
+  gap: .22rem;
+  min-width: 0;
+  padding: .7rem;
+}
+
+.radar-map-popup strong,
+.radar-map-popup small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.radar-cluster-profile small {
-  color: rgba(255, 244, 214, .7);
+.radar-map-popup small {
+  color: #a99f8e;
 }
 
-.radar-cluster-avatar {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  overflow: hidden;
-  border: 2px solid var(--radar-status-color, #6b7280);
-  border-radius: 50%;
-  background: #171717;
-  font-size: .68rem;
-  font-weight: 900;
+.radar-map-popup .radar-popup-approximate {
+  color: #35d9e6;
 }
 
-.radar-cluster-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.radar-panel.compact .radar-cluster-list {
-  max-height: 6rem;
-}
-
-@media (max-width: 720px) {
-  .radar-cluster-list {
-    max-height: 7.5rem;
-  }
+.radar-map-popup a {
+  width: max-content;
+  margin-top: .25rem;
+  color: #f4d77f;
+  font-size: .75rem;
+  font-weight: 800;
 }
 
 .radar-start-panel {
@@ -183,6 +250,11 @@
 }
 
 @media (max-width: 720px) {
+  .radar-map-error {
+    top: 48px;
+    width: min(20rem, calc(100% - 5rem));
+  }
+
   .radar-start-panel {
     gap: .75rem;
     padding: .9rem;

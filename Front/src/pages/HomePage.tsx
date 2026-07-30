@@ -26,7 +26,6 @@ export function HomePage() {
   const [fallbackNotice, setFallbackNotice] = useState(false);
   const [promotions, setPromotions] = useState<PublicFunPagePromotions>({ advertisements: [], rotationIntervalSeconds: 6, ticker: null });
   const profilesAbortRef = useRef<AbortController | null>(null);
-  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const { sponsoredProfiles, nearbyProfiles } = deriveHomeRadarView(profiles, searcherLocation, radarStatus);
   const nearbyProfileCards = nearbyProfiles.map(({ profile }) => profile);
   const radarHref = getHomeRadarHref(searcherLocation);
@@ -194,7 +193,6 @@ export function HomePage() {
           }}
           fallbackNotice={fallbackNotice}
           compact
-          mapApiKey={googleMapsApiKey}
           showFavoritesFilter={false}
         />
       </div>

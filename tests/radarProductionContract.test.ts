@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isRadarRequest } from '../Back/src/radarPool.js';
+import { buildCityOnlyLayoutIndexes, CITY_ONLY_LAYOUT_SPACING_METERS, disperseCityOnlyLocation, resolveEffectivePublicLocation } from '../Back/src/publicLocation.js';
 import { clearPublicProfilesRequestCache, getPublicProfiles } from '../Front/src/lib/publicProfiles.js';
 import { MAX_RADAR_RADIUS_METERS, radarRadiusStorageKey, readSavedRadarRadius, saveRadarRadius } from '../Front/src/lib/geo.js';
 import { clusterRadarPoints, getRadarPoint } from '../Front/src/lib/radarLayout.js';
+import { buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection } from '../Front/src/lib/radarMapData.js';
 
 test('frontend radar=1 reaches the exact backend radar branch and never accepts a 60-row non-radar response', async () => {
   assert.equal(isRadarRequest('1'), true);
@@ -113,3 +115,99 @@ test('radar points preserve Haversine distance and bearing while overlapping pro
   ], 6);
   assert.equal(chained.length, 1, 'a marker bridging two collision groups must merge both clusters');
 });
+
+test('MapLibre GeoJSON preserves longitude/latitude order and radius changes update the polygon', () => {
+  const item = {
+    profile: { id: 'safe-profile', display_name: 'Safe profile' },
+    distanceKm: 1,
+    operatorStatus: 'ONLINE_NOW',
+    statusClass: 'online-now',
+    favorite: false,
+    radarLocation: {
+      lat: 52.52,
+      lng: 13.405,
+      label: 'Berlin',
+      precision: 'exact' as const,
+      approximate: false
+    }
+  } as any;
+  const collection = buildRadarProfileFeatureCollection([item]);
+  assert.deepEqual(collection.features[0].geometry.coordinates, [13.405, 52.52]);
+
+  const center = { lat: 52.52, lng: 13.405, source: 'city' as const };
+  const small = buildRadarRadiusFeatureCollection(center, 1_000);
+  const large = buildRadarRadiusFeatureCollection(center, 10_000);
+  assert.notDeepEqual(small, large);
+  assert.equal(small.features[0].properties.radiusMeters, 1_000);
+  assert.equal(large.features[0].properties.radiusMeters, 10_000);
+});
+
+test('city_only layout is stable, country-aware and uses nominal 350 metre spacing', () => {
+  assert.equal(CITY_ONLY_LAYOUT_SPACING_METERS, 350);
+  const profiles = [
+    { id: 'b', work_country: 'DE', work_city: 'Berlin', location_visibility: 'city_only' },
+    { id: 'a', work_country: 'DE', work_city: 'Berlin', location_visibility: 'city_only' },
+    { id: 'pl', work_country: 'PL', work_city: 'Berlin', location_visibility: 'city_only' }
+  ];
+  const forward = buildCityOnlyLayoutIndexes(profiles);
+  const reversed = buildCityOnlyLayoutIndexes([...profiles].reverse());
+  assert.equal(forward.get('a'), 0);
+  assert.equal(forward.get('b'), 1);
+  assert.equal(forward.get('pl'), 0, 'the same city label in another country must start a separate group');
+  assert.deepEqual([...forward].sort(), [...reversed].sort());
+
+  const berlin = { latitude: 52.52, longitude: 13.405 };
+  const first = disperseCityOnlyLocation(berlin.latitude, berlin.longitude, 0);
+  const second = disperseCityOnlyLocation(berlin.latitude, berlin.longitude, 1);
+  const distance = haversineMeters(first, second);
+  assert.ok(distance >= 300 && distance <= 400, `expected 300-400 m, received ${distance}`);
+
+  const positions = Array.from({ length: 18 }, (_, index) => disperseCityOnlyLocation(berlin.latitude, berlin.longitude, index));
+  assert.ok(new Set(positions.map((point) => `${point.latitude.toFixed(7)},${point.longitude.toFixed(7)}`)).size > 1);
+});
+
+test('public radar contract hides city_only raw coordinates, contacts and galleries', async () => {
+  const safe = resolveEffectivePublicLocation({
+    id: 'city-only',
+    work_country: 'DE',
+    work_city: 'Berlin',
+    location_mode: 'city_only',
+    location_visibility: 'city_only',
+    latitude: 48.123456,
+    longitude: 11.123456
+  }, 0);
+  assert.ok(safe);
+  assert.notEqual(safe!.latitude, 48.123456);
+  assert.notEqual(safe!.longitude, 11.123456);
+  assert.equal(safe!.location_precision, 'city');
+  assert.equal(safe!.location_approximate, true);
+
+  const routeSource = await readFile(new URL('../Back/src/routes/profiles.ts', import.meta.url), 'utf8');
+  const radarSelect = routeSource.slice(routeSource.indexOf('const radarSelect'), routeSource.indexOf("].join(', ')"));
+  assert.doesNotMatch(radarSelect, /primary_phone|additional_phones|whatsapp|telegram|description/);
+  assert.match(routeSource, /sanitizePublicProfile\(withImageUrls\(profile\), location, 1\)/);
+  assert.match(routeSource, /const \{ phone, primary_phone, additional_phones, whatsapp, telegram/);
+});
+
+test('Radar uses MapLibre/OpenFreeMap without Google, Mapbox or an API key', async () => {
+  const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
+  const panelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
+  assert.match(mapSource, /maplibre-gl/);
+  assert.match(mapSource, /https:\/\/tiles\.openfreemap\.org\/styles\/liberty/);
+  assert.match(mapSource, /OpenStreetMap/);
+  assert.doesNotMatch(`${mapSource}\n${panelSource}`, /google\.maps|maps\.googleapis|mapbox|apiKey/i);
+});
+
+function haversineMeters(
+  left: { latitude: number; longitude: number },
+  right: { latitude: number; longitude: number }
+) {
+  const toRadians = (value: number) => value * Math.PI / 180;
+  const latitudeDelta = toRadians(right.latitude - left.latitude);
+  const longitudeDelta = toRadians(right.longitude - left.longitude);
+  const startLatitude = toRadians(left.latitude);
+  const endLatitude = toRadians(right.latitude);
+  const value = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+}

@@ -1,16 +1,15 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { FormEvent } from 'react';
-import { List, LocateFixed, Map, Minus, Plus } from 'lucide-react';
+import { List, Map } from 'lucide-react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import type { ProfileRadarLocation } from '../lib/geo';
-import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatDistanceKm, formatRadiusMeters, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, saveSearchLocationToStorage } from '../lib/geo';
+import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatRadiusMeters, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, saveSearchLocationToStorage } from '../lib/geo';
 import { getOperatorStatus, matchesRadarStatus, selectRadarProfiles } from '../lib/homeRadar';
-import { getPublicLocationLabel } from '../lib/locationLabels';
-import { clusterRadarPoints, getRadarPoint } from '../lib/radarLayout';
 import './RadarPanel.css';
+
+const RadarMapLibre = lazy(() => import('./RadarMapLibre').then((module) => ({ default: module.RadarMapLibre })));
 
 type RadarPanelProps = {
   profiles: Profile[];
@@ -26,9 +25,9 @@ type RadarPanelProps = {
   onClearManualLocation?: () => void;
   fallbackNotice?: boolean;
   compact?: boolean;
-  mapApiKey?: string;
   showFavoritesFilter?: boolean;
   profilesWithoutLocationCount?: number;
+  favoriteProfileIds?: ReadonlySet<string>;
 };
 
 const statusClassByOperator: Record<string, string> = {
@@ -39,7 +38,6 @@ const statusClassByOperator: Record<string, string> = {
   TRAVELING: 'traveling',
   OFFLINE: 'offline'
 };
-let radarGoogleMapsPromise: Promise<any> | null = null;
 
 const radarStatuses = [
   ['favorites', 'favorites', 'favorites.favoritesFilter'],
@@ -50,16 +48,13 @@ const radarStatuses = [
 
 const allStatus = ['all', 'all', 'status.all'] as const;
 
-export function RadarPanel({ profiles, radius, status, city, radarHref, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false, mapApiKey = '', showFavoritesFilter = true, profilesWithoutLocationCount }: RadarPanelProps) {
+export function RadarPanel({ profiles, radius, status, city, radarHref, onRadiusChange, onStatusChange, searcherLocation, onUseLocation, onSetManualLocation, onClearManualLocation, fallbackNotice = false, compact = false, showFavoritesFilter = true, profilesWithoutLocationCount, favoriteProfileIds = new Set() }: RadarPanelProps) {
   const { t } = useI18n();
   const [manualQuery, setManualQuery] = useState('');
   const [manualError, setManualError] = useState('');
   const [manualMessage, setManualMessage] = useState('');
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
-  const [expandedClusterId, setExpandedClusterId] = useState('');
-  const [radarDiameterPx, setRadarDiameterPx] = useState(0);
-  const radarVisualNode = useRef<HTMLDivElement | null>(null);
   const effectiveLocation = searcherLocation;
   const hasRadarLocation = Boolean(effectiveLocation && isValidLatLng(effectiveLocation.lat, effectiveLocation.lng));
   const showManualForm = !hasRadarLocation || isEditingLocation;
@@ -67,24 +62,17 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
   const radarLegendStatuses = showFavoritesFilter ? radarStatuses : [allStatus, ...visibleRadarStatuses];
   const radarCandidates = hasRadarLocation ? selectRadarProfiles(profiles, effectiveLocation, radius, 'all') : [];
   const radarProfiles = radarCandidates
-    .map(({ profile, distanceKm, location }) => getRadarProfile(profile, effectiveLocation!, radius, distanceKm, location))
-    .filter(({ profile }) => matchesRadarStatus(profile, status));
-  const markerDiameterPx = compact ? 34 : 38;
-  const collisionDistancePercent = radarDiameterPx > 0 ? (markerDiameterPx + 4) / radarDiameterPx * 100 : (compact ? 13 : 9);
-  const radarClusters = clusterRadarPoints(radarProfiles, collisionDistancePercent);
+    .map(({ profile, distanceKm, location }) => ({
+      profile,
+      distanceKm,
+      operatorStatus: getOperatorStatus(profile),
+      statusClass: statusClassByOperator[getOperatorStatus(profile)] || 'offline',
+      radarLocation: location,
+      favorite: favoriteProfileIds.has(profile.id)
+    }))
+    .filter(({ profile }) => status === 'favorites' ? favoriteProfileIds.has(profile.id) : matchesRadarStatus(profile, status));
   const profilesWithoutLocation = profilesWithoutLocationCount ?? profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length;
   const locatedProfiles = profiles.length - profilesWithoutLocation;
-
-  useEffect(() => {
-    const node = radarVisualNode.current;
-    if (!node) return;
-    const updateDiameter = () => setRadarDiameterPx(node.getBoundingClientRect().width);
-    updateDiameter();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(updateDiameter);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   if (import.meta.env.DEV) {
     console.debug('[RadarLocationResolve]', profiles.map((profile) => ({
@@ -121,7 +109,7 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
     event.preventDefault();
     if (manualBusy) return;
     setManualBusy(true);
-    const location = resolveManualSearcherLocation(manualQuery) || await geocodeManualSearcherLocation(manualQuery, mapApiKey);
+    const location = resolveManualSearcherLocation(manualQuery);
     if (import.meta.env.DEV) console.debug('[RadarPanel] manual input', { manualQuery, resolved: location });
     if (!location) {
       setManualError(t('radar.manualLocationNotFound'));
@@ -231,70 +219,31 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
       </RadarSearchPanel>
       <RadarMap>
         <RadarViewSwitch />
-        {mapApiKey && effectiveLocation && <RadarMapBackground apiKey={mapApiKey} center={effectiveLocation} />}
-        <div ref={radarVisualNode} className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas ${mapApiKey ? 'with-map' : ''}`} aria-label={t('radar.title')}>
-        <div className="radar-distance-rings" aria-hidden="true">
-          <span className="radar-distance-ring selected">
-            <em>{formatRadiusMeters(radius)} {t('radar.radiusLabel').toLowerCase()}</em>
-          </span>
-        </div>
-        <div className="radar-sweep" />
-        <div className="radar-core" />
-        {hasRadarLocation && radarProfiles.length === 0 && (
-          <div className="radar-empty-state">
-            <strong>{t('radar.noProfilesInRadius')}</strong>
-            <small>{t('radar.profilesWithoutRadarLocation')}</small>
-          </div>
+        {hasRadarLocation && effectiveLocation && (
+          <Suspense fallback={<div className="radar-map-loading">{t('states.loading')}</div>}>
+            <RadarMapLibre
+              center={effectiveLocation}
+              radius={radius}
+              items={radarProfiles}
+              empty={radarProfiles.length === 0}
+              t={t}
+            />
+          </Suspense>
         )}
-        {radarClusters.map((cluster) => {
-          const clusterId = cluster.items.map(({ profile }) => profile.id).join(':');
-          if (cluster.items.length > 1) {
-            const tooltipClass = getTooltipClass(cluster.point);
-            const expanded = expandedClusterId === clusterId;
-            return (
-              <div
-                key={clusterId}
-                className={`radar-marker-cluster ${tooltipClass} ${expanded ? 'expanded' : ''}`}
-                style={{ left: `${cluster.point.left}%`, top: `${cluster.point.top}%` }}
-              >
-                <button
-                  type="button"
-                  className="radar-cluster-button"
-                  aria-expanded={expanded}
-                  aria-label={`${cluster.items.length} ${t('radar.profilesInRadarRange')}`}
-                  onClick={() => setExpandedClusterId(expanded ? '' : clusterId)}
-                >
-                  {cluster.items.length}
-                </button>
-                {expanded && (
-                  <div className="radar-cluster-list">
-                    {cluster.items.map(({ profile, distanceKm, statusClass }) => {
-                      const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
-                      return (
-                        <Link key={profile.id} to={`/profile/${profile.id}`} className="radar-cluster-profile">
-                          <span className={`radar-cluster-avatar ${statusClass}`}>
-                            {primary?.public_url ? <img src={primary.public_url} alt="" loading="lazy" /> : getInitials(profile.display_name)}
-                          </span>
-                          <span>
-                            <strong>{profile.display_name}</strong>
-                            <small>{formatDistanceKm(distanceKm, t('radar.distanceUnavailable'))}</small>
-                          </span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
-
-          return <RadarProfileMarker key={cluster.items[0].profile.id} item={cluster.items[0]} t={t} />;
-        })}
-        </div>
-        <div className="radar-map-tools" aria-label={t('radar.mapControls')}>
-          <button type="button" onClick={() => onRadiusChange(Math.min(radius + 10_000, MAX_RADAR_RADIUS_METERS))} aria-label={t('radar.increaseRadius')}><Plus size={18} /></button>
-          <button type="button" onClick={() => onRadiusChange(Math.max(radius - 10_000, MIN_RADAR_RADIUS_METERS))} aria-label={t('radar.decreaseRadius')}><Minus size={18} /></button>
-          {onUseLocation && <button type="button" onClick={onUseLocation} aria-label={t('radar.useGps')}><LocateFixed size={17} /></button>}
+        <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas`} aria-label={t('radar.title')}>
+          <div className="radar-distance-rings" aria-hidden="true">
+            <span className="radar-distance-ring selected">
+              <em>{formatRadiusMeters(radius)} {t('radar.radiusLabel').toLowerCase()}</em>
+            </span>
+          </div>
+          <div className="radar-sweep" aria-hidden="true" />
+          <div className="radar-core" aria-hidden="true" />
+          {!hasRadarLocation && (
+            <div className="radar-empty-state">
+              <strong>{t('radar.locationRequired')}</strong>
+              <small>{t('radar.locationInputHelp')}</small>
+            </div>
+          )}
         </div>
         <RadarQuickFilters
           statuses={[allStatus, ...visibleRadarStatuses]}
@@ -346,198 +295,5 @@ function RadarQuickFilters({ statuses, selectedStatus, onStatusChange }: {
       ))}
     </div>
   );
-}
-
-function RadarProfileMarker({ item, t }: {
-  item: ReturnType<typeof getRadarProfile>;
-  t: (key: string, vars?: Record<string, string | number>) => string;
-}) {
-  const { profile, distanceKm, point, operatorStatus, statusClass } = item;
-  const primary = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
-  const price = getPrice(profile, t);
-  const tooltipClass = getTooltipClass(point);
-  const distanceLabel = formatDistanceKm(distanceKm, t('radar.distanceUnavailable'));
-
-  return (
-    <Link
-      to={`/profile/${profile.id}`}
-      className={`radar-point radar-avatar-point ${statusClass} ${tooltipClass}`}
-      style={{ left: `${point.left}%`, top: `${point.top}%` }}
-    >
-      {primary?.public_url ? <img src={primary.public_url} alt="" loading="lazy" /> : <span>{getInitials(profile.display_name)}</span>}
-      <span className="radar-tooltip">
-        <strong>{profile.display_name}</strong>
-        <small>{distanceLabel}</small>
-        <small>{getPublicLocationLabel(profile, t)}</small>
-        <small>{operatorStatus.replaceAll('_', ' ')}</small>
-        <small>{price}</small>
-      </span>
-    </Link>
-  );
-}
-
-function RadarMapBackground({ apiKey, center }: { apiKey: string; center: GeoPoint }) {
-  const mapNode = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (!apiKey || !isValidLatLng(center.lat, center.lng)) return;
-    let active = true;
-    loadRadarGoogleMaps(apiKey)
-      .then((google) => {
-        if (!active || !mapNode.current) return;
-        const position = { lat: center.lat, lng: center.lng };
-        if (!mapRef.current) {
-          mapRef.current = new google.maps.Map(mapNode.current, {
-            center: position,
-            zoom: 12,
-            clickableIcons: false,
-            disableDefaultUI: true,
-            gestureHandling: 'none',
-            keyboardShortcuts: false,
-            styles: radarMapStyles
-          });
-          return;
-        }
-        mapRef.current.setCenter(position);
-      })
-      .catch(() => {
-        if (active) setFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [apiKey, center.lat, center.lng]);
-
-  if (failed) return null;
-  return <div ref={mapNode} className="radar-google-map" aria-hidden="true" />;
-}
-
-async function geocodeManualSearcherLocation(input: string, apiKey: string): Promise<GeoPoint | null> {
-  const query = normalizeLocationQuery(input);
-  if (!query || !apiKey) return null;
-  try {
-    const google = await loadRadarGoogleMaps(apiKey);
-    const geocoder = new google.maps.Geocoder();
-    const result = await geocoder.geocode({ address: query });
-    const place = result.results?.[0];
-    const point = place?.geometry?.location;
-    const lat = typeof point?.lat === 'function' ? point.lat() : Number.NaN;
-    const lng = typeof point?.lng === 'function' ? point.lng() : Number.NaN;
-    if (!isValidLatLng(lat, lng)) return null;
-    return {
-      lat,
-      lng,
-      source: 'manual',
-      label: place.formatted_address || query,
-      city: getGeocodedCity(place) || query
-    };
-  } catch {
-    return null;
-  }
-}
-
-function getGeocodedCity(place: any) {
-  const components = Array.isArray(place?.address_components) ? place.address_components : [];
-  const city = components.find((component: any) => component.types?.includes('locality'))
-    || components.find((component: any) => component.types?.includes('postal_town'))
-    || components.find((component: any) => component.types?.includes('administrative_area_level_2'));
-  return typeof city?.long_name === 'string' ? city.long_name.trim() : '';
-}
-
-function loadRadarGoogleMaps(apiKey: string) {
-  const existing = (window as any).google;
-  if (existing?.maps) return Promise.resolve(existing);
-  if (radarGoogleMapsPromise) return radarGoogleMapsPromise;
-
-  radarGoogleMapsPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      const google = (window as any).google;
-      google?.maps ? resolve(google) : reject(new Error('Google Maps unavailable'));
-    };
-    script.onerror = () => reject(new Error('Google Maps failed'));
-    document.head.appendChild(script);
-  });
-
-  return radarGoogleMapsPromise;
-}
-
-function normalizeLocationQuery(value: string) {
-  return value.trim().replace(/\s+/g, ' ');
-}
-
-const radarMapStyles = [
-  { elementType: 'geometry', stylers: [{ color: '#0b0b0d' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#b9a66d' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#080809' }] },
-  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#4a3a1b' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#171719' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#050506' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2a2415' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#05070c' }] }
-];
-
-function getRadarFilterButtonClass(value: string) {
-  if (value === 'favorites') return 'er-glass-btn--pink';
-  if (value === 'online') return 'er-glass-btn--green';
-  if (value === 'BUSY') return 'er-glass-btn--orange';
-  if (value === 'OFFLINE') return 'er-glass-btn--gray';
-  return 'er-glass-btn--purple';
-}
-
-function getRadarProfile(profile: Profile, searcherLocation: GeoPoint, radius: number, distanceKm: number, profileLocation: ProfileRadarLocation) {
-  const bearingDeg = getBearingDeg(searcherLocation.lat, searcherLocation.lng, profileLocation.lat, profileLocation.lng);
-  const operatorStatus = getOperatorStatus(profile);
-  const statusClass = statusClassByOperator[operatorStatus] || 'offline';
-
-  return {
-    profile,
-    distanceKm,
-    bearingDeg,
-    operatorStatus,
-    statusClass,
-    radarLocation: profileLocation,
-    point: getRadarPoint(radius, distanceKm, bearingDeg)
-  };
-}
-
-function getTooltipClass(point: { left: number; top: number }) {
-  return [
-    point.left > 68 ? 'edge-right' : point.left < 32 ? 'edge-left' : '',
-    point.top < 30 ? 'edge-top' : point.top > 72 ? 'edge-bottom' : ''
-  ].filter(Boolean).join(' ');
-}
-
-function getBearingDeg(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const startLat = toRad(lat1);
-  const endLat = toRad(lat2);
-  const deltaLng = toRad(lng2 - lng1);
-  const y = Math.sin(deltaLng) * Math.cos(endLat);
-  const x = Math.cos(startLat) * Math.sin(endLat) - Math.sin(startLat) * Math.cos(endLat) * Math.cos(deltaLng);
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-}
-
-function toRad(value: number) {
-  return value * Math.PI / 180;
-}
-
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return `${parts[0]?.[0] || 'P'}${parts[1]?.[0] || ''}`;
-}
-
-function getPrice(profile: Profile, t: (key: string, vars?: Record<string, string | number>) => string) {
-  const prices = [profile.price_30min, profile.price_1h, profile.price_2h, profile.price_3h, profile.price_night]
-    .map((value) => Number(value || 0))
-    .filter((value) => value > 0);
-  if (!prices.length) return t('profile.priceOnRequest');
-  return t('profile.priceFrom', { amount: Math.min(...prices), currency: profile.currency || 'EUR' });
 }
 

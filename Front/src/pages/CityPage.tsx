@@ -220,7 +220,6 @@ export function CityPage() {
   const topProfiles = sortedProfiles.slice(0, 12);
   const marketplaceCarouselProfiles = sortedProfiles;
   const categoryLabel = appliedFilters.category ? option(appliedFilters.category) : t('filters.allCategories');
-  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const isClientActivated = clientActivationState === 'client_activated';
   const hasPremiumFilterAccess = isClientActivated || hasAdminAccess;
 
@@ -541,7 +540,7 @@ export function CityPage() {
           onSetManualLocation={setManualLocation}
           onClearManualLocation={clearManualLocation}
           fallbackNotice={fallbackNotice}
-          mapApiKey={googleMapsApiKey}
+          favoriteProfileIds={favoriteProfileIds}
           profilesWithoutLocationCount={profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length}
         />
         </section>

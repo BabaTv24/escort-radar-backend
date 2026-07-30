@@ -1,11 +1,11 @@
 import type { Profile, ProfileImage } from '../types';
 import { normalizeProfileEthnicity, normalizeProfileGender, normalizeProfileOrientation, normalizeProfileTravels } from './profileDetails';
 import { normalizeProfileCategory } from './geo';
+import { API_URL } from './apiBase';
 
 const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | boolean> }).env || {};
-const API_URL = String(viteEnv.VITE_API_URL || 'http://localhost:4000');
 const PUBLIC_PROFILES_PATH = '/api/profiles';
-const PUBLIC_PROFILES_TIMEOUT_MS = 15_000;
+const PUBLIC_PROFILES_TIMEOUT_MS = 30_000;
 
 type ApiProfile = Record<string, unknown>;
 
