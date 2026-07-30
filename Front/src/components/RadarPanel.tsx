@@ -7,6 +7,7 @@ import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
 import { RADAR_RADIUS_STEPS_METERS, clearSavedSearchLocation, formatRadiusMeters, getRadarWheelDirection, isValidLatLng, radarRadiusToSliderPosition, resolveManualSearcherLocation, resolveProfileRadarLocation, saveSearchLocationToStorage, sliderPositionToRadarRadius, stepRadarRadius } from '../lib/geo';
 import { getOperatorStatus, matchesRadarStatus, selectRadarProfiles } from '../lib/homeRadar';
+import { assignRadarDisplayCoordinates } from '../lib/radarMapData';
 import './RadarPanel.css';
 
 const RadarMapLibre = lazy(() => import('./RadarMapLibre').then((module) => ({ default: module.RadarMapLibre })));
@@ -70,16 +71,35 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
   const visibleRadarStatuses = showFavoritesFilter ? radarStatuses : radarStatuses.filter(([value]) => value !== 'favorites');
   const radarLegendStatuses = showFavoritesFilter ? radarStatuses : [allStatus, ...visibleRadarStatuses];
   const radarCandidates = hasRadarLocation ? selectRadarProfiles(profiles, effectiveLocation, radius, 'all') : [];
-  const radarProfiles = radarCandidates
-    .map(({ profile, distanceKm, location }) => ({
+  const radarLayoutUniverse = profiles.flatMap((profile) => {
+    const location = resolveProfileRadarLocation(profile);
+    if (!location) return [];
+    return [{
       profile,
-      distanceKm,
+      distanceKm: 0,
       operatorStatus: getOperatorStatus(profile),
       statusClass: statusClassByOperator[getOperatorStatus(profile)] || 'offline',
-      radarLocation: location,
+      filterCoordinates: location,
+      displayCoordinates: { lat: location.lat, lng: location.lng },
+      isApproximateLocation: location.approximate,
       favorite: favoriteProfileIds.has(profile.id)
-    }))
-    .filter(({ profile }) => status === 'favorites' ? favoriteProfileIds.has(profile.id) : matchesRadarStatus(profile, status));
+    }];
+  });
+  const radarProfiles = assignRadarDisplayCoordinates(
+    radarCandidates
+      .map(({ profile, distanceKm, location }) => ({
+        profile,
+        distanceKm,
+        operatorStatus: getOperatorStatus(profile),
+        statusClass: statusClassByOperator[getOperatorStatus(profile)] || 'offline',
+        filterCoordinates: location,
+        displayCoordinates: { lat: location.lat, lng: location.lng },
+        isApproximateLocation: location.approximate,
+        favorite: favoriteProfileIds.has(profile.id)
+      }))
+      .filter(({ profile }) => status === 'favorites' ? favoriteProfileIds.has(profile.id) : matchesRadarStatus(profile, status)),
+    radarLayoutUniverse
+  );
   const profilesWithoutLocation = profilesWithoutLocationCount ?? profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length;
   const locatedProfiles = profiles.length - profilesWithoutLocation;
   radiusRef.current = radius;
@@ -134,7 +154,8 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
         id: item.profile.id,
         name: item.profile.display_name,
         distanceKm: item.distanceKm,
-        location: item.radarLocation
+        filterCoordinates: item.filterCoordinates,
+        displayCoordinates: item.displayCoordinates
       }))
     });
   }

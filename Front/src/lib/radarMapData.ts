@@ -1,5 +1,7 @@
 import type { Profile } from '../types';
+import { getCityCenter, isValidLatLng } from './geo';
 import type { ProfileRadarLocation } from './geo';
+import { getApproximateRadarDisplayLocation } from './radarLayout';
 
 export const RADAR_CITY_ONLY_SPACING_METERS = 350;
 
@@ -10,7 +12,9 @@ export type RadarMapItem = {
   distanceKm: number;
   operatorStatus: string;
   statusClass: string;
-  radarLocation: ProfileRadarLocation;
+  filterCoordinates: ProfileRadarLocation;
+  displayCoordinates: { lat: number; lng: number };
+  isApproximateLocation: boolean;
   favorite: boolean;
 };
 
@@ -31,17 +35,63 @@ export function buildRadarProfileFeatureCollection(items: RadarMapItem[]) {
       geometry: {
         type: 'Point' as const,
         // GeoJSON and MapLibre always use [longitude, latitude].
-        coordinates: [item.radarLocation.lng, item.radarLocation.lat]
+        coordinates: [item.displayCoordinates.lng, item.displayCoordinates.lat]
       },
       properties: {
         id: item.profile.id,
         operatorStatus: item.operatorStatus,
         statusClass: item.statusClass,
         favorite: item.favorite,
-        approximate: item.radarLocation.approximate
+        approximate: item.isApproximateLocation
       } satisfies RadarProfileFeatureProperties
     }))
   };
+}
+
+export function assignRadarDisplayCoordinates(items: RadarMapItem[], layoutUniverse: RadarMapItem[] = items) {
+  const displayCoordinatesById = new Map<string, { lat: number; lng: number }>();
+  const approximateGroups = new Map<string, RadarMapItem[]>();
+
+  for (const item of layoutUniverse) {
+    if (!item.isApproximateLocation) {
+      displayCoordinatesById.set(item.profile.id, {
+        lat: item.filterCoordinates.lat,
+        lng: item.filterCoordinates.lng
+      });
+      continue;
+    }
+    const city = String(item.profile.work_city || item.profile.city || '').trim();
+    const cityCenter = getCityCenter(city);
+    const center = isValidLatLng(cityCenter.lat, cityCenter.lng)
+      ? cityCenter
+      : item.filterCoordinates;
+    const country = String(item.profile.work_country || '').trim().toLowerCase();
+    const groupKey = `${country}|${city.toLowerCase()}|${center.lat},${center.lng}`;
+    const group = approximateGroups.get(groupKey) || [];
+    group.push(item);
+    approximateGroups.set(groupKey, group);
+  }
+
+  for (const group of approximateGroups.values()) {
+    group.sort((left, right) => {
+      const leftKey = `${left.profile.work_city || left.profile.city || ''}|${left.profile.id}`;
+      const rightKey = `${right.profile.work_city || right.profile.city || ''}|${right.profile.id}`;
+      return leftKey.localeCompare(rightKey);
+    });
+    const city = String(group[0].profile.work_city || group[0].profile.city || '').trim();
+    const resolvedCenter = getCityCenter(city);
+    const center = isValidLatLng(resolvedCenter.lat, resolvedCenter.lng)
+      ? resolvedCenter
+      : group[0].filterCoordinates;
+    group.forEach((item, index) => {
+      displayCoordinatesById.set(item.profile.id, getApproximateRadarDisplayLocation(center, index));
+    });
+  }
+
+  return items.map((item) => ({
+    ...item,
+    displayCoordinates: displayCoordinatesById.get(item.profile.id) || item.displayCoordinates
+  }));
 }
 
 export function buildRadarCenterFeatureCollection(center: RadarCenter) {

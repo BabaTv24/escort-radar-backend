@@ -14,10 +14,21 @@ import {
 } from '../lib/radarMapData';
 import type { RadarMapItem } from '../lib/radarMapData';
 
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
-const PROFILE_SOURCE = 'radar-profiles';
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/dark';
+const EXACT_PROFILE_SOURCE = 'radar-exact-profiles';
+const APPROXIMATE_PROFILE_SOURCE = 'radar-approximate-profiles';
 const RADIUS_SOURCE = 'radar-radius';
 const CENTER_SOURCE = 'radar-center';
+const FALLBACK_MAP_STYLE = {
+  version: 8,
+  name: 'Escort Radar dark fallback',
+  sources: {},
+  layers: [{
+    id: 'escort-radar-dark-background',
+    type: 'background',
+    paint: { 'background-color': '#080b0f' }
+  }]
+} as StyleSpecification;
 
 maplibregl.setWorkerUrl(mapLibreWorkerUrl);
 
@@ -38,6 +49,7 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
   const center = { lng: longitude, lat: latitude };
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
+  const [mapStyleName, setMapStyleName] = useState('dark');
   const [reloadKey, setReloadKey] = useState(0);
   itemsRef.current = items;
 
@@ -69,13 +81,10 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
       if (!loaded) setMapError(true);
     }, 15_000);
 
-    fetch(MAP_STYLE)
-      .then((response) => {
-        if (!response.ok) throw new Error(`Map style HTTP ${response.status}`);
-        return response.json() as Promise<StyleSpecification>;
-      })
-      .then((style) => {
+    loadRadarMapStyle()
+      .then(({ style, name }) => {
         if (!active || !containerRef.current) return;
+        setMapStyleName(name);
         map = new maplibregl.Map({
           container: containerRef.current,
           style,
@@ -155,7 +164,16 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map) return;
-    setSourceData(map, PROFILE_SOURCE, buildRadarProfileFeatureCollection(items));
+    setSourceData(
+      map,
+      EXACT_PROFILE_SOURCE,
+      buildRadarProfileFeatureCollection(items.filter((item) => !item.isApproximateLocation))
+    );
+    setSourceData(
+      map,
+      APPROXIMATE_PROFILE_SOURCE,
+      buildRadarProfileFeatureCollection(items.filter((item) => item.isApproximateLocation))
+    );
   }, [items, mapReady]);
 
   useEffect(() => {
@@ -171,6 +189,9 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
       className="radar-maplibre-shell"
       data-search-center={`${longitude},${latitude}`}
       data-radius-meters={radius}
+      data-map-style={mapStyleName}
+      data-approximate-count={items.filter((item) => item.isApproximateLocation).length}
+      data-exact-count={items.filter((item) => !item.isApproximateLocation).length}
     >
       <div ref={containerRef} className="radar-maplibre" aria-label={t('radar.title')} />
       <button className="radar-recenter" type="button" onClick={() => recenter()} aria-label={t('radar.recenter')}>
@@ -193,6 +214,16 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
       )}
     </div>
   );
+}
+
+async function loadRadarMapStyle() {
+  try {
+    const response = await fetch(MAP_STYLE);
+    if (!response.ok) throw new Error(`Map style HTTP ${response.status}`);
+    return { style: await response.json() as StyleSpecification, name: 'dark' };
+  } catch {
+    return { style: FALLBACK_MAP_STYLE, name: 'dark-fallback' };
+  }
 }
 
 function getRadarRingPadding(container: HTMLElement) {
@@ -237,9 +268,9 @@ function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: 
     paint: { 'line-color': '#f4d77f', 'line-opacity': 0.72, 'line-width': 1.5 }
   });
 
-  map.addSource(PROFILE_SOURCE, {
+  map.addSource(EXACT_PROFILE_SOURCE, {
     type: 'geojson',
-    data: buildRadarProfileFeatureCollection(items),
+    data: buildRadarProfileFeatureCollection(items.filter((item) => !item.isApproximateLocation)),
     cluster: true,
     clusterMaxZoom: 14,
     clusterRadius: 42
@@ -247,7 +278,7 @@ function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: 
   map.addLayer({
     id: 'radar-clusters',
     type: 'circle',
-    source: PROFILE_SOURCE,
+    source: EXACT_PROFILE_SOURCE,
     filter: ['has', 'point_count'],
     paint: {
       'circle-color': '#7b4dff',
@@ -259,7 +290,7 @@ function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: 
   map.addLayer({
     id: 'radar-cluster-count',
     type: 'symbol',
-    source: PROFILE_SOURCE,
+    source: EXACT_PROFILE_SOURCE,
     filter: ['has', 'point_count'],
     layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 },
     paint: { 'text-color': '#ffffff' }
@@ -267,7 +298,7 @@ function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: 
   map.addLayer({
     id: 'radar-profile-points',
     type: 'circle',
-    source: PROFILE_SOURCE,
+    source: EXACT_PROFILE_SOURCE,
     filter: ['!', ['has', 'point_count']],
     paint: {
       'circle-color': [
@@ -283,6 +314,33 @@ function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: 
       'circle-radius': 9,
       'circle-stroke-color': ['case', ['boolean', ['get', 'favorite'], false], '#ff5fa2', '#fff0ba'],
       'circle-stroke-width': ['case', ['boolean', ['get', 'favorite'], false], 4, 2]
+    }
+  });
+
+  map.addSource(APPROXIMATE_PROFILE_SOURCE, {
+    type: 'geojson',
+    data: buildRadarProfileFeatureCollection(items.filter((item) => item.isApproximateLocation)),
+    cluster: false
+  });
+  map.addLayer({
+    id: 'radar-approximate-points',
+    type: 'circle',
+    source: APPROXIMATE_PROFILE_SOURCE,
+    paint: {
+      'circle-color': [
+        'match',
+        ['get', 'operatorStatus'],
+        'ONLINE_NOW', '#36d486',
+        'BUSY', '#f6b84b',
+        'AVAILABLE_TODAY', '#35d9e6',
+        'APPOINTMENT_ONLY', '#ff5fa2',
+        'TRAVELING', '#9b6cff',
+        '#9a9aa4'
+      ],
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, 2.5, 8, 4, 14, 7, 18, 9],
+      'circle-opacity': 0.88,
+      'circle-stroke-color': ['case', ['boolean', ['get', 'favorite'], false], '#ff5fa2', '#fff0ba'],
+      'circle-stroke-width': ['case', ['boolean', ['get', 'favorite'], false], 3, 1.5]
     }
   });
 
@@ -310,6 +368,7 @@ function removeRadarSourcesAndLayers(map: MapLibreMap) {
   for (const layerId of [
     'radar-center-point',
     'radar-center-halo',
+    'radar-approximate-points',
     'radar-profile-points',
     'radar-cluster-count',
     'radar-clusters',
@@ -318,7 +377,7 @@ function removeRadarSourcesAndLayers(map: MapLibreMap) {
   ]) {
     if (map.getLayer(layerId)) map.removeLayer(layerId);
   }
-  for (const sourceId of [CENTER_SOURCE, PROFILE_SOURCE, RADIUS_SOURCE]) {
+  for (const sourceId of [CENTER_SOURCE, APPROXIMATE_PROFILE_SOURCE, EXACT_PROFILE_SOURCE, RADIUS_SOURCE]) {
     if (map.getSource(sourceId)) map.removeSource(sourceId);
   }
 }
@@ -332,25 +391,27 @@ function bindRadarInteractions(
     const feature = map.queryRenderedFeatures(event.point, { layers: ['radar-clusters'] })[0];
     const clusterId = Number(feature?.properties?.cluster_id);
     if (!Number.isFinite(clusterId)) return;
-    const source = map.getSource(PROFILE_SOURCE) as GeoJSONSource;
+    const source = map.getSource(EXACT_PROFILE_SOURCE) as GeoJSONSource;
     const zoom = await source.getClusterExpansionZoom(clusterId);
     const coordinates = (feature.geometry as { coordinates: [number, number] }).coordinates;
     map.easeTo({ center: coordinates, zoom });
   });
 
-  map.on('click', 'radar-profile-points', (event: MapMouseEvent) => {
-    const feature = map.queryRenderedFeatures(event.point, { layers: ['radar-profile-points'] })[0];
-    const id = String(feature?.properties?.id || '');
-    const item = itemsRef.current.find(({ profile }) => profile.id === id);
-    if (!item) return;
-    const coordinates = (feature.geometry as { coordinates: [number, number] }).coordinates;
-    new maplibregl.Popup({ closeButton: true, maxWidth: '250px', offset: 14 })
-      .setLngLat(coordinates)
-      .setDOMContent(buildProfilePopup(item, t))
-      .addTo(map);
-  });
+  for (const layer of ['radar-profile-points', 'radar-approximate-points']) {
+    map.on('click', layer, (event: MapMouseEvent) => {
+      const feature = map.queryRenderedFeatures(event.point, { layers: [layer] })[0];
+      const id = String(feature?.properties?.id || '');
+      const item = itemsRef.current.find(({ profile }) => profile.id === id);
+      if (!item) return;
+      const coordinates = (feature.geometry as { coordinates: [number, number] }).coordinates;
+      new maplibregl.Popup({ closeButton: true, maxWidth: '250px', offset: 14 })
+        .setLngLat(coordinates)
+        .setDOMContent(buildProfilePopup(item, t))
+        .addTo(map);
+    });
+  }
 
-  for (const layer of ['radar-clusters', 'radar-profile-points']) {
+  for (const layer of ['radar-clusters', 'radar-profile-points', 'radar-approximate-points']) {
     map.on('mouseenter', layer, () => {
       map.getCanvas().style.cursor = 'pointer';
     });
@@ -361,7 +422,7 @@ function bindRadarInteractions(
 }
 
 function buildProfilePopup(item: RadarMapItem, t: RadarMapLibreProps['t']) {
-  const { profile, distanceKm, operatorStatus, radarLocation } = item;
+  const { profile, distanceKm, operatorStatus, isApproximateLocation } = item;
   const card = document.createElement('article');
   card.className = 'radar-map-popup';
   const cover = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
@@ -379,7 +440,7 @@ function buildProfilePopup(item: RadarMapItem, t: RadarMapLibreProps['t']) {
   appendPopupLine(body, operatorStatus.replaceAll('_', ' '));
   appendPopupLine(body, formatDistanceKm(distanceKm, t('radar.distanceUnavailable')));
   appendPopupLine(body, getPublicLocationLabel(profile, t));
-  if (radarLocation.approximate) appendPopupLine(body, t('radar.approximateLocation'), 'radar-popup-approximate');
+  if (isApproximateLocation) appendPopupLine(body, t('radar.approximateLocation'), 'radar-popup-approximate');
   const link = document.createElement('a');
   link.href = `/profile/${encodeURIComponent(profile.id)}`;
   link.textContent = t('radar.openProfile');

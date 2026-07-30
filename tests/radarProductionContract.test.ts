@@ -18,8 +18,8 @@ import {
   sliderPositionToRadarRadius,
   stepRadarRadius
 } from '../Front/src/lib/geo.js';
-import { clusterRadarPoints, getRadarPoint } from '../Front/src/lib/radarLayout.js';
-import { buildRadarCenterFeatureCollection, buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection, getRadarRadiusBounds } from '../Front/src/lib/radarMapData.js';
+import { APPROXIMATE_RADAR_LAYOUT_SPACING_METERS, clusterRadarPoints, getApproximateRadarDisplayLocation, getRadarPoint } from '../Front/src/lib/radarLayout.js';
+import { assignRadarDisplayCoordinates, buildRadarCenterFeatureCollection, buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection, getRadarRadiusBounds } from '../Front/src/lib/radarMapData.js';
 import { selectRadarProfiles } from '../Front/src/lib/homeRadar.js';
 
 test('frontend radar=1 reaches the exact backend radar branch and never accepts a 60-row non-radar response', async () => {
@@ -137,13 +137,15 @@ test('MapLibre GeoJSON preserves longitude/latitude order and radius changes upd
     operatorStatus: 'ONLINE_NOW',
     statusClass: 'online-now',
     favorite: false,
-    radarLocation: {
+    filterCoordinates: {
       lat: 52.52,
       lng: 13.405,
       label: 'Berlin',
       precision: 'exact' as const,
       approximate: false
-    }
+    },
+    displayCoordinates: { lat: 52.52, lng: 13.405 },
+    isApproximateLocation: false
   } as any;
   const collection = buildRadarProfileFeatureCollection([item]);
   assert.deepEqual(collection.features[0].geometry.coordinates, [13.405, 52.52]);
@@ -283,6 +285,122 @@ test('city_only layout is stable, country-aware and uses nominal 350 metre spaci
   assert.ok(new Set(positions.map((point) => `${point.latitude.toFixed(7)},${point.longitude.toFixed(7)}`)).size > 1);
 });
 
+test('63 approximate profiles receive deterministic unique 350 metre display-only positions', () => {
+  assert.equal(APPROXIMATE_RADAR_LAYOUT_SPACING_METERS, 350);
+  const center = { lat: 52.52, lng: 13.405 };
+  const directPositions = Array.from({ length: 63 }, (_, index) => getApproximateRadarDisplayLocation(center, index));
+  assert.equal(new Set(directPositions.map(({ lat, lng }) => `${lat.toFixed(8)},${lng.toFixed(8)}`)).size, 63);
+  assert.deepEqual(
+    directPositions,
+    Array.from({ length: 63 }, (_, index) => getApproximateRadarDisplayLocation(center, index))
+  );
+  directPositions.forEach((position, index) => {
+    const nearest = Math.min(...directPositions
+      .filter((_, candidateIndex) => candidateIndex !== index)
+      .map((candidate) => haversineMeters(
+        { latitude: position.lat, longitude: position.lng },
+        { latitude: candidate.lat, longitude: candidate.lng }
+      )));
+    assert.ok(nearest >= 300 && nearest <= 400, `point ${index} nearest neighbour measured ${nearest} m`);
+  });
+
+  const approximateItems = Array.from({ length: 63 }, (_, index) => ({
+    profile: {
+      id: `approx-${String(index).padStart(2, '0')}`,
+      display_name: `Approx ${index}`,
+      city: 'Berlin',
+      work_city: 'Berlin',
+      location_mode: 'city_only',
+      location_visibility: 'city_only',
+      latitude: 48.123456,
+      longitude: 11.123456
+    },
+    distanceKm: 0,
+    operatorStatus: 'OFFLINE',
+    statusClass: 'offline',
+    favorite: false,
+    filterCoordinates: {
+      lat: center.lat,
+      lng: center.lng,
+      label: 'Berlin',
+      precision: 'city_fallback',
+      approximate: true
+    },
+    displayCoordinates: { lat: center.lat, lng: center.lng },
+    isApproximateLocation: true
+  })) as any[];
+  const firstLayout = assignRadarDisplayCoordinates(approximateItems);
+  const secondLayout = assignRadarDisplayCoordinates([...approximateItems].reverse());
+  const firstById = new Map(firstLayout.map((item) => [item.profile.id, item.displayCoordinates]));
+  const secondById = new Map(secondLayout.map((item) => [item.profile.id, item.displayCoordinates]));
+  assert.deepEqual([...firstById], [...secondById].sort(([left], [right]) => String(left).localeCompare(String(right))));
+  assert.equal(new Set(firstLayout.map(({ displayCoordinates }) => `${displayCoordinates.lat},${displayCoordinates.lng}`)).size, 63);
+  assert.equal(approximateItems[0].profile.latitude, 48.123456);
+  assert.equal(approximateItems[0].profile.longitude, 11.123456);
+  assert.deepEqual(approximateItems[0].filterCoordinates, {
+    lat: 52.52,
+    lng: 13.405,
+    label: 'Berlin',
+    precision: 'city_fallback',
+    approximate: true
+  });
+
+  const exact = {
+    ...approximateItems[0],
+    profile: { ...approximateItems[0].profile, id: 'exact', location_mode: 'exact', location_visibility: 'exact' },
+    filterCoordinates: { lat: 52.501, lng: 13.411, label: 'Exact', precision: 'exact', approximate: false },
+    displayCoordinates: { lat: 52.501, lng: 13.411 },
+    isApproximateLocation: false
+  };
+  assert.deepEqual(assignRadarDisplayCoordinates([exact])[0].displayCoordinates, { lat: 52.501, lng: 13.411 });
+  const radiusFilteredLayout = assignRadarDisplayCoordinates(
+    [approximateItems[62], approximateItems[7]],
+    approximateItems
+  );
+  assert.deepEqual(
+    radiusFilteredLayout.map(({ profile, displayCoordinates }) => [profile.id, displayCoordinates]),
+    [approximateItems[62], approximateItems[7]].map(({ profile }) => [profile.id, firstById.get(profile.id)])
+  );
+  const feature = buildRadarProfileFeatureCollection([firstLayout[7]]);
+  assert.deepEqual(feature.features[0].geometry.coordinates, [
+    firstLayout[7].displayCoordinates.lng,
+    firstLayout[7].displayCoordinates.lat
+  ]);
+  assert.equal(feature.features[0].properties.id, firstLayout[7].profile.id);
+});
+
+test('approximate layout uses each profile city while city_only filtering stays privacy-safe', async () => {
+  const itemForCity = (id: string, city: string) => ({
+    profile: { id, display_name: id, city, work_city: city },
+    distanceKm: 0,
+    operatorStatus: 'OFFLINE',
+    statusClass: 'offline',
+    favorite: false,
+    filterCoordinates: { lat: 1, lng: 1, label: city, precision: 'city_fallback', approximate: true },
+    displayCoordinates: { lat: 1, lng: 1 },
+    isApproximateLocation: true
+  }) as any;
+  const layout = assignRadarDisplayCoordinates([
+    itemForCity('berlin-profile', 'Berlin'),
+    itemForCity('hamburg-profile', 'Hamburg'),
+    itemForCity('koeln-profile', 'Koeln'),
+    itemForCity('szczecin-profile', 'Szczecin')
+  ]);
+  assert.deepEqual(layout.map(({ displayCoordinates }) => displayCoordinates), [
+    { lat: 52.52, lng: 13.405 },
+    { lat: 53.5511, lng: 9.9937 },
+    { lat: 50.9375, lng: 6.9603 },
+    { lat: 53.4285, lng: 14.5528 }
+  ]);
+
+  const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
+  assert.match(mapSource, /APPROXIMATE_PROFILE_SOURCE/);
+  assert.match(mapSource, /cluster: false/);
+  assert.match(mapSource, /radar-approximate-points/);
+  assert.match(mapSource, /items\.filter\(\(item\) => item\.isApproximateLocation\)/);
+  assert.match(mapSource, /const id = String\(feature\?\.properties\?\.id/);
+});
+
 test('public radar contract hides city_only raw coordinates, contacts and galleries', async () => {
   const safe = resolveEffectivePublicLocation({
     id: 'city-only',
@@ -310,7 +428,8 @@ test('Radar uses MapLibre/OpenFreeMap without Google, Mapbox or an API key', asy
   const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
   const panelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
   assert.match(mapSource, /maplibre-gl/);
-  assert.match(mapSource, /https:\/\/tiles\.openfreemap\.org\/styles\/liberty/);
+  assert.match(mapSource, /https:\/\/tiles\.openfreemap\.org\/styles\/dark/);
+  assert.match(mapSource, /Escort Radar dark fallback/);
   assert.match(mapSource, /OpenStreetMap/);
   assert.doesNotMatch(`${mapSource}\n${panelSource}`, /google\.maps|maps\.googleapis|mapbox|apiKey/i);
 });
