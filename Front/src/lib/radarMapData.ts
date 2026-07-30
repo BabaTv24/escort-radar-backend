@@ -1,7 +1,9 @@
 import type { Profile } from '../types';
-import type { GeoPoint, ProfileRadarLocation } from './geo';
+import type { ProfileRadarLocation } from './geo';
 
 export const RADAR_CITY_ONLY_SPACING_METERS = 350;
+
+type RadarCenter = { lat: number; lng: number };
 
 export type RadarMapItem = {
   profile: Profile;
@@ -42,7 +44,7 @@ export function buildRadarProfileFeatureCollection(items: RadarMapItem[]) {
   };
 }
 
-export function buildRadarCenterFeatureCollection(center: GeoPoint) {
+export function buildRadarCenterFeatureCollection(center: RadarCenter) {
   return {
     type: 'FeatureCollection' as const,
     features: [{
@@ -56,7 +58,7 @@ export function buildRadarCenterFeatureCollection(center: GeoPoint) {
   };
 }
 
-export function buildRadarRadiusFeatureCollection(center: GeoPoint, radiusMeters: number, steps = 96) {
+export function buildRadarRadiusFeatureCollection(center: RadarCenter, radiusMeters: number, steps = 96) {
   const earthRadiusKilometers = 6_371;
   const radiusKilometers = Number.isFinite(radiusMeters) && radiusMeters > 0 ? radiusMeters / 1_000 : 0;
   const angularDistance = radiusKilometers / earthRadiusKilometers;
@@ -90,7 +92,7 @@ export function buildRadarRadiusFeatureCollection(center: GeoPoint, radiusMeters
   };
 }
 
-export function getRadarRadiusBounds(center: GeoPoint, radiusMeters: number) {
+export function getRadarRadiusBounds(center: RadarCenter, radiusMeters: number) {
   const coordinates = buildRadarRadiusFeatureCollection(center, radiusMeters).features[0].geometry.coordinates[0];
   const longitudes = coordinates.map(([longitude]) => longitude);
   const latitudes = coordinates.map(([, latitude]) => latitude);

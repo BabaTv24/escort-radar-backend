@@ -22,6 +22,13 @@ export const radarRadiusStorageKey = 'escortRadar.radarRadiusMeters';
 export const MIN_RADAR_RADIUS_METERS = 10;
 export const MAX_RADAR_RADIUS_METERS = 150_000;
 export const DEFAULT_RADAR_RADIUS_METERS = 25_000;
+export const RADAR_RADIUS_STEPS_METERS = [
+  10, 20, 30, 50,
+  100, 200, 300, 500,
+  1_000, 2_000, 3_000, 5_000,
+  10_000, 15_000, 20_000, 25_000, 30_000,
+  50_000, 75_000, 100_000, 125_000, 150_000
+] as const;
 
 const cityCenters: Record<string, { lat: number; lng: number }> = {
   berlin: { lat: 52.52, lng: 13.405 },
@@ -375,18 +382,62 @@ export function clearSavedSearchLocation() {
   window.localStorage.removeItem(clientSearchLocationStorageKey);
 }
 
-export function readSavedRadarRadius() {
+export function readSavedRadarRadius(): number {
   if (typeof window === 'undefined') return DEFAULT_RADAR_RADIUS_METERS;
   const radius = Number(window.localStorage.getItem(radarRadiusStorageKey));
   return Number.isFinite(radius) && radius >= MIN_RADAR_RADIUS_METERS && radius <= MAX_RADAR_RADIUS_METERS
-    ? radius
+    ? sliderPositionToRadarRadius(radarRadiusToSliderPosition(radius))
     : DEFAULT_RADAR_RADIUS_METERS;
 }
 
 export function saveRadarRadius(radius: number) {
   if (typeof window === 'undefined' || !Number.isFinite(radius)) return;
-  const safeRadius = Math.min(Math.max(radius, MIN_RADAR_RADIUS_METERS), MAX_RADAR_RADIUS_METERS);
+  const safeRadius = clampRadarRadiusMeters(radius);
   window.localStorage.setItem(radarRadiusStorageKey, String(safeRadius));
+}
+
+export function clampRadarRadiusMeters(radius: number) {
+  if (!Number.isFinite(radius)) return MIN_RADAR_RADIUS_METERS;
+  return Math.min(Math.max(radius, MIN_RADAR_RADIUS_METERS), MAX_RADAR_RADIUS_METERS);
+}
+
+export function radarRadiusToSliderPosition(radius: number) {
+  const safeRadius = clampRadarRadiusMeters(radius);
+  let closestIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  RADAR_RADIUS_STEPS_METERS.forEach((stepRadius, index) => {
+    const distance = Math.abs(stepRadius - safeRadius);
+    if (distance < closestDistance) {
+      closestIndex = index;
+      closestDistance = distance;
+    }
+  });
+  return closestIndex;
+}
+
+export function sliderPositionToRadarRadius(position: number): number {
+  const index = Math.min(
+    Math.max(Math.round(Number.isFinite(position) ? position : 0), 0),
+    RADAR_RADIUS_STEPS_METERS.length - 1
+  );
+  return RADAR_RADIUS_STEPS_METERS[index];
+}
+
+export function stepRadarRadius(radius: number, direction: 'decrease' | 'increase'): number {
+  const safeRadius = clampRadarRadiusMeters(radius);
+  if (direction === 'increase') {
+    return RADAR_RADIUS_STEPS_METERS.find((stepRadius) => stepRadius > safeRadius)
+      ?? MAX_RADAR_RADIUS_METERS;
+  }
+  for (let index = RADAR_RADIUS_STEPS_METERS.length - 1; index >= 0; index -= 1) {
+    if (RADAR_RADIUS_STEPS_METERS[index] < safeRadius) return RADAR_RADIUS_STEPS_METERS[index];
+  }
+  return MIN_RADAR_RADIUS_METERS;
+}
+
+export function getRadarWheelDirection(deltaY: number) {
+  if (!Number.isFinite(deltaY) || deltaY === 0) return null;
+  return deltaY < 0 ? 'decrease' as const : 'increase' as const;
 }
 
 export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocation | null {

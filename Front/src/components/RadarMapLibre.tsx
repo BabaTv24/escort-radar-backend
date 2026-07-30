@@ -4,7 +4,6 @@ import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent, StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { LocateFixed } from 'lucide-react';
-import type { GeoPoint } from '../lib/geo';
 import { formatDistanceKm, isValidLatLng } from '../lib/geo';
 import { getPublicLocationLabel } from '../lib/locationLabels';
 import {
@@ -23,17 +22,20 @@ const CENTER_SOURCE = 'radar-center';
 maplibregl.setWorkerUrl(mapLibreWorkerUrl);
 
 type RadarMapLibreProps = {
-  center: GeoPoint;
+  searchCenter: readonly [longitude: number, latitude: number];
   radius: number;
   items: RadarMapItem[];
   empty: boolean;
   t: (key: string, vars?: Record<string, string | number>) => string;
 };
 
-export function RadarMapLibre({ center, radius, items, empty, t }: RadarMapLibreProps) {
+export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMapLibreProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const itemsRef = useRef(items);
+  const longitude = searchCenter[0];
+  const latitude = searchCenter[1];
+  const center = { lng: longitude, lat: latitude };
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -81,6 +83,7 @@ export function RadarMapLibre({ center, radius, items, empty, t }: RadarMapLibre
           zoom: 11,
           minZoom: 2,
           maxZoom: 22,
+          scrollZoom: false,
           attributionControl: false
         });
         mapRef.current = map;
@@ -161,10 +164,14 @@ export function RadarMapLibre({ center, radius, items, empty, t }: RadarMapLibre
     setSourceData(map, CENTER_SOURCE, buildRadarCenterFeatureCollection(center));
     setSourceData(map, RADIUS_SOURCE, buildRadarRadiusFeatureCollection(center, radius));
     recenter();
-  }, [center.lat, center.lng, radius, mapReady]);
+  }, [latitude, longitude, radius, mapReady]);
 
   return (
-    <div className="radar-maplibre-shell">
+    <div
+      className="radar-maplibre-shell"
+      data-search-center={`${longitude},${latitude}`}
+      data-radius-meters={radius}
+    >
       <div ref={containerRef} className="radar-maplibre" aria-label={t('radar.title')} />
       <button className="radar-recenter" type="button" onClick={() => recenter()} aria-label={t('radar.recenter')}>
         <LocateFixed size={17} />
@@ -215,7 +222,7 @@ function getRadarRingPadding(container: HTMLElement) {
   };
 }
 
-function addRadarSourcesAndLayers(map: MapLibreMap, center: GeoPoint, radius: number, items: RadarMapItem[]) {
+function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: number }, radius: number, items: RadarMapItem[]) {
   map.addSource(RADIUS_SOURCE, { type: 'geojson', data: buildRadarRadiusFeatureCollection(center, radius) });
   map.addLayer({
     id: 'radar-radius-fill',

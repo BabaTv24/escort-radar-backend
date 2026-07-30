@@ -76,6 +76,7 @@ export function CityPage() {
   const [clientActivationState, setClientActivationState] = useState<'client_free' | 'client_activated'>('client_free');
   const marketplaceCarouselRef = useRef<HTMLDivElement | null>(null);
   const marketplacePauseTimeoutRef = useRef<number | null>(null);
+  const searchCenterRevisionRef = useRef(0);
   const location = useRouterLocation();
   const { t, option } = useI18n();
 
@@ -89,11 +90,16 @@ export function CityPage() {
     if (normalizedCategory && categoryOptions.includes(normalizedCategory)) next.category = normalizedCategory;
     setDraftFilters(next);
     setAppliedFilters(next);
+  }, [urlCitySlug, urlCategory, countryCode]);
+
+  useEffect(() => {
+    searchCenterRevisionRef.current += 1;
     setSearcherLocation(readSavedSearchLocation() || { ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel });
-  }, [urlCitySlug, cityLabel, urlCategory, countryCode]);
+  }, [urlCitySlug, cityLabel, countryCode]);
 
   useEffect(() => {
     let cancelled = false;
+    const searchCenterRevision = searchCenterRevisionRef.current;
     supabase.auth.getSession().then(async ({ data }) => {
       const accessToken = data.session?.access_token;
       const appMetadata = data.session?.user.app_metadata || {};
@@ -107,7 +113,7 @@ export function CityPage() {
           setClientActivationState('client_free');
         }
         const saved = readSavedSearchLocation();
-        if (!cancelled && saved) {
+        if (!cancelled && saved && searchCenterRevisionRef.current === searchCenterRevision) {
           setSearcherLocation(saved);
           setFallbackNotice(false);
         }
@@ -135,7 +141,7 @@ export function CityPage() {
         const { preferences } = await api.clientPreferences(accessToken);
         const lat = Number(preferences.client_search_lat);
         const lng = Number(preferences.client_search_lng);
-        if (!cancelled && Number.isFinite(lat) && Number.isFinite(lng)) {
+        if (!cancelled && searchCenterRevisionRef.current === searchCenterRevision && Number.isFinite(lat) && Number.isFinite(lng)) {
           setSearcherLocation({
             lat,
             lng,
@@ -146,7 +152,7 @@ export function CityPage() {
         }
       } catch {
         const saved = readSavedSearchLocation();
-        if (!cancelled && saved) {
+        if (!cancelled && saved && searchCenterRevisionRef.current === searchCenterRevision) {
           setSearcherLocation(saved);
           setFallbackNotice(false);
         }
@@ -355,12 +361,14 @@ export function CityPage() {
   }
 
   async function useLocation() {
+    searchCenterRevisionRef.current += 1;
     const location = await getSearcherLocationWithFallback(urlCitySlug);
     setSearcherLocation(location);
     setFallbackNotice(location.source === 'city');
   }
 
   function setManualLocation(location: GeoPoint) {
+    searchCenterRevisionRef.current += 1;
     setSearcherLocation(location);
     setFallbackNotice(false);
     saveSearchLocationToStorage(location);
@@ -380,6 +388,7 @@ export function CityPage() {
   }
 
   function clearManualLocation() {
+    searchCenterRevisionRef.current += 1;
     clearSavedSearchLocation();
     setSearcherLocation({ ...getCityCenter(urlCitySlug), source: 'city', label: cityLabel });
     setFallbackNotice(false);

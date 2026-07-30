@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { List, Map } from 'lucide-react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import type { GeoPoint } from '../lib/geo';
-import { MAX_RADAR_RADIUS_METERS, MIN_RADAR_RADIUS_METERS, clearSavedSearchLocation, formatRadiusMeters, isValidLatLng, resolveManualSearcherLocation, resolveProfileRadarLocation, saveSearchLocationToStorage } from '../lib/geo';
+import { RADAR_RADIUS_STEPS_METERS, clearSavedSearchLocation, formatRadiusMeters, getRadarWheelDirection, isValidLatLng, radarRadiusToSliderPosition, resolveManualSearcherLocation, resolveProfileRadarLocation, saveSearchLocationToStorage, sliderPositionToRadarRadius, stepRadarRadius } from '../lib/geo';
 import { getOperatorStatus, matchesRadarStatus, selectRadarProfiles } from '../lib/homeRadar';
 import './RadarPanel.css';
 
@@ -55,8 +55,17 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
   const [manualMessage, setManualMessage] = useState('');
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
+  const radiusControlRef = useRef<HTMLLabelElement>(null);
+  const radarSurfaceRef = useRef<HTMLDivElement>(null);
+  const radiusRef = useRef(radius);
+  const onRadiusChangeRef = useRef(onRadiusChange);
+  const lastRadiusWheelAtRef = useRef(0);
   const effectiveLocation = searcherLocation;
   const hasRadarLocation = Boolean(effectiveLocation && isValidLatLng(effectiveLocation.lat, effectiveLocation.lng));
+  const searchCenter = useMemo<readonly [longitude: number, latitude: number] | null>(
+    () => hasRadarLocation && effectiveLocation ? [effectiveLocation.lng, effectiveLocation.lat] : null,
+    [effectiveLocation?.lat, effectiveLocation?.lng, hasRadarLocation]
+  );
   const showManualForm = !hasRadarLocation || isEditingLocation;
   const visibleRadarStatuses = showFavoritesFilter ? radarStatuses : radarStatuses.filter(([value]) => value !== 'favorites');
   const radarLegendStatuses = showFavoritesFilter ? radarStatuses : [allStatus, ...visibleRadarStatuses];
@@ -73,6 +82,31 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
     .filter(({ profile }) => status === 'favorites' ? favoriteProfileIds.has(profile.id) : matchesRadarStatus(profile, status));
   const profilesWithoutLocation = profilesWithoutLocationCount ?? profiles.filter((profile) => !resolveProfileRadarLocation(profile)).length;
   const locatedProfiles = profiles.length - profilesWithoutLocation;
+  radiusRef.current = radius;
+  onRadiusChangeRef.current = onRadiusChange;
+
+  useEffect(() => {
+    const handleRadiusWheel = (event: WheelEvent) => {
+      const direction = getRadarWheelDirection(event.deltaY);
+      if (!direction) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const now = performance.now();
+      if (now - lastRadiusWheelAtRef.current < 70) return;
+      lastRadiusWheelAtRef.current = now;
+      const nextRadius = stepRadarRadius(radiusRef.current, direction);
+      if (nextRadius === radiusRef.current) return;
+      radiusRef.current = nextRadius;
+      onRadiusChangeRef.current(nextRadius);
+    };
+
+    const targets: HTMLElement[] = [];
+    if (radiusControlRef.current) targets.push(radiusControlRef.current);
+    if (radarSurfaceRef.current) targets.push(radarSurfaceRef.current);
+    targets.forEach((target) => target.addEventListener('wheel', handleRadiusWheel, { passive: false }));
+    return () => targets.forEach((target) => target.removeEventListener('wheel', handleRadiusWheel));
+  }, []);
 
   if (import.meta.env.DEV) {
     console.debug('[RadarLocationResolve]', profiles.map((profile) => ({
@@ -151,19 +185,20 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
           {fallbackNotice && !hasRadarLocation && <p className="safety-line">{t('radar.fallbackNotice')}</p>}
         </div>
         <div className="radar-control-group radar-radius-control">
-          <label className={`radar-radius-slider ${compact ? 'live-radar-range' : ''}`}>
+          <label ref={radiusControlRef} className={`radar-radius-slider ${compact ? 'live-radar-range' : ''}`}>
             <span className="radar-radius-slider-head">
               <span>{t('radar.radius')}</span>
               <strong>{formatRadiusMeters(radius)}</strong>
             </span>
             <input
               aria-label={t('radar.radius')}
+              aria-valuetext={formatRadiusMeters(radius)}
               type="range"
-              min={MIN_RADAR_RADIUS_METERS}
-              max={MAX_RADAR_RADIUS_METERS}
-              step={10}
-              value={radius}
-              onChange={(event) => onRadiusChange(Number(event.target.value))}
+              min={0}
+              max={RADAR_RADIUS_STEPS_METERS.length - 1}
+              step={1}
+              value={radarRadiusToSliderPosition(radius)}
+              onChange={(event) => onRadiusChange(sliderPositionToRadarRadius(Number(event.target.value)))}
             />
             <span className="radar-radius-scale"><small>10 m</small><small>150 km</small></span>
           </label>
@@ -217,12 +252,12 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
         </div>
         {compact && <Link to={radarHref || `/city/${city}`} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>{t('home.openRadar')}</span></Link>}
       </RadarSearchPanel>
-      <RadarMap>
+      <RadarMap surfaceRef={radarSurfaceRef}>
         <RadarViewSwitch />
-        {hasRadarLocation && effectiveLocation && (
+        {hasRadarLocation && effectiveLocation && searchCenter && (
           <Suspense fallback={<div className="radar-map-loading">{t('states.loading')}</div>}>
             <RadarMapLibre
-              center={effectiveLocation}
+              searchCenter={searchCenter}
               radius={radius}
               items={radarProfiles}
               empty={radarProfiles.length === 0}
@@ -259,8 +294,8 @@ function RadarSearchPanel({ children }: { children: React.ReactNode }) {
   return <div className="radar-copy radar-control-panel radar-search-panel">{children}</div>;
 }
 
-function RadarMap({ children }: { children: React.ReactNode }) {
-  return <div className="radar-map-surface">{children}</div>;
+function RadarMap({ children, surfaceRef }: { children: React.ReactNode; surfaceRef: React.RefObject<HTMLDivElement> }) {
+  return <div ref={surfaceRef} className="radar-map-surface">{children}</div>;
 }
 
 function RadarViewSwitch() {

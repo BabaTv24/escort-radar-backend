@@ -4,9 +4,23 @@ import { readFile } from 'node:fs/promises';
 import { isRadarRequest } from '../Back/src/radarPool.js';
 import { buildCityOnlyLayoutIndexes, CITY_ONLY_LAYOUT_SPACING_METERS, disperseCityOnlyLocation, resolveEffectivePublicLocation } from '../Back/src/publicLocation.js';
 import { clearPublicProfilesRequestCache, getPublicProfiles } from '../Front/src/lib/publicProfiles.js';
-import { MAX_RADAR_RADIUS_METERS, radarRadiusStorageKey, readSavedRadarRadius, saveRadarRadius } from '../Front/src/lib/geo.js';
+import {
+  MAX_RADAR_RADIUS_METERS,
+  MIN_RADAR_RADIUS_METERS,
+  RADAR_RADIUS_STEPS_METERS,
+  formatRadiusMeters,
+  getRadarWheelDirection,
+  radarRadiusStorageKey,
+  radarRadiusToSliderPosition,
+  readSavedRadarRadius,
+  resolveManualSearcherLocation,
+  saveRadarRadius,
+  sliderPositionToRadarRadius,
+  stepRadarRadius
+} from '../Front/src/lib/geo.js';
 import { clusterRadarPoints, getRadarPoint } from '../Front/src/lib/radarLayout.js';
-import { buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection, getRadarRadiusBounds } from '../Front/src/lib/radarMapData.js';
+import { buildRadarCenterFeatureCollection, buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection, getRadarRadiusBounds } from '../Front/src/lib/radarMapData.js';
+import { selectRadarProfiles } from '../Front/src/lib/homeRadar.js';
 
 test('frontend radar=1 reaches the exact backend radar branch and never accepts a 60-row non-radar response', async () => {
   assert.equal(isRadarRequest('1'), true);
@@ -161,6 +175,88 @@ test('MapLibre circle and camera bounds preserve the exact selected geographic r
   const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
   assert.match(mapSource, /maxZoom: 22/);
   assert.doesNotMatch(mapSource, /maxZoom: 15/);
+});
+
+test('wheel and slider share one bounded, controlled radius scale', async () => {
+  assert.equal(getRadarWheelDirection(-120), 'decrease');
+  assert.equal(getRadarWheelDirection(-.25), 'decrease');
+  assert.equal(getRadarWheelDirection(120), 'increase');
+  assert.equal(getRadarWheelDirection(.25), 'increase');
+  assert.equal(getRadarWheelDirection(0), null);
+
+  assert.equal(stepRadarRadius(100, 'decrease'), 50);
+  assert.equal(stepRadarRadius(100, 'increase'), 200);
+  assert.equal(stepRadarRadius(MIN_RADAR_RADIUS_METERS, 'decrease'), MIN_RADAR_RADIUS_METERS);
+  assert.equal(stepRadarRadius(MAX_RADAR_RADIUS_METERS, 'increase'), MAX_RADAR_RADIUS_METERS);
+
+  let radius = MIN_RADAR_RADIUS_METERS;
+  for (let index = 0; index < 1_000; index += 1) radius = stepRadarRadius(radius, 'increase');
+  assert.equal(radius, MAX_RADAR_RADIUS_METERS);
+  for (let index = 0; index < 1_000; index += 1) radius = stepRadarRadius(radius, 'decrease');
+  assert.equal(radius, MIN_RADAR_RADIUS_METERS);
+
+  RADAR_RADIUS_STEPS_METERS.forEach((stepRadius, position) => {
+    assert.equal(sliderPositionToRadarRadius(position), stepRadius);
+    assert.equal(radarRadiusToSliderPosition(stepRadius), position);
+  });
+  assert.equal(sliderPositionToRadarRadius(-999), MIN_RADAR_RADIUS_METERS);
+  assert.equal(sliderPositionToRadarRadius(999), MAX_RADAR_RADIUS_METERS);
+  assert.equal(formatRadiusMeters(10), '10 m');
+  assert.equal(formatRadiusMeters(500), '500 m');
+  assert.equal(formatRadiusMeters(1_000), '1 km');
+  assert.equal(formatRadiusMeters(150_000), '150 km');
+
+  const searchCenter = { lat: 52.42, lng: 13.497, source: 'manual_saved' as const };
+  const nearbyProfile = {
+    id: 'near-rudow',
+    display_name: 'Near Rudow',
+    city: 'Berlin',
+    status: 'active',
+    is_published: true,
+    moderation_status: 'approved',
+    shadowbanned: false,
+    latitude: 52.4205,
+    longitude: 13.497,
+    location_mode: 'exact',
+    location_visibility: 'exact',
+    operator_status: 'OFFLINE',
+    profile_images: []
+  } as any;
+  assert.equal(selectRadarProfiles([nearbyProfile], searchCenter, 50, 'all').length, 0);
+  assert.equal(selectRadarProfiles([nearbyProfile], searchCenter, 100, 'all').length, 1);
+
+  const panelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
+  assert.match(panelSource, /stepRadarRadius\(radiusRef\.current, direction\)/);
+  assert.match(panelSource, /onRadiusChangeRef\.current\(nextRadius\)/);
+  assert.match(panelSource, /sliderPositionToRadarRadius\(Number\(event\.target\.value\)\)/);
+  assert.doesNotMatch(panelSource, /useState\(radius\)/);
+});
+
+test('MapLibre wheel zoom is disabled and the explicit search center survives radius and camera changes', async () => {
+  const rudow = resolveManualSearcherLocation('12355 Berlin Rudow');
+  assert.ok(rudow);
+  const searchCenter = [rudow.lng, rudow.lat];
+  assert.deepEqual(searchCenter, [13.497, 52.42]);
+
+  for (const radius of [10, 100, 1_000, 50_000, 150_000]) {
+    const centerFeature = buildRadarCenterFeatureCollection(rudow);
+    const radiusFeature = buildRadarRadiusFeatureCollection(rudow, radius);
+    assert.deepEqual(centerFeature.features[0].geometry.coordinates, searchCenter);
+    assert.equal(radiusFeature.features[0].properties.radiusMeters, radius);
+  }
+
+  const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
+  assert.match(mapSource, /scrollZoom: false/);
+  assert.match(mapSource, /searchCenter: readonly \[longitude: number, latitude: number\]/);
+  assert.doesNotMatch(mapSource, /map\.on\(['"]move/);
+  assert.doesNotMatch(mapSource, /map\.on\(['"]dragend/);
+
+  const citySource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
+  assert.match(citySource, /searchCenterRevisionRef/);
+  assert.match(citySource, /selectRadarProfiles\(profiles, searcherLocation, draftFilters\.radius/);
+  const homeSource = await readFile(new URL('../Front/src/pages/HomePage.tsx', import.meta.url), 'utf8');
+  assert.match(homeSource, /searcherLocation=\{searcherLocation\}/);
+  assert.match(homeSource, /onRadiusChange=\{\(value\) =>/);
 });
 
 test('city_only layout is stable, country-aware and uses nominal 350 metre spacing', () => {
