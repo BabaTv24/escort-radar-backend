@@ -41,7 +41,7 @@ export async function getPublicProfiles(params: URLSearchParams | string = '', o
     : params.toString() ? `?${params.toString()}` : '';
   const url = `${API_URL}${PUBLIC_PROFILES_PATH}${query}`;
   if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
-  const cacheTtlMs = options.cacheTtlMs ?? (new URL(url).searchParams.get('radar') === '1' ? 30_000 : 0);
+  const cacheTtlMs = options.cacheTtlMs ?? (toRequestUrl(url).searchParams.get('radar') === '1' ? 30_000 : 0);
   const cached = publicProfilesCache.get(url);
   if (cached && cached.expiresAt > Date.now()) {
     options.onMetrics?.(publicProfilesMetrics.get(url) || null);
@@ -103,7 +103,7 @@ async function fetchPublicProfiles(url: string, signal: AbortSignal): Promise<Pr
   }
 
   const payload = await response.json() as { profiles?: unknown[]; radar_meta?: PublicProfilesMetrics };
-  const radarRequest = new URL(url).searchParams.get('radar') === '1';
+  const radarRequest = toRequestUrl(url).searchParams.get('radar') === '1';
   if (radarRequest && !payload.radar_meta) {
     throw new Error('Radar API response is missing radar_meta; the backend did not execute global radar mode.');
   }
@@ -123,6 +123,11 @@ async function fetchPublicProfiles(url: string, signal: AbortSignal): Promise<Pr
   }
 
   return profiles;
+}
+
+function toRequestUrl(url: string) {
+  const baseUrl = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+  return new URL(url, baseUrl);
 }
 
 function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {

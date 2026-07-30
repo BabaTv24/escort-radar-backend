@@ -57,8 +57,9 @@ export function buildRadarCenterFeatureCollection(center: GeoPoint) {
 }
 
 export function buildRadarRadiusFeatureCollection(center: GeoPoint, radiusMeters: number, steps = 96) {
-  const earthRadiusMeters = 6_371_000;
-  const angularDistance = Math.max(radiusMeters, 1) / earthRadiusMeters;
+  const earthRadiusKilometers = 6_371;
+  const radiusKilometers = Number.isFinite(radiusMeters) && radiusMeters > 0 ? radiusMeters / 1_000 : 0;
+  const angularDistance = radiusKilometers / earthRadiusKilometers;
   const centerLat = center.lat * Math.PI / 180;
   const centerLng = center.lng * Math.PI / 180;
   const coordinates: number[][] = [];
@@ -90,11 +91,11 @@ export function buildRadarRadiusFeatureCollection(center: GeoPoint, radiusMeters
 }
 
 export function getRadarRadiusBounds(center: GeoPoint, radiusMeters: number) {
-  const latitudeDelta = radiusMeters / 111_320;
-  const longitudeScale = Math.max(Math.cos(center.lat * Math.PI / 180), 0.01);
-  const longitudeDelta = radiusMeters / (111_320 * longitudeScale);
+  const coordinates = buildRadarRadiusFeatureCollection(center, radiusMeters).features[0].geometry.coordinates[0];
+  const longitudes = coordinates.map(([longitude]) => longitude);
+  const latitudes = coordinates.map(([, latitude]) => latitude);
   return [
-    [center.lng - longitudeDelta, center.lat - latitudeDelta],
-    [center.lng + longitudeDelta, center.lat + latitudeDelta]
+    [Math.min(...longitudes), Math.min(...latitudes)],
+    [Math.max(...longitudes), Math.max(...latitudes)]
   ] as [[number, number], [number, number]];
 }

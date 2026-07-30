@@ -46,17 +46,10 @@ export function RadarMapLibre({ center, radius, items, empty, t }: RadarMapLibre
     const width = container.clientWidth;
     const height = container.clientHeight;
     if (width < 100 || height < 100) return;
-    const radarDiameter = Math.min(width, height) * .78;
-    const horizontalPadding = Math.max(44, (width - radarDiameter) / 2);
-    const verticalPadding = Math.max(44, (height - radarDiameter) / 2);
+    const padding = getRadarRingPadding(container);
     map.fitBounds(getRadarRadiusBounds(center, radius), {
-      padding: {
-        top: verticalPadding,
-        right: horizontalPadding,
-        bottom: verticalPadding,
-        left: horizontalPadding
-      },
-      maxZoom: 15,
+      padding,
+      maxZoom: 22,
       duration: animate ? 500 : 0
     });
   }
@@ -87,7 +80,7 @@ export function RadarMapLibre({ center, radius, items, empty, t }: RadarMapLibre
           center: [center.lng, center.lat],
           zoom: 11,
           minZoom: 2,
-          maxZoom: 18,
+          maxZoom: 22,
           attributionControl: false
         });
         mapRef.current = map;
@@ -193,6 +186,33 @@ export function RadarMapLibre({ center, radius, items, empty, t }: RadarMapLibre
       )}
     </div>
   );
+}
+
+function getRadarRingPadding(container: HTMLElement) {
+  const mapRect = container.getBoundingClientRect();
+  const radar = container.closest('.radar-map-surface')?.querySelector<HTMLElement>('.radar-visual-canvas');
+  const radarRect = radar?.getBoundingClientRect();
+  if (!radarRect || radarRect.width <= 0 || radarRect.height <= 0) {
+    const diameter = Math.min(mapRect.width, mapRect.height) * .88;
+    return {
+      top: (mapRect.height - diameter) / 2,
+      right: (mapRect.width - diameter) / 2,
+      bottom: (mapRect.height - diameter) / 2,
+      left: (mapRect.width - diameter) / 2
+    };
+  }
+
+  // The selected outer ring is 88% of the stable visual radar diameter.
+  const ringDiameter = Math.min(radarRect.width, radarRect.height) * .88;
+  const ringRadius = ringDiameter / 2;
+  const centerX = radarRect.left - mapRect.left + radarRect.width / 2;
+  const centerY = radarRect.top - mapRect.top + radarRect.height / 2;
+  return {
+    top: Math.max(0, centerY - ringRadius),
+    right: Math.max(0, mapRect.width - centerX - ringRadius),
+    bottom: Math.max(0, mapRect.height - centerY - ringRadius),
+    left: Math.max(0, centerX - ringRadius)
+  };
 }
 
 function addRadarSourcesAndLayers(map: MapLibreMap, center: GeoPoint, radius: number, items: RadarMapItem[]) {

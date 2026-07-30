@@ -121,6 +121,42 @@
   pointer-events: none;
 }
 
+.live-radar-section .radar-map-surface {
+  height: clamp(360px, 42vw, 620px);
+}
+
+.live-radar-section .radar-panel.compact .radar-visual-canvas,
+.radar-city-page .radar-main-stage .radar-visual-canvas {
+  pointer-events: none;
+  overflow: hidden !important;
+  border-color: rgba(244, 215, 127, .46) !important;
+  background:
+    repeating-radial-gradient(circle, transparent 0 12.2%, rgba(244, 215, 127, .25) 12.4% 12.65%, transparent 12.85% 24.7%),
+    repeating-conic-gradient(from 0deg, rgba(244, 215, 127, .22) 0deg 1deg, transparent 1deg 30deg) !important;
+  box-shadow: none !important;
+}
+
+.live-radar-section .radar-panel.compact .radar-visual-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: auto !important;
+  height: calc(100% - 2.5rem);
+  max-width: calc(100% - 2.5rem);
+  margin: 0;
+  transform: translate(-50%, -50%);
+}
+
+.live-radar-section .radar-panel.compact .radar-visual-canvas::before,
+.live-radar-section .radar-panel.compact .radar-visual-canvas::after,
+.radar-city-page .radar-main-stage .radar-visual-canvas::before,
+.radar-city-page .radar-main-stage .radar-visual-canvas::after {
+  background:
+    linear-gradient(90deg, transparent calc(50% - .5px), rgba(244, 215, 127, .18) 50%, transparent calc(50% + .5px)),
+    linear-gradient(0deg, transparent calc(50% - .5px), rgba(244, 215, 127, .18) 50%, transparent calc(50% + .5px)) !important;
+  box-shadow: none !important;
+}
+
 .maplibregl-popup {
   z-index: 40;
 }
@@ -250,6 +286,16 @@
 }
 
 @media (max-width: 720px) {
+  .live-radar-section .radar-map-surface {
+    height: min(380px, calc(100vw - 30px));
+  }
+
+  .live-radar-section .radar-panel.compact .radar-visual-canvas {
+    width: auto !important;
+    height: calc(100% - .5rem);
+    max-width: calc(100% - .5rem);
+  }
+
   .radar-map-error {
     top: 48px;
     width: min(20rem, calc(100% - 5rem));

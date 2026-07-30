@@ -6,7 +6,7 @@ import { buildCityOnlyLayoutIndexes, CITY_ONLY_LAYOUT_SPACING_METERS, disperseCi
 import { clearPublicProfilesRequestCache, getPublicProfiles } from '../Front/src/lib/publicProfiles.js';
 import { MAX_RADAR_RADIUS_METERS, radarRadiusStorageKey, readSavedRadarRadius, saveRadarRadius } from '../Front/src/lib/geo.js';
 import { clusterRadarPoints, getRadarPoint } from '../Front/src/lib/radarLayout.js';
-import { buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection } from '../Front/src/lib/radarMapData.js';
+import { buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection, getRadarRadiusBounds } from '../Front/src/lib/radarMapData.js';
 
 test('frontend radar=1 reaches the exact backend radar branch and never accepts a 60-row non-radar response', async () => {
   assert.equal(isRadarRequest('1'), true);
@@ -140,6 +140,27 @@ test('MapLibre GeoJSON preserves longitude/latitude order and radius changes upd
   assert.notDeepEqual(small, large);
   assert.equal(small.features[0].properties.radiusMeters, 1_000);
   assert.equal(large.features[0].properties.radiusMeters, 10_000);
+});
+
+test('MapLibre circle and camera bounds preserve the exact selected geographic radius', async () => {
+  const center = { lat: 52.52, lng: 13.405, source: 'city' as const };
+  for (const radiusMeters of [10, 100, 1_000, 10_000, 150_000]) {
+    const circle = buildRadarRadiusFeatureCollection(center, radiusMeters);
+    const [longitude, latitude] = circle.features[0].geometry.coordinates[0][0];
+    const measured = haversineMeters(
+      { latitude: center.lat, longitude: center.lng },
+      { latitude, longitude }
+    );
+    assert.ok(Math.abs(measured - radiusMeters) < .02, `${radiusMeters} m circle measured ${measured} m`);
+
+    const bounds = getRadarRadiusBounds(center, radiusMeters);
+    assert.ok(bounds[0][0] < center.lng && bounds[1][0] > center.lng);
+    assert.ok(bounds[0][1] < center.lat && bounds[1][1] > center.lat);
+  }
+
+  const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
+  assert.match(mapSource, /maxZoom: 22/);
+  assert.doesNotMatch(mapSource, /maxZoom: 15/);
 });
 
 test('city_only layout is stable, country-aware and uses nominal 350 metre spacing', () => {
