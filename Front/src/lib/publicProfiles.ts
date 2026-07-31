@@ -145,6 +145,18 @@ export function clearPublicProfilesRequestCache() {
   publicProfilesMetrics.clear();
 }
 
+export function getPublicProfilePrimaryImage(profile: Pick<Profile, 'profile_images'>): ProfileImage | null {
+  const images = (profile.profile_images || []).filter((image) => (
+    Boolean(image.public_url)
+    && !image.is_hidden
+    && !image.is_private
+    && image.moderation_status !== 'pending'
+    && image.moderation_status !== 'rejected'
+    && image.moderation_status !== 'blocked'
+  ));
+  return images.find((image) => image.is_primary || image.is_cover) || images[0] || null;
+}
+
 export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
   if (!input || typeof input !== 'object') {
     devReject('not_an_object');

@@ -8,6 +8,7 @@ import type { GeoPoint } from '../lib/geo';
 import { RADAR_RADIUS_STEPS_METERS, clearSavedSearchLocation, formatRadiusMeters, getRadarWheelDirection, isValidLatLng, radarRadiusToSliderPosition, resolveManualSearcherLocation, resolveProfileRadarLocation, saveSearchLocationToStorage, sliderPositionToRadarRadius, stepRadarRadius } from '../lib/geo';
 import { getOperatorStatus, matchesRadarStatus, selectRadarProfiles } from '../lib/homeRadar';
 import { assignRadarDisplayCoordinates } from '../lib/radarMapData';
+import { getRadarStatusClass } from '../lib/radarProfilePresentation';
 import './RadarPanel.css';
 
 const RadarMapLibre = lazy(() => import('./RadarMapLibre').then((module) => ({ default: module.RadarMapLibre })));
@@ -31,19 +32,13 @@ type RadarPanelProps = {
   favoriteProfileIds?: ReadonlySet<string>;
 };
 
-const statusClassByOperator: Record<string, string> = {
-  ONLINE_NOW: 'online-now',
-  AVAILABLE_TODAY: 'available-today',
-  BUSY: 'busy',
-  APPOINTMENT_ONLY: 'appointment-only',
-  TRAVELING: 'traveling',
-  OFFLINE: 'offline'
-};
-
 const radarStatuses = [
   ['favorites', 'favorites', 'favorites.favoritesFilter'],
   ['online', 'online-now', 'status.onlineNow'],
+  ['AVAILABLE_TODAY', 'available-today', 'status.availableToday'],
   ['BUSY', 'busy', 'status.busy'],
+  ['APPOINTMENT_ONLY', 'appointment-only', 'status.appointmentOnly'],
+  ['TRAVELING', 'traveling', 'status.traveling'],
   ['OFFLINE', 'offline', 'status.offline']
 ] as const;
 
@@ -69,7 +64,7 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
   );
   const showManualForm = !hasRadarLocation || isEditingLocation;
   const visibleRadarStatuses = showFavoritesFilter ? radarStatuses : radarStatuses.filter(([value]) => value !== 'favorites');
-  const radarLegendStatuses = showFavoritesFilter ? radarStatuses : [allStatus, ...visibleRadarStatuses];
+  const radarLegendStatuses = radarStatuses.filter(([value]) => value !== 'favorites');
   const radarCandidates = hasRadarLocation ? selectRadarProfiles(profiles, effectiveLocation, radius, 'all') : [];
   const radarLayoutUniverse = profiles.flatMap((profile) => {
     const location = resolveProfileRadarLocation(profile);
@@ -78,7 +73,7 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
       profile,
       distanceKm: 0,
       operatorStatus: getOperatorStatus(profile),
-      statusClass: statusClassByOperator[getOperatorStatus(profile)] || 'offline',
+      statusClass: getRadarStatusClass(getOperatorStatus(profile)),
       filterCoordinates: location,
       displayCoordinates: { lat: location.lat, lng: location.lng },
       isApproximateLocation: location.approximate,
@@ -91,7 +86,7 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
         profile,
         distanceKm,
         operatorStatus: getOperatorStatus(profile),
-        statusClass: statusClassByOperator[getOperatorStatus(profile)] || 'offline',
+        statusClass: getRadarStatusClass(getOperatorStatus(profile)),
         filterCoordinates: location,
         displayCoordinates: { lat: location.lat, lng: location.lng },
         isApproximateLocation: location.approximate,

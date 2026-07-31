@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isRadarRequest } from '../Back/src/radarPool.js';
 import { buildCityOnlyLayoutIndexes, CITY_ONLY_LAYOUT_SPACING_METERS, disperseCityOnlyLocation, resolveEffectivePublicLocation } from '../Back/src/publicLocation.js';
-import { clearPublicProfilesRequestCache, getPublicProfiles } from '../Front/src/lib/publicProfiles.js';
+import { clearPublicProfilesRequestCache, getPublicProfilePrimaryImage, getPublicProfiles } from '../Front/src/lib/publicProfiles.js';
 import {
   MAX_RADAR_RADIUS_METERS,
   MIN_RADAR_RADIUS_METERS,
@@ -20,6 +20,14 @@ import {
 } from '../Front/src/lib/geo.js';
 import { APPROXIMATE_RADAR_LAYOUT_SPACING_METERS, clusterRadarPoints, getApproximateRadarDisplayLocation, getRadarPoint } from '../Front/src/lib/radarLayout.js';
 import { assignRadarDisplayCoordinates, buildRadarCenterFeatureCollection, buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection, getRadarRadiusBounds } from '../Front/src/lib/radarMapData.js';
+import {
+  RADAR_STATUS_COLORS,
+  getRadarProfileHref,
+  getRadarProfileImageUrl,
+  getRadarProfileInitials,
+  getRadarProfilePrice,
+  getRadarStatusClass
+} from '../Front/src/lib/radarProfilePresentation.js';
 import { selectRadarProfiles } from '../Front/src/lib/homeRadar.js';
 
 test('frontend radar=1 reaches the exact backend radar branch and never accepts a 60-row non-radar response', async () => {
@@ -156,6 +164,79 @@ test('MapLibre GeoJSON preserves longitude/latitude order and radius changes upd
   assert.notDeepEqual(small, large);
   assert.equal(small.features[0].properties.radiusMeters, 1_000);
   assert.equal(large.features[0].properties.radiusMeters, 10_000);
+});
+
+test('rich radar marker presentation uses only public photos and has a stable fallback', () => {
+  const profile = {
+    id: 'public-photo',
+    display_name: 'Anna Maria',
+    profile_images: [
+      { id: 'private', storage_path: 'private.jpg', public_url: 'https://cdn.example/private.jpg', is_primary: true, is_blurred: false, is_private: true },
+      { id: 'pending', storage_path: 'pending.jpg', public_url: 'https://cdn.example/pending.jpg', is_primary: false, is_blurred: false, moderation_status: 'pending' },
+      { id: 'approved', storage_path: 'approved.jpg', public_url: 'https://cdn.example/approved.jpg', is_primary: false, is_blurred: false, moderation_status: 'approved' }
+    ]
+  } as any;
+  assert.equal(getPublicProfilePrimaryImage(profile)?.id, 'approved');
+  assert.equal(getRadarProfileImageUrl(profile), 'https://cdn.example/approved.jpg');
+  assert.equal(getRadarProfileInitials(profile.display_name), 'AM');
+  assert.equal(getRadarProfileImageUrl({ profile_images: [] }), '');
+  assert.equal(getRadarProfileInitials(''), 'P');
+});
+
+test('rich radar statuses match the legend palette', async () => {
+  assert.deepEqual(RADAR_STATUS_COLORS, {
+    ONLINE_NOW: '#36d486',
+    BUSY: '#f6b84b',
+    AVAILABLE_TODAY: '#35d9e6',
+    APPOINTMENT_ONLY: '#ff5fa2',
+    TRAVELING: '#9b6cff',
+    OFFLINE: '#9a9aa4'
+  });
+  assert.equal(getRadarStatusClass('ONLINE_NOW'), 'online-now');
+  assert.equal(getRadarStatusClass('BUSY'), 'busy');
+  assert.equal(getRadarStatusClass('OFFLINE'), 'offline');
+  assert.equal(getRadarStatusClass('unknown'), 'offline');
+
+  const css = await readFile(new URL('../Front/src/styles.css', import.meta.url), 'utf8');
+  for (const color of Object.values(RADAR_STATUS_COLORS)) assert.match(css, new RegExp(color, 'i'));
+});
+
+test('radar card price respects duration priority and never invents a missing price or currency', () => {
+  assert.deepEqual(getRadarProfilePrice({
+    price_30min: 120,
+    price_1h: 200,
+    price_2h: 350,
+    currency: 'eur'
+  }), {
+    amount: 120,
+    currency: 'EUR',
+    duration: '30 min',
+    label: '30 min · 120 EUR'
+  });
+  assert.equal(getRadarProfilePrice({ price_1h: 200, currency: '' })?.label, '1 h · 200');
+  assert.equal(getRadarProfilePrice({ price_30min: null, price_1h: 0, currency: 'EUR' }), null);
+});
+
+test('rich markers retain profile identity, route, hover/tap card and deterministic cleanup', async () => {
+  assert.equal(getRadarProfileHref({ id: 'profile/id' }), '/profile/profile%2Fid');
+  const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
+  assert.match(mapSource, /markerElement\.dataset\.profileId = profile\.id/);
+  assert.match(mapSource, /markerElement\.href = href/);
+  assert.match(mapSource, /markerElement\.addEventListener\('mouseenter', showPopup\)/);
+  assert.match(mapSource, /window\.matchMedia\('\(hover: hover\) and \(pointer: fine\)'\)/);
+  assert.match(mapSource, /if \(isApproximateLocation\) appendPopupLine/);
+  assert.match(mapSource, /if \(price\) appendPopupLine/);
+  assert.match(mapSource, /name\.textContent = profile\.display_name/);
+  assert.match(mapSource, /clearRichProfileMarkers\(markers\)/);
+  assert.match(mapSource, /closeOtherRichProfilePopups\(markers, profile\.id\)/);
+  assert.match(mapSource, /markers\.set\(profile\.id/);
+  assert.match(mapSource, /entry\.popup\?\.remove\(\)/);
+  assert.match(mapSource, /entry\.marker\.remove\(\)/);
+  assert.match(mapSource, /maxzoom: RICH_MARKER_MIN_ZOOM/);
+  assert.match(mapSource, /const markerVisible = showRichMarkers \|\| entry\.approximate/);
+  assert.match(mapSource, /entry\.element\.hidden = !markerVisible/);
+  assert.match(mapSource, /anchor: getRadarPopupAnchor\(map, displayCoordinates\)/);
+  assert.match(mapSource, /clampRadarPopupToMapViewport\(map, activePopup\)/);
 });
 
 test('MapLibre circle and camera bounds preserve the exact selected geographic radius', async () => {

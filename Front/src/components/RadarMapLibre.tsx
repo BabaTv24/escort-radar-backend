@@ -7,6 +7,15 @@ import { LocateFixed } from 'lucide-react';
 import { formatDistanceKm, isValidLatLng } from '../lib/geo';
 import { getPublicLocationLabel } from '../lib/locationLabels';
 import {
+  RADAR_STATUS_COLORS,
+  getRadarProfileHref,
+  getRadarProfileImageUrl,
+  getRadarProfileInitials,
+  getRadarProfilePrice,
+  getRadarStatusClass,
+  getRadarStatusLabel
+} from '../lib/radarProfilePresentation';
+import {
   buildRadarCenterFeatureCollection,
   buildRadarProfileFeatureCollection,
   buildRadarRadiusFeatureCollection,
@@ -19,6 +28,7 @@ const EXACT_PROFILE_SOURCE = 'radar-exact-profiles';
 const APPROXIMATE_PROFILE_SOURCE = 'radar-approximate-profiles';
 const RADIUS_SOURCE = 'radar-radius';
 const CENTER_SOURCE = 'radar-center';
+const RICH_MARKER_MIN_ZOOM = 11;
 const FALLBACK_MAP_STYLE = {
   version: 8,
   name: 'Escort Radar dark fallback',
@@ -43,6 +53,7 @@ type RadarMapLibreProps = {
 export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMapLibreProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const richMarkersRef = useRef<Map<string, RichMarkerEntry>>(new Map());
   const itemsRef = useRef(items);
   const longitude = searchCenter[0];
   const latitude = searchCenter[1];
@@ -51,6 +62,7 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
   const [mapError, setMapError] = useState(false);
   const [mapStyleName, setMapStyleName] = useState('dark');
   const [reloadKey, setReloadKey] = useState(0);
+  const richMarkerSignature = buildRichMarkerSignature(items);
   itemsRef.current = items;
 
   function recenter(animate = true) {
@@ -155,6 +167,7 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
       if (tileTimeout) window.clearTimeout(tileTimeout);
       if (initializationPoll) window.clearInterval(initializationPoll);
       observer?.disconnect();
+      clearRichProfileMarkers(richMarkersRef.current);
       map?.remove();
       mapRef.current = null;
       setMapReady(false);
@@ -175,6 +188,19 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
       buildRadarProfileFeatureCollection(items.filter((item) => item.isApproximateLocation))
     );
   }, [items, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    syncRichProfileMarkers(map, richMarkersRef.current, itemsRef.current, t);
+    const updateMarkerZoom = () => updateRichMarkerZoom(map, richMarkersRef.current);
+    map.on('zoom', updateMarkerZoom);
+    updateMarkerZoom();
+    return () => {
+      map.off('zoom', updateMarkerZoom);
+      clearRichProfileMarkers(richMarkersRef.current);
+    };
+  }, [mapReady, richMarkerSignature]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -279,6 +305,7 @@ function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: 
     id: 'radar-clusters',
     type: 'circle',
     source: EXACT_PROFILE_SOURCE,
+    maxzoom: RICH_MARKER_MIN_ZOOM,
     filter: ['has', 'point_count'],
     paint: {
       'circle-color': '#7b4dff',
@@ -291,25 +318,31 @@ function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: 
     id: 'radar-cluster-count',
     type: 'symbol',
     source: EXACT_PROFILE_SOURCE,
+    maxzoom: RICH_MARKER_MIN_ZOOM,
     filter: ['has', 'point_count'],
-    layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 },
+    layout: {
+      'text-field': ['get', 'point_count_abbreviated'],
+      'text-font': ['Noto Sans Regular'],
+      'text-size': 12
+    },
     paint: { 'text-color': '#ffffff' }
   });
   map.addLayer({
     id: 'radar-profile-points',
     type: 'circle',
     source: EXACT_PROFILE_SOURCE,
+    maxzoom: RICH_MARKER_MIN_ZOOM,
     filter: ['!', ['has', 'point_count']],
     paint: {
       'circle-color': [
         'match',
         ['get', 'operatorStatus'],
-        'ONLINE_NOW', '#36d486',
-        'BUSY', '#f6b84b',
-        'AVAILABLE_TODAY', '#35d9e6',
-        'APPOINTMENT_ONLY', '#ff5fa2',
-        'TRAVELING', '#9b6cff',
-        '#9a9aa4'
+        'ONLINE_NOW', RADAR_STATUS_COLORS.ONLINE_NOW,
+        'BUSY', RADAR_STATUS_COLORS.BUSY,
+        'AVAILABLE_TODAY', RADAR_STATUS_COLORS.AVAILABLE_TODAY,
+        'APPOINTMENT_ONLY', RADAR_STATUS_COLORS.APPOINTMENT_ONLY,
+        'TRAVELING', RADAR_STATUS_COLORS.TRAVELING,
+        RADAR_STATUS_COLORS.OFFLINE
       ],
       'circle-radius': 9,
       'circle-stroke-color': ['case', ['boolean', ['get', 'favorite'], false], '#ff5fa2', '#fff0ba'],
@@ -326,21 +359,23 @@ function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: 
     id: 'radar-approximate-points',
     type: 'circle',
     source: APPROXIMATE_PROFILE_SOURCE,
+    maxzoom: RICH_MARKER_MIN_ZOOM,
     paint: {
       'circle-color': [
         'match',
         ['get', 'operatorStatus'],
-        'ONLINE_NOW', '#36d486',
-        'BUSY', '#f6b84b',
-        'AVAILABLE_TODAY', '#35d9e6',
-        'APPOINTMENT_ONLY', '#ff5fa2',
-        'TRAVELING', '#9b6cff',
-        '#9a9aa4'
+        'ONLINE_NOW', RADAR_STATUS_COLORS.ONLINE_NOW,
+        'BUSY', RADAR_STATUS_COLORS.BUSY,
+        'AVAILABLE_TODAY', RADAR_STATUS_COLORS.AVAILABLE_TODAY,
+        'APPOINTMENT_ONLY', RADAR_STATUS_COLORS.APPOINTMENT_ONLY,
+        'TRAVELING', RADAR_STATUS_COLORS.TRAVELING,
+        RADAR_STATUS_COLORS.OFFLINE
       ],
       'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, 2.5, 8, 4, 14, 7, 18, 9],
-      'circle-opacity': 0.88,
+      'circle-opacity': 0,
       'circle-stroke-color': ['case', ['boolean', ['get', 'favorite'], false], '#ff5fa2', '#fff0ba'],
-      'circle-stroke-width': ['case', ['boolean', ['get', 'favorite'], false], 3, 1.5]
+      'circle-stroke-width': ['case', ['boolean', ['get', 'favorite'], false], 3, 1.5],
+      'circle-stroke-opacity': 0
     }
   });
 
@@ -421,31 +456,265 @@ function bindRadarInteractions(
   }
 }
 
-function buildProfilePopup(item: RadarMapItem, t: RadarMapLibreProps['t']) {
+type RichMarkerEntry = {
+  element: HTMLAnchorElement;
+  marker: maplibregl.Marker;
+  popup: maplibregl.Popup | null;
+  approximate: boolean;
+  cancelClose: () => void;
+};
+
+function syncRichProfileMarkers(
+  map: MapLibreMap,
+  markers: Map<string, RichMarkerEntry>,
+  items: RadarMapItem[],
+  t: RadarMapLibreProps['t']
+) {
+  clearRichProfileMarkers(markers);
+  for (const item of items) {
+    const { profile, displayCoordinates, operatorStatus, favorite } = item;
+    const href = getRadarProfileHref(profile);
+    const statusClass = getRadarStatusClass(operatorStatus);
+    const statusLabel = getRadarStatusLabel(operatorStatus, t);
+    const markerElement = document.createElement('a');
+    markerElement.className = `radar-profile-marker ${statusClass}`;
+    markerElement.dataset.profileId = profile.id;
+    markerElement.dataset.operatorStatus = operatorStatus;
+    markerElement.href = href;
+    markerElement.draggable = false;
+    markerElement.setAttribute('aria-label', `${profile.display_name}, ${statusLabel}`);
+    markerElement.title = `${profile.display_name} · ${statusLabel}`;
+
+    const fallback = document.createElement('span');
+    fallback.className = 'radar-profile-marker-fallback';
+    fallback.textContent = getRadarProfileInitials(profile.display_name);
+    markerElement.appendChild(fallback);
+
+    const imageUrl = getRadarProfileImageUrl(profile);
+    if (imageUrl) {
+      const image = document.createElement('img');
+      image.src = imageUrl;
+      image.alt = profile.display_name;
+      image.loading = 'lazy';
+      image.decoding = 'async';
+      image.addEventListener('error', () => markerElement.classList.add('has-image-error'), { once: true });
+      markerElement.classList.add('has-image');
+      markerElement.appendChild(image);
+    }
+
+    if (favorite) {
+      const heart = document.createElement('span');
+      heart.className = 'radar-profile-marker-favorite';
+      heart.textContent = '♥';
+      heart.setAttribute('aria-hidden', 'true');
+      markerElement.appendChild(heart);
+    }
+
+    let closeTimer: number | null = null;
+    const cancelClose = () => {
+      if (closeTimer !== null) window.clearTimeout(closeTimer);
+      closeTimer = null;
+    };
+    const popupCard = buildProfilePopup(item, t);
+    let entry: RichMarkerEntry;
+    const showPopup = () => {
+      cancelClose();
+      closeOtherRichProfilePopups(markers, profile.id);
+      if (!entry.popup?.isOpen()) {
+        entry.popup?.remove();
+        entry.popup = new maplibregl.Popup({
+          anchor: getRadarPopupAnchor(map, displayCoordinates),
+          closeButton: false,
+          closeOnClick: true,
+          maxWidth: '290px',
+          offset: 24
+        })
+          .setDOMContent(popupCard)
+          .setLngLat([displayCoordinates.lng, displayCoordinates.lat])
+          .addTo(map);
+        entry.popup.on('close', () => {
+          cancelClose();
+          markerElement.classList.remove('is-active');
+        });
+        const activePopup = entry.popup;
+        window.requestAnimationFrame(() => {
+          if (activePopup.isOpen()) clampRadarPopupToMapViewport(map, activePopup);
+        });
+      }
+      markerElement.classList.add('is-active');
+    };
+    const scheduleClose = () => {
+      cancelClose();
+      closeTimer = window.setTimeout(() => entry.popup?.remove(), 180);
+    };
+
+    markerElement.addEventListener('mouseenter', showPopup);
+    markerElement.addEventListener('mouseleave', scheduleClose);
+    markerElement.addEventListener('focus', showPopup);
+    markerElement.addEventListener('blur', scheduleClose);
+    markerElement.addEventListener('keydown', (event) => {
+      if (event.key !== ' ') return;
+      event.preventDefault();
+      showPopup();
+    });
+    markerElement.addEventListener('click', (event) => {
+      if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+      event.preventDefault();
+      event.stopPropagation();
+      showPopup();
+    });
+    popupCard.addEventListener('mouseenter', cancelClose);
+    popupCard.addEventListener('mouseleave', scheduleClose);
+
+    const marker = new maplibregl.Marker({ element: markerElement, anchor: 'center' })
+      .setLngLat([displayCoordinates.lng, displayCoordinates.lat])
+      .addTo(map);
+    entry = { element: markerElement, marker, popup: null, approximate: item.isApproximateLocation, cancelClose };
+    markers.set(profile.id, entry);
+  }
+}
+
+function clearRichProfileMarkers(markers: Map<string, RichMarkerEntry>) {
+  for (const entry of markers.values()) {
+    entry.cancelClose();
+    entry.popup?.remove();
+    entry.marker.remove();
+  }
+  markers.clear();
+}
+
+function closeOtherRichProfilePopups(markers: Map<string, RichMarkerEntry>, activeProfileId: string) {
+  for (const [profileId, entry] of markers) {
+    if (profileId === activeProfileId) continue;
+    entry.cancelClose();
+    entry.popup?.remove();
+    entry.element.classList.remove('is-active');
+  }
+}
+
+function getRadarPopupAnchor(
+  map: MapLibreMap,
+  coordinates: { lat: number; lng: number }
+): 'top' | 'top-left' | 'top-right' | 'bottom' | 'bottom-left' | 'bottom-right' {
+  const point = map.project([coordinates.lng, coordinates.lat]);
+  const container = map.getContainer();
+  const verticalAnchor = point.y < container.clientHeight / 2 ? 'top' : 'bottom';
+  if (point.x < container.clientWidth * .3) return `${verticalAnchor}-left`;
+  if (point.x > container.clientWidth * .7) return `${verticalAnchor}-right`;
+  return verticalAnchor;
+}
+
+function clampRadarPopupToMapViewport(map: MapLibreMap, popup: maplibregl.Popup) {
+  const popupElement = popup.getElement();
+  const popupRect = popupElement.getBoundingClientRect();
+  const mapRect = map.getContainer().getBoundingClientRect();
+  const padding = 8;
+  const leftBoundary = Math.max(mapRect.left + padding, padding);
+  const rightBoundary = Math.min(mapRect.right - padding, window.innerWidth - padding);
+  const topBoundary = Math.max(mapRect.top + padding, padding);
+  const bottomBoundary = Math.min(mapRect.bottom - padding, window.innerHeight - padding);
+  let shiftX = 0;
+  let shiftY = 0;
+  if (popupRect.left < leftBoundary) shiftX = leftBoundary - popupRect.left;
+  else if (popupRect.right > rightBoundary) shiftX = rightBoundary - popupRect.right;
+  if (popupRect.top < topBoundary) shiftY = topBoundary - popupRect.top;
+  else if (popupRect.bottom > bottomBoundary) shiftY = bottomBoundary - popupRect.bottom;
+  popupElement.style.translate = `${Math.round(shiftX)}px ${Math.round(shiftY)}px`;
+}
+
+function updateRichMarkerZoom(map: MapLibreMap, markers: Map<string, RichMarkerEntry>) {
+  const zoom = map.getZoom();
+  const showRichMarkers = zoom >= RICH_MARKER_MIN_ZOOM;
+  const sizeClass = zoom < RICH_MARKER_MIN_ZOOM
+    ? 'is-far'
+    : zoom >= 15
+      ? 'is-near'
+      : zoom >= 12.5
+        ? 'is-medium'
+        : 'is-compact';
+  for (const entry of markers.values()) {
+    const markerVisible = showRichMarkers || entry.approximate;
+    entry.element.hidden = !markerVisible;
+    if (!markerVisible) {
+      entry.cancelClose();
+      entry.popup?.remove();
+      entry.element.classList.remove('is-active');
+    }
+    entry.element.classList.remove('is-far', 'is-compact', 'is-medium', 'is-near');
+    entry.element.classList.add(sizeClass);
+  }
+}
+
+function buildRichMarkerSignature(items: RadarMapItem[]) {
+  return items.map((item) => [
+    item.profile.id,
+    item.displayCoordinates.lat,
+    item.displayCoordinates.lng,
+    item.operatorStatus,
+    item.favorite,
+    getRadarProfileImageUrl(item.profile),
+    item.profile.price_30min,
+    item.profile.price_1h,
+    item.profile.price_2h,
+    item.profile.price_3h,
+    item.profile.price_night,
+    item.profile.currency
+  ].join(':')).join('|');
+}
+
+export function buildProfilePopup(item: RadarMapItem, t: RadarMapLibreProps['t']) {
   const { profile, distanceKm, operatorStatus, isApproximateLocation } = item;
   const card = document.createElement('article');
   card.className = 'radar-map-popup';
-  const cover = profile.profile_images?.find((image) => image.is_primary) || profile.profile_images?.[0];
-  if (cover?.public_url) {
+  card.dataset.profileId = profile.id;
+  const href = getRadarProfileHref(profile);
+  card.dataset.profileHref = href;
+  const media = document.createElement('div');
+  media.className = 'radar-map-popup-media';
+  const imageUrl = getRadarProfileImageUrl(profile);
+  const fallback = document.createElement('span');
+  fallback.className = 'radar-map-popup-fallback';
+  fallback.textContent = getRadarProfileInitials(profile.display_name);
+  media.appendChild(fallback);
+  if (imageUrl) {
     const image = document.createElement('img');
-    image.src = cover.public_url;
-    image.alt = '';
+    image.src = imageUrl;
+    image.alt = profile.display_name;
     image.loading = 'lazy';
-    card.appendChild(image);
+    image.decoding = 'async';
+    image.addEventListener('error', () => media.classList.add('has-image-error'), { once: true });
+    media.classList.add('has-image');
+    media.appendChild(image);
   }
+  card.appendChild(media);
   const body = document.createElement('div');
+  const heading = document.createElement('div');
+  heading.className = 'radar-map-popup-heading';
   const name = document.createElement('strong');
   name.textContent = profile.display_name;
-  body.appendChild(name);
-  appendPopupLine(body, operatorStatus.replaceAll('_', ' '));
+  heading.appendChild(name);
+  if (Number(profile.age) > 0) {
+    const age = document.createElement('small');
+    age.textContent = t('profile.ageYears', { age: Number(profile.age) });
+    heading.appendChild(age);
+  }
+  body.appendChild(heading);
+  appendPopupLine(body, getRadarStatusLabel(operatorStatus, t), `radar-popup-status ${getRadarStatusClass(operatorStatus)}`);
+  if (profile.category) appendPopupLine(body, profile.category, 'radar-popup-category');
+  const price = getRadarProfilePrice(profile);
+  if (price) appendPopupLine(body, price.label, 'radar-popup-price');
   appendPopupLine(body, formatDistanceKm(distanceKm, t('radar.distanceUnavailable')));
   appendPopupLine(body, getPublicLocationLabel(profile, t));
   if (isApproximateLocation) appendPopupLine(body, t('radar.approximateLocation'), 'radar-popup-approximate');
   const link = document.createElement('a');
-  link.href = `/profile/${encodeURIComponent(profile.id)}`;
+  link.href = href;
   link.textContent = t('radar.openProfile');
   body.appendChild(link);
   card.appendChild(body);
+  card.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement).closest('a')) return;
+    window.location.assign(href);
+  });
   return card;
 }
 
