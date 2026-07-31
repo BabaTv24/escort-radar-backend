@@ -20,7 +20,7 @@ export function resolveEffectivePublicLocation(profile: Record<string, any>, cit
     && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
 
   if (profile.location_mode === 'city_only' || visibility === 'city_only') {
-    const city = resolveCityLocation(profile.work_city || profile.city);
+    const city = resolveCityLocation(profile.work_city) || resolveCityLocation(profile.city);
     const point = city && Number.isInteger(cityOnlyLayoutIndex)
       ? disperseCityOnlyLocation(city.latitude, city.longitude, cityOnlyLayoutIndex as number)
       : city;
@@ -32,8 +32,20 @@ export function resolveEffectivePublicLocation(profile: Record<string, any>, cit
     } : null;
   }
 
+  // An exact point is private data. Public callers always receive a stable city
+  // approximation; the exact point is exposed only by the authenticated route.
+  if (visibility === 'exact') {
+    const city = resolveCityLocation(profile.work_city) || resolveCityLocation(profile.city);
+    return city ? {
+      latitude: city.latitude,
+      longitude: city.longitude,
+      location_approximate: true,
+      location_precision: 'city'
+    } : null;
+  }
+
   if (visibility === 'postal_area' && !hasValidCoordinates && hasPostalArea(profile)) {
-    const city = resolveCityLocation(profile.work_city || profile.city);
+    const city = resolveCityLocation(profile.work_city) || resolveCityLocation(profile.city);
     return city ? {
       latitude: city.latitude,
       longitude: city.longitude,
@@ -42,12 +54,12 @@ export function resolveEffectivePublicLocation(profile: Record<string, any>, cit
     } : null;
   }
 
-  if (!hasValidCoordinates || (visibility !== 'exact' && visibility !== 'postal_area')) return null;
+  if (!hasValidCoordinates || visibility !== 'postal_area') return null;
   return {
     latitude,
     longitude,
-    location_approximate: visibility !== 'exact',
-    location_precision: visibility === 'exact' ? 'exact' : 'postal_area'
+    location_approximate: true,
+    location_precision: 'postal_area'
   };
 }
 
@@ -98,11 +110,14 @@ export function disperseCityOnlyLocation(latitude: number, longitude: number, in
   };
 }
 
-export function normalizeEffectiveLocationVisibility(locationMode: unknown, locationVisibility: unknown) {
+export function normalizeEffectiveLocationVisibility(
+  locationMode: unknown,
+  locationVisibility: unknown
+): 'exact' | 'postal_area' | 'city_only' | 'hidden' {
   if (locationVisibility === 'hidden' || locationMode === 'exact_hidden' || locationMode === 'hidden') return 'hidden';
   if (locationMode === 'city_only') return 'city_only';
   const mode = String(locationVisibility || locationMode || 'postal_area');
-  if (['exact', 'postal_area', 'city_only', 'hidden'].includes(mode)) return mode;
+  if (mode === 'exact' || mode === 'postal_area' || mode === 'city_only' || mode === 'hidden') return mode;
   if (mode === 'exact_hidden') return 'hidden';
   if (mode === 'approximate') return 'postal_area';
   return 'postal_area';

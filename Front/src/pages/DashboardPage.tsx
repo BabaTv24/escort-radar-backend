@@ -2672,7 +2672,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
               <input placeholder={t('dashboard.advertiser.placeLabel')} value={profile.work_place_label || ''} onChange={(event) => onProfileChange({ ...profile, work_place_label: event.target.value })} />
               <input placeholder={t('radar.exactAddress')} value={profile.exact_address || ''} onChange={(event) => onProfileChange({ ...profile, exact_address: event.target.value, work_place_label: event.target.value || profile.work_place_label || '' })} />
               <WorkPointMap latitude={profile.latitude} longitude={profile.longitude} onChange={(point) => {
-                onProfileChange({ ...profile, latitude: point.latitude, longitude: point.longitude, location_mode: 'approximate', location_visibility: profile.location_visibility || 'postal_area' });
+                onProfileChange({ ...profile, latitude: point.latitude, longitude: point.longitude, location_mode: 'exact', location_visibility: 'exact', location_input_source: 'manual' });
                 setGeoMessage(t('location.workPointSet'));
               }} />
               <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value, work_city: profile.work_city || normalizeCityName(event.target.value) })}>

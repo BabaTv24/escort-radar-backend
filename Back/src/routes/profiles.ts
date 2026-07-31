@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../supabase.js';
 import { allowedCities, asyncHandler, normalizeOperatorStatus, normalizeProfileCategory, parseBoolean, slugify, validateProfileInput } from '../validation.js';
-import { requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
+import { getAuthAccountType, requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
 import { generatePublicUserId, generateReferralCode, normalizePhone } from '../utils/identity.js';
 import { getClientActivationSummary } from '../services/clientActivation.js';
 import { notifyMatchingClientsForProfile } from './clientIntent.js';
@@ -11,6 +11,8 @@ import { isActivePublicCategory } from '../categories.js';
 import { normalizeEffectiveLocationVisibility, resolveEffectivePublicLocation } from '../publicLocation.js';
 import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 import { isRadarRequest, prepareRadarCandidatePool } from '../radarPool.js';
+import { hasActiveEntitlement } from '../services/bcuWallet.js';
+import { canReadExactProfileLocation, exactProfileLocationPayload } from '../profileLocationAccess.js';
 
 export const profilesRouter = Router();
 
@@ -237,6 +239,38 @@ profilesRouter.get('/:id/access', verifyUser, asyncHandler(async (req, res) => {
       live_cam_enabled: true
     }
   });
+}));
+
+profilesRouter.get('/:id/location', verifyUser, asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store, max-age=0');
+  res.set('Vary', 'Authorization');
+  const { data: profile, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, user_id, latitude, longitude, location_mode, location_visibility')
+    .eq('id', req.params.id)
+    .single();
+  if (error || !profile) return res.status(404).json({ error: 'Profile not found' });
+
+  const metadata = req.user?.app_metadata;
+  const admin = metadata?.role === 'admin' || metadata?.admin === true;
+  const owner = profile.user_id === req.user!.id;
+  const premium = !admin && !owner && getAuthAccountType(req.user) === 'client'
+    ? await hasActiveEntitlement(req.user!.id, 'client_premium')
+    : false;
+  const visibility = normalizeEffectiveLocationVisibility(profile.location_mode, profile.location_visibility);
+  if (!canReadExactProfileLocation({
+    isAdmin: admin,
+    isOwner: owner,
+    isClient: getAuthAccountType(req.user) === 'client',
+    hasActivePremium: premium,
+    visibility
+  })) {
+    return res.status(403).json({ error: 'Active client Premium entitlement required' });
+  }
+
+  const payload = exactProfileLocationPayload(profile);
+  if (!payload) return res.status(404).json({ error: 'Exact profile location is not available' });
+  res.json(payload);
 }));
 
 profilesRouter.get('/:id', asyncHandler(async (req, res) => {
@@ -467,21 +501,36 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
   };
 }
 
-function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile), imageLimit = 4) {
-  const { phone, primary_phone, additional_phones, whatsapp, telegram, admin_note, subscription_note, source_url, import_source, imported_at, source_url_normalized, latitude, longitude, work_place_label, exact_address: _omittedExactAddress, ...publicProfile } = profile;
+export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile), imageLimit = 4) {
+  const { phone, primary_phone, additional_phones, whatsapp, telegram,
+    admin_note, subscription_note, source_url, import_source, imported_at, source_url_normalized,
+    latitude, longitude,
+    exact_address: _exactAddress,
+    address: _address,
+    street: _street,
+    street_address: _streetAddress,
+    work_address: _workAddress,
+    work_place_label: _workPlaceLabel,
+    postal_code: _postalCode,
+    postal_code_label: _postalCodeLabel,
+    location_label: _locationLabel,
+    display_location: _displayLocation,
+    location_input_source: _locationInputSource,
+    ...publicProfile
+  } = profile;
   const visibleImages = (publicProfile.profile_images || []).slice(0, imageLimit);
   const visibility = normalizeEffectiveLocationVisibility(publicProfile.location_mode, publicProfile.location_visibility);
-  const postalCode = visibility === 'hidden' ? null : publicProfile.postal_code;
-  // Legacy DB modes: approximate/city_only/exact_hidden. UI modes exact/postal_area/city_only/hidden are mapped before save.
-  // Radar may use postal_code/work_area as a consciously configured public area, but never for hidden profiles.
   const effectiveLocation = resolvedLocation || resolveEffectivePublicLocation({ ...publicProfile, latitude, longitude, location_visibility: visibility });
+  const safeArea = safePublicArea(publicProfile.work_area || publicProfile.area);
+  const safeCity = safePublicCity(publicProfile.work_city, publicProfile.city);
   return {
     ...publicProfile,
     category: normalizeProfileCategory(publicProfile.category) || publicProfile.category,
     location_visibility: visibility,
-    postal_code: postalCode,
-    work_place_label: visibility === 'exact' ? work_place_label : null,
-    exact_address: null,
+    work_city: safeCity,
+    area: safeArea,
+    work_area: safeArea,
+    location_label: [safeArea, safeCity].filter(Boolean).join(', ') || null,
     latitude: effectiveLocation?.latitude ?? null,
     longitude: effectiveLocation?.longitude ?? null,
     location_approximate: effectiveLocation?.location_approximate ?? false,
@@ -490,6 +539,26 @@ function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffective
     images: visibleImages,
     locked_features: ['phone_number', 'whatsapp', 'telegram', 'full_gallery', 'vip_gallery', 'gifts', 'live_cam']
   };
+}
+
+function safePublicArea(value: unknown) {
+  const area = String(value || '').trim();
+  if (!area || area.length > 80 || /\d/.test(area)) return null;
+  if (/\b(str(?:a(?:ss|ß)e)?|street|road|avenue|ave|boulevard|lane|drive|damm|weg|allee|platz|gasse|ufer|chaussee|highway)\b/iu.test(area)) return null;
+  return area.split(',')[0]?.trim() || null;
+}
+
+function safePublicCity(value: unknown, fallback: unknown) {
+  const city = String(value || '').trim();
+  if (city && city.length <= 80 && !/\d/.test(city) && !looksLikeStreet(city) && city.split(',').length <= 2) return city;
+  const safeFallback = String(fallback || '').trim();
+  return safeFallback && safeFallback.length <= 80 && !/\d/.test(safeFallback) && !looksLikeStreet(safeFallback)
+    ? safeFallback
+    : null;
+}
+
+function looksLikeStreet(value: string) {
+  return /\b(str(?:a(?:ss|ß)e)?|street|road|avenue|ave|boulevard|lane|drive|damm|weg|allee|platz|gasse|ufer|chaussee|highway)\b/iu.test(value);
 }
 
 function normalizePublicLocationVisibility(value: unknown) {

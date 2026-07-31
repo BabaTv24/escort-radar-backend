@@ -2194,4 +2194,8 @@
   "admin.advertisement.noSchedule": "No schedule", "admin.advertisement.noTargetUrl": "No target URL", "admin.advertisement.moveUp": "Move advertisement up", "admin.advertisement.moveDown": "Move advertisement down", "admin.advertisement.orderSuccess": "Advertisement order saved.", "admin.advertisement.saveCard": "Save advertisement", "admin.advertisement.saveSuccess": "Advertisement saved.",
   "admin.advertisement.rotationEyebrow": "Rotation", "admin.advertisement.rotationTitle": "Advertisement rotation", "admin.advertisement.rotationInterval": "Change advertisement every (seconds)", "admin.advertisement.rotationHelp": "Allowed range: 3–30 seconds. Default: 6.", "admin.advertisement.saveRotation": "Save rotation interval", "admin.advertisement.configurationSuccess": "Rotation and scrolling text settings saved.",
   "admin.ticker.eyebrow": "FunPage", "admin.ticker.title": "Scrolling text bar", "admin.ticker.active": "Text bar active", "admin.ticker.text": "Text bar content", "admin.ticker.speed": "Scrolling speed", "admin.ticker.speedSlow": "Slow", "admin.ticker.speedNormal": "Normal", "admin.ticker.speedFast": "Fast", "admin.ticker.targetUrl": "Optional target URL", "admin.ticker.preview": "Scrolling text preview", "admin.ticker.previewEmpty": "Enter text to preview the bar.", "admin.ticker.save": "Save scrolling text settings"
+  ,"profile.exactLocation": "Exact location"
+  ,"profile.exactLocationMapOnly": "For privacy, the exact location is shown only on the map."
+  ,"profile.exactLocationLocked": "Exact location is protected"
+  ,"profile.exactLocationPremium": "Only an active Premium client can see the exact point on the map."
 }

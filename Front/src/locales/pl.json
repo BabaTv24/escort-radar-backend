@@ -2194,4 +2194,8 @@
   "admin.advertisement.noSchedule": "Brak harmonogramu", "admin.advertisement.noTargetUrl": "Brak adresu docelowego", "admin.advertisement.moveUp": "Przenieś reklamę wyżej", "admin.advertisement.moveDown": "Przenieś reklamę niżej", "admin.advertisement.orderSuccess": "Kolejność reklam została zapisana.", "admin.advertisement.saveCard": "Zapisz reklamę", "admin.advertisement.saveSuccess": "Reklama została zapisana.",
   "admin.advertisement.rotationEyebrow": "Rotacja", "admin.advertisement.rotationTitle": "Rotacja reklam", "admin.advertisement.rotationInterval": "Zmiana reklamy co (sekundy)", "admin.advertisement.rotationHelp": "Dozwolony zakres: 3–30 sekund. Domyślnie: 6.", "admin.advertisement.saveRotation": "Zapisz interwał rotacji", "admin.advertisement.configurationSuccess": "Ustawienia rotacji i paska zostały zapisane.",
   "admin.ticker.eyebrow": "FunPage", "admin.ticker.title": "Ruchomy pasek tekstowy", "admin.ticker.active": "Pasek aktywny", "admin.ticker.text": "Tekst paska", "admin.ticker.speed": "Prędkość przesuwania", "admin.ticker.speedSlow": "Wolno", "admin.ticker.speedNormal": "Normalnie", "admin.ticker.speedFast": "Szybko", "admin.ticker.targetUrl": "Opcjonalny adres URL", "admin.ticker.preview": "Podgląd ruchomego paska", "admin.ticker.previewEmpty": "Wpisz tekst, aby zobaczyć podgląd.", "admin.ticker.save": "Zapisz ustawienia paska"
+  ,"profile.exactLocation": "Dokładna lokalizacja"
+  ,"profile.exactLocationMapOnly": "Ze względu na prywatność dokładna lokalizacja jest widoczna wyłącznie na mapie."
+  ,"profile.exactLocationLocked": "Dokładna lokalizacja jest chroniona"
+  ,"profile.exactLocationPremium": "Tylko aktywny klient Premium może zobaczyć dokładny punkt na mapie."
 }

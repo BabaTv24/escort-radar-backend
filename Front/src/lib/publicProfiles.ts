@@ -164,6 +164,7 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
   }
 
   const raw = input as ApiProfile;
+  const safeRaw = stripPrivateLocationFields(raw);
   const id = text(raw.id);
   const displayName = text(raw.display_name ?? raw.displayName ?? raw.name);
   if (!id || !displayName) {
@@ -176,7 +177,7 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
   const availability = text(raw.availability_status ?? raw.availabilityStatus ?? raw.status);
 
   return {
-    ...(raw as unknown as Profile),
+    ...(safeRaw as unknown as Profile),
     id,
     display_name: displayName,
     slug: text(raw.slug) || id,
@@ -185,8 +186,6 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     work_city: nullableText(raw.work_city ?? raw.workCity ?? raw.location_city),
     area: nullableText(raw.area ?? raw.district),
     work_area: nullableText(raw.work_area ?? raw.workArea ?? raw.district),
-    postal_code: nullableText(raw.postal_code ?? raw.postalCode ?? raw.zip),
-    work_place_label: nullableText(raw.work_place_label ?? raw.workPlaceLabel),
     location_mode: normalizeLocationMode(raw.location_mode ?? raw.locationMode),
     location_visibility: normalizeLocationVisibility(raw.location_visibility ?? raw.locationVisibility ?? raw.location_mode ?? raw.locationMode),
     latitude: numberValue(raw.latitude ?? raw.lat),
@@ -219,6 +218,18 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     profile_images: images,
     images
   };
+}
+
+function stripPrivateLocationFields(raw: ApiProfile) {
+  const safe = { ...raw };
+  for (const key of [
+    'exact_address', 'address', 'street', 'street_address', 'work_address',
+    'work_place_label', 'postal_code', 'postal_code_label', 'location_input_source',
+    'display_location'
+  ]) {
+    delete safe[key];
+  }
+  return safe;
 }
 
 function mapImages(raw: ApiProfile): ProfileImage[] {

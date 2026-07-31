@@ -502,7 +502,8 @@ test('public radar contract hides city_only raw coordinates, contacts and galler
   const radarSelect = routeSource.slice(routeSource.indexOf('const radarSelect'), routeSource.indexOf("].join(', ')"));
   assert.doesNotMatch(radarSelect, /primary_phone|additional_phones|whatsapp|telegram|description/);
   assert.match(routeSource, /sanitizePublicProfile\(withImageUrls\(profile\), location, 1\)/);
-  assert.match(routeSource, /const \{ phone, primary_phone, additional_phones, whatsapp, telegram/);
+  assert.match(routeSource, /phone, primary_phone, additional_phones, whatsapp, telegram/);
+  assert.match(routeSource, /exact_address: _exactAddress/);
 });
 
 test('Radar uses MapLibre/OpenFreeMap without Google, Mapbox or an API key', async () => {

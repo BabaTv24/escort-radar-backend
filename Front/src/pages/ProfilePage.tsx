@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import type { Profile, ProfileAccess, SponsoredChatMessage, SponsoredChatSession } from '../types';
+import type { ExactProfileLocation, Profile, ProfileAccess, SponsoredChatMessage, SponsoredChatSession } from '../types';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { useI18n } from '../i18n';
 import { serviceLabel } from '../data/serviceCatalog';
@@ -31,6 +31,7 @@ import { getPublicProfiles, mapApiProfileToPublicProfile } from '../lib/publicPr
 import { getPublicLocationLabel, getPublicLocationMode } from '../lib/locationLabels';
 import { profileDetailRows } from '../lib/profileDetails';
 import { availabilityDayKeys, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
+import { WorkPointMap } from '../components/WorkPointMap';
 
 type ProfileTab = 'overview' | 'services' | 'prices' | 'reviews';
 
@@ -47,6 +48,8 @@ export function ProfilePage() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [profileAccess, setProfileAccess] = useState<ProfileAccess | null>(null);
   const [profileAccessChecked, setProfileAccessChecked] = useState(false);
+  const [exactLocation, setExactLocation] = useState<ExactProfileLocation | null>(null);
+  const [exactLocationChecked, setExactLocationChecked] = useState(false);
   const [accessMessage, setAccessMessage] = useState('');
   const [favoriteSaved, setFavoriteSaved] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
@@ -66,6 +69,8 @@ export function ProfilePage() {
     setProfile(null);
     setProfileAccess(null);
     setProfileAccessChecked(false);
+    setExactLocation(null);
+    setExactLocationChecked(false);
     api.profile(id)
       .then(async (data) => {
         const mapped = mapApiProfileToPublicProfile(data.profile);
@@ -83,8 +88,13 @@ export function ProfilePage() {
             .then((accessData) => setProfileAccess(accessData.access))
             .catch(() => setProfileAccess(null))
             .finally(() => setProfileAccessChecked(true));
+          api.profileExactLocation(token, id)
+            .then(setExactLocation)
+            .catch(() => setExactLocation(null))
+            .finally(() => setExactLocationChecked(true));
         } else {
           setProfileAccessChecked(true);
+          setExactLocationChecked(true);
         }
       })
       .catch((err) => {
@@ -204,6 +214,31 @@ export function ProfilePage() {
               </button>
             ))}
           </nav>
+
+          {exactLocation ? (
+            <section className="market-section profile-exact-location">
+              <WorkPointMap
+                latitude={exactLocation.latitude}
+                longitude={exactLocation.longitude}
+                readOnly
+                title={t('profile.exactLocation')}
+                description={t('profile.exactLocationMapOnly')}
+              />
+            </section>
+          ) : exactLocationChecked && getPublicLocationMode(profile) === 'exact' ? (
+            <section className="market-section profile-exact-location-lock">
+              <div className="market-lock-card">
+                <LockKeyhole size={18} />
+                <div>
+                  <strong>{t('profile.exactLocationLocked')}</strong>
+                  <p>{t('profile.exactLocationPremium')}</p>
+                </div>
+                <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={startClientActivation}>
+                  <span>{t('profile.activateClient')}</span>
+                </button>
+              </div>
+            </section>
+          ) : null}
 
           <MarketSection tab="overview" activeTab={activeTab} eyebrow={t('profile.tabs.overview')} title={t('profile.privateIntroduction')}>
             <p>{profile.description || t('profile.fallbackDescription')}</p>

@@ -5651,6 +5651,30 @@ textarea::placeholder {
   background: rgba(255, 255, 255, .04);
 }
 
+.work-point-map-shell {
+  position: relative;
+  min-width: 0;
+}
+
+.work-point-map-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: .75rem;
+  padding: 1rem;
+  text-align: center;
+  border: 1px solid rgba(239, 92, 109, .45);
+  border-radius: 16px;
+  background: rgba(7, 7, 7, .92);
+  color: var(--er-text);
+  z-index: 4;
+}
+
+.work-point-map-error button {
+  min-height: 44px;
+}
+
 .service-pricing-row {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(240px, .85fr) minmax(120px, .5fr);

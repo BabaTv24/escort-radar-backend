@@ -2194,4 +2194,8 @@
   "admin.advertisement.noSchedule": "Kein Zeitplan", "admin.advertisement.noTargetUrl": "Keine Zieladresse", "admin.advertisement.moveUp": "Werbung nach oben", "admin.advertisement.moveDown": "Werbung nach unten", "admin.advertisement.orderSuccess": "Reihenfolge gespeichert.", "admin.advertisement.saveCard": "Werbung speichern", "admin.advertisement.saveSuccess": "Werbung wurde gespeichert.",
   "admin.advertisement.rotationEyebrow": "Rotation", "admin.advertisement.rotationTitle": "Werberotation", "admin.advertisement.rotationInterval": "Werbung wechseln alle (Sekunden)", "admin.advertisement.rotationHelp": "Zulässiger Bereich: 3–30 Sekunden. Standard: 6.", "admin.advertisement.saveRotation": "Rotationsintervall speichern", "admin.advertisement.configurationSuccess": "Rotation und Lauftext wurden gespeichert.",
   "admin.ticker.eyebrow": "FunPage", "admin.ticker.title": "Laufender Text", "admin.ticker.active": "Textleiste aktiv", "admin.ticker.text": "Text der Leiste", "admin.ticker.speed": "Laufgeschwindigkeit", "admin.ticker.speedSlow": "Langsam", "admin.ticker.speedNormal": "Normal", "admin.ticker.speedFast": "Schnell", "admin.ticker.targetUrl": "Optionale Zieladresse", "admin.ticker.preview": "Vorschau des Lauftexts", "admin.ticker.previewEmpty": "Text eingeben, um die Vorschau zu sehen.", "admin.ticker.save": "Lauftext speichern"
+  ,"profile.exactLocation": "Genauer Standort"
+  ,"profile.exactLocationMapOnly": "Der genaue Standort wird aus Datenschutzgründen nur auf der Karte angezeigt."
+  ,"profile.exactLocationLocked": "Genauer Standort ist geschützt"
+  ,"profile.exactLocationPremium": "Nur aktive Premium-Kunden können den genauen Punkt auf der Karte sehen."
 }

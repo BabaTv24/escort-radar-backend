@@ -304,6 +304,7 @@ export const api = {
   tags: () => request<{ tags: Tag[] }>('/api/tags'),
   profile: (id: string) => request<{ profile: Profile }>(`/api/profiles/${id}`),
   profileAccess: (token: string, id: string) => request<{ access: ProfileAccess }>(`/api/profiles/${id}/access`, { token }),
+  profileExactLocation: (token: string, id: string) => request<import('../types').ExactProfileLocation>(`/api/profiles/${id}/location`, { token }),
   myProfile: (token: string) => request<{ profile: Profile | null }>('/api/profiles/me', { token }),
   createProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile }>('/api/profiles', {
     method: 'POST',

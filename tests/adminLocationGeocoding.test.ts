@@ -230,7 +230,7 @@ test('Admin flow contains no Google geocoder or Google map and public API stays 
   }
   assert.match(resolverSource, /nominatim\.openstreetmap\.org\/search/);
   assert.match(workPointMapSource, /maplibre-gl/);
-  assert.match(publicRouteSource, /exact_address: null/);
+  assert.match(publicRouteSource, /exact_address: _exactAddress/);
 });
 
 function nominatimResult(input: { latitude: number; longitude: number; country: string; houseNumber?: string; road?: string }) {

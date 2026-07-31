@@ -142,6 +142,7 @@ export type Profile = {
   longitude?: number | null;
   location_approximate?: boolean;
   location_precision?: 'exact' | 'postal_area' | 'area' | 'city' | null;
+  location_input_source?: 'automatic' | 'manual' | null;
   location_updated_at?: string | null;
   auto_location_on_login?: boolean;
   auto_location_while_online?: boolean;
@@ -617,4 +618,10 @@ export type ProfileAccess = {
   vip_gallery_unlocked: boolean;
   gifts_enabled: boolean;
   live_cam_enabled: boolean;
+};
+
+export type ExactProfileLocation = {
+  latitude: number;
+  longitude: number;
+  precision: 'exact';
 };
