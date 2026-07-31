@@ -109,6 +109,7 @@ const emptyStudioForm = {
   longitude: '',
   location_mode: 'city_only',
   location_visibility: 'postal_area',
+  location_input_source: 'automatic' as 'automatic' | 'manual',
   service_radius_km: 25,
   gender: '',
   orientation: '',
@@ -396,9 +397,6 @@ export function AdminPage() {
   const [profileControlOpen, setProfileControlOpen] = useState(true);
   const [profileReviewOpen, setProfileReviewOpen] = useState(false);
   const [moderationFilter, setModerationFilter] = useState<'pending' | 'reported' | 'suspended' | 'rejected'>('pending');
-  const [adminPlaceQuery, setAdminPlaceQuery] = useState('');
-  const [adminPlaceSuggestions, setAdminPlaceSuggestions] = useState<Record<string, any>[]>([]);
-  const [adminPlaceLoading, setAdminPlaceLoading] = useState(false);
   const [studioFilters, setStudioFilters] = useState({ ...defaultAdminProfileFilters });
   const [profileCityQuery, setProfileCityQuery] = useState('');
   const [selectedProfileCountryKey, setSelectedProfileCountryKey] = useState('all');
@@ -1105,6 +1103,7 @@ export function AdminPage() {
       longitude: profile.longitude === null || profile.longitude === undefined ? '' : String(profile.longitude),
       location_mode: profile.location_mode || 'city_only',
       location_visibility: profile.location_visibility || getAdminLocationChoice(profile),
+      location_input_source: 'automatic',
       service_radius_km: profile.service_radius_km || 25,
       gender: normalizeProfileGender(profile.gender) || profile.gender || '',
       orientation: normalizeProfileOrientation(profile.orientation) || profile.orientation || '',
@@ -1826,7 +1825,15 @@ export function AdminPage() {
       }
       const accountCreated = 'account_created' in result && Boolean(result.account_created);
       const userLinked = 'user_linked' in result && Boolean(result.user_linked);
-      setMessage(accountCreated ? t('admin.accounts.accountCreated') : userLinked ? t('admin.accounts.userLinked') : t('admin.messages.profileSaved'));
+      setMessage(accountCreated
+        ? t('admin.accounts.accountCreated')
+        : userLinked
+          ? t('admin.accounts.userLinked')
+          : result.location_precision === 'street'
+            ? t('admin.messages.profileSavedStreetApproximate')
+            : result.location_geocoded || result.location_coordinates_updated
+              ? t('admin.messages.profileSavedCoordinatesUpdated')
+            : t('admin.messages.profileSaved'));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Nie udalo sie zapisac profilu.');
     } finally {
@@ -2284,75 +2291,6 @@ export function AdminPage() {
     }
   }
 
-  async function searchAdminPlace() {
-    setMessage('');
-    const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-    if (!googleMapsKey) {
-      setMessage(t('admin.location.googleMissing'));
-      setAdminPlaceSuggestions([]);
-      return;
-    }
-    if (!adminPlaceQuery.trim()) {
-      setMessage(t('admin.location.typePlaceFirst'));
-      return;
-    }
-    setAdminPlaceLoading(true);
-    try {
-      const google = await loadGooglePlaces(googleMapsKey);
-      const service = new google.maps.places.AutocompleteService();
-      service.getPlacePredictions({ input: adminPlaceQuery, types: ['geocode', 'establishment'] }, (predictions: any[] | null, status: string) => {
-        setAdminPlaceLoading(false);
-        if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions?.length) {
-          setMessage(t('admin.location.noPlaceFound'));
-          setAdminPlaceSuggestions([]);
-          return;
-        }
-        setAdminPlaceSuggestions(predictions.slice(0, 5));
-      });
-    } catch {
-      setAdminPlaceLoading(false);
-      setMessage(t('admin.location.googleLoadFailed'));
-    }
-  }
-
-  async function selectAdminPlace(placeId: string) {
-    const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-    if (!googleMapsKey) return;
-    setAdminPlaceLoading(true);
-    try {
-      const google = await loadGooglePlaces(googleMapsKey);
-      const node = document.createElement('div');
-      const service = new google.maps.places.PlacesService(node);
-      service.getDetails({ placeId, fields: ['name', 'formatted_address', 'geometry', 'address_components'] }, (place: any, status: string) => {
-        setAdminPlaceLoading(false);
-        if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
-          setMessage(t('admin.location.googleLoadFailed'));
-          return;
-        }
-        const parsed = parseGooglePlace(place);
-        const district = resolveBerlinPostalDistrict(parsed.postal_code);
-        setStudioForm({
-          ...studioForm,
-          work_country: parsed.country || studioForm.work_country,
-          work_city: parsed.city || studioForm.work_city,
-          work_area: district || parsed.area || studioForm.work_area,
-          area: district || parsed.area || studioForm.area,
-          city: getLegacyCitySlug(parsed.city || studioForm.work_city),
-          postal_code: parsed.postal_code || studioForm.postal_code,
-          work_place_label: parsed.label || studioForm.work_place_label,
-          latitude: parsed.latitude === null || parsed.latitude === undefined ? '' : String(parsed.latitude),
-          longitude: parsed.longitude === null || parsed.longitude === undefined ? '' : String(parsed.longitude),
-          location_mode: 'approximate'
-        });
-        setAdminPlaceQuery(parsed.label || '');
-        setAdminPlaceSuggestions([]);
-      });
-    } catch {
-      setAdminPlaceLoading(false);
-      setMessage(t('admin.location.googleLoadFailed'));
-    }
-  }
-
   function renderStudioEditorTab(selectedProfile?: Profile) {
     const selectedServices = studioForm.services.map((key) => ({ key, label: serviceLabel(key) }));
     const visibleServices = serviceOptions
@@ -2453,14 +2391,14 @@ export function AdminPage() {
         <AdminField label={t('admin.profileEditor.workCountry')}><select value={country.code} onChange={(event) => {
           const nextCountry = getAdminLocationCountry(countries, event.target.value);
           const nextCity = nextCountry.cities[0]?.name || '';
-          setStudioForm(applyAdminCitySelection({ ...studioForm, work_country: nextCountry.code }, nextCity));
+          setStudioForm({ ...applyAdminCitySelection({ ...studioForm, work_country: nextCountry.code }, nextCity), location_input_source: 'automatic' });
         }}>{countries.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></AdminField>
         <AdminField label={t('admin.profileEditor.workCity')}><input list="admin-city-options" placeholder={t('admin.location.manualCity')} value={studioForm.work_city} onChange={(event) => {
-          setStudioForm(applyAdminCitySelection(studioForm, event.target.value));
+          setStudioForm({ ...applyAdminCitySelection(studioForm, event.target.value), location_input_source: 'automatic' });
         }} /></AdminField>
         <datalist id="admin-city-options">{cities.map((city) => <option key={city.name} value={city.name} />)}</datalist>
-        <AdminField label={t('profileDetails.berlinDistrict')}><select value={districts.includes(studioForm.work_area) ? studioForm.work_area : ''} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value })}><option value="">{t('profileDetails.chooseDistrict')}</option>{districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></AdminField>
-        <AdminField label={t('dashboard.advertiser.districtArea')}><input list="admin-district-options" placeholder={t('admin.profileEditor.areaPlaceholder')} value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value })} /></AdminField>
+        <AdminField label={t('profileDetails.berlinDistrict')}><select value={districts.includes(studioForm.work_area) ? studioForm.work_area : ''} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value, location_input_source: 'automatic' })}><option value="">{t('profileDetails.chooseDistrict')}</option>{districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></AdminField>
+        <AdminField label={t('dashboard.advertiser.districtArea')}><input list="admin-district-options" placeholder={t('admin.profileEditor.areaPlaceholder')} value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value, location_input_source: 'automatic' })} /></AdminField>
         <datalist id="admin-district-options">{districts.map((district) => <option key={district} value={district} />)}</datalist>
         <AdminField label={t('admin.location.postalCode')}><input maxLength={20} placeholder="12043" value={studioForm.postal_code} onChange={(event) => {
           const postalCode = event.target.value.slice(0, 20);
@@ -2468,12 +2406,13 @@ export function AdminPage() {
           setStudioForm({
             ...studioForm,
             postal_code: postalCode,
+            location_input_source: 'automatic',
             ...(district ? { work_city: studioForm.work_city || 'Berlin', city: 'berlin', work_area: district, area: district } : {})
           });
           if (district) setMessage(t('profileDetails.postalCodeAutoArea'));
         }} /></AdminField>
-        <AdminField label={t('admin.location.placeLabel')}><input placeholder={t('admin.location.placeLabelPlaceholder')} value={studioForm.work_place_label} onChange={(event) => setStudioForm({ ...studioForm, work_place_label: event.target.value })} /></AdminField>
-        <AdminField label={t('radar.exactAddress')}><input placeholder="Street, number, city" value={studioForm.exact_address} onChange={(event) => setStudioForm({ ...studioForm, exact_address: event.target.value, work_place_label: event.target.value || studioForm.work_place_label })} /></AdminField>
+        <AdminField label={t('admin.location.placeLabel')}><input placeholder={t('admin.location.placeLabelPlaceholder')} value={studioForm.work_place_label} onChange={(event) => setStudioForm({ ...studioForm, work_place_label: event.target.value, location_input_source: 'automatic' })} /></AdminField>
+        <AdminField label={t('radar.exactAddress')}><input placeholder="Street, number, city" value={studioForm.exact_address} onChange={(event) => setStudioForm({ ...studioForm, exact_address: event.target.value, work_place_label: event.target.value || studioForm.work_place_label, location_input_source: 'automatic' })} /></AdminField>
         <AdminField label={t('admin.location.radius')}><select value={studioForm.service_radius_km} onChange={(event) => setStudioForm({ ...studioForm, service_radius_km: Number(event.target.value) })}>{[1, 5, 10, 25, 50, 100].map((radius) => <option key={radius} value={radius}>{radius} km</option>)}</select></AdminField>
         <AdminField label={t('radar.locationVisibility')}><><select value={studioForm.location_visibility || getAdminLocationChoice(studioForm)} onChange={(event) => setStudioForm(applyAdminLocationChoice(studioForm, event.target.value))}>
           <option value="exact">{t('radar.exactAddress')}</option>
@@ -2481,10 +2420,9 @@ export function AdminPage() {
           <option value="city_only">{t('radar.cityOnly')}</option>
           <option value="hidden">{t('radar.hideExactLocation')}</option>
         </select><small className="muted">{t('radar.locationVisibilityHelp')}</small></></AdminField>
-        <AdminField label={t('admin.location.placeSearch')}><><input placeholder={t('admin.location.placeSearchPlaceholder')} value={adminPlaceQuery} onChange={(event) => setAdminPlaceQuery(event.target.value)} /><button type="button" className="button" disabled={adminPlaceLoading} onClick={searchAdminPlace}>{adminPlaceLoading ? t('states.loading') : t('admin.location.searchPlace')}</button>{adminPlaceSuggestions.length ? <div className="place-suggestions">{adminPlaceSuggestions.map((suggestion) => <button key={suggestion.place_id} type="button" onClick={() => selectAdminPlace(suggestion.place_id)}>{suggestion.description}</button>)}</div> : null}</></AdminField>
         <div className="full-span">
-          <WorkPointMap apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''} latitude={studioForm.latitude} longitude={studioForm.longitude} onChange={(point) => {
-            setStudioForm({ ...studioForm, latitude: String(point.latitude), longitude: String(point.longitude), location_mode: 'approximate', location_visibility: studioForm.location_visibility || 'postal_area' });
+          <WorkPointMap latitude={studioForm.latitude} longitude={studioForm.longitude} onChange={(point) => {
+            setStudioForm({ ...studioForm, latitude: String(point.latitude), longitude: String(point.longitude), location_mode: 'exact', location_visibility: 'exact', location_input_source: 'manual' });
             setMessage(t('location.workPointSet'));
           }} />
         </div>
@@ -4306,47 +4244,6 @@ function AdminPhotoThumb({ photo, onClick }: { photo: Record<string, any>; onCli
 
 function AdminCoverPlaceholder({ label }: { label: string }) {
   return <div className="admin-cover-placeholder"><span>{label?.slice(0, 1) || 'ER'}</span></div>;
-}
-
-let adminGooglePlacesPromise: Promise<any> | null = null;
-
-function loadGooglePlaces(apiKey: string) {
-  if ((window as any).google?.maps?.places) return Promise.resolve((window as any).google);
-  if (adminGooglePlacesPromise) return adminGooglePlacesPromise;
-
-  adminGooglePlacesPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
-    script.async = true;
-    script.onload = () => {
-      const google = (window as any).google;
-      google?.maps?.places ? resolve(google) : reject(new Error('Google Places unavailable'));
-    };
-    script.onerror = () => reject(new Error('Google Maps failed to load'));
-    document.head.appendChild(script);
-  });
-
-  return adminGooglePlacesPromise;
-}
-
-function parseGooglePlace(place: any) {
-  const components = Array.isArray(place.address_components) ? place.address_components : [];
-  const byType = (type: string) => components.find((component: any) => component.types?.includes(type))?.long_name || '';
-  const city = byType('locality') || byType('postal_town') || byType('administrative_area_level_2');
-  const area = byType('sublocality') || byType('sublocality_level_1') || byType('neighborhood') || byType('administrative_area_level_3');
-  const countryCode = components.find((component: any) => component.types?.includes('country'))?.short_name || byType('country');
-  const postalCode = byType('postal_code');
-  const latitude = place.geometry?.location?.lat ? Number(place.geometry.location.lat().toFixed(6)) : null;
-  const longitude = place.geometry?.location?.lng ? Number(place.geometry.location.lng().toFixed(6)) : null;
-  return {
-    city,
-    area,
-    country: countryCode,
-    postal_code: postalCode,
-    latitude,
-    longitude,
-    label: place.formatted_address || place.name || ''
-  };
 }
 
 function AdminStatCard({ label, value, badge, details }: { label: string; value: unknown; badge?: string; details?: Array<[string, unknown]> }) {

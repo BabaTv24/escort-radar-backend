@@ -65,6 +65,7 @@ import { runBulkPhotoModeration, validateBulkPhotoModerationInput } from '../bul
 import { buildProfilePhotoApprovalResult, validateProfilePhotoApprovalInput } from '../bulkProfilePhotoApproval.js';
 import { buildProfileExport, loadAllProfilesForExport, profileExportFilename, profileExportPageSize, selectedProfileExportFilename } from '../adminProfileExport.js';
 import { adminFunPageAdvertisementRouter } from './funPageAdvertisement.js';
+import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, resolveAdminLocation, validateManualAdminLocation } from '../adminLocationGeocoding.js';
 
 export const adminRouter = Router();
 
@@ -1054,6 +1055,15 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
   const profileData = normalizeAdminProfilePayload(req.body);
   if ('error' in profileData) return res.status(400).json({ error: profileData.error });
   if (req.body.password && req.body.password !== req.body.confirm_password) return res.status(400).json({ error: 'Passwords do not match' });
+  let locationResolution;
+  try {
+    locationResolution = req.body.location_input_source === 'manual' && profileData.data.location_visibility === 'exact'
+      ? validateManualAdminLocation(profileData.data)
+      : await resolveAdminLocation(profileData.data, { userAgent: adminNominatimUserAgent() });
+  } catch (error) {
+    if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+    throw error;
+  }
 
   const starter = starterPackagePatch(req.body.starter_package, String(profileData.data.account_type || 'escort'));
   let authUser: any = null;
@@ -1074,6 +1084,9 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
 
   const payload: Record<string, any> = {
     ...profileData.data,
+    latitude: locationResolution.latitude,
+    longitude: locationResolution.longitude,
+    ...(locationResolution.work_place_label ? { work_place_label: locationResolution.work_place_label } : {}),
     ...starter,
     user_id: authUser?.id || null,
     slug: `${slugify(String(profileData.data.display_name))}-${Date.now().toString(36)}`,
@@ -1101,7 +1114,13 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
     await logAccountAccess(req, data.id, authUser.id, authUserCreated ? 'admin_created_account' : 'admin_linked_user');
   }
   await logAdminAction(req.user?.email, 'profile_studio_created', 'profile', data.id, payload);
-  res.status(201).json({ profile: withAdminImageUrls(data), account_created: authUserCreated, user_linked: Boolean(authUser) });
+  res.status(201).json({
+    profile: withAdminImageUrls(data),
+    account_created: authUserCreated,
+    user_linked: Boolean(authUser),
+    location_geocoded: locationResolution.geocoded,
+    location_precision: locationResolution.precision
+  });
 }));
 
 adminRouter.post('/profiles/import', adminImportUpload.single('file'), asyncHandler(async (req, res) => {
@@ -2003,11 +2022,50 @@ adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
   const profileData = normalizeAdminProfilePayload(req.body, true, true);
   if ('error' in profileData) return res.status(400).json({ error: profileData.error });
 
-  const patch = {
+  const { data: previousProfile, error: previousProfileError } = await supabaseAdmin
+    .from('profiles')
+    .select('id, work_country, work_city, work_area, postal_code, work_place_label, exact_address, city, area, latitude, longitude, location_mode, location_visibility')
+    .eq('id', req.params.id)
+    .single();
+  if (previousProfileError || !previousProfile) return res.status(404).json({ error: 'Profile not found' });
+
+  const locationChanged = adminLocationChanged(previousProfile, profileData.data);
+  const addressOrPrivacyChanged = adminAddressOrPrivacyChanged(previousProfile, profileData.data);
+  let locationResolution = null;
+  const manualExactPoint = req.body.location_input_source === 'manual' && profileData.data.location_visibility === 'exact';
+  if (manualExactPoint && locationChanged) {
+    try {
+      locationResolution = validateManualAdminLocation(profileData.data);
+    } catch (error) {
+      if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+      throw error;
+    }
+  } else if (addressOrPrivacyChanged || (locationChanged && profileData.data.location_visibility !== 'exact')) {
+    try {
+      locationResolution = await resolveAdminLocation(profileData.data, { userAgent: adminNominatimUserAgent() });
+    } catch (error) {
+      if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+      throw error;
+    }
+  } else if (locationChanged) {
+    try {
+      locationResolution = validateManualAdminLocation(profileData.data);
+    } catch (error) {
+      if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+      throw error;
+    }
+  }
+
+  const patch: Record<string, unknown> = {
     ...profileData.data,
+    ...(locationResolution ? {
+      latitude: locationResolution.latitude,
+      longitude: locationResolution.longitude,
+      ...(locationResolution.work_place_label ? { work_place_label: locationResolution.work_place_label } : {})
+    } : {}),
     verification_status: profileData.data.verified ? 'verified' : 'pending',
     verified_at: profileData.data.verified ? new Date().toISOString() : null,
-    location_updated_at: new Date().toISOString()
+    ...(locationChanged ? { location_updated_at: new Date().toISOString() } : {})
   };
   // Creation provenance is immutable here. Editing an existing profile must
   // never turn it into an admin-sponsored profile or make it eligible for backfill.
@@ -2033,7 +2091,12 @@ adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
   await upsertManualSubscription(data, req.user?.email || req.user?.id || null);
   await logAdminAction(req.user?.email, 'profile_studio_updated', 'profile', req.params.id, patch);
-  res.json({ profile: withAdminImageUrls(data) });
+  res.json({
+    profile: withAdminImageUrls(data),
+    location_geocoded: locationResolution?.geocoded || false,
+    location_precision: locationResolution?.precision || null,
+    location_coordinates_updated: locationChanged
+  });
 }));
 
 adminRouter.patch('/profiles/:id/publish', asyncHandler(async (req, res) => {
@@ -3500,7 +3563,7 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
   const suppliedWorkCountry = optionalText(body.work_country || body.country, 80);
   const suppliedWorkCity = optionalText(body.work_city || body.city, 100);
   const importedWorkCountry = resolveImportedCountry(suppliedWorkCountry || resolvedCity?.country_code, suppliedWorkCity || resolvedCity?.canonical_city || city);
-  const locationMode = ['exact_hidden', 'approximate', 'city_only'].includes(String(body.location_mode || 'city_only')) ? String(body.location_mode || 'city_only') : 'city_only';
+  const locationMode = ['exact', 'postal_area', 'hidden', 'exact_hidden', 'approximate', 'city_only'].includes(String(body.location_mode || 'city_only')) ? String(body.location_mode || 'city_only') : 'city_only';
   const importedCityOnly = allowImportedCity && locationMode === 'city_only' ? resolvedCity : null;
 
   return {
@@ -3596,6 +3659,12 @@ function normalizeAdminProfilePayload(body: Record<string, unknown>, allowImport
 function normalizeAdminOperatorStatus(value: unknown) {
   const status = normalizeOperatorStatus(value);
   return operatorStatuses.includes(status) ? status : 'OFFLINE';
+}
+
+function adminNominatimUserAgent() {
+  const appUrl = String(config.appUrl || 'https://escort-radar.fun').trim();
+  const contact = String(config.supportEmail || 'support@escort-radar.fun').trim();
+  return `Escort Radar/1.0 (+${appUrl}; contact: ${contact})`;
 }
 
 function normalizeAdminCategory(value: unknown) {

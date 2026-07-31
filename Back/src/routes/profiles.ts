@@ -481,7 +481,7 @@ function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffective
     location_visibility: visibility,
     postal_code: postalCode,
     work_place_label: visibility === 'exact' ? work_place_label : null,
-    exact_address: visibility === 'exact' ? _omittedExactAddress : null,
+    exact_address: null,
     latitude: effectiveLocation?.latitude ?? null,
     longitude: effectiveLocation?.longitude ?? null,
     location_approximate: effectiveLocation?.location_approximate ?? false,

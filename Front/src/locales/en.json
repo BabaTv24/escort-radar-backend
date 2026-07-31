@@ -1993,6 +1993,8 @@
   "admin.common.no": "No",
   "admin.status.male_escort": "Male escort",
   "admin.messages.profileSaved": "Profile saved.",
+  "admin.messages.profileSavedCoordinatesUpdated": "Location saved and coordinates updated.",
+  "admin.messages.profileSavedStreetApproximate": "Street location saved. The house number was not confirmed, so the position is approximate.",
   "admin.accounts.accountAccess": "Account access",
   "admin.accounts.password": "Password",
   "admin.accounts.confirmPassword": "Confirm password",
