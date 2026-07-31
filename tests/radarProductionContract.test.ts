@@ -516,6 +516,23 @@ test('Radar uses MapLibre/OpenFreeMap without Google, Mapbox or an API key', asy
   assert.doesNotMatch(`${mapSource}\n${panelSource}`, /google\.maps|maps\.googleapis|mapbox|apiKey/i);
 });
 
+test('mobile Radar is content-sized, square, overflow-safe and reserves bottom navigation space', async () => {
+  const [styles, componentStyles, panelSource] = await Promise.all([
+    readFile(new URL('../Front/src/styles.css', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/components/RadarPanel.css', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8')
+  ]);
+  const mobile = styles.slice(styles.lastIndexOf('@media (max-width: 720px)'), styles.indexOf('@media (prefers-reduced-motion', styles.lastIndexOf('@media (max-width: 720px)')));
+  assert.match(mobile, /radar-map-surface[\s\S]*height:\s*auto;[\s\S]*aspect-ratio:\s*1\s*\/\s*1/);
+  assert.match(mobile, /radar-visual[\s\S]*top:\s*50%;[\s\S]*width:\s*calc\(100% - 24px\)/);
+  assert.match(mobile, /padding-bottom:\s*calc\(var\(--er-mobile-nav-height[^;]+env\(safe-area-inset-bottom\)/);
+  assert.match(mobile, /max-width:\s*100%/);
+  assert.doesNotMatch(mobile, /radar-map-surface[\s\S]{0,180}height:\s*380px/);
+  assert.doesNotMatch(mobile, /transform:\s*scale\(/);
+  assert.match(componentStyles, /ResizeObserver|radar-maplibre/);
+  assert.match(panelSource, /radarSurfaceRef/);
+});
+
 function haversineMeters(
   left: { latitude: number; longitude: number },
   right: { latitude: number; longitude: number }

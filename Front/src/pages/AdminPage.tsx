@@ -110,6 +110,7 @@ const emptyStudioForm = {
   location_mode: 'city_only',
   location_visibility: 'postal_area',
   location_input_source: 'automatic' as 'automatic' | 'manual',
+  location_precision: null as Profile['location_precision'],
   service_radius_km: 25,
   gender: '',
   orientation: '',
@@ -371,6 +372,8 @@ export function AdminPage() {
   const [studioForm, setStudioForm] = useState({ ...emptyStudioForm });
   const [studioFile, setStudioFile] = useState<File | null>(null);
   const [studioSaving, setStudioSaving] = useState(false);
+  const [studioLocationResolving, setStudioLocationResolving] = useState(false);
+  const [studioLocationError, setStudioLocationError] = useState('');
   const [studioTab, setStudioTab] = useState<(typeof studioTabs)[number]>('account');
   const [studioServiceSearch, setStudioServiceSearch] = useState('');
   const [studioServiceCategory, setStudioServiceCategory] = useState('all');
@@ -1103,7 +1106,8 @@ export function AdminPage() {
       longitude: profile.longitude === null || profile.longitude === undefined ? '' : String(profile.longitude),
       location_mode: profile.location_mode || 'city_only',
       location_visibility: profile.location_visibility || getAdminLocationChoice(profile),
-      location_input_source: 'automatic',
+      location_input_source: profile.location_input_source || 'automatic',
+      location_precision: profile.location_precision || null,
       service_radius_km: profile.service_radius_km || 25,
       gender: normalizeProfileGender(profile.gender) || profile.gender || '',
       orientation: normalizeProfileOrientation(profile.orientation) || profile.orientation || '',
@@ -1809,7 +1813,8 @@ export function AdminPage() {
       const result = studioForm.id
         ? await api.updateAdminProfile(token, studioForm.id, body)
         : await api.createAdminProfile(token, body);
-      const savedProfile = result.profile;
+      const reread = await api.adminProfile(token, result.profile.id);
+      const savedProfile = reread.profile;
       setProfiles((current) => {
         const exists = current.some((profile) => profile.id === savedProfile.id);
         return exists
@@ -1838,6 +1843,40 @@ export function AdminPage() {
       setMessage(error instanceof Error ? error.message : 'Nie udalo sie zapisac profilu.');
     } finally {
       setStudioSaving(false);
+    }
+  }
+
+  async function reverseStudioPoint(point: { latitude: number; longitude: number }) {
+    if (studioLocationResolving) return;
+    setStudioLocationResolving(true);
+    setStudioLocationError('');
+    setMessage('Rozpoznawanie adresu…');
+    try {
+      const { location } = await api.reverseAdminLocation(token, point.latitude, point.longitude);
+      setStudioForm((current) => ({
+        ...current,
+        latitude: String(point.latitude),
+        longitude: String(point.longitude),
+        work_country: location.work_country || current.work_country,
+        work_city: location.work_city || current.work_city,
+        city: location.work_city ? getLegacyCitySlug(location.work_city) : current.city,
+        work_area: location.work_area || '',
+        area: location.work_area || '',
+        postal_code: location.postal_code || '',
+        exact_address: location.exact_address || location.work_place_label || '',
+        work_place_label: location.work_place_label || location.exact_address || '',
+        location_mode: 'exact',
+        location_visibility: 'exact',
+        location_precision: location.precision === 'city' ? 'city' : location.precision === 'postal_area' ? 'postal_area' : 'exact',
+        location_input_source: 'manual'
+      }));
+      setMessage('Adres rozpoznany. Użyj przycisku Zapisz, aby zapisać kompletną lokalizację.');
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Nie udało się rozpoznać adresu.';
+      setStudioLocationError(text);
+      setMessage(text);
+    } finally {
+      setStudioLocationResolving(false);
     }
   }
 
@@ -2422,9 +2461,11 @@ export function AdminPage() {
         </select><small className="muted">{t('radar.locationVisibilityHelp')}</small></></AdminField>
         <div className="full-span">
           <WorkPointMap latitude={studioForm.latitude} longitude={studioForm.longitude} onChange={(point) => {
-            setStudioForm({ ...studioForm, latitude: String(point.latitude), longitude: String(point.longitude), location_mode: 'exact', location_visibility: 'exact', location_input_source: 'manual' });
-            setMessage(t('location.workPointSet'));
+            setStudioForm((current) => ({ ...current, latitude: String(point.latitude), longitude: String(point.longitude), location_mode: 'exact', location_visibility: 'exact', location_precision: 'exact', location_input_source: 'manual' }));
+            void reverseStudioPoint(point);
           }} />
+          {studioLocationResolving ? <p className="muted" role="status">Rozpoznawanie adresu…</p> : null}
+          {studioLocationError ? <p className="error-text" role="alert">{studioLocationError}</p> : null}
         </div>
       </div>;
     }

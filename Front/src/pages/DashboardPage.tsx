@@ -647,6 +647,11 @@ export function DashboardPage() {
     await persistProfile(profile);
   }
 
+  async function reverseProfilePoint(point: { latitude: number; longitude: number }) {
+    if (!token) throw new Error(t('dashboard.signInFirst'));
+    return (await api.reverseProfileLocation(token, point.latitude, point.longitude)).location;
+  }
+
   async function setCoverImage(imageId: string) {
     if (!token) return;
     setDashboardStatus('saving');
@@ -912,6 +917,7 @@ export function DashboardPage() {
         message={message}
         uploadStatus={uploadStatus}
         onProfileChange={setProfile}
+        onReverseLocation={reverseProfilePoint}
         onUploadImage={uploadImage}
         onSetCoverImage={setCoverImage}
         onDeleteImage={deleteImage}
@@ -2165,7 +2171,7 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
   );
 }
 
-function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onActivateSubscription, onLogout, bcuWallet, bcuLedger, sponsoredDashboard }: {
+function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onReverseLocation, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onActivateSubscription, onLogout, bcuWallet, bcuLedger, sponsoredDashboard }: {
   profile: Partial<Profile>;
   savedProfile: Profile | null;
   userEmail: string;
@@ -2176,6 +2182,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   message: string;
   uploadStatus: string;
   onProfileChange: (profile: Partial<Profile>) => void;
+  onReverseLocation: (point: { latitude: number; longitude: number }) => Promise<import('../lib/api').LocationGeocodeResult>;
   onUploadImage: (event: ChangeEvent<HTMLInputElement>) => void;
   onSetCoverImage: (imageId: string) => void;
   onDeleteImage: (imageId: string) => void;
@@ -2190,6 +2197,8 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   const [panel, setPanel] = useState<'setup' | 'waiting' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text' | 'additional' | 'account' | 'visibility'>(savedProfile?.owner_activation_status === 'awaiting_owner_activation' ? 'waiting' : savedProfile ? 'operator' : 'setup');
   const [serviceSearch, setServiceSearch] = useState('');
   const [geoMessage, setGeoMessage] = useState('');
+  const [locationResolving, setLocationResolving] = useState(false);
+  const [locationError, setLocationError] = useState('');
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeSuggestions, setPlaceSuggestions] = useState<any[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
@@ -2213,6 +2222,39 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   const photoInputDisabled = !savedProfile || imageCount >= photoLimit || uploadStatus === 'uploading';
   const favoriteGifts = bcuLedger.filter((entry) => entry.direction === 'credit' && entry.transaction_type === 'favorite_received');
   const favoriteGiftTotal = favoriteGifts.reduce((sum, entry) => sum + Number(entry.amount_bc), 0);
+
+  async function reverseWorkPoint(point: { latitude: number; longitude: number }) {
+    setLocationResolving(true);
+    setLocationError('');
+    setGeoMessage('Rozpoznawanie adresu…');
+    try {
+      const location = await onReverseLocation(point);
+      onProfileChange({
+        ...profile,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        work_country: location.work_country || profile.work_country,
+        work_city: location.work_city || profile.work_city,
+        city: location.work_city ? getLegacyCitySlug(location.work_city) : profile.city,
+        work_area: location.work_area || null,
+        area: location.work_area || null,
+        postal_code: location.postal_code || null,
+        exact_address: location.exact_address || location.work_place_label || null,
+        work_place_label: location.work_place_label || location.exact_address || null,
+        location_mode: 'exact',
+        location_visibility: 'exact',
+        location_precision: location.precision === 'city' ? 'city' : location.precision === 'postal_area' ? 'postal_area' : 'exact',
+        location_input_source: 'manual'
+      });
+      setGeoMessage('Adres rozpoznany. Zapisz profil, aby utrwalić lokalizację.');
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Nie udało się rozpoznać adresu.';
+      setLocationError(text);
+      setGeoMessage('');
+    } finally {
+      setLocationResolving(false);
+    }
+  }
 
   useEffect(() => {
     if (savedProfile && panel === 'setup') setPanel('photos');
@@ -2670,11 +2712,13 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
                 });
               }} />
               <input placeholder={t('dashboard.advertiser.placeLabel')} value={profile.work_place_label || ''} onChange={(event) => onProfileChange({ ...profile, work_place_label: event.target.value })} />
-              <input placeholder={t('radar.exactAddress')} value={profile.exact_address || ''} onChange={(event) => onProfileChange({ ...profile, exact_address: event.target.value, work_place_label: event.target.value || profile.work_place_label || '' })} />
+              <input placeholder={t('radar.exactAddress')} value={profile.exact_address || ''} onChange={(event) => onProfileChange({ ...profile, exact_address: event.target.value, work_place_label: event.target.value || profile.work_place_label || '', location_input_source: 'automatic' })} />
               <WorkPointMap latitude={profile.latitude} longitude={profile.longitude} onChange={(point) => {
-                onProfileChange({ ...profile, latitude: point.latitude, longitude: point.longitude, location_mode: 'exact', location_visibility: 'exact', location_input_source: 'manual' });
-                setGeoMessage(t('location.workPointSet'));
+                onProfileChange({ ...profile, latitude: point.latitude, longitude: point.longitude, location_mode: 'exact', location_visibility: 'exact', location_precision: 'exact', location_input_source: 'manual' });
+                void reverseWorkPoint(point);
               }} />
+              {locationResolving ? <p className="muted" role="status">Rozpoznawanie adresu…</p> : null}
+              {locationError ? <p className="error-text" role="alert">{locationError}</p> : null}
               <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value, work_city: profile.work_city || normalizeCityName(event.target.value) })}>
                 {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
               </select>

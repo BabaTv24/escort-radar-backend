@@ -28,6 +28,7 @@ export type BulkProfilePhotoApprovalResponse = {
 };
 
 type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
+export type LocationGeocodeResult = Pick<Profile, 'work_country' | 'work_city' | 'work_area' | 'postal_code' | 'exact_address' | 'work_place_label' | 'latitude' | 'longitude' | 'location_precision'> & { street?: string; house_number?: string; precision: 'exact' | 'street' | 'postal_area' | 'city'; geocoded: boolean };
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly payload?: Record<string, unknown>) {
@@ -316,6 +317,9 @@ export const api = {
     token,
     body: JSON.stringify(body)
   }),
+  reverseProfileLocation: (token: string, latitude: number, longitude: number) => request<{ location: LocationGeocodeResult }>('/api/profiles/location/reverse-geocode', {
+    method: 'POST', token, body: JSON.stringify({ latitude, longitude })
+  }),
   uploadImage: (token: string, form: FormData) => request<{ image: unknown }>('/api/uploads/profile-image', {
     method: 'POST',
     token,
@@ -414,6 +418,9 @@ export const api = {
   adminUsers: (token: string) => request<{ users: Record<string, unknown>[] }>('/api/admin/users', { token }),
   adminSubscriptions: (token: string) => request<{ subscriptions: Record<string, unknown>[]; stats?: Record<string, number> }>('/api/admin/subscriptions', { token }),
   adminProfile: (token: string, id: string) => request<{ profile: Profile }>(`/api/admin/profiles/${id}`, { token }),
+  reverseAdminLocation: (token: string, latitude: number, longitude: number) => request<{ location: LocationGeocodeResult }>('/api/admin/location/reverse-geocode', {
+    method: 'POST', token, body: JSON.stringify({ latitude, longitude })
+  }),
   adminProfileVisibilityAudit: (token: string, query = '') => request<{ context: Record<string, unknown>; profiles: Array<Record<string, unknown>> }>(`/api/admin/profiles/visibility-audit${query}`, { token }),
   createAdminProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile; account_created?: boolean; user_linked?: boolean; location_geocoded?: boolean; location_precision?: string | null; location_coordinates_updated?: boolean }>('/api/admin/profiles', {
     method: 'POST',

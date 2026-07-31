@@ -132,6 +132,8 @@ export function validateProfileInput(body: Record<string, unknown>) {
       approximate_location_area: optionalText(body.approximate_location_area, 120),
       location_mode: normalizeLocationMode(body.location_mode),
       location_visibility: normalizeLocationVisibility(body.location_visibility ?? body.location_mode),
+      ...(Object.prototype.hasOwnProperty.call(body, 'location_precision') ? { location_precision: normalizeLocationPrecision(body.location_precision) } : {}),
+      ...(body.location_input_source === 'manual' || body.location_input_source === 'automatic' ? { location_input_source: body.location_input_source } : {}),
       latitude: optionalCoordinate(body.latitude, -90, 90),
       longitude: optionalCoordinate(body.longitude, -180, 180),
       auto_location_on_login: Boolean(body.auto_location_on_login),
@@ -142,6 +144,10 @@ export function validateProfileInput(body: Record<string, unknown>) {
       private_studio: Boolean(body.private_studio)
     }
   };
+}
+
+function normalizeLocationPrecision(value: unknown) {
+  return value === 'city' || value === 'postal_area' || value === 'exact' ? value : null;
 }
 
 const availabilityDayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;

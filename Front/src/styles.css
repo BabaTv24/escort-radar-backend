@@ -14211,17 +14211,19 @@ textarea:focus {
     grid-column: 1;
     grid-row: 1;
     width: 100% !important;
-    height: 380px;
+    height: auto;
     min-height: 0 !important;
+    aspect-ratio: 1 / 1;
     margin: 0;
+    box-sizing: border-box;
     border-radius: 8px !important;
   }
 
   .radar-city-page .radar-main-stage .radar-visual {
     left: 50%;
-    top: 164px;
-    width: 326px !important;
-    max-width: calc(100% - 16px);
+    top: 50%;
+    width: calc(100% - 24px) !important;
+    max-width: 100%;
     height: auto;
     aspect-ratio: 1;
     border-radius: 50% !important;
@@ -14378,6 +14380,33 @@ textarea:focus {
   .radar-city-page .radar-results-section {
     border-radius: var(--radar-screen-radius);
     margin-bottom: calc(var(--er-mobile-nav-height, 76px) + env(safe-area-inset-bottom) + 24px);
+  }
+
+  .radar-city-page,
+  .radar-city-page .radar-premium-shell,
+  .radar-city-page .radar-premium-workspace,
+  .radar-city-page .radar-main-stage .radar-map-surface {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .radar-city-page .radar-main-stage .radar-empty-state {
+    inset: 34% 16% 30%;
+    min-height: 0;
+    padding: 8px;
+    gap: 3px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+
+  .radar-city-page .radar-main-stage .radar-empty-state strong {
+    font-size: 12px;
+  }
+
+  .radar-city-page .radar-main-stage .radar-empty-state small {
+    overflow-wrap: anywhere;
+    font-size: 9px;
+    line-height: 1.25;
   }
 
   .radar-city-page .radar-results-toolbar .sort-tabs button {

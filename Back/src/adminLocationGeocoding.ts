@@ -4,6 +4,13 @@ import { normalizeEffectiveLocationVisibility } from './publicLocation.js';
 export type AdminLocationResolution = {
   latitude: number;
   longitude: number;
+  work_country?: string;
+  work_city?: string;
+  work_area?: string;
+  postal_code?: string;
+  street?: string;
+  house_number?: string;
+  exact_address?: string;
   work_place_label?: string;
   geocoded: boolean;
   precision: 'exact' | 'street' | 'postal_area' | 'city';
@@ -34,14 +41,25 @@ type NominatimResult = {
     country_code?: string;
     house_number?: string;
     road?: string;
+    pedestrian?: string;
+    residential?: string;
+    footway?: string;
     city?: string;
     town?: string;
     village?: string;
+    municipality?: string;
+    borough?: string;
+    city_district?: string;
+    suburb?: string;
+    quarter?: string;
+    neighbourhood?: string;
     postcode?: string;
+    country?: string;
   };
 };
 
 const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search';
+const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
 const DEFAULT_USER_AGENT = 'Escort Radar/1.0 (+https://escort-radar.fun; contact: support@escort-radar.fun)';
 const DEFAULT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 1000;
@@ -125,6 +143,47 @@ export async function resolveAdminLocation(
   return pending.then((result) => ({ ...result }));
 }
 
+export async function reverseGeocodeAdminLocation(
+  latitudeValue: unknown,
+  longitudeValue: unknown,
+  options: NominatimOptions = {}
+): Promise<AdminLocationResolution> {
+  const latitude = Number(latitudeValue);
+  const longitude = Number(longitudeValue);
+  if (!validCoordinates(latitude, longitude)) {
+    throw new AdminLocationGeocodingError('Enter valid non-zero latitude and longitude values.', 'invalid_manual_coordinates');
+  }
+
+  const cacheKey = `reverse|${latitude.toFixed(6)}|${longitude.toFixed(6)}`;
+  const cached = geocodeCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return { ...cached.result };
+  if (cached) geocodeCache.delete(cacheKey);
+  const existing = geocodeInFlight.get(cacheKey);
+  if (existing) return existing.then((result) => ({ ...result }));
+
+  const pending = enqueueNominatimRequest(async () => {
+    const url = new URL(NOMINATIM_REVERSE_URL);
+    url.searchParams.set('lat', String(latitude));
+    url.searchParams.set('lon', String(longitude));
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('addressdetails', '1');
+    const result = await fetchNominatimJson(url, options);
+    if (!result || Array.isArray(result)) {
+      throw new AdminLocationGeocodingError('No matching OpenStreetMap address was found for this point.', 'reverse_address_not_found');
+    }
+    const normalized = normalizeNominatimAddress(result as NominatimResult, latitude, longitude, true);
+    if (!normalized.work_country || !normalized.work_city) {
+      throw new AdminLocationGeocodingError('OpenStreetMap did not return a complete country and city for this point.', 'incomplete_reverse_address');
+    }
+    return normalized;
+  }, options.rateLimitMs ?? 1000).then((result) => {
+    cacheResult(cacheKey, result, options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS);
+    return result;
+  }).finally(() => geocodeInFlight.delete(cacheKey));
+  geocodeInFlight.set(cacheKey, pending);
+  return pending.then((result) => ({ ...result }));
+}
+
 export function validateManualAdminLocation(profile: Record<string, any>): AdminLocationResolution {
   const latitude = Number(profile.latitude);
   const longitude = Number(profile.longitude);
@@ -155,28 +214,7 @@ async function requestNominatim(
   url.searchParams.set('addressdetails', '1');
   url.searchParams.set('limit', '5');
 
-  let response: Response;
-  try {
-    response = await (options.fetchImpl || fetch)(url, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': options.userAgent || DEFAULT_USER_AGENT
-      },
-      signal: AbortSignal.timeout(8000)
-    });
-  } catch {
-    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder could not be reached. The profile was not changed.', 'geocoder_unavailable');
-  }
-  if (!response.ok) {
-    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder rejected the request. The profile was not changed.', 'geocoder_http_error');
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder returned an invalid response. The profile was not changed.', 'invalid_geocoder_response');
-  }
+  const payload = await fetchNominatimJson(url, options);
   const results = Array.isArray(payload) ? payload as NominatimResult[] : [];
   if (!results.length) {
     throw new AdminLocationGeocodingError('No matching OpenStreetMap location was found. Check the country, postal code, city and street.', 'address_not_found');
@@ -188,10 +226,7 @@ async function requestNominatim(
   }
 
   const requestedHouseNumber = extractHouseNumber(query.street);
-  const exactHouse = requestedHouseNumber
-    ? countryMatches.find((result) => normalizeHouseNumber(result.address?.house_number) === normalizeHouseNumber(requestedHouseNumber) && hasValidNominatimCoordinates(result))
-    : undefined;
-  const selected = exactHouse || countryMatches.find(hasValidNominatimCoordinates);
+  const selected = selectBestNominatimResult(countryMatches, query);
   if (!selected) {
     throw new AdminLocationGeocodingError('The OpenStreetMap geocoder returned invalid coordinates.', 'invalid_geocoder_coordinates');
   }
@@ -203,16 +238,83 @@ async function requestNominatim(
   }
 
   const exactRequested = visibility === 'exact' || visibility === 'hidden';
-  const precision = exactRequested
+  const exactHouse = Boolean(requestedHouseNumber && normalizeHouseNumber(selected.address?.house_number) === normalizeHouseNumber(requestedHouseNumber));
+  const precision: AdminLocationResolution['precision'] = exactRequested
     ? exactHouse ? 'exact' : 'street'
     : 'postal_area';
+  return { ...normalizeNominatimAddress(selected, latitude, longitude), precision };
+}
+
+async function fetchNominatimJson(url: URL, options: NominatimOptions) {
+  let response: Response;
+  try {
+    response = await (options.fetchImpl || fetch)(url, {
+      headers: { Accept: 'application/json', 'User-Agent': options.userAgent || DEFAULT_USER_AGENT },
+      signal: AbortSignal.timeout(8000)
+    });
+  } catch {
+    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder could not be reached. The profile was not changed.', 'geocoder_unavailable');
+  }
+  if (!response.ok) throw new AdminLocationGeocodingError('The OpenStreetMap geocoder rejected the request. The profile was not changed.', 'geocoder_http_error');
+  try {
+    return await response.json() as unknown;
+  } catch {
+    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder returned an invalid response. The profile was not changed.', 'invalid_geocoder_response');
+  }
+}
+
+function normalizeNominatimAddress(result: NominatimResult, latitude: number, longitude: number, preservePoint = false): AdminLocationResolution {
+  const address = result.address || {};
+  const workCountry = normalizeCountry(address.country_code);
+  const city = text(address.city || address.town || address.village || address.municipality);
+  const area = text(address.borough || address.city_district || address.suburb || address.quarter || address.neighbourhood);
+  const street = text(address.road || address.pedestrian || address.residential || address.footway);
+  const houseNumber = text(address.house_number);
+  const postalCode = text(address.postcode);
+  const streetLine = [street, houseNumber].filter(Boolean).join(' ');
+  const exactAddress = [streetLine, postalCode, city, address.country].filter(Boolean).join(', ');
   return {
     latitude,
     longitude,
-    work_place_label: text(selected.display_name) || structuredLabel(query),
-    geocoded: true,
-    precision
-  } satisfies AdminLocationResolution;
+    ...(workCountry ? { work_country: workCountry } : {}),
+    ...(city ? { work_city: city } : {}),
+    ...(area ? { work_area: area } : {}),
+    ...(postalCode ? { postal_code: postalCode } : {}),
+    ...(street ? { street } : {}),
+    ...(houseNumber ? { house_number: houseNumber } : {}),
+    ...(exactAddress ? { exact_address: exactAddress } : {}),
+    work_place_label: text(result.display_name) || exactAddress,
+    geocoded: !preservePoint,
+    precision: houseNumber ? 'exact' : street ? 'street' : postalCode ? 'postal_area' : 'city'
+  };
+}
+
+function scoreNominatimResult(result: NominatimResult, query: Record<string, string>) {
+  const address = result.address || {};
+  const requestedStreet = normalizeComparableLocationValue(query.street.replace(extractHouseNumber(query.street), ''));
+  const resultStreet = normalizeComparableLocationValue(address.road || address.pedestrian || address.residential || address.footway);
+  const requestedCity = normalizeComparableLocationValue(query.city);
+  const resultCity = normalizeComparableLocationValue(address.city || address.town || address.village || address.municipality);
+  let score = 0;
+  if (requestedStreet && resultStreet && (resultStreet.includes(requestedStreet) || requestedStreet.includes(resultStreet))) score += 8;
+  if (requestedCity && resultCity === requestedCity) score += 5;
+  if (query.postalcode && text(address.postcode) === text(query.postalcode)) score += 4;
+  if (extractHouseNumber(query.street) && normalizeHouseNumber(address.house_number) === normalizeHouseNumber(extractHouseNumber(query.street))) score += 10;
+  return score;
+}
+
+function selectBestNominatimResult(results: NominatimResult[], query: Record<string, string>) {
+  let candidates = results.filter(hasValidNominatimCoordinates);
+  const requestedCity = normalizeComparableLocationValue(query.city);
+  const matchingCity = candidates.filter((result) => normalizeComparableLocationValue(
+    result.address?.city || result.address?.town || result.address?.village || result.address?.municipality
+  ) === requestedCity);
+  if (matchingCity.length) candidates = matchingCity;
+  if (query.postalcode) {
+    const matchingPostal = candidates.filter((result) => text(result.address?.postcode) === text(query.postalcode));
+    if (matchingPostal.length) candidates = matchingPostal;
+  }
+  return [...candidates].sort((left, right) => scoreNominatimResult(right, query) - scoreNominatimResult(left, query))[0];
 }
 
 function enqueueNominatimRequest<T>(task: () => Promise<T>, rateLimitMs: number): Promise<T> {

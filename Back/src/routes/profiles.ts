@@ -13,8 +13,19 @@ import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 import { isRadarRequest, prepareRadarCandidatePool } from '../radarPool.js';
 import { hasActiveEntitlement } from '../services/bcuWallet.js';
 import { canReadExactProfileLocation, exactProfileLocationPayload } from '../profileLocationAccess.js';
+import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, resolveAdminLocation, reverseGeocodeAdminLocation, validateManualAdminLocation, type AdminLocationResolution } from '../adminLocationGeocoding.js';
 
 export const profilesRouter = Router();
+
+profilesRouter.post('/location/reverse-geocode', verifyUser, requireAdvertiserOnboardingAccess, asyncHandler(async (req, res) => {
+  try {
+    const location = await reverseGeocodeAdminLocation(req.body.latitude, req.body.longitude);
+    res.json({ location });
+  } catch (error) {
+    if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+    throw error;
+  }
+}));
 
 profilesRouter.get('/', asyncHandler(async (req, res) => {
   const startedAt = Date.now();
@@ -308,11 +319,21 @@ profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHan
     return res.status(400).json({ error: phoneValidation.error });
   }
   const { tag_ids, profileData } = splitProfileTags(result.data);
+  let locationResolution: AdminLocationResolution;
+  try {
+    locationResolution = result.data.location_input_source === 'manual' && result.data.location_visibility === 'exact'
+      ? validateManualAdminLocation(result.data)
+      : await resolveAdminLocation(result.data);
+  } catch (error) {
+    if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+    throw error;
+  }
 
   const baseSlug = slugify(result.data.display_name);
   const isTestAccount = Boolean(req.body.is_test_account) || isSafeTestEmail(req.user?.email);
   const payload = {
     ...profileData,
+    ...profileLocationPatch(locationResolution, result.data.location_input_source === 'manual' ? 'manual' : 'automatic'),
     ...phoneValidation.data,
     ...operatorStatusPatch(profileData.operator_status),
     user_id: req.user!.id,
@@ -382,7 +403,7 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
     console.log('[profiles] update services keys=', profileData.services.slice(0, 30));
   }
 
-  const { data: existing } = await supabaseAdmin.from('profiles').select('user_id, is_test_account, public_user_id, referral_code').eq('id', req.params.id).single();
+  const { data: existing } = await supabaseAdmin.from('profiles').select('user_id, is_test_account, public_user_id, referral_code, work_country, work_city, work_area, postal_code, work_place_label, exact_address, city, area, latitude, longitude, location_mode, location_visibility, location_precision, location_input_source').eq('id', req.params.id).single();
   if (!existing) {
     logProfileDebug('PUT /api/profiles/:id not_found', req, { status: 'error', profile_id: req.params.id });
     return res.status(404).json({ error: 'Profile not found' });
@@ -392,8 +413,25 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
     return res.status(403).json({ error: 'Not your profile' });
   }
 
+  const locationChanged = adminLocationChanged(existing, profileData);
+  const addressOrPrivacyChanged = adminAddressOrPrivacyChanged(existing, profileData);
+  const manualExactPoint = result.data.location_input_source === 'manual' && result.data.location_visibility === 'exact';
+  let locationPatch: Record<string, unknown> = {};
+  if (locationChanged || addressOrPrivacyChanged) {
+    try {
+      const locationResolution = manualExactPoint
+        ? validateManualAdminLocation(profileData)
+        : await resolveAdminLocation(profileData);
+      locationPatch = profileLocationPatch(locationResolution, manualExactPoint ? 'manual' : 'automatic');
+    } catch (error) {
+      if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+      throw error;
+    }
+  }
+
   const updatePayload = {
     ...profileData,
+    ...locationPatch,
     ...phoneValidation.data,
     ...operatorStatusPatch(profileData.operator_status),
     public_user_id: existing.public_user_id || await generateUniqueValue('public_user_id', generatePublicUserId),
@@ -401,7 +439,7 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
     subscription_status: req.advertiserAccess!.onboarding ? 'trial' : 'active',
     plan: req.advertiserAccess!.plan,
     listing_plan: req.advertiserAccess!.plan,
-    ...(hasLocationChange(req.body) ? { location_updated_at: new Date().toISOString() } : {}),
+    ...(locationChanged ? { location_updated_at: new Date().toISOString() } : {}),
     ...(existing.is_test_account ? {
       status: 'active',
       verified: true,
@@ -482,6 +520,23 @@ function withImageUrls(profile: any, wallet?: any) {
     } : undefined,
     visibility_reason: getVisibilityReason({ ...profile, profile_images: images }),
     radar_score: calculateRadarScore({ ...profile, profile_images: images })
+  };
+}
+
+function profileLocationPatch(location: AdminLocationResolution, source: 'automatic' | 'manual') {
+  const precision = location.precision === 'city' ? 'city' : location.precision === 'postal_area' ? 'postal_area' : 'exact';
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    ...(location.work_country ? { work_country: location.work_country } : {}),
+    ...(location.work_city ? { work_city: location.work_city, city: slugify(location.work_city) } : {}),
+    ...(location.work_area ? { work_area: location.work_area, area: location.work_area } : {}),
+    ...(location.postal_code ? { postal_code: location.postal_code } : {}),
+    ...(location.exact_address ? { exact_address: location.exact_address } : {}),
+    ...(location.work_place_label ? { work_place_label: location.work_place_label } : {}),
+    location_mode: precision === 'city' ? 'city_only' : precision === 'postal_area' ? 'approximate' : 'exact',
+    location_precision: precision,
+    location_input_source: source
   };
 }
 

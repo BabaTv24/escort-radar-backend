@@ -7,6 +7,7 @@ import {
   adminLocationChanged,
   resetAdminLocationGeocodingStateForTests,
   resolveAdminLocation,
+  reverseGeocodeAdminLocation,
   validateManualAdminLocation
 } from '../Back/src/adminLocationGeocoding.js';
 import { resolveEffectivePublicLocation } from '../Back/src/publicLocation.js';
@@ -128,6 +129,39 @@ test('manual exact point takes priority and performs no external request', async
   });
 });
 
+test('reverse geocoding preserves the clicked point and normalizes all returned address parts without inventing a house number', async () => {
+  resetAdminLocationGeocodingStateForTests();
+  let requestedUrl = '';
+  const location = await reverseGeocodeAdminLocation(52.521234, 13.412345, {
+    rateLimitMs: 0,
+    fetchImpl: async (input) => {
+      requestedUrl = String(input);
+      return new Response(JSON.stringify({
+        lat: '52.52',
+        lon: '13.41',
+        display_name: 'Donaustraße, Neukölln, 12043 Berlin, Deutschland',
+        address: {
+          country_code: 'de', country: 'Deutschland', city: 'Berlin', suburb: 'Neukölln',
+          postcode: '12043', road: 'Donaustraße'
+        }
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+  });
+  const query = new URL(requestedUrl);
+  assert.equal(query.pathname, '/reverse');
+  assert.equal(query.searchParams.get('lat'), '52.521234');
+  assert.equal(query.searchParams.get('lon'), '13.412345');
+  assert.equal(location.latitude, 52.521234, 'reverse result must not move the marker to a geocoder centroid');
+  assert.equal(location.longitude, 13.412345);
+  assert.equal(location.work_country, 'DE');
+  assert.equal(location.work_city, 'Berlin');
+  assert.equal(location.work_area, 'Neukölln');
+  assert.equal(location.postal_code, '12043');
+  assert.equal(location.street, 'Donaustraße');
+  assert.equal(location.house_number, undefined);
+  assert.doesNotMatch(location.exact_address || '', /\b\d+[a-z]?\b.*Donaustraße/i);
+});
+
 test('one backend queue serializes Nominatim calls, respects the gap and caches normalized addresses', async () => {
   resetAdminLocationGeocodingStateForTests();
   let active = 0;
@@ -229,6 +263,9 @@ test('Admin flow contains no Google geocoder or Google map and public API stays 
     assert.doesNotMatch(source, /GOOGLE_MAPS_API_KEY|maps\.googleapis|google\.maps/i);
   }
   assert.match(resolverSource, /nominatim\.openstreetmap\.org\/search/);
+  assert.match(resolverSource, /nominatim\.openstreetmap\.org\/reverse/);
+  assert.match(adminPageSource, /reverseAdminLocation/);
+  assert.ok(routeSource.indexOf('adminRouter.use(verifyAdminJwt, requireAdmin)') < routeSource.indexOf("adminRouter.post('/location/reverse-geocode'"));
   assert.match(workPointMapSource, /maplibre-gl/);
   assert.match(publicRouteSource, /exact_address: _exactAddress/);
 });

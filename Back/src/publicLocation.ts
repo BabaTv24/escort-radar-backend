@@ -36,9 +36,10 @@ export function resolveEffectivePublicLocation(profile: Record<string, any>, cit
   // approximation; the exact point is exposed only by the authenticated route.
   if (visibility === 'exact') {
     const city = resolveCityLocation(profile.work_city) || resolveCityLocation(profile.city);
-    return city ? {
-      latitude: city.latitude,
-      longitude: city.longitude,
+    const safePoint = city || (hasValidCoordinates ? approximateExactPoint(latitude, longitude, profile.id) : null);
+    return safePoint ? {
+      latitude: safePoint.latitude,
+      longitude: safePoint.longitude,
       location_approximate: true,
       location_precision: 'city'
     } : null;
@@ -60,6 +61,23 @@ export function resolveEffectivePublicLocation(profile: Record<string, any>, cit
     longitude,
     location_approximate: true,
     location_precision: 'postal_area'
+  };
+}
+
+function approximateExactPoint(latitude: number, longitude: number, profileId: unknown) {
+  // About a 5 km grid plus a stable sub-cell offset. This keeps an otherwise
+  // valid exact profile on the public radar without disclosing its exact point.
+  const grid = 0.05;
+  let hash = 2166136261;
+  for (const character of String(profileId || 'profile')) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  const latOffset = (((hash >>> 8) % 1000) / 1000 - .5) * grid * .5;
+  const lngOffset = (((hash >>> 20) % 1000) / 1000 - .5) * grid * .5;
+  return {
+    latitude: Math.max(-90, Math.min(90, Math.round(latitude / grid) * grid + latOffset)),
+    longitude: Math.max(-180, Math.min(180, Math.round(longitude / grid) * grid + lngOffset))
   };
 }
 
