@@ -502,6 +502,8 @@ function syncRichProfileMarkers(
     markerElement.className = `radar-profile-marker ${statusClass}`;
     markerElement.dataset.profileId = profile.id;
     markerElement.dataset.operatorStatus = operatorStatus;
+    markerElement.dataset.radarLatitude = String(displayCoordinates.lat);
+    markerElement.dataset.radarLongitude = String(displayCoordinates.lng);
     markerElement.href = href;
     markerElement.draggable = false;
     markerElement.setAttribute('aria-label', `${profile.display_name}, ${statusLabel}`);

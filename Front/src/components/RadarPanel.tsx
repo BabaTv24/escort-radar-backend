@@ -281,20 +281,17 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
             />
           </Suspense>
         )}
-        <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas`} aria-label={t('radar.title')}>
-          <div className="radar-distance-rings" aria-hidden="true">
-            <span className="radar-distance-ring selected">
-              <em>{formatRadiusMeters(radius)} {t('radar.radiusLabel').toLowerCase()}</em>
-            </span>
+        <div className="radar-map-viewport">
+          <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas`} aria-label={t('radar.title')}>
+            <div className="radar-sweep" aria-hidden="true" />
+            <div className="radar-core" aria-hidden="true" />
+            {!hasRadarLocation && (
+              <div className="radar-empty-state">
+                <strong>{t('radar.locationRequired')}</strong>
+                <small>{t('radar.locationInputHelp')}</small>
+              </div>
+            )}
           </div>
-          <div className="radar-sweep" aria-hidden="true" />
-          <div className="radar-core" aria-hidden="true" />
-          {!hasRadarLocation && (
-            <div className="radar-empty-state">
-              <strong>{t('radar.locationRequired')}</strong>
-              <small>{t('radar.locationInputHelp')}</small>
-            </div>
-          )}
         </div>
         <RadarQuickFilters
           statuses={[allStatus, ...visibleRadarStatuses]}

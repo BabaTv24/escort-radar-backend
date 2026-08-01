@@ -446,8 +446,8 @@ export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocat
 
   const raw = profile as Profile & Record<string, unknown>;
   const city = textValue(raw.work_city ?? raw.city ?? raw.location_city);
-  const cityOnly = profile.location_mode === 'city_only'
-    || profile.location_visibility === 'city_only'
+  const cityOnly = profile.location_visibility === 'city_only'
+    || (!profile.location_visibility && profile.location_mode === 'city_only')
     || profile.location_precision === 'city';
   if (cityOnly) {
     const cityCenter = cityCenters[normalizeLocationQuery(city)];
@@ -468,7 +468,9 @@ export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocat
       lat,
       lng,
       label: textValue(raw.work_place_label ?? raw.exact_address ?? raw.postal_code ?? raw.postalCode ?? raw.zip ?? raw.work_area ?? raw.area ?? raw.district ?? raw.work_city ?? raw.location_city ?? raw.city),
-      precision: profile.location_precision === 'city' ? 'city' : profile.work_place_label || profile.exact_address ? 'exact' : profile.location_visibility === 'postal_area' ? 'postal_area' : 'approximate',
+      precision: profile.location_visibility === 'exact'
+        ? 'exact'
+        : profile.location_precision === 'city' ? 'city' : profile.work_place_label || profile.exact_address ? 'exact' : profile.location_visibility === 'postal_area' ? 'postal_area' : 'approximate',
       approximate: profile.location_approximate === true || profile.location_precision === 'city' || profile.location_visibility !== 'exact'
     };
   }

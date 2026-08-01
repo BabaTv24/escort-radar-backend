@@ -14,6 +14,7 @@ import {
   radarRadiusToSliderPosition,
   readSavedRadarRadius,
   resolveManualSearcherLocation,
+  resolveProfileRadarLocation,
   saveRadarRadius,
   sliderPositionToRadarRadius,
   stepRadarRadius
@@ -199,6 +200,94 @@ test('MapLibre GeoJSON preserves longitude/latitude order and radius changes upd
   assert.equal(large.features[0].properties.radiusMeters, 10_000);
 });
 
+test('exact API latitude/longitude feed filtering and MapLibre without legacy radar coordinate replacement', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      profiles: [{
+        id: 'privacy-safe',
+        display_name: 'Privacy Safe',
+        city: 'Berlin',
+        radar_latitude: '1',
+        radar_longitude: '1',
+        latitude: '52.5205',
+        longitude: '13.4055',
+        location_visibility: 'exact',
+        location_approximate: false,
+        location_precision: 'exact',
+        operator_status: 'OFFLINE',
+        profile_images: []
+      }],
+      radar_meta: {
+        fetched_candidates: 1, eligible_candidates: 1, located_candidates: 1,
+        unlocated_candidates: 0, pages_fetched: 1, truncated: false
+      }
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    clearPublicProfilesRequestCache();
+    const [profile] = await getPublicProfiles(new URLSearchParams({ radar: '1' }));
+    assert.equal(profile.radar_latitude, 52.5205);
+    assert.equal(profile.radar_longitude, 13.4055);
+    assert.deepEqual(
+      { latitude: profile.latitude, longitude: profile.longitude },
+      { latitude: 52.5205, longitude: 13.4055 }
+    );
+    const selected = selectRadarProfiles([profile], { lat: 52.52, lng: 13.405, source: 'city' }, 1_000, 'all');
+    assert.equal(selected.length, 1, 'offline profile without a photo must remain eligible for the radar');
+    const location = selected[0].location;
+    const features = buildRadarProfileFeatureCollection([{
+      profile,
+      distanceKm: selected[0].distanceKm,
+      operatorStatus: 'OFFLINE',
+      statusClass: 'offline',
+      favorite: false,
+      filterCoordinates: location,
+      displayCoordinates: { lat: location.lat, lng: location.lng },
+      isApproximateLocation: location.approximate
+    }]);
+    assert.deepEqual(features.features[0].geometry.coordinates, [13.4055, 52.5205]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearPublicProfilesRequestCache();
+  }
+});
+
+test('a changed exact coordinate bypasses stale radar cache and updates the MapLibre feature', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestCount = 0;
+  try {
+    globalThis.fetch = async () => {
+      requestCount += 1;
+      const latitude = requestCount === 1 ? 52.5001 : 52.5002;
+      const longitude = requestCount === 1 ? 13.4001 : 13.4002;
+      return new Response(JSON.stringify({
+        profiles: [{
+          id: 'moving-exact', display_name: 'Moving Exact', city: 'Berlin',
+          latitude, longitude, location_visibility: 'exact', location_precision: 'exact',
+          location_approximate: false, operator_status: 'OFFLINE', profile_images: []
+        }],
+        radar_meta: {
+          fetched_candidates: 1, eligible_candidates: 1, located_candidates: 1,
+          unlocated_candidates: 0, pages_fetched: 1, truncated: false
+        }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    clearPublicProfilesRequestCache();
+    await getPublicProfiles(new URLSearchParams({ radar: '1' }));
+    const [updated] = await getPublicProfiles(new URLSearchParams({ radar: '1' }));
+    const location = resolveProfileRadarLocation(updated)!;
+    const feature = buildRadarProfileFeatureCollection([{
+      profile: updated, distanceKm: 0, operatorStatus: 'OFFLINE', statusClass: 'offline',
+      favorite: false, filterCoordinates: location,
+      displayCoordinates: { lat: location.lat, lng: location.lng }, isApproximateLocation: false
+    }]);
+    assert.equal(requestCount, 2);
+    assert.deepEqual(feature.features[0].geometry.coordinates, [13.4002, 52.5002]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearPublicProfilesRequestCache();
+  }
+});
+
 test('rich radar marker presentation uses only public photos and has a stable fallback', () => {
   const profile = {
     id: 'public-photo',
@@ -254,6 +343,8 @@ test('rich markers retain profile identity, route, hover/tap card and determinis
   assert.equal(getRadarProfileHref({ id: 'profile/id' }), '/profile/profile%2Fid');
   const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
   assert.match(mapSource, /markerElement\.dataset\.profileId = profile\.id/);
+  assert.match(mapSource, /markerElement\.dataset\.radarLatitude = String\(displayCoordinates\.lat\)/);
+  assert.match(mapSource, /markerElement\.dataset\.radarLongitude = String\(displayCoordinates\.lng\)/);
   assert.match(mapSource, /markerElement\.href = href/);
   assert.match(mapSource, /markerElement\.addEventListener\('mouseenter', showPopup\)/);
   assert.match(mapSource, /window\.matchMedia\('\(hover: hover\) and \(pointer: fine\)'\)/);
@@ -539,6 +630,29 @@ test('public radar contract hides city_only raw coordinates, contacts and galler
   assert.match(routeSource, /exact_address: _exactAddress/);
 });
 
+test('exact public coordinates equal the admin point while other privacy modes stay approximate', () => {
+  const raw = { latitude: 52.500123, longitude: 13.450987 };
+  const safe = resolveEffectivePublicLocation({
+    id: 'admin-positioned',
+    work_city: 'Berlin',
+    city: 'berlin',
+    location_visibility: 'exact',
+    location_mode: 'exact',
+    ...raw
+  });
+  assert.ok(safe);
+  assert.deepEqual(
+    { latitude: safe!.latitude, longitude: safe!.longitude },
+    raw
+  );
+  assert.equal(safe!.location_precision, 'exact');
+  assert.equal(safe!.location_approximate, false);
+  assert.equal(resolveEffectivePublicLocation({
+    work_city: 'Berlin', postal_code: '10115', latitude: null, longitude: null,
+    location_visibility: 'exact', location_mode: 'approximate'
+  }), null, 'exact must not fall back to city_only or postal_area coordinates');
+});
+
 test('Radar uses MapLibre/OpenFreeMap without Google, Mapbox or an API key', async () => {
   const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
   const panelSource = await readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8');
@@ -563,6 +677,15 @@ test('mobile Radar is content-sized, square, overflow-safe and reserves bottom n
   assert.doesNotMatch(mobile, /radar-map-surface[\s\S]{0,180}height:\s*380px/);
   assert.doesNotMatch(mobile, /transform:\s*scale\(/);
   assert.match(componentStyles, /ResizeObserver|radar-maplibre/);
+  assert.match(componentStyles, /\.radar-map-viewport[\s\S]*aspect-ratio:\s*1\s*\/\s*1/);
+  assert.match(componentStyles, /\.radar-maplibre-shell[\s\S]*border-radius:\s*inherit/);
+  assert.match(componentStyles, /\.radar-maplibre-shell\s*\{[\s\S]*?inset:\s*0;[\s\S]*?z-index:\s*1;/);
+  assert.doesNotMatch(componentStyles, /\.radar-maplibre-shell[\s\S]{0,180}(?:border-radius:\s*50%|clip-path:\s*circle|mask-image)/);
+  assert.equal((panelSource.match(/className="radar-map-viewport"/g) || []).length, 1);
+  assert.equal((panelSource.match(/<RadarMapLibre/g) || []).length, 1);
+  assert.equal((panelSource.match(/className="radar-sweep"/g) || []).length, 1);
+  assert.ok(panelSource.indexOf('<RadarMapLibre') < panelSource.indexOf('className="radar-map-viewport"'));
+  assert.equal((panelSource.match(/className="radar-distance-rings"/g) || []).length, 0);
   assert.match(panelSource, /radarSurfaceRef/);
 });
 

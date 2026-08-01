@@ -41,7 +41,7 @@ export async function getPublicProfiles(params: URLSearchParams | string = '', o
     : params.toString() ? `?${params.toString()}` : '';
   const url = `${API_URL}${PUBLIC_PROFILES_PATH}${query}`;
   if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
-  const cacheTtlMs = options.cacheTtlMs ?? (toRequestUrl(url).searchParams.get('radar') === '1' ? 30_000 : 0);
+  const cacheTtlMs = options.cacheTtlMs ?? 0;
   const cached = publicProfilesCache.get(url);
   if (cached && cached.expiresAt > Date.now()) {
     options.onMetrics?.(publicProfilesMetrics.get(url) || null);
@@ -175,6 +175,13 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
   const city = text(raw.city ?? raw.work_city ?? raw.workCity ?? raw.location_city) || 'unknown';
   const images = mapImages(raw);
   const availability = text(raw.availability_status ?? raw.availabilityStatus ?? raw.status);
+  const locationVisibility = normalizeLocationVisibility(raw.location_visibility ?? raw.locationVisibility ?? raw.location_mode ?? raw.locationMode);
+  const radarLatitude = numberValue(locationVisibility === 'exact'
+    ? raw.latitude ?? raw.lat ?? raw.radar_latitude ?? raw.radarLatitude
+    : raw.radar_latitude ?? raw.radarLatitude ?? raw.latitude ?? raw.lat);
+  const radarLongitude = numberValue(locationVisibility === 'exact'
+    ? raw.longitude ?? raw.lng ?? raw.radar_longitude ?? raw.radarLongitude
+    : raw.radar_longitude ?? raw.radarLongitude ?? raw.longitude ?? raw.lng);
 
   return {
     ...(safeRaw as unknown as Profile),
@@ -187,9 +194,11 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     area: nullableText(raw.area ?? raw.district),
     work_area: nullableText(raw.work_area ?? raw.workArea ?? raw.district),
     location_mode: normalizeLocationMode(raw.location_mode ?? raw.locationMode),
-    location_visibility: normalizeLocationVisibility(raw.location_visibility ?? raw.locationVisibility ?? raw.location_mode ?? raw.locationMode),
-    latitude: numberValue(raw.latitude ?? raw.lat),
-    longitude: numberValue(raw.longitude ?? raw.lng),
+    location_visibility: locationVisibility,
+    latitude: radarLatitude,
+    longitude: radarLongitude,
+    radar_latitude: radarLatitude,
+    radar_longitude: radarLongitude,
     languages: stringArray(raw.languages),
     gender: normalizeProfileGender(raw.gender) || nullableText(raw.gender),
     orientation: normalizeProfileOrientation(raw.orientation) || nullableText(raw.orientation),
@@ -217,6 +226,9 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     outcall_fee: numberValue(raw.outcall_fee),
     profile_images: images,
     images
+  } as Profile & {
+    radar_latitude: number | null;
+    radar_longitude: number | null;
   };
 }
 

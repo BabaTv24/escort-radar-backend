@@ -3,6 +3,18 @@
   pointer-events: none;
 }
 
+.radar-map-viewport {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  width: min(100%, 620px);
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
 .radar-maplibre-shell {
   position: absolute;
   inset: 0;
@@ -10,6 +22,10 @@
   overflow: hidden;
   border-radius: inherit;
   background: #090909;
+}
+
+.radar-maplibre .maplibregl-marker {
+  z-index: 12;
 }
 
 .radar-map-loading {
@@ -284,7 +300,7 @@
 .radar-city-page .radar-main-stage .radar-visual-canvas {
   pointer-events: none;
   overflow: hidden !important;
-  border-color: rgba(244, 215, 127, .46) !important;
+  border-color: transparent !important;
   background:
     repeating-radial-gradient(circle, transparent 0 12.2%, rgba(244, 215, 127, .25) 12.4% 12.65%, transparent 12.85% 24.7%),
     repeating-conic-gradient(from 0deg, rgba(244, 215, 127, .22) 0deg 1deg, transparent 1deg 30deg) !important;
@@ -532,6 +548,10 @@
     width: auto !important;
     height: calc(100% - .5rem);
     max-width: calc(100% - .5rem);
+  }
+
+  .radar-map-viewport {
+    width: 100%;
   }
 
   .radar-map-error {

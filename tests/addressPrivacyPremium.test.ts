@@ -19,13 +19,13 @@ const exactProfile = {
   location_visibility: 'exact'
 };
 
-test('public exact mode resolves to a city approximation, never stored GPS', () => {
+test('public exact mode preserves the stored Admin coordinates without approximation', () => {
   const location = resolveEffectivePublicLocation(exactProfile);
   assert.ok(location);
-  assert.equal(location.location_precision, 'city');
-  assert.equal(location.location_approximate, true);
-  assert.notEqual(location.latitude, exactProfile.latitude);
-  assert.notEqual(location.longitude, exactProfile.longitude);
+  assert.equal(location.location_precision, 'exact');
+  assert.equal(location.location_approximate, false);
+  assert.equal(location.latitude, exactProfile.latitude);
+  assert.equal(location.longitude, exactProfile.longitude);
 });
 
 test('exact location authorization covers anonymous, regular, Premium, Admin, owner and ID manipulation', () => {
