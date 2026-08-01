@@ -26,6 +26,7 @@ import {
   getRadarProfileHref,
   getRadarProfileImageUrl,
   getRadarProfileInitials,
+  getRadarMarkerSizeClass,
   getRadarProfilePrice,
   getRadarStatusClass
 } from '../Front/src/lib/radarProfilePresentation.js';
@@ -347,7 +348,9 @@ test('rich markers retain profile identity, route, hover/tap card and determinis
   assert.match(mapSource, /markerElement\.dataset\.radarLongitude = String\(displayCoordinates\.lng\)/);
   assert.match(mapSource, /markerElement\.href = href/);
   assert.match(mapSource, /markerElement\.addEventListener\('mouseenter', showPopup\)/);
-  assert.match(mapSource, /window\.matchMedia\('\(hover: hover\) and \(pointer: fine\)'\)/);
+  assert.match(mapSource, /markerElement\.addEventListener\('pointerdown', \(event\) => event\.stopPropagation\(\)\)/);
+  assert.match(mapSource, /markerElement\.addEventListener\('click', \(event\) => event\.stopPropagation\(\)\)/);
+  assert.doesNotMatch(mapSource, /markerElement\.addEventListener\('click'[\s\S]{0,180}event\.preventDefault\(\)/);
   assert.match(mapSource, /if \(isApproximateLocation\) appendPopupLine/);
   assert.match(mapSource, /if \(price\) appendPopupLine/);
   assert.match(mapSource, /name\.textContent = profile\.display_name/);
@@ -357,10 +360,52 @@ test('rich markers retain profile identity, route, hover/tap card and determinis
   assert.match(mapSource, /entry\.popup\?\.remove\(\)/);
   assert.match(mapSource, /entry\.marker\.remove\(\)/);
   assert.match(mapSource, /maxzoom: RICH_MARKER_MIN_ZOOM/);
-  assert.match(mapSource, /const markerVisible = showRichMarkers \|\| entry\.approximate/);
-  assert.match(mapSource, /entry\.element\.hidden = !markerVisible/);
+  assert.match(mapSource, /entry\.element\.hidden = false/);
+  assert.doesNotMatch(mapSource, /entry\.approximate/);
   assert.match(mapSource, /anchor: getRadarPopupAnchor\(map, displayCoordinates\)/);
   assert.match(mapSource, /clampRadarPopupToMapViewport\(map, activePopup\)/);
+});
+
+test('exact and automatically positioned profiles share one interactive rich marker contract at every zoom', async () => {
+  const image = {
+    id: 'public-cover', storage_path: 'profiles/public-cover.jpg',
+    public_url: 'https://cdn.example/public-cover.jpg', is_primary: true,
+    is_hidden: false, is_private: false, moderation_status: 'approved'
+  } as any;
+  const exactProfile = { id: 'exact-profile', display_name: 'Exact Profile', profile_images: [image] } as any;
+  const automaticProfile = { id: 'automatic-profile', display_name: 'Automatic Profile', profile_images: [image] } as any;
+  assert.equal(getRadarProfileImageUrl(exactProfile), image.public_url);
+  assert.equal(getRadarProfileImageUrl(automaticProfile), image.public_url);
+  assert.equal(getRadarMarkerSizeClass(2), 'is-compact');
+  assert.equal(getRadarMarkerSizeClass(11), 'is-compact');
+
+  const item = (profile: any, approximate: boolean, lat: number, lng: number) => ({
+    profile, distanceKm: 1, operatorStatus: 'OFFLINE', statusClass: 'offline', favorite: false,
+    filterCoordinates: { lat, lng, label: 'Berlin', precision: approximate ? 'city_fallback' : 'exact', approximate },
+    displayCoordinates: { lat, lng }, isApproximateLocation: approximate
+  }) as any;
+  const features = buildRadarProfileFeatureCollection([
+    item(exactProfile, false, 52.443913, 13.4337947),
+    item(automaticProfile, true, 52.52, 13.405)
+  ]);
+  assert.equal(features.features.length, 2);
+  assert.deepEqual(features.features[0].geometry.coordinates, [13.4337947, 52.443913]);
+
+  const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
+  const componentStyles = await readFile(new URL('../Front/src/components/RadarPanel.css', import.meta.url), 'utf8');
+  assert.match(mapSource, /for \(const item of items\)[\s\S]*document\.createElement\('a'\)/);
+  assert.match(mapSource, /getRadarProfileImageUrl\(profile\)/);
+  assert.match(mapSource, /radar-profile-marker-fallback/);
+  assert.match(mapSource, /markerElement\.href = href/);
+  assert.match(mapSource, /markerElement\.dataset\.locationPrecision = item\.filterCoordinates\.precision/);
+  assert.match(mapSource, /markerElement\.addEventListener\('mouseenter', showPopup\)/);
+  assert.match(mapSource, /markers\.set\(profile\.id, entry\)/);
+  assert.match(mapSource, /map\.project\(entry\.marker\.getLngLat\(\)\)/);
+  assert.match(mapSource, /classList\.toggle\('is-sweep-highlighted', highlighted\)/);
+  assert.match(mapSource, /entry\.element\.hidden = false/);
+  assert.doesNotMatch(mapSource, /showRichMarkers \|\| entry\.approximate/);
+  assert.match(componentStyles, /\.radar-map-viewport[\s\S]*pointer-events:\s*none/);
+  assert.match(componentStyles, /\.radar-profile-marker[\s\S]*cursor:\s*pointer/);
 });
 
 test('MapLibre circle and camera bounds preserve the exact selected geographic radius', async () => {

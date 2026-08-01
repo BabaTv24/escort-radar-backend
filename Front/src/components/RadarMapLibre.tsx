@@ -11,6 +11,7 @@ import {
   getRadarProfileHref,
   getRadarProfileImageUrl,
   getRadarProfileInitials,
+  getRadarMarkerSizeClass,
   getRadarProfilePrice,
   getRadarStatusClass,
   getRadarStatusLabel
@@ -482,7 +483,6 @@ type RichMarkerEntry = {
   element: HTMLAnchorElement;
   marker: maplibregl.Marker;
   popup: maplibregl.Popup | null;
-  approximate: boolean;
   cancelClose: () => void;
 };
 
@@ -504,6 +504,8 @@ function syncRichProfileMarkers(
     markerElement.dataset.operatorStatus = operatorStatus;
     markerElement.dataset.radarLatitude = String(displayCoordinates.lat);
     markerElement.dataset.radarLongitude = String(displayCoordinates.lng);
+    markerElement.dataset.locationPrecision = item.filterCoordinates.precision;
+    markerElement.dataset.locationApproximate = String(item.isApproximateLocation);
     markerElement.href = href;
     markerElement.draggable = false;
     markerElement.setAttribute('aria-label', `${profile.display_name}, ${statusLabel}`);
@@ -581,19 +583,15 @@ function syncRichProfileMarkers(
       event.preventDefault();
       showPopup();
     });
-    markerElement.addEventListener('click', (event) => {
-      if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-      event.preventDefault();
-      event.stopPropagation();
-      showPopup();
-    });
+    markerElement.addEventListener('pointerdown', (event) => event.stopPropagation());
+    markerElement.addEventListener('click', (event) => event.stopPropagation());
     popupCard.addEventListener('mouseenter', cancelClose);
     popupCard.addEventListener('mouseleave', scheduleClose);
 
     const marker = new maplibregl.Marker({ element: markerElement, anchor: 'center' })
       .setLngLat([displayCoordinates.lng, displayCoordinates.lat])
       .addTo(map);
-    entry = { element: markerElement, marker, popup: null, approximate: item.isApproximateLocation, cancelClose };
+    entry = { element: markerElement, marker, popup: null, cancelClose };
     markers.set(profile.id, entry);
   }
 }
@@ -665,23 +663,9 @@ function clampRadarPopupToMapViewport(map: MapLibreMap, popup: maplibregl.Popup)
 }
 
 function updateRichMarkerZoom(map: MapLibreMap, markers: Map<string, RichMarkerEntry>) {
-  const zoom = map.getZoom();
-  const showRichMarkers = zoom >= RICH_MARKER_MIN_ZOOM;
-  const sizeClass = zoom < RICH_MARKER_MIN_ZOOM
-    ? 'is-far'
-    : zoom >= 15
-      ? 'is-near'
-      : zoom >= 12.5
-        ? 'is-medium'
-        : 'is-compact';
+  const sizeClass = getRadarMarkerSizeClass(map.getZoom());
   for (const entry of markers.values()) {
-    const markerVisible = showRichMarkers || entry.approximate;
-    entry.element.hidden = !markerVisible;
-    if (!markerVisible) {
-      entry.cancelClose();
-      entry.popup?.remove();
-      entry.element.classList.remove('is-active');
-    }
+    entry.element.hidden = false;
     entry.element.classList.remove('is-far', 'is-compact', 'is-medium', 'is-near');
     entry.element.classList.add(sizeClass);
   }

@@ -42,6 +42,12 @@ export function getRadarStatusLabel(operatorStatus: string, t: Translate) {
   return t(statusLabelKeys[operatorStatus] || statusLabelKeys.OFFLINE);
 }
 
+export function getRadarMarkerSizeClass(zoom: number) {
+  if (zoom >= 15) return 'is-near' as const;
+  if (zoom >= 12.5) return 'is-medium' as const;
+  return 'is-compact' as const;
+}
+
 export function getRadarProfileImageUrl(profile: Pick<Profile, 'profile_images'>) {
   return getPublicProfilePrimaryImage(profile)?.public_url || '';
 }
