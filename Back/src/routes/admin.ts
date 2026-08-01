@@ -1068,7 +1068,7 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
   let locationResolution;
   try {
     locationResolution = req.body.location_input_source === 'manual' && profileData.data.location_visibility === 'exact'
-      ? validateManualAdminLocation(profileData.data)
+      ? await reverseGeocodeAdminLocation(profileData.data.latitude, profileData.data.longitude, { userAgent: adminNominatimUserAgent() })
       : await resolveAdminLocation(profileData.data, { userAgent: adminNominatimUserAgent() });
   } catch (error) {
     if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
@@ -1094,7 +1094,7 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
 
   const payload: Record<string, any> = {
     ...profileData.data,
-    ...adminLocationPatch(locationResolution, req.body.location_input_source === 'manual' ? 'manual' : 'automatic'),
+    ...adminLocationPatch(locationResolution, req.body.location_input_source === 'manual' ? 'manual' : 'automatic', req.body.location_input_source === 'manual'),
     ...starter,
     user_id: authUser?.id || null,
     slug: `${slugify(String(profileData.data.display_name))}-${Date.now().toString(36)}`,
@@ -2043,7 +2043,7 @@ adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
   const manualExactPoint = req.body.location_input_source === 'manual' && profileData.data.location_visibility === 'exact';
   if (manualExactPoint && locationChanged) {
     try {
-      locationResolution = validateManualAdminLocation(profileData.data);
+      locationResolution = await reverseGeocodeAdminLocation(profileData.data.latitude, profileData.data.longitude, { userAgent: adminNominatimUserAgent() });
     } catch (error) {
       if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
       throw error;
@@ -2066,7 +2066,7 @@ adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
 
   const patch: Record<string, unknown> = {
     ...profileData.data,
-    ...(locationResolution ? adminLocationPatch(locationResolution, manualExactPoint ? 'manual' : 'automatic') : {}),
+    ...(locationResolution ? adminLocationPatch(locationResolution, manualExactPoint ? 'manual' : 'automatic', manualExactPoint) : {}),
     verification_status: profileData.data.verified ? 'verified' : 'pending',
     verified_at: profileData.data.verified ? new Date().toISOString() : null,
     ...(locationChanged ? { location_updated_at: new Date().toISOString() } : {})
@@ -3673,18 +3673,19 @@ function adminNominatimUserAgent() {
   return `Escort Radar/1.0 (+${appUrl}; contact: ${contact})`;
 }
 
-function adminLocationPatch(location: AdminLocationResolution, source: 'automatic' | 'manual') {
+function adminLocationPatch(location: AdminLocationResolution, source: 'automatic' | 'manual', replaceAddress = false) {
   const precision = location.precision === 'city' ? 'city' : location.precision === 'postal_area' ? 'postal_area' : 'exact';
   return {
     latitude: location.latitude,
     longitude: location.longitude,
     ...(location.work_country ? { work_country: location.work_country } : {}),
     ...(location.work_city ? { work_city: location.work_city, city: slugify(location.work_city) } : {}),
-    ...(location.work_area ? { work_area: location.work_area, area: location.work_area } : {}),
-    ...(location.postal_code ? { postal_code: location.postal_code } : {}),
-    ...(location.exact_address ? { exact_address: location.exact_address } : {}),
-    ...(location.work_place_label ? { work_place_label: location.work_place_label } : {}),
-    location_mode: precision === 'city' ? 'city_only' : precision === 'postal_area' ? 'approximate' : 'exact',
+    ...(replaceAddress || location.work_area ? { work_area: location.work_area || null, area: location.work_area || null } : {}),
+    ...(replaceAddress || location.postal_code ? { postal_code: location.postal_code || null } : {}),
+    ...(replaceAddress || location.exact_address ? { exact_address: location.exact_address || null } : {}),
+    ...(replaceAddress || location.work_place_label ? { work_place_label: location.work_place_label || null } : {}),
+    // Exact visibility uses the existing legacy approximate DB mode.
+    location_mode: precision === 'city' ? 'city_only' : 'approximate',
     location_precision: precision,
     location_input_source: source
   };

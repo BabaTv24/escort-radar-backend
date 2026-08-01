@@ -77,8 +77,8 @@ export function WorkPointMap({
         const setPoint = (lng: number, lat: number) => {
           if (!marker || readOnly || !onChangeRef.current) return;
           const point = {
-            latitude: Number(lat.toFixed(6)),
-            longitude: Number(lng.toFixed(6))
+            latitude: lat,
+            longitude: lng
           };
           marker.setLngLat([point.longitude, point.latitude]);
           onChangeRef.current(point);

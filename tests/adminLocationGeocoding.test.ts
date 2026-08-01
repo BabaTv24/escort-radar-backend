@@ -11,6 +11,7 @@ import {
   validateManualAdminLocation
 } from '../Back/src/adminLocationGeocoding.js';
 import { resolveEffectivePublicLocation } from '../Back/src/publicLocation.js';
+import { adminLocationFormFromProfile, adminLocationSavePayload, mergeAdminReverseGeocode } from '../Front/src/lib/adminLocationForm.js';
 
 const berlinA = {
   work_country: 'DE',
@@ -162,6 +163,98 @@ test('reverse geocoding preserves the clicked point and normalizes all returned 
   assert.doesNotMatch(location.exact_address || '', /\b\d+[a-z]?\b.*Donaustraße/i);
 });
 
+test('reverse geocoding accepts Google-style Berlin address component aliases', async () => {
+  resetAdminLocationGeocodingStateForTests();
+  const location = await reverseGeocodeAdminLocation(52.5071, 13.4352, {
+    rateLimitMs: 0,
+    fetchImpl: async () => new Response(JSON.stringify({
+      display_name: 'Warschauer Strasse 10, 10243 Berlin, Germany',
+      address: {
+        countryCode: 'DE',
+        country: 'Germany',
+        locality: 'Berlin',
+        sublocality_level_1: 'Friedrichshain',
+        postal_code: '10243',
+        route: 'Warschauer Strasse',
+        street_number: '10'
+      }
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+  });
+  assert.deepEqual({
+    country: location.work_country,
+    city: location.work_city,
+    district: location.work_area,
+    postalCode: location.postal_code,
+    street: location.street,
+    houseNumber: location.house_number
+  }, {
+    country: 'DE', city: 'Berlin', district: 'Friedrichshain', postalCode: '10243',
+    street: 'Warschauer Strasse', houseNumber: '10'
+  });
+});
+
+test('dragend point remains exact through reverse geocoding, save payload and profile reload', () => {
+  const point = { latitude: 52.507123456789, longitude: 13.435298765432 };
+  const location = {
+    latitude: 52.5,
+    longitude: 13.4,
+    work_country: 'DE',
+    work_city: 'Berlin',
+    work_area: 'Friedrichshain',
+    postal_code: '10243',
+    street: 'Warschauer Strasse',
+    house_number: '10',
+    exact_address: 'Warschauer Strasse 10, 10243 Berlin, Germany',
+    work_place_label: 'Warschauer Strasse 10, Friedrichshain, Berlin',
+    geocoded: false,
+    precision: 'exact' as const
+  };
+  const form = mergeAdminReverseGeocode({}, point, location, () => 'berlin');
+  const payload = adminLocationSavePayload(form);
+  assert.deepEqual(payload, {
+    latitude: point.latitude,
+    longitude: point.longitude,
+    work_country: 'DE',
+    work_city: 'Berlin',
+    work_area: 'Friedrichshain',
+    area: 'Friedrichshain',
+    postal_code: '10243',
+    exact_address: 'Warschauer Strasse 10, 10243 Berlin, Germany',
+    work_place_label: 'Warschauer Strasse 10, Friedrichshain, Berlin',
+    location_mode: 'approximate',
+    location_visibility: 'exact',
+    location_precision: 'exact',
+    location_input_source: 'manual'
+  });
+
+  const reloaded = adminLocationFormFromProfile({
+    id: 'saved', display_name: 'Saved', available_now: false, mobile_service: false,
+    private_studio: false, verified: true, premium: false, profile_images: [],
+    ...payload
+  });
+  assert.equal(reloaded.latitude, String(point.latitude));
+  assert.equal(reloaded.longitude, String(point.longitude));
+  assert.equal(reloaded.work_area, 'Friedrichshain');
+  assert.equal(reloaded.postal_code, '10243');
+  assert.match(reloaded.exact_address, /Warschauer Strasse 10/);
+});
+
+test('nearby reverse-geocode points do not share coordinates through a rounded cache key', async () => {
+  resetAdminLocationGeocodingStateForTests();
+  let requests = 0;
+  const fetchImpl = async () => {
+    requests += 1;
+    return new Response(JSON.stringify({
+      address: { country_code: 'de', country: 'Germany', city: 'Berlin', road: 'Testweg' }
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const first = await reverseGeocodeAdminLocation(52.5000001, 13.4000001, { rateLimitMs: 0, fetchImpl });
+  const second = await reverseGeocodeAdminLocation(52.5000002, 13.4000002, { rateLimitMs: 0, fetchImpl });
+  assert.equal(requests, 2);
+  assert.deepEqual([first.latitude, first.longitude], [52.5000001, 13.4000001]);
+  assert.deepEqual([second.latitude, second.longitude], [52.5000002, 13.4000002]);
+});
+
 test('one backend queue serializes Nominatim calls, respects the gap and caches normalized addresses', async () => {
   resetAdminLocationGeocodingStateForTests();
   let active = 0;
@@ -249,6 +342,10 @@ test('admin route geocodes before update, returns 422 and preserves sponsorship 
   assert.match(updateRoute, /'is_sponsored'.*'acquisition_source'.*'provider'/s);
   assert.match(updateRoute, /location_updated_at/);
   assert.match(updateRoute, /location_input_source === 'manual'/);
+  assert.match(updateRoute, /manualExactPoint[\s\S]*await reverseGeocodeAdminLocation/);
+  assert.ok(updateRoute.indexOf('await reverseGeocodeAdminLocation') < updateRoute.indexOf(".from('profiles')\n    .update(patch)"));
+  assert.match(updateRoute, /adminLocationPatch\(locationResolution,[^\n]+manualExactPoint\)/);
+  assert.match(source, /location_mode: precision === 'city' \? 'city_only' : 'approximate'/);
 });
 
 test('Admin flow contains no Google geocoder or Google map and public API stays private', async () => {
@@ -265,6 +362,9 @@ test('Admin flow contains no Google geocoder or Google map and public API stays 
   assert.match(resolverSource, /nominatim\.openstreetmap\.org\/search/);
   assert.match(resolverSource, /nominatim\.openstreetmap\.org\/reverse/);
   assert.match(adminPageSource, /reverseAdminLocation/);
+  assert.match(adminPageSource, /requestId !== studioLocationRequestRef\.current/);
+  assert.doesNotMatch(workPointMapSource, /toFixed\(6\)/);
+  assert.match(workPointMapSource, /marker\.on\('dragend'/);
   assert.ok(routeSource.indexOf('adminRouter.use(verifyAdminJwt, requireAdmin)') < routeSource.indexOf("adminRouter.post('/location/reverse-geocode'"));
   assert.match(workPointMapSource, /maplibre-gl/);
   assert.match(publicRouteSource, /exact_address: _exactAddress/);

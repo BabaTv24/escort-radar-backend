@@ -39,21 +39,31 @@ type NominatimResult = {
   addresstype?: string;
   address?: {
     country_code?: string;
+    countryCode?: string;
     house_number?: string;
+    street_number?: string;
     road?: string;
+    route?: string;
     pedestrian?: string;
     residential?: string;
     footway?: string;
     city?: string;
+    locality?: string;
+    postal_town?: string;
     town?: string;
     village?: string;
     municipality?: string;
+    administrative_area_level_2?: string;
     borough?: string;
     city_district?: string;
     suburb?: string;
+    sublocality?: string;
+    sublocality_level_1?: string;
     quarter?: string;
     neighbourhood?: string;
+    neighborhood?: string;
     postcode?: string;
+    postal_code?: string;
     country?: string;
   };
 };
@@ -154,7 +164,8 @@ export async function reverseGeocodeAdminLocation(
     throw new AdminLocationGeocodingError('Enter valid non-zero latitude and longitude values.', 'invalid_manual_coordinates');
   }
 
-  const cacheKey = `reverse|${latitude.toFixed(6)}|${longitude.toFixed(6)}`;
+  // A nearby cached lookup must never replace the exact point selected by the admin.
+  const cacheKey = `reverse|${latitude}|${longitude}`;
   const cached = geocodeCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return { ...cached.result };
   if (cached) geocodeCache.delete(cacheKey);
@@ -265,12 +276,12 @@ async function fetchNominatimJson(url: URL, options: NominatimOptions) {
 
 function normalizeNominatimAddress(result: NominatimResult, latitude: number, longitude: number, preservePoint = false): AdminLocationResolution {
   const address = result.address || {};
-  const workCountry = normalizeCountry(address.country_code);
-  const city = text(address.city || address.town || address.village || address.municipality);
-  const area = text(address.borough || address.city_district || address.suburb || address.quarter || address.neighbourhood);
-  const street = text(address.road || address.pedestrian || address.residential || address.footway);
-  const houseNumber = text(address.house_number);
-  const postalCode = text(address.postcode);
+  const workCountry = normalizeCountry(address.country_code || address.countryCode || address.country);
+  const city = text(address.city || address.locality || address.postal_town || address.town || address.village || address.municipality || address.administrative_area_level_2);
+  const area = text(address.borough || address.city_district || address.suburb || address.sublocality_level_1 || address.sublocality || address.quarter || address.neighbourhood || address.neighborhood);
+  const street = text(address.road || address.route || address.pedestrian || address.residential || address.footway);
+  const houseNumber = text(address.house_number || address.street_number);
+  const postalCode = text(address.postcode || address.postal_code);
   const streetLine = [street, houseNumber].filter(Boolean).join(' ');
   const exactAddress = [streetLine, postalCode, city, address.country].filter(Boolean).join(', ');
   return {

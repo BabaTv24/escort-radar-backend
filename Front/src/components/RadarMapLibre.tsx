@@ -22,6 +22,7 @@ import {
   getRadarRadiusBounds
 } from '../lib/radarMapData';
 import type { RadarMapItem } from '../lib/radarMapData';
+import { cssRotationAngle, isMarkerHitByRadarSweep, radarMarkerAngle } from '../lib/radarSweep';
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 const EXACT_PROFILE_SOURCE = 'radar-exact-profiles';
@@ -199,6 +200,27 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
     return () => {
       map.off('zoom', updateMarkerZoom);
       clearRichProfileMarkers(richMarkersRef.current);
+    };
+  }, [mapReady, richMarkerSignature]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const sweep = containerRef.current?.closest('.radar-map-surface')?.querySelector<HTMLElement>('.radar-sweep');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (!mapReady || !map || !sweep || reducedMotion.matches) {
+      clearRadarSweepHighlights(richMarkersRef.current);
+      return;
+    }
+
+    let animationFrame = 0;
+    const update = () => {
+      updateRadarSweepHighlights(map, richMarkersRef.current, cssRotationAngle(getComputedStyle(sweep).transform));
+      animationFrame = window.requestAnimationFrame(update);
+    };
+    animationFrame = window.requestAnimationFrame(update);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      clearRadarSweepHighlights(richMarkersRef.current);
     };
   }, [mapReady, richMarkerSignature]);
 
@@ -581,6 +603,24 @@ function clearRichProfileMarkers(markers: Map<string, RichMarkerEntry>) {
     entry.marker.remove();
   }
   markers.clear();
+}
+
+function updateRadarSweepHighlights(
+  map: MapLibreMap,
+  markers: Map<string, RichMarkerEntry>,
+  sweepAngle: number
+) {
+  const center = map.project(map.getCenter());
+  for (const entry of markers.values()) {
+    const marker = map.project(entry.marker.getLngLat());
+    const highlighted = !entry.element.hidden
+      && isMarkerHitByRadarSweep(sweepAngle, radarMarkerAngle(center, marker));
+    entry.element.classList.toggle('is-sweep-highlighted', highlighted);
+  }
+}
+
+function clearRadarSweepHighlights(markers: Map<string, RichMarkerEntry>) {
+  for (const entry of markers.values()) entry.element.classList.remove('is-sweep-highlighted');
 }
 
 function closeOtherRichProfilePopups(markers: Map<string, RichMarkerEntry>, activeProfileId: string) {

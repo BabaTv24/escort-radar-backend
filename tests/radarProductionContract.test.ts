@@ -29,6 +29,7 @@ import {
   getRadarStatusClass
 } from '../Front/src/lib/radarProfilePresentation.js';
 import { selectRadarProfiles } from '../Front/src/lib/homeRadar.js';
+import { cssRotationAngle, isMarkerHitByRadarSweep, radarAngularDistance, radarMarkerAngle } from '../Front/src/lib/radarSweep.js';
 
 test('frontend radar=1 reaches the exact backend radar branch and never accepts a 60-row non-radar response', async () => {
   assert.equal(isRadarRequest('1'), true);
@@ -81,6 +82,38 @@ test('frontend radar=1 reaches the exact backend radar branch and never accepts 
     globalThis.fetch = originalFetch;
     clearPublicProfilesRequestCache();
   }
+});
+
+test('radar sweep highlights only markers inside tolerance, including the 359/0 degree boundary', () => {
+  assert.equal(radarMarkerAngle({ x: 50, y: 50 }, { x: 50, y: 0 }), 0);
+  assert.equal(radarMarkerAngle({ x: 50, y: 50 }, { x: 100, y: 50 }), 90);
+  assert.equal(radarAngularDistance(359, 1), 2);
+  assert.equal(isMarkerHitByRadarSweep(359, 1, 3), true);
+  assert.equal(isMarkerHitByRadarSweep(20, 31, 9), false);
+  assert.equal(cssRotationAngle('matrix(0, 1, -1, 0, 0, 0)'), 90);
+});
+
+test('sweep hit calculation preserves marker count and positions', () => {
+  const markers = [
+    { id: 'hit', point: { x: 50, y: 0 } },
+    { id: 'miss', point: { x: 100, y: 50 } }
+  ];
+  const before = structuredClone(markers);
+  const highlighted = markers.filter(({ point }) => isMarkerHitByRadarSweep(2, radarMarkerAngle({ x: 50, y: 50 }, point), 9));
+  assert.deepEqual(highlighted.map(({ id }) => id), ['hit']);
+  assert.equal(markers.length, before.length);
+  assert.deepEqual(markers, before);
+});
+
+test('sweep lookup uses a viewport present in the committed RadarPanel structure', async () => {
+  const [mapSource, panelSource] = await Promise.all([
+    readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8')
+  ]);
+  assert.match(mapSource, /closest\('\.radar-map-surface'\)\?\.querySelector<HTMLElement>\('\.radar-sweep'\)/);
+  assert.doesNotMatch(mapSource, /closest\('\.radar-map-viewport'\)/);
+  assert.match(panelSource, /className="radar-map-surface"/);
+  assert.match(panelSource, /className="radar-sweep"/);
 });
 
 test('the 150 km radius persists across HomePage and CityPage mounts', async () => {

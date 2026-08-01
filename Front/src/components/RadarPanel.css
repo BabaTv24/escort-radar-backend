@@ -94,6 +94,21 @@
     0 14px 30px rgba(0, 0, 0, .72);
 }
 
+.radar-profile-marker.is-sweep-highlighted {
+  z-index: 55;
+  filter: brightness(1.28) saturate(1.12);
+  box-shadow:
+    0 0 0 3px rgba(5, 5, 5, .82),
+    0 0 0 7px color-mix(in srgb, var(--radar-marker-status) 48%, transparent),
+    0 0 34px 10px color-mix(in srgb, var(--radar-marker-status) 72%, transparent),
+    0 12px 28px rgba(0, 0, 0, .68);
+  transition: filter 70ms ease-out, box-shadow 70ms ease-out;
+}
+
+.radar-profile-marker:not(.is-sweep-highlighted) {
+  transition: width .16s ease, height .16s ease, filter .42s ease-out, box-shadow .42s ease-out;
+}
+
 .radar-profile-marker.is-active {
   --radar-marker-size: 50px;
 }
@@ -445,7 +460,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .radar-profile-marker,
-  .radar-profile-marker.online-now::after {
+  .radar-profile-marker.online-now::after,
+  .radar-profile-marker.is-sweep-highlighted {
     animation: none;
     transition: none;
   }
