@@ -28,6 +28,13 @@ import { isDuplicateSourceUrlApiError, runCityImportQueue } from '../lib/cityImp
 import type { CityImportQueueItem } from '../lib/cityImportQueue';
 import { adminProfileCountryName, adminProfileSelectionState, normalizeAdminProfileCitySearch } from '../lib/adminProfileCity';
 import {
+  adminProfileAlphabet,
+  adminProfileAlphabetCounts,
+  adminProfileIdsInCatalogGroups,
+  filterAdminProfileCatalogGroups
+} from '../lib/adminProfileAlphabet';
+import type { AdminProfileAlphabetValue } from '../lib/adminProfileAlphabet';
+import {
   adminProfileSelectionCount,
   adminProfileSelectionFilterKey,
   adminProfileSelectionRequest,
@@ -406,6 +413,7 @@ export function AdminPage() {
   const [profileCityQuery, setProfileCityQuery] = useState('');
   const [selectedProfileCountryKey, setSelectedProfileCountryKey] = useState('all');
   const [selectedProfileCityKey, setSelectedProfileCityKey] = useState('all');
+  const [profileAlphabet, setProfileAlphabet] = useState<AdminProfileAlphabetValue>('all');
   const [expandedProfileCountryKeys, setExpandedProfileCountryKeys] = useState<string[]>([]);
   const [expandedProfileCityKeys, setExpandedProfileCityKeys] = useState<string[]>([]);
   const [windowLayoutResetNotice, setWindowLayoutResetNotice] = useState(false);
@@ -430,7 +438,7 @@ export function AdminPage() {
     city: selectedCityParts[1] || ''
   }), [query, studioFilters, profileCityQuery, selectedProfileCountryKey, selectedProfileCityKey]);
   const profileSelectionFiltersKey = adminProfileSelectionFilterKey(profileSelectionFilters);
-  const totalMatchingProfileCount = useMemo(() => {
+  const serverMatchingProfileCount = useMemo(() => {
     if (selectedCityParts.length === 2) {
       return profileCatalogCities[selectedCityParts[0]]?.find((city) => city.key === selectedCityParts[1])?.total || 0;
     }
@@ -439,16 +447,6 @@ export function AdminPage() {
     }
     return profileCatalogCountries.reduce((sum, country) => sum + country.total, 0);
   }, [profileCatalogCountries, profileCatalogCities, selectedProfileCountryKey, selectedProfileCityKey]);
-  const selectedProfileCount = adminProfileSelectionCount(profileSelection);
-  const totalProfileCount = Number(stats.total_profiles || 0);
-  const profileExportOptions = adminProfileExportOptions({
-    selectedCount: selectedProfileCount,
-    filteredCount: totalMatchingProfileCount,
-    totalCount: totalProfileCount,
-    filtersActive: adminProfileExportFiltersActive(profileSelectionFilters),
-    selectionMatchesFilters: adminProfileSelectionMatchesFilters(profileSelection, profileSelectionFilters)
-  });
-  const selectedProfileIds = profiles.filter((profile) => isAdminProfileSelected(profileSelection, profile.id)).map((profile) => profile.id);
   const profileCountryGroups = useMemo(() => profileCatalogCountries
     .filter((country) => selectedProfileCountryKey === 'all' || country.key === selectedProfileCountryKey)
     .map((country) => {
@@ -462,7 +460,24 @@ export function AdminPage() {
         profiles: cities.flatMap((city) => city.profiles), approvedCount: country.approved, cities
       };
     }), [profileCatalogCountries, profileCatalogCities, profileCatalogPages, selectedProfileCountryKey, lang, t]);
-  const visibleProfileCountryGroups = profileCountryGroups;
+  const alphabetCandidateProfiles = useMemo(() => profileCountryGroups.flatMap((country) => country.profiles), [profileCountryGroups]);
+  const profileAlphabetCounts = useMemo(() => adminProfileAlphabetCounts(alphabetCandidateProfiles), [alphabetCandidateProfiles]);
+  const visibleProfileCountryGroups = useMemo(
+    () => filterAdminProfileCatalogGroups(profileCountryGroups, profileAlphabet),
+    [profileCountryGroups, profileAlphabet]
+  );
+  const visibleAlphabetProfileIds = useMemo(() => adminProfileIdsInCatalogGroups(visibleProfileCountryGroups), [visibleProfileCountryGroups]);
+  const totalMatchingProfileCount = profileAlphabet === 'all' ? serverMatchingProfileCount : visibleAlphabetProfileIds.length;
+  const selectedProfileCount = adminProfileSelectionCount(profileSelection);
+  const totalProfileCount = Number(stats.total_profiles || 0);
+  const profileExportOptions = adminProfileExportOptions({
+    selectedCount: selectedProfileCount,
+    filteredCount: totalMatchingProfileCount,
+    totalCount: totalProfileCount,
+    filtersActive: adminProfileExportFiltersActive(profileSelectionFilters) || profileAlphabet !== 'all',
+    selectionMatchesFilters: profileAlphabet === 'all' && adminProfileSelectionMatchesFilters(profileSelection, profileSelectionFilters)
+  });
+  const selectedProfileIds = profiles.filter((profile) => isAdminProfileSelected(profileSelection, profile.id)).map((profile) => profile.id);
   const filteredUsers = users.filter((user) => JSON.stringify(user).toLowerCase().includes(query.toLowerCase()));
   const adminWindowLabels = {
     minimize: t('admin.window.minimize'),
@@ -505,11 +520,16 @@ export function AdminPage() {
   useEffect(() => {
     setProfileCountrySelectionIds({});
     const reset = resetAllFilteredSelectionForFilters(profileSelection, profileSelectionFilters);
-    if (reset.reset) {
-      setProfileSelection(reset.selection);
+    if (adminProfileSelectionCount(profileSelection) || reset.reset) {
+      setProfileSelection(emptyAdminProfileSelection);
       setMessage(t('admin.profiles.selectionReset'));
     }
   }, [profileSelectionFiltersKey]);
+
+  useEffect(() => {
+    setProfileSelection(emptyAdminProfileSelection);
+    setProfileCountrySelectionIds({});
+  }, [profileAlphabet]);
 
   useEffect(() => {
     const countryKeys = new Set(profileCountryGroups.map((country) => country.key));
@@ -1211,6 +1231,12 @@ export function AdminPage() {
   }
 
   function setAllMatchingProfilesSelected(selected: boolean) {
+    if (profileAlphabet !== 'all') {
+      setProfileSelection(selected
+        ? { mode: 'explicit', profile_ids: visibleAlphabetProfileIds }
+        : emptyAdminProfileSelection);
+      return;
+    }
     setProfileSelection(selected
       ? selectAllFilteredProfiles(profileSelectionFilters, totalMatchingProfileCount)
       : emptyAdminProfileSelection);
@@ -1230,7 +1256,10 @@ export function AdminPage() {
 
   async function setCountryProfilesSelected(country: string, selected: boolean) {
     try {
-      const ids = await resolveCountryProfileIds(country);
+      const visibleCountry = visibleProfileCountryGroups.find((group) => group.key === country);
+      const ids = profileAlphabet === 'all'
+        ? await resolveCountryProfileIds(country)
+        : visibleCountry?.profiles.map((profile) => profile.id) || [];
       setProfileSelection((current) => setAdminProfileScopeSelected(current, ids, selected));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
@@ -2012,6 +2041,11 @@ export function AdminPage() {
     const targetIds = scope === 'selected' && profileSelection.mode === 'explicit'
       ? profileSelection.profile_ids
       : [`scope:${scope}`];
+    const exportSelection = scope === 'selected'
+      ? profileSelection
+      : profileAlphabet !== 'all'
+        ? { mode: 'explicit' as const, profile_ids: visibleAlphabetProfileIds }
+        : selectAllFilteredProfiles(profileSelectionFilters, totalMatchingProfileCount);
     const started = startOperation({
       type: `profile-export-${scope}`,
       labelKey: 'admin.operations.type.exportProfiles',
@@ -2020,7 +2054,7 @@ export function AdminPage() {
       targetIds,
       total: expectedCount,
       indeterminate: true,
-      parameters: { scope, selection: scope === 'selected' ? adminProfileSelectionRequest(profileSelection) : undefined }
+      parameters: { scope, selection: scope === 'all' ? undefined : adminProfileSelectionRequest(exportSelection) }
     });
     if (!started.operation) {
       setProfileExportError({ status: null, message: t(started.reason === 'duplicate' ? 'admin.operations.duplicateBlocked' : 'admin.operations.conflictBlocked') });
@@ -2054,11 +2088,7 @@ export function AdminPage() {
       };
       const file = scope === 'all'
         ? await api.exportAdminProfiles(token, requestOptions)
-        : await api.exportAdminProfileSelection(token, adminProfileSelectionRequest(
-            scope === 'selected'
-              ? profileSelection
-              : selectAllFilteredProfiles(profileSelectionFilters, totalMatchingProfileCount)
-          ), requestOptions);
+        : await api.exportAdminProfileSelection(token, adminProfileSelectionRequest(exportSelection), requestOptions);
       if (requestId !== profileExportRequestIdRef.current) return;
       setPreparedProfileExport({
         blob: file.blob,
@@ -3460,6 +3490,20 @@ export function AdminPage() {
               </select>
               <input placeholder={t('admin.filters.ownerEmail')} value={studioFilters.owner_email} onChange={(event) => setStudioFilters({ ...studioFilters, owner_email: event.target.value })} />
             </div>
+            <div className="admin-profile-alphabet" role="group" aria-label={t('admin.profiles.alphabetFilter')}>
+              <button type="button" className="admin-profile-alphabet-button all" aria-pressed={profileAlphabet === 'all'} onClick={() => setProfileAlphabet('all')}>{t('admin.profiles.alphabetAll')}</button>
+              {adminProfileAlphabet.map((letter) => (
+                <button
+                  type="button"
+                  className="admin-profile-alphabet-button"
+                  key={letter}
+                  aria-label={letter === '#' ? t('admin.profiles.alphabetOtherOption') : t('admin.profiles.alphabetOption', { letter })}
+                  aria-pressed={profileAlphabet === letter}
+                  disabled={!profileAlphabetCounts[letter] && profileAlphabet !== letter}
+                  onClick={() => setProfileAlphabet(letter)}
+                >{letter}</button>
+              ))}
+            </div>
             <div className="admin-bulk-bar">
               <AdminSelectionCheckbox checked={allMatchingChecked} indeterminate={allMatchingIndeterminate} disabled={!totalMatchingProfileCount} onChange={setAllMatchingProfilesSelected} label={<>{t('admin.profiles.selectAllResults', { count: totalMatchingProfileCount })} · {t('admin.bulk.selected', { count: selectedProfileCount })}</>} />
               <Action disabled={Boolean(activeOperation('profile-approve'))} onClick={() => runBulkAction('approve')}>{operationButtonContent('profile-approve', t('admin.bulk.approve'))}</Action>
@@ -3489,7 +3533,7 @@ export function AdminPage() {
             ) : <div className="admin-profile-country-groups">
               {visibleProfileCountryGroups.map((country, countryIndex) => {
                 const countryExpanded = expandedProfileCountryKeys.includes(country.key);
-                const resolvedCountryIds = profileCountrySelectionIds[country.key] || [];
+                const resolvedCountryIds = profileAlphabet === 'all' ? profileCountrySelectionIds[country.key] || [] : [];
                 const countryIds = resolvedCountryIds.length ? resolvedCountryIds : country.profiles.map((profile) => profile.id);
                 const countrySelection = countryIds.length
                   ? adminProfileSelectionState(countryIds.filter((id) => isAdminProfileSelected(profileSelection, id)), countryIds)
@@ -3506,7 +3550,7 @@ export function AdminPage() {
                       <strong>{t('admin.profiles.countryCount', { total: country.total, approved: country.approvedCount })} · {t('admin.profiles.pendingCount', { count: country.pending })}</strong>
                       <small>{countryExpanded ? t('admin.profiles.collapse') : t('admin.profiles.expand')}</small>
                     </button>
-                    <AdminSelectionCheckbox checked={countrySelection.checked} indeterminate={countrySelection.indeterminate} disabled={!country.total} onChange={(checked) => void setCountryProfilesSelected(country.key, checked)} label={t('admin.profiles.selectAllInCountry', { count: country.total })} />
+                    <AdminSelectionCheckbox checked={countrySelection.checked} indeterminate={countrySelection.indeterminate} disabled={!country.total} onChange={(checked) => void setCountryProfilesSelected(country.key, checked)} label={profileAlphabet === 'all' ? t('admin.profiles.selectAllInCountry', { count: country.total }) : t('admin.profiles.selectVisibleInCountry')} />
                   </div>
                   <div id={countryPanelId} hidden={!countryExpanded} className="admin-profile-city-groups">{countryExpanded ? country.cities.map((city, cityIndex) => {
                     const scopedCityKey = `${country.key}:${city.key}`;

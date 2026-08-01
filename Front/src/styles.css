@@ -12978,6 +12978,44 @@ textarea:focus {
 .admin-profile-city-filter input,
 .admin-profile-city-filter select { width: 100%; min-width: 0; }
 
+.admin-profile-alphabet {
+  box-sizing: border-box;
+  display: flex;
+  gap: .3rem;
+  margin: .75rem 0;
+  padding: .4rem;
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid rgba(231, 200, 109, .2);
+  border-radius: .65rem;
+  background: rgba(7, 12, 18, .82);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(231, 200, 109, .42) transparent;
+}
+.admin-profile-alphabet-button {
+  flex: 0 0 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  border: 1px solid rgba(231, 200, 109, .16);
+  border-radius: .4rem;
+  background: rgba(23, 19, 15, .74);
+  color: #d9d0b5;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.admin-profile-alphabet-button.all { flex-basis: auto; min-width: max-content; padding-inline: .75rem; }
+.admin-profile-alphabet-button:hover:not(:disabled) { border-color: rgba(244, 215, 127, .58); color: #fff0ba; }
+.admin-profile-alphabet-button[aria-pressed="true"] {
+  border-color: #f4d77f;
+  background: linear-gradient(135deg, #f4d77f, #d9a84e);
+  color: #070707;
+  box-shadow: 0 0 0 1px rgba(244, 215, 127, .18), 0 0 14px rgba(217, 168, 78, .2);
+}
+.admin-profile-alphabet-button:disabled { opacity: .32; cursor: not-allowed; }
+.admin-profile-alphabet-button:focus-visible { outline: 2px solid #fff0ba; outline-offset: 2px; }
+
 .admin-profile-country-groups,
 .admin-profile-city-groups { display: grid; gap: .7rem; min-width: 0; }
 .admin-profile-country-card { min-width: 0; overflow: hidden; border: 1px solid rgba(231, 200, 109, .22); border-radius: .7rem; background: rgba(7, 12, 18, .76); }
@@ -13045,6 +13083,8 @@ textarea:focus {
   .admin-profile-window > .admin-window-content-shell { max-height: calc(100dvh - 8rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
   .admin-profile-window.is-maximized > .admin-window-content-shell { max-height: none; }
   .admin-profile-city-filter { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  .admin-profile-alphabet { width: 100%; overscroll-behavior-inline: contain; }
+  .admin-profile-alphabet-button { flex-basis: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; }
   .admin-profile-city-card-head { align-items: stretch; flex-direction: column; gap: 0; padding: 0 0 .7rem; }
   .admin-profile-country-card-head { align-items: stretch; flex-direction: column; gap: 0; padding: 0 0 .7rem; }
   .admin-profile-city-card-head > label { padding-inline: .8rem; }
