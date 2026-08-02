@@ -1059,8 +1059,8 @@ test('radar distance helpers reject invalid coordinates and never return negativ
   const friedrichshain = { lat: 52.5144, lng: 13.46 };
   const distance = safeDistanceKm(buckow, friedrichshain);
 
-  assert.equal(isValidLatLng(0, 0), false);
-  assert.equal(safeDistanceKm(buckow, { lat: 0, lng: 0 }), null);
+  assert.equal(isValidLatLng(0, 0), true);
+  assert.ok((safeDistanceKm(buckow, { lat: 0, lng: 0 }) || 0) > 0);
   assert.equal(safeDistanceKm(buckow, { lat: 999, lng: 13.46 }), null);
   assert.ok(distance !== null && distance > 0);
   assert.ok(distance !== null && distance < 25);
@@ -1093,8 +1093,8 @@ test('radar location resolver falls back from bad coords to Berlin postal and ar
     postal_code: '10247',
     location_visibility: 'postal_area',
     location_mode: 'city_only',
-    latitude: 0,
-    longitude: 0
+    latitude: null,
+    longitude: null
   } as any);
   const kreuzberg = resolveProfileRadarLocation({
     id: 'profile-10997',
@@ -1118,6 +1118,61 @@ test('radar location resolver falls back from bad coords to Berlin postal and ar
   assert.equal(kreuzberg?.precision, 'area');
   assert.match(kreuzberg?.label || '', /Kreuzberg/);
   assert.equal(hidden, null);
+});
+
+test('radar location resolver never exposes private coordinates outside exact visibility', () => {
+  const exact = resolveProfileRadarLocation({
+    id: 'exact-admin-point',
+    display_name: 'Exact',
+    work_city: 'Berlin',
+    location_visibility: 'exact',
+    location_precision: 'exact',
+    latitude: 52.501,
+    longitude: 13.401,
+    radar_latitude: 52.6,
+    radar_longitude: 13.5
+  } as any);
+  const cityOnly = resolveProfileRadarLocation({
+    id: 'private-city-point',
+    display_name: 'City only',
+    work_city: 'Berlin',
+    location_visibility: 'city_only',
+    latitude: 52.501,
+    longitude: 13.401
+  } as any);
+  const postalArea = resolveProfileRadarLocation({
+    id: 'private-postal-point',
+    display_name: 'Postal area',
+    work_city: 'Berlin',
+    postal_code: '10247',
+    location_visibility: 'postal_area',
+    latitude: 52.501,
+    longitude: 13.401
+  } as any);
+  const hidden = resolveProfileRadarLocation({
+    id: 'private-hidden-point',
+    display_name: 'Hidden',
+    work_city: 'Berlin',
+    location_visibility: 'hidden',
+    latitude: 52.501,
+    longitude: 13.401,
+    radar_latitude: 52.6,
+    radar_longitude: 13.5
+  } as any);
+
+  assert.deepEqual(exact && { lat: exact.lat, lng: exact.lng, precision: exact.precision }, { lat: 52.501, lng: 13.401, precision: 'exact' });
+  assert.equal(cityOnly?.precision, 'city_fallback');
+  assert.notDeepEqual(cityOnly && { lat: cityOnly.lat, lng: cityOnly.lng }, { lat: 52.501, lng: 13.401 });
+  assert.equal(postalArea?.precision, 'postal_area');
+  assert.notDeepEqual(postalArea && { lat: postalArea.lat, lng: postalArea.lng }, { lat: 52.501, lng: 13.401 });
+  assert.equal(hidden, null);
+});
+
+test('WorkPointMap rejects null and empty coordinate values before numeric conversion', async () => {
+  const source = await readFile(new URL('../Front/src/components/WorkPointMap.tsx', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(source, /returnnull/);
+  assert.match(source, /latitude === null[\s\S]*latitude === ''[\s\S]*longitude === null[\s\S]*longitude === ''[\s\S]*return null/);
 });
 
 test('city page keeps listing profiles as radar input and does not pre-empty the radar', async () => {

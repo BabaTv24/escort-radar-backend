@@ -1857,6 +1857,8 @@ export function AdminPage() {
         ? t('admin.accounts.accountCreated')
         : userLinked
           ? t('admin.accounts.userLinked')
+          : result.location_geocoding_warning
+            ? t('admin.messages.profileSavedCoordinatesWithoutAddress')
           : result.location_precision === 'street'
             ? t('admin.messages.profileSavedStreetApproximate')
             : result.location_geocoded || result.location_coordinates_updated
@@ -1881,7 +1883,7 @@ export function AdminPage() {
       setMessage('Adres rozpoznany. Użyj przycisku Zapisz, aby zapisać kompletną lokalizację.');
     } catch (error) {
       if (requestId !== studioLocationRequestRef.current) return;
-      const text = error instanceof Error ? error.message : 'Nie udało się rozpoznać adresu.';
+      const text = t('admin.messages.coordinatesSetAddressUnavailable');
       setStudioLocationError(text);
       setMessage(text);
     } finally {

@@ -422,7 +422,7 @@ export const api = {
     method: 'POST', token, body: JSON.stringify({ latitude, longitude })
   }),
   adminProfileVisibilityAudit: (token: string, query = '') => request<{ context: Record<string, unknown>; profiles: Array<Record<string, unknown>> }>(`/api/admin/profiles/visibility-audit${query}`, { token }),
-  createAdminProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile; account_created?: boolean; user_linked?: boolean; location_geocoded?: boolean; location_precision?: string | null; location_coordinates_updated?: boolean }>('/api/admin/profiles', {
+  createAdminProfile: (token: string, body: Partial<Profile>) => request<{ profile: Profile; account_created?: boolean; user_linked?: boolean; location_geocoded?: boolean; location_precision?: string | null; location_coordinates_updated?: boolean; location_geocoding_warning?: { code: string; message: string } | null }>('/api/admin/profiles', {
     method: 'POST',
     token,
     body: JSON.stringify(body)
@@ -454,7 +454,7 @@ export const api = {
     method: 'POST',
     token
   }),
-  updateAdminProfile: (token: string, id: string, body: Partial<Profile>) => request<{ profile: Profile; location_geocoded?: boolean; location_precision?: string | null; location_coordinates_updated?: boolean }>(`/api/admin/profiles/${id}`, {
+  updateAdminProfile: (token: string, id: string, body: Partial<Profile>) => request<{ profile: Profile; location_geocoded?: boolean; location_precision?: string | null; location_coordinates_updated?: boolean; location_geocoding_warning?: { code: string; message: string } | null }>(`/api/admin/profiles/${id}`, {
     method: 'PUT',
     token,
     body: JSON.stringify(body)

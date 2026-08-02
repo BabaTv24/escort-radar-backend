@@ -318,8 +318,8 @@ export function getCityCenter(city: string) {
 
 export function getProfileCoordinates(profile: Profile) {
   const raw = profile as Profile & Record<string, unknown>;
-  const lat = toCoordinate(raw.latitude ?? raw.lat);
-  const lng = toCoordinate(raw.longitude ?? raw.lng);
+  const lat = toCoordinate(raw.radar_latitude ?? raw.radarLatitude ?? raw.latitude ?? raw.lat);
+  const lng = toCoordinate(raw.radar_longitude ?? raw.radarLongitude ?? raw.longitude ?? raw.lng);
   if (isValidLatLng(lat, lng)) return { lat, lng };
   return cityCenters[normalizeLocationQuery(profile.work_city || profile.city)] || null;
 }
@@ -446,9 +446,25 @@ export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocat
 
   const raw = profile as Profile & Record<string, unknown>;
   const city = textValue(raw.work_city ?? raw.city ?? raw.location_city);
+  const exact = profile.location_visibility === 'exact'
+    || (!profile.location_visibility && (profile.location_precision === 'exact' || profile.location_mode === 'exact'));
+  const postalArea = profile.location_visibility === 'postal_area';
   const cityOnly = profile.location_visibility === 'city_only'
-    || (!profile.location_visibility && profile.location_mode === 'city_only')
-    || profile.location_precision === 'city';
+    || (!profile.location_visibility && (profile.location_mode === 'city_only' || profile.location_precision === 'city'));
+
+  if (exact) {
+    const exactLat = toCoordinate(raw.latitude ?? raw.lat ?? raw.radar_latitude ?? raw.radarLatitude);
+    const exactLng = toCoordinate(raw.longitude ?? raw.lng ?? raw.radar_longitude ?? raw.radarLongitude);
+    if (!isValidLatLng(exactLat, exactLng)) return null;
+    return {
+      lat: exactLat,
+      lng: exactLng,
+      label: textValue(raw.work_place_label ?? raw.exact_address ?? raw.postal_code ?? raw.postalCode ?? raw.zip ?? raw.work_area ?? raw.area ?? raw.district ?? raw.work_city ?? raw.location_city ?? raw.city),
+      precision: 'exact',
+      approximate: false
+    };
+  }
+
   if (cityOnly) {
     const cityCenter = cityCenters[normalizeLocationQuery(city)];
     if (cityCenter) {
@@ -461,19 +477,20 @@ export function resolveProfileRadarLocation(profile: Profile): ProfileRadarLocat
     }
   }
 
-  const lat = toCoordinate(raw.latitude ?? raw.lat);
-  const lng = toCoordinate(raw.longitude ?? raw.lng);
-  if (isValidLatLng(lat, lng)) {
+  const radarLat = toCoordinate(raw.radar_latitude ?? raw.radarLatitude);
+  const radarLng = toCoordinate(raw.radar_longitude ?? raw.radarLongitude);
+  if (isValidLatLng(radarLat, radarLng)) {
     return {
-      lat,
-      lng,
+      lat: radarLat,
+      lng: radarLng,
       label: textValue(raw.work_place_label ?? raw.exact_address ?? raw.postal_code ?? raw.postalCode ?? raw.zip ?? raw.work_area ?? raw.area ?? raw.district ?? raw.work_city ?? raw.location_city ?? raw.city),
-      precision: profile.location_visibility === 'exact'
-        ? 'exact'
-        : profile.location_precision === 'city' ? 'city' : profile.work_place_label || profile.exact_address ? 'exact' : profile.location_visibility === 'postal_area' ? 'postal_area' : 'approximate',
-      approximate: profile.location_approximate === true || profile.location_precision === 'city' || profile.location_visibility !== 'exact'
+      precision: postalArea || profile.location_precision === 'postal_area'
+        ? 'postal_area'
+        : profile.location_precision === 'city' ? 'city' : 'approximate',
+      approximate: true
     };
   }
+
   const postalCode = textValue(raw.postal_code ?? raw.postalCode ?? raw.zip);
   if (postalCode) {
     const postal = resolveKnownLocation(`${postalCode} ${city}`);
@@ -497,7 +514,6 @@ export function isValidLatLng(lat: unknown, lng: unknown) {
     && typeof lng === 'number'
     && Number.isFinite(lat)
     && Number.isFinite(lng)
-    && !(lat === 0 && lng === 0)
     && Math.abs(lat) <= 90
     && Math.abs(lng) <= 180;
 }

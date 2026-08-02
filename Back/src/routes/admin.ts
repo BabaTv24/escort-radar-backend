@@ -65,7 +65,7 @@ import { runBulkPhotoModeration, validateBulkPhotoModerationInput } from '../bul
 import { buildProfilePhotoApprovalResult, validateProfilePhotoApprovalInput } from '../bulkProfilePhotoApproval.js';
 import { buildProfileExport, loadAllProfilesForExport, profileExportFilename, profileExportPageSize, selectedProfileExportFilename } from '../adminProfileExport.js';
 import { adminFunPageAdvertisementRouter } from './funPageAdvertisement.js';
-import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, resolveAdminLocation, reverseGeocodeAdminLocation, validateManualAdminLocation, type AdminLocationResolution } from '../adminLocationGeocoding.js';
+import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, buildAdminLocationPatch, resolveAdminLocation, resolveManualAdminLocationForSave, reverseGeocodeAdminLocation, validateManualAdminLocation } from '../adminLocationGeocoding.js';
 
 export const adminRouter = Router();
 
@@ -213,7 +213,7 @@ adminRouter.post('/location/reverse-geocode', asyncHandler(async (req, res) => {
     const location = await reverseGeocodeAdminLocation(req.body.latitude, req.body.longitude, { userAgent: adminNominatimUserAgent() });
     res.json({ location });
   } catch (error) {
-    if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+    if (error instanceof AdminLocationGeocodingError) return res.status(error.status).json({ error: error.message, code: error.code });
     throw error;
   }
 }));
@@ -1068,10 +1068,10 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
   let locationResolution;
   try {
     locationResolution = req.body.location_input_source === 'manual' && profileData.data.location_visibility === 'exact'
-      ? await reverseGeocodeAdminLocation(profileData.data.latitude, profileData.data.longitude, { userAgent: adminNominatimUserAgent() })
+      ? await resolveManualAdminLocationForSave(profileData.data, { userAgent: adminNominatimUserAgent() })
       : await resolveAdminLocation(profileData.data, { userAgent: adminNominatimUserAgent() });
   } catch (error) {
-    if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+    if (error instanceof AdminLocationGeocodingError) return res.status(error.status).json({ error: error.message, code: error.code });
     throw error;
   }
 
@@ -1094,7 +1094,7 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
 
   const payload: Record<string, any> = {
     ...profileData.data,
-    ...adminLocationPatch(locationResolution, req.body.location_input_source === 'manual' ? 'manual' : 'automatic', req.body.location_input_source === 'manual'),
+    ...buildAdminLocationPatch(locationResolution, req.body.location_input_source === 'manual' ? 'manual' : 'automatic'),
     ...starter,
     user_id: authUser?.id || null,
     slug: `${slugify(String(profileData.data.display_name))}-${Date.now().toString(36)}`,
@@ -1127,7 +1127,8 @@ adminRouter.post('/profiles', asyncHandler(async (req, res) => {
     account_created: authUserCreated,
     user_linked: Boolean(authUser),
     location_geocoded: locationResolution.geocoded,
-    location_precision: locationResolution.precision
+    location_precision: locationResolution.precision,
+    location_geocoding_warning: locationResolution.geocoding_warning || null
   });
 }));
 
@@ -2043,30 +2044,30 @@ adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
   const manualExactPoint = req.body.location_input_source === 'manual' && profileData.data.location_visibility === 'exact';
   if (manualExactPoint && locationChanged) {
     try {
-      locationResolution = await reverseGeocodeAdminLocation(profileData.data.latitude, profileData.data.longitude, { userAgent: adminNominatimUserAgent() });
+      locationResolution = await resolveManualAdminLocationForSave(profileData.data, { userAgent: adminNominatimUserAgent() });
     } catch (error) {
-      if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+      if (error instanceof AdminLocationGeocodingError) return res.status(error.status).json({ error: error.message, code: error.code });
       throw error;
     }
   } else if (addressOrPrivacyChanged || (locationChanged && profileData.data.location_visibility !== 'exact')) {
     try {
       locationResolution = await resolveAdminLocation(profileData.data, { userAgent: adminNominatimUserAgent() });
     } catch (error) {
-      if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+      if (error instanceof AdminLocationGeocodingError) return res.status(error.status).json({ error: error.message, code: error.code });
       throw error;
     }
   } else if (locationChanged) {
     try {
       locationResolution = validateManualAdminLocation(profileData.data);
     } catch (error) {
-      if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
+      if (error instanceof AdminLocationGeocodingError) return res.status(error.status).json({ error: error.message, code: error.code });
       throw error;
     }
   }
 
   const patch: Record<string, unknown> = {
     ...profileData.data,
-    ...(locationResolution ? adminLocationPatch(locationResolution, manualExactPoint ? 'manual' : 'automatic', manualExactPoint) : {}),
+    ...(locationResolution ? buildAdminLocationPatch(locationResolution, manualExactPoint ? 'manual' : 'automatic') : {}),
     verification_status: profileData.data.verified ? 'verified' : 'pending',
     verified_at: profileData.data.verified ? new Date().toISOString() : null,
     ...(locationChanged ? { location_updated_at: new Date().toISOString() } : {})
@@ -2099,7 +2100,8 @@ adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
     profile: withAdminImageUrls(data),
     location_geocoded: locationResolution?.geocoded || false,
     location_precision: locationResolution?.precision || null,
-    location_coordinates_updated: locationChanged
+    location_coordinates_updated: locationChanged,
+    location_geocoding_warning: locationResolution?.geocoding_warning || null
   });
 }));
 
@@ -3671,24 +3673,6 @@ function adminNominatimUserAgent() {
   const appUrl = String(config.appUrl || 'https://escort-radar.fun').trim();
   const contact = String(config.supportEmail || 'support@escort-radar.fun').trim();
   return `Escort Radar/1.0 (+${appUrl}; contact: ${contact})`;
-}
-
-function adminLocationPatch(location: AdminLocationResolution, source: 'automatic' | 'manual', replaceAddress = false) {
-  const precision = location.precision === 'city' ? 'city' : location.precision === 'postal_area' ? 'postal_area' : 'exact';
-  return {
-    latitude: location.latitude,
-    longitude: location.longitude,
-    ...(location.work_country ? { work_country: location.work_country } : {}),
-    ...(location.work_city ? { work_city: location.work_city, city: slugify(location.work_city) } : {}),
-    ...(replaceAddress || location.work_area ? { work_area: location.work_area || null, area: location.work_area || null } : {}),
-    ...(replaceAddress || location.postal_code ? { postal_code: location.postal_code || null } : {}),
-    ...(replaceAddress || location.exact_address ? { exact_address: location.exact_address || null } : {}),
-    ...(replaceAddress || location.work_place_label ? { work_place_label: location.work_place_label || null } : {}),
-    // Exact visibility uses the existing legacy approximate DB mode.
-    location_mode: precision === 'city' ? 'city_only' : 'approximate',
-    location_precision: precision,
-    location_input_source: source
-  };
 }
 
 function normalizeStoredLocationPrecision(value: unknown) {

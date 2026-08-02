@@ -1998,6 +1998,8 @@
   "admin.status.male_escort": "Male Escort",
   "admin.messages.profileSaved": "Profil gespeichert.",
   "admin.messages.profileSavedCoordinatesUpdated": "Standort gespeichert und Koordinaten aktualisiert.",
+  "admin.messages.profileSavedCoordinatesWithoutAddress": "Koordinaten gespeichert. Nominatim konnte die Adressdaten nicht aktualisieren; die vorhandenen Daten wurden beibehalten.",
+  "admin.messages.coordinatesSetAddressUnavailable": "Koordinaten wurden gesetzt. Die Adresse konnte nicht aktualisiert werden; der Marker kann trotzdem gespeichert werden.",
   "admin.messages.profileSavedStreetApproximate": "Straßenposition gespeichert. Die Hausnummer wurde nicht bestätigt, daher ist die Position ungefähr.",
   "admin.accounts.accountAccess": "Kontozugang",
   "admin.accounts.password": "Passwort",

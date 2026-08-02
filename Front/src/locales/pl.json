@@ -1998,6 +1998,8 @@
   "admin.status.male_escort": "Męski escort",
   "admin.messages.profileSaved": "Profil zapisany.",
   "admin.messages.profileSavedCoordinatesUpdated": "Lokalizacja zapisana, wspolrzedne zaktualizowane.",
+  "admin.messages.profileSavedCoordinatesWithoutAddress": "Współrzędne zapisano. Nominatim nie odświeżył danych adresowych; zachowano dotychczasowe dane.",
+  "admin.messages.coordinatesSetAddressUnavailable": "Współrzędne ustawiono. Nie udało się odświeżyć adresu; marker nadal można zapisać.",
   "admin.messages.profileSavedStreetApproximate": "Lokalizacja ulicy zapisana. Numer budynku nie zostal potwierdzony, dlatego pozycja jest przyblizona.",
   "admin.accounts.accountAccess": "Dostęp do konta",
   "admin.accounts.password": "Hasło",

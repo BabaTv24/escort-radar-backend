@@ -14,10 +14,14 @@ export type AdminLocationResolution = {
   work_place_label?: string;
   geocoded: boolean;
   precision: 'exact' | 'street' | 'postal_area' | 'city';
+  geocoding_warning?: {
+    code: string;
+    message: string;
+  };
 };
 
 export class AdminLocationGeocodingError extends Error {
-  constructor(message: string, public readonly code: string) {
+  constructor(message: string, public readonly code: string, public readonly status = 422) {
     super(message);
     this.name = 'AdminLocationGeocodingError';
   }
@@ -158,8 +162,8 @@ export async function reverseGeocodeAdminLocation(
   longitudeValue: unknown,
   options: NominatimOptions = {}
 ): Promise<AdminLocationResolution> {
-  const latitude = Number(latitudeValue);
-  const longitude = Number(longitudeValue);
+  const latitude = coordinateValue(latitudeValue);
+  const longitude = coordinateValue(longitudeValue);
   if (!validCoordinates(latitude, longitude)) {
     throw new AdminLocationGeocodingError('Enter valid non-zero latitude and longitude values.', 'invalid_manual_coordinates');
   }
@@ -182,7 +186,7 @@ export async function reverseGeocodeAdminLocation(
     if (!result || Array.isArray(result)) {
       throw new AdminLocationGeocodingError('No matching OpenStreetMap address was found for this point.', 'reverse_address_not_found');
     }
-    const normalized = normalizeNominatimAddress(result as NominatimResult, latitude, longitude, true);
+    const normalized = { ...normalizeNominatimAddress(result as NominatimResult, latitude, longitude, true), geocoded: true };
     if (!normalized.work_country || !normalized.work_city) {
       throw new AdminLocationGeocodingError('OpenStreetMap did not return a complete country and city for this point.', 'incomplete_reverse_address');
     }
@@ -195,11 +199,53 @@ export async function reverseGeocodeAdminLocation(
   return pending.then((result) => ({ ...result }));
 }
 
+export async function resolveManualAdminLocationForSave(
+  profile: Record<string, any>,
+  options: NominatimOptions = {}
+): Promise<AdminLocationResolution> {
+  const point = validateManualAdminLocation(profile);
+  try {
+    const reversed = await reverseGeocodeAdminLocation(point.latitude, point.longitude, options);
+    const expectedCountry = normalizeCountry(profile.work_country || profile.country);
+    if (expectedCountry && reversed.work_country && reversed.work_country !== expectedCountry) {
+      throw new AdminLocationGeocodingError(
+        'The selected point is in a different country than the profile location.',
+        'geocoder_country_mismatch'
+      );
+    }
+    return reversed;
+  } catch (error) {
+    if (!(error instanceof AdminLocationGeocodingError)) throw error;
+    if (error.code === 'invalid_manual_coordinates' || error.code === 'geocoder_country_mismatch') throw error;
+    return {
+      ...point,
+      geocoding_warning: { code: error.code, message: error.message }
+    };
+  }
+}
+
+export function buildAdminLocationPatch(location: AdminLocationResolution, source: 'automatic' | 'manual') {
+  const precision = location.precision === 'city' ? 'city' : location.precision === 'postal_area' ? 'postal_area' : 'exact';
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    ...(location.work_country ? { work_country: location.work_country } : {}),
+    ...(location.work_city ? { work_city: location.work_city, city: slugifyLocation(location.work_city) } : {}),
+    ...(location.work_area ? { work_area: location.work_area, area: location.work_area } : {}),
+    ...(location.postal_code ? { postal_code: location.postal_code } : {}),
+    ...(location.exact_address ? { exact_address: location.exact_address } : {}),
+    ...(location.work_place_label ? { work_place_label: location.work_place_label } : {}),
+    location_mode: precision === 'city' ? 'city_only' : 'approximate',
+    location_precision: precision,
+    location_input_source: source
+  };
+}
+
 export function validateManualAdminLocation(profile: Record<string, any>): AdminLocationResolution {
-  const latitude = Number(profile.latitude);
-  const longitude = Number(profile.longitude);
+  const latitude = coordinateValue(profile.latitude);
+  const longitude = coordinateValue(profile.longitude);
   if (!validCoordinates(latitude, longitude)) {
-    throw new AdminLocationGeocodingError('Enter valid non-zero latitude and longitude values.', 'invalid_manual_coordinates');
+    throw new AdminLocationGeocodingError('Enter latitude from -90 to 90 and longitude from -180 to 180.', 'invalid_manual_coordinates');
   }
   return { latitude, longitude, geocoded: false, precision: 'exact' };
 }
@@ -264,19 +310,23 @@ async function fetchNominatimJson(url: URL, options: NominatimOptions) {
       signal: AbortSignal.timeout(8000)
     });
   } catch {
-    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder could not be reached. The profile was not changed.', 'geocoder_unavailable');
+    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder could not be reached.', 'geocoder_unavailable', 503);
   }
-  if (!response.ok) throw new AdminLocationGeocodingError('The OpenStreetMap geocoder rejected the request. The profile was not changed.', 'geocoder_http_error');
+  if (!response.ok) {
+    const status = response.status === 429 || response.status >= 500 ? 503 : 502;
+    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder rejected the request.', 'geocoder_http_error', status);
+  }
   try {
     return await response.json() as unknown;
   } catch {
-    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder returned an invalid response. The profile was not changed.', 'invalid_geocoder_response');
+    throw new AdminLocationGeocodingError('The OpenStreetMap geocoder returned an invalid response.', 'invalid_geocoder_response', 502);
   }
 }
 
 function normalizeNominatimAddress(result: NominatimResult, latitude: number, longitude: number, preservePoint = false): AdminLocationResolution {
   const address = result.address || {};
-  const workCountry = normalizeCountry(address.country_code || address.countryCode || address.country);
+  const rawCountry = text(address.country_code || address.countryCode).toUpperCase();
+  const workCountry = normalizeCountry(rawCountry || address.country) || (/^[A-Z]{2}$/.test(rawCountry) ? rawCountry : null);
   const city = text(address.city || address.locality || address.postal_town || address.town || address.village || address.municipality || address.administrative_area_level_2);
   const area = text(address.borough || address.city_district || address.suburb || address.sublocality_level_1 || address.sublocality || address.quarter || address.neighbourhood || address.neighborhood);
   const street = text(address.road || address.route || address.pedestrian || address.residential || address.footway);
@@ -383,11 +433,20 @@ function hasValidNominatimCoordinates(result: NominatimResult) {
 function validCoordinates(latitude: number, longitude: number) {
   return Number.isFinite(latitude)
     && Number.isFinite(longitude)
-    && !(latitude === 0 && longitude === 0)
     && latitude >= -90
     && latitude <= 90
     && longitude >= -180
     && longitude <= 180;
+}
+
+function coordinateValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return Number.NaN;
+  if (typeof value === 'string' && !value.trim()) return Number.NaN;
+  return Number(value);
+}
+
+function slugifyLocation(value: string) {
+  return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 function structuredLabel(query: Record<string, string>) {

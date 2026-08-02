@@ -13,10 +13,9 @@ export function resolveEffectivePublicLocation(profile: Record<string, any>, cit
   const visibility = normalizeEffectiveLocationVisibility(profile.location_mode, profile.location_visibility);
   if (visibility === 'hidden') return null;
 
-  const latitude = Number(profile.latitude);
-  const longitude = Number(profile.longitude);
-  const hasValidCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude)
-    && !(latitude === 0 && longitude === 0)
+  const latitude = locationCoordinate(profile.latitude);
+  const longitude = locationCoordinate(profile.longitude);
+  const hasValidCoordinates = latitude !== null && longitude !== null
     && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
 
   if (profile.location_mode === 'city_only' || visibility === 'city_only') {
@@ -58,6 +57,12 @@ export function resolveEffectivePublicLocation(profile: Record<string, any>, cit
     location_approximate: true,
     location_precision: 'postal_area'
   };
+}
+
+function locationCoordinate(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
+  const coordinate = Number(value);
+  return Number.isFinite(coordinate) ? coordinate : null;
 }
 
 function hasPostalArea(profile: Record<string, any>) {

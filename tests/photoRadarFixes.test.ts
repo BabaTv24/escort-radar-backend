@@ -69,9 +69,9 @@ test('12353 resolves correctly and Haversine includes exactly 150 km but exclude
   const center = resolveManualSearcherLocation('12353 Berlin Buckow/Rudow');
   assert.deepEqual(center, { lat: 52.424, lng: 13.462, label: '12353 Berlin Buckow / Rudow', source: 'manual', city: 'Berlin' });
   assert.ok(center);
-  const pointAt = { latitude: center!.lat + 150 / 111.195, longitude: center!.lng };
-  const pointOutside = { latitude: center!.lat + 150.1 / 111.195, longitude: center!.lng };
-  const atDistance = safeDistanceKm(center!, { lat: pointAt.latitude, lng: pointAt.longitude });
+  const pointAt = { radar_latitude: center!.lat + 150 / 111.195, radar_longitude: center!.lng };
+  const pointOutside = { radar_latitude: center!.lat + 150.1 / 111.195, radar_longitude: center!.lng };
+  const atDistance = safeDistanceKm(center!, { lat: pointAt.radar_latitude, lng: pointAt.radar_longitude });
   assert.ok(atDistance !== null && Math.abs(atDistance - 150) < .05);
   assert.equal(isProfileInRadarRange({ id: 'pl', display_name: 'PL', city: 'Poland', location_visibility: 'postal_area', ...pointAt } as any, center!, 150_000).inRange, true);
   assert.equal(isProfileInRadarRange({ id: 'pl', display_name: 'PL', city: 'Poland', location_visibility: 'postal_area', ...pointAt } as any, center!, 30_000).inRange, false);
