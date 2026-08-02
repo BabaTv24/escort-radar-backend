@@ -1,11 +1,18 @@
 User-agent: *
 Allow: /
-Disallow: /dashboard
+
 Disallow: /admin
-Disallow: /admin-access
-Disallow: /login
-Disallow: /register
-Disallow: /tokens
-Disallow: /coins
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /settings
+Disallow: /settings/
+Disallow: /messages
+Disallow: /messages/
+Disallow: /api/
+Disallow: /auth/
+Disallow: /*?token=
+Disallow: /*?claim=
+Disallow: /*?session=
 
 Sitemap: https://escort-radar.fun/sitemap.xml

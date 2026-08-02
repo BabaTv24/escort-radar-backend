@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config.js';
 import { profilesRouter } from './routes/profiles.js';
+import { sitemapRouter } from './routes/sitemap.js';
 import { uploadsRouter } from './routes/uploads.js';
 import { reportsRouter } from './routes/reports.js';
 import { adminRouter } from './routes/admin.js';
@@ -68,6 +69,7 @@ app.get('/api/version', (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/profiles', profilesRouter);
+app.use('/api/sitemap', sitemapRouter);
 app.use('/api/funpage-advertisement', publicFunPageAdvertisementRouter);
 app.use('/api/uploads', uploadsRouter);
 app.use('/api/reports', reportsRouter);

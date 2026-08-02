@@ -32,6 +32,7 @@ import { getPublicLocationLabel, getPublicLocationMode } from '../lib/locationLa
 import { profileDetailRows } from '../lib/profileDetails';
 import { availabilityDayKeys, normalizeAvailabilityHoursForEditor } from '../components/AvailabilityHoursEditor';
 import { WorkPointMap } from '../components/WorkPointMap';
+import { Seo, SITE_URL } from '../components/Seo';
 
 type ProfileTab = 'overview' | 'services' | 'prices' | 'reviews';
 
@@ -102,8 +103,8 @@ export function ProfilePage() {
       });
   }, [id, retryKey]);
 
-  if (error) return <div className="page narrow"><ErrorState message={error} onRetry={() => setRetryKey((value) => value + 1)} /></div>;
-  if (!profile) return <div className="page narrow"><LoadingState /></div>;
+  if (error) return <div className="page narrow"><Seo title="Profil niedostępny – Escort Radar" description="Ten profil nie jest publicznie dostępny." canonical={`${SITE_URL}/profile/${encodeURIComponent(id)}`} noindex /><ErrorState message={error} onRetry={() => setRetryKey((value) => value + 1)} /></div>;
+  if (!profile) return <div className="page narrow"><Seo title="Profil – Escort Radar" description="Publiczny profil w Escort Radar." canonical={`${SITE_URL}/profile/${encodeURIComponent(id)}`} noindex /><LoadingState /></div>;
 
   const availabilityHours = normalizeAvailabilityHoursForEditor(profile.opening_hours);
   const activated = profileAccess?.client_state === 'client_activated';
@@ -160,6 +161,12 @@ export function ProfilePage() {
 
   return (
     <div className="page premium-profile-page">
+      <Seo
+        title={`${profile.display_name} – profil w Escort Radar`}
+        description={`${profile.display_name}: publiczny profil w ${profile.work_city || profile.city}. Sprawdź dostępność, informacje i bezpieczne opcje kontaktu.`}
+        canonical={`${SITE_URL}/profile/${encodeURIComponent(profile.id)}`}
+        ogType="profile"
+      />
       <section className="market-profile-shell">
         <main className="market-profile-main">
           <section className="market-gallery-card">

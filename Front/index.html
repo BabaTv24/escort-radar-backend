@@ -1,19 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="pl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#050505" />
+    <meta name="theme-color" content="#050b10" />
+    <meta name="application-name" content="Escort Radar" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Escort Radar" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="format-detection" content="telephone=no" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <title>Escort Radar – Verified Escorts Near You</title>
+    <title>Escort Radar – panel AI do rezerwacji, klientów i lokalnej widoczności</title>
     <meta
       name="description"
-      content="Discover verified independent escorts, couples, massage and nightlife profiles near you. Search by city, availability and distance."
+      content="Zarządzaj rezerwacjami, klientami, wiadomościami i widocznością w mieście z jednego prywatnego panelu wspieranego przez AI."
     />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://escort-radar.fun/" />
@@ -26,64 +27,54 @@
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Escort Radar" />
-    <meta property="og:title" content="Escort Radar – Verified Profiles Near You" />
-    <meta property="og:description" content="Find verified escorts and nightlife profiles near you using Escort Radar." />
+    <meta property="og:title" content="Escort Radar – panel AI do rezerwacji, klientów i lokalnej widoczności" />
+    <meta property="og:description" content="Zarządzaj rezerwacjami, klientami, wiadomościami i widocznością w mieście z jednego prywatnego panelu wspieranego przez AI." />
     <meta property="og:url" content="https://escort-radar.fun/" />
-    <meta property="og:image" content="https://escort-radar.fun/escort-radar-social-preview.jpg" />
+    <meta property="og:image" content="https://escort-radar.fun/og/escort-radar-ai-panel-1200x630.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:locale" content="pl_PL" />
+    <meta property="og:locale:alternate" content="de_DE" />
+    <meta property="og:locale:alternate" content="en_US" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Escort Radar – Verified Profiles Near You" />
-    <meta name="twitter:description" content="Find verified escorts and nightlife profiles near you using Escort Radar." />
-    <meta name="twitter:image" content="https://escort-radar.fun/escort-radar-social-preview.jpg" />
+    <meta name="twitter:title" content="Escort Radar – panel AI do rezerwacji, klientów i lokalnej widoczności" />
+    <meta name="twitter:description" content="Zarządzaj rezerwacjami, klientami, wiadomościami i widocznością w mieście z jednego prywatnego panelu wspieranego przez AI." />
+    <meta name="twitter:image" content="https://escort-radar.fun/og/escort-radar-ai-panel-1200x630.jpg" />
 
     <script type="application/ld+json">
-      [
-        {
-          "@context": "https://schema.org",
-          "@type": "WebSite",
-          "name": "Escort Radar",
-          "url": "https://escort-radar.fun/",
-          "inLanguage": ["de", "en", "pl"],
-          "potentialAction": {
-            "@type": "SearchAction",
-            "target": "https://escort-radar.fun/city/{search_term_string}",
-            "query-input": "required name=search_term_string"
-          }
-        },
-        {
-          "@context": "https://schema.org",
-          "@type": "Organization",
-          "name": "Escort Radar",
-          "url": "https://escort-radar.fun/",
-          "logo": "https://escort-radar.fun/Logo_Escort_5.png"
-        },
-        {
-          "@context": "https://schema.org",
-          "@type": "WebApplication",
-          "name": "Escort Radar",
-          "url": "https://escort-radar.fun/",
-          "applicationCategory": "LifestyleApplication",
-          "operatingSystem": "Web",
-          "isAccessibleForFree": true,
-          "audience": {
-            "@type": "PeopleAudience",
-            "requiredMinAge": 18
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://escort-radar.fun/#organization",
+            "name": "Escort Radar",
+            "url": "https://escort-radar.fun/",
+            "logo": "https://escort-radar.fun/favicon-512x512.png"
           },
-          "description": "Privacy-first 18+ marketplace for legal independent nightlife and adult companionship profiles."
-        },
-        {
-          "@context": "https://schema.org",
-          "@type": "MobileApplication",
-          "name": "Escort Radar",
-          "url": "https://escort-radar.fun/app",
-          "applicationCategory": "LifestyleApplication",
-          "operatingSystem": "Android, iOS, Web",
-          "description": "Installable PWA for Escort Radar city discovery, account access, favorites and messages."
-        }
-      ]
+          {
+            "@type": "WebSite",
+            "@id": "https://escort-radar.fun/#website",
+            "name": "Escort Radar",
+            "url": "https://escort-radar.fun/",
+            "publisher": { "@id": "https://escort-radar.fun/#organization" },
+            "inLanguage": ["pl", "de", "en"]
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://escort-radar.fun/#application",
+            "name": "Escort Radar",
+            "url": "https://escort-radar.fun/",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "browserRequirements": "Requires a modern browser with JavaScript enabled",
+            "description": "Panel AI do zarządzania rezerwacjami, klientami, wiadomościami, dostępnością i lokalną widocznością.",
+            "publisher": { "@id": "https://escort-radar.fun/#organization" }
+          }
+        ]
+      }
     </script>
   </head>
   <body>

@@ -17,11 +17,13 @@ import { CoinWalletPage } from './pages/CoinWalletPage';
 import { ReferralPage } from './pages/ReferralPage';
 import { InstallAppPage } from './pages/InstallAppPage';
 import { AgeGate } from './components/AgeGate';
+import { RouteSeo } from './components/RouteSeo';
 
 export function App() {
   return (
     <AgeGate>
       <ScrollToTop />
+      <RouteSeo />
       <Routes>
         <Route path="/admin-access" element={<AdminAccessPage />} />
         <Route path="/admin/login" element={<AdminPage />} />

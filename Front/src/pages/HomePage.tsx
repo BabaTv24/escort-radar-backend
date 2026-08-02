@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, RadioTower, PlusCircle } from 'lucide-react';
+import { CalendarCheck, ChevronLeft, ChevronRight, MapPin, MessageCircle, RadioTower, ShieldCheck } from 'lucide-react';
 import { ProfileCard } from '../components/ProfileCard';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
@@ -14,9 +14,33 @@ import { isSponsoredProfile, toLocationCitySlug } from '../lib/sponsoredProfiles
 import { deriveHomeRadarView, getHomeRadarHref, loadHomeRadarCandidatePool } from '../lib/homeRadar';
 import { api, type FunPageTicker, type PublicFunPageAdvertisement, type PublicFunPagePromotions } from '../lib/api';
 import { advertisementRotationDelayMs, nextAdvertisementIndex, safeAdvertisementHref, shouldRotateAdvertisements } from '../lib/funPageAdvertisement';
+import { homeFaq, homeJsonLd, homeSeo, localeForLanguage } from '../lib/seoMetadata';
+
+const productBenefits = [
+  {
+    icon: CalendarCheck,
+    title: 'Inteligentne rezerwacje',
+    description: 'Zbieraj i porządkuj prośby o rezerwację z jednego panelu.'
+  },
+  {
+    icon: MessageCircle,
+    title: 'Komunikacja z klientami',
+    description: 'Prowadź prywatne rozmowy i przejmuj kontakt od asystenta AI.'
+  },
+  {
+    icon: MapPin,
+    title: 'Lokalna widoczność',
+    description: 'Docieraj do klientów szukających profili w konkretnym mieście lub promieniu.'
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Prywatność i kontrola',
+    description: 'Samodzielnie wybieraj poziom widoczności profilu, lokalizacji i dostępności.'
+  }
+] as const;
 
 export function HomePage() {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -32,7 +56,6 @@ export function HomePage() {
   const radarCity = toLocationCitySlug(searcherLocation);
   const paidProfiles = profiles.filter((profile) => !isSponsoredProfile(profile));
   const topProfiles = paidProfiles.slice(0, 8);
-  const featured = (paidProfiles.length ? paidProfiles : profiles).slice(0, 8);
 
   const loadProfiles = useCallback(() => {
     profilesAbortRef.current?.abort();
@@ -86,40 +109,53 @@ export function HomePage() {
   return (
     <div className="page landing-page">
       <Seo
-        title="Escort Radar - Verified 18+ Nightlife Profiles"
-        description="Privacy-first 18+ nightlife marketplace with verified independent profiles, city radar, favorites and account tools."
-        canonical="https://escort-radar.fun/"
+        {...homeSeo}
+        locale={localeForLanguage(lang)}
+        alternateLocales={(['pl_PL', 'de_DE', 'en_US'] as const).filter((locale) => locale !== localeForLanguage(lang))}
+        jsonLd={homeJsonLd}
       />
       <section className="landing-section landing-hero hero">
         <div className="hero-content">
           <img className="hero-brand-mark" src="/Logo_Escort_5.png" alt="" />
-          <p className="eyebrow">{t('home.heroEyebrow')}</p>
-          <h1>{t('home.heroTitle')}</h1>
-          <p className="tagline">{t('home.heroSubtitle')}</p>
-          <div className="hero-stat-row" aria-label={t('home.heroStats')}>
-            <span><strong>12K+</strong>{t('home.stats.profiles')}</span>
-            <span><strong>24/7</strong>{t('home.stats.support')}</span>
-            <span><strong>98%</strong>{t('home.stats.verified')}</span>
-            <span><strong>100%</strong>{t('home.stats.discreet')}</span>
-          </div>
+          <p className="eyebrow">Escort Radar · AI Client Office</p>
+          <h1>Panel AI do zarządzania rezerwacjami, klientami i widocznością w mieście</h1>
+          <p className="tagline">Escort Radar łączy prywatny panel klientek, inteligentne wiadomości, rezerwacje, dostępność i lokalną widoczność w jednym systemie.</p>
           <div className="hero-actions">
-            <Link to={radarHref} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={18} /> <span>{t('home.openRadar')}</span></Link>
-            <Link to="/dashboard" className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md"><PlusCircle size={18} /> <span>{t('home.create')}</span></Link>
+            <Link to="/register?type=escort" className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>Utwórz profil</span></Link>
+            <a
+              href="#how-it-works"
+              className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md"
+              onClick={() => window.setTimeout(() => document.getElementById('how-it-works')?.focus(), 0)}
+            ><span>Zobacz, jak działa</span></a>
           </div>
         </div>
-        <div className="hero-product-preview" aria-hidden="true">
-          {featured.slice(0, 3).map((profile, index) => {
-            const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
-            return (
-              <div className={`hero-floating-profile hero-floating-profile-${['a', 'b', 'c'][index]}`} key={profile.id}>
-                {image?.public_url ? <img src={image.public_url} alt="" /> : <div className="image-placeholder">{profile.display_name.slice(0, 1)}</div>}
-                <div>
-                  <span>{profile.display_name}</span>
-                  <strong>{profile.available_now ? t('home.preview.availableNow') : profile.work_city || profile.city}</strong>
-                </div>
-              </div>
-            );
-          })}
+        <figure className="hero-product-preview">
+          <img
+            src="/images/escort-radar-ai-client-office.png"
+            alt="Panel AI Escort Radar z radarem lokalnym, wiadomościami, dostępnością i rezerwacjami"
+            width="417"
+            height="488"
+            loading="eager"
+            fetchPriority="high"
+          />
+        </figure>
+      </section>
+
+      <section className="landing-section product-benefits-section" id="how-it-works" aria-labelledby="product-benefits-title" tabIndex={-1}>
+        <div className="section-head compact">
+          <div>
+            <p className="eyebrow">Jedno prywatne miejsce do pracy</p>
+            <h2 id="product-benefits-title">Organizuj klientów, rezerwacje i lokalną widoczność</h2>
+          </div>
+        </div>
+        <div className="product-benefits-grid">
+          {productBenefits.map(({ icon: Icon, title, description }) => (
+            <article className="product-benefit-card" key={title}>
+              <Icon aria-hidden="true" size={24} />
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -211,6 +247,23 @@ export function HomePage() {
       </>}
 
       <FunPagePromotionArea promotions={promotions} advertisementLabel={t('advertisement.label')} />
+
+      <section className="landing-section home-faq-section" aria-labelledby="home-faq-title">
+        <div className="section-head compact">
+          <div>
+            <p className="eyebrow">Escort Radar w praktyce</p>
+            <h2 id="home-faq-title">Najczęściej zadawane pytania</h2>
+          </div>
+        </div>
+        <div className="home-faq-list">
+          {homeFaq.map((item) => (
+            <article key={item.question}>
+              <h3>{item.question}</h3>
+              <p>{item.answer}</p>
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
