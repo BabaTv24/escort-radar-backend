@@ -6,7 +6,7 @@ export type GlobalCountry = {
 
 export const globalCountries: GlobalCountry[] = [
   { code: 'DE', labels: { en: 'Germany', pl: 'Niemcy', de: 'Deutschland' }, cities: ['Berlin', 'Hamburg', 'Muenchen', 'Koeln', 'Frankfurt am Main', 'Duesseldorf', 'Stuttgart', 'Dortmund', 'Leipzig', 'Hannover', 'Bremen', 'Nuernberg', 'Dresden', 'Essen', 'Duisburg', 'Bochum'] },
-  { code: 'PL', labels: { en: 'Poland', pl: 'Polska', de: 'Polen' }, cities: ['Warszawa', 'Krakow', 'Wroclaw', 'Poznan', 'Gdansk', 'Lodz', 'Szczecin', 'Katowice', 'Lublin', 'Bydgoszcz', 'Swiebodzin', 'Stargard', 'Koszalin', 'Kolobrzeg'] },
+  { code: 'PL', labels: { en: 'Poland', pl: 'Polska', de: 'Polen' }, cities: ['Warszawa', 'Krakow', 'Wroclaw', 'Poznan', 'Gdansk', 'Lodz', 'Szczecin', 'Suwalki', 'Katowice', 'Lublin', 'Bydgoszcz', 'Swiebodzin', 'Stargard', 'Koszalin', 'Kolobrzeg'] },
   { code: 'NL', labels: { en: 'Netherlands', pl: 'Holandia', de: 'Niederlande' }, cities: ['Amsterdam', 'Rotterdam', 'Den Haag', 'Utrecht', 'Eindhoven'] },
   { code: 'BE', labels: { en: 'Belgium', pl: 'Belgia', de: 'Belgien' }, cities: ['Brussels', 'Antwerp', 'Gent', 'Liege'] },
   { code: 'LU', labels: { en: 'Luxembourg', pl: 'Luksemburg', de: 'Luxemburg' }, cities: ['Luxembourg'] },
@@ -23,8 +23,17 @@ export function normalizeCountry(value: unknown) {
   return globalCountries.find((country) => normalizeText(country.code) === key || Object.values(country.labels).some((label) => normalizeText(label) === key))?.code || '';
 }
 
+export function resolveProfileCountry(country: unknown, city: unknown) {
+  const explicit = normalizeCountry(country);
+  const cityKey = normalizeCity(city);
+  const cityCountry = globalCountries.find((item) => item.cities.some((candidate) => normalizeCity(candidate) === cityKey))?.code || '';
+  if (cityCountry && (!explicit || (explicit === 'DE' && cityCountry !== 'DE'))) return cityCountry;
+  return explicit || cityCountry;
+}
+
 export function normalizeCity(value: unknown) {
-  return citySlug(String(value || ''));
+  const slug = citySlug(String(value || ''));
+  return slug === 'stargard-szczecinski' ? 'stargard' : slug;
 }
 
 export function citySlug(value: string) {

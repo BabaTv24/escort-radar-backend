@@ -66,6 +66,7 @@ import { buildProfilePhotoApprovalResult, validateProfilePhotoApprovalInput } fr
 import { buildProfileExport, loadAllProfilesForExport, profileExportFilename, profileExportPageSize, selectedProfileExportFilename } from '../adminProfileExport.js';
 import { adminFunPageAdvertisementRouter } from './funPageAdvertisement.js';
 import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, buildAdminLocationPatch, resolveAdminLocation, resolveManualAdminLocationForSave, reverseGeocodeAdminLocation, validateManualAdminLocation } from '../adminLocationGeocoding.js';
+import { canonicalizeProfileLocation } from '../profileCountry.js';
 
 export const adminRouter = Router();
 
@@ -1062,8 +1063,9 @@ adminRouter.get('/moderation', asyncHandler(async (_req, res) => {
 }));
 
 adminRouter.post('/profiles', asyncHandler(async (req, res) => {
-  const profileData = normalizeAdminProfilePayload(req.body);
-  if ('error' in profileData) return res.status(400).json({ error: profileData.error });
+  const normalizedProfileData = normalizeAdminProfilePayload(req.body);
+  if ('error' in normalizedProfileData) return res.status(400).json({ error: normalizedProfileData.error });
+  const profileData = { data: canonicalizeProfileLocation(normalizedProfileData.data) };
   if (req.body.password && req.body.password !== req.body.confirm_password) return res.status(400).json({ error: 'Passwords do not match' });
   let locationResolution;
   try {
@@ -2028,8 +2030,9 @@ adminRouter.patch('/profiles/:id/promotion', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.put('/profiles/:id', asyncHandler(async (req, res) => {
-  const profileData = normalizeAdminProfilePayload(req.body, true, true);
-  if ('error' in profileData) return res.status(400).json({ error: profileData.error });
+  const normalizedProfileData = normalizeAdminProfilePayload(req.body, true, true);
+  if ('error' in normalizedProfileData) return res.status(400).json({ error: normalizedProfileData.error });
+  const profileData = { data: canonicalizeProfileLocation(normalizedProfileData.data) };
 
   const { data: previousProfile, error: previousProfileError } = await supabaseAdmin
     .from('profiles')
@@ -3779,7 +3782,8 @@ function operatorStatusPatch(status: string) {
 }
 
 function withAdminImageUrls(profile: any) {
-  const images = (profile.profile_images || [])
+  const canonicalProfile = canonicalizeProfileLocation(profile);
+  const images = (canonicalProfile.profile_images || [])
     .map(withPublicImageUrl)
     .sort((left: any, right: any) => {
       if (Boolean(left.is_cover) !== Boolean(right.is_cover)) return left.is_cover ? -1 : 1;
@@ -3787,7 +3791,7 @@ function withAdminImageUrls(profile: any) {
       if (sortDiff !== 0) return sortDiff;
       return new Date(left.created_at || 0).getTime() - new Date(right.created_at || 0).getTime();
     });
-  return { ...profile, profile_images: images, images };
+  return { ...canonicalProfile, profile_images: images, images };
 }
 
 function withPublicImageUrl(image: any) {

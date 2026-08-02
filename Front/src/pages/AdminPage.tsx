@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Ban, BarChart3, Bell, Camera, ChevronRight, Coins, Crown, Download, Eye, LoaderCircle, Mail, MessageSquare, Pencil, Power, RefreshCw, Settings, Shield, Sparkles, Trash2, Upload, UserCheck, UserX, Users, WalletCards } from 'lucide-react';
 import { AdminProfileExportError, ApiError, api } from '../lib/api';
-import { adminLocationFormFromProfile, adminLocationSavePayload, mergeAdminReverseGeocode } from '../lib/adminLocationForm';
+import { adminLocationFormFromProfile, adminLocationSavePayload, isCurrentAdminProfileRequest, mergeAdminReverseGeocode } from '../lib/adminLocationForm';
 import { adminSession } from '../lib/adminSession';
 import type { BulkPhotoModerationResponse, BulkProfilePhotoApprovalResponse, BulkProfilePublishResponse, BulkProfilePublishStatus } from '../lib/api';
 import { AdminFunPagePromotions } from '../components/AdminFunPagePromotions';
@@ -68,6 +68,7 @@ import {
 import type { AdminBatchProgress } from '../lib/adminOperations';
 import { serviceOptions, serviceLabel } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
+import { resolveProfileCountry } from '../lib/globalLocations';
 import { berlinDistrictOptions, resolveBerlinPostalDistrict, resolveManualSearcherLocation } from '../lib/geo';
 import {
   normalizeProfileEthnicity,
@@ -296,7 +297,7 @@ export function AdminPage() {
   const [profileCatalogCities, setProfileCatalogCities] = useState<Record<string, Array<{ key: string; name: string; total: number; approved: number; pending: number }>>>({});
   const [profileCatalogPages, setProfileCatalogPages] = useState<Record<string, { items: Profile[]; total: number; page: number; has_more: boolean; loading?: boolean }>>({});
   const profileCatalogRequestKeyRef = useRef('');
-  const selectedProfileRequestRef = useRef('');
+  const selectedProfileRequestRef = useRef(0);
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
   const [moderationQueues, setModerationQueues] = useState<Record<string, Profile[]>>({});
   const [reports, setReports] = useState<AdminReport[]>([]);
@@ -941,14 +942,28 @@ export function AdminPage() {
   }, [token, view]);
 
   useEffect(() => {
+    const requestId = ++selectedProfileRequestRef.current;
     if (!selectedProfileQueryId || !['profiles', 'profile-studio'].includes(view)) return;
     const profile = profiles.find((item) => item.id === selectedProfileQueryId);
     if (!profile) {
-      if (!token || selectedProfileRequestRef.current === selectedProfileQueryId) return;
-      selectedProfileRequestRef.current = selectedProfileQueryId;
+      if (!token) return;
+      setStudioForm({
+        ...emptyStudioForm,
+        id: selectedProfileQueryId,
+        city: '', area: '', work_country: '', work_city: '', work_area: '', postal_code: '',
+        work_place_label: '', exact_address: '', latitude: '', longitude: ''
+      });
+      setProfileReviewOpen(true);
       void api.adminProfile(token, selectedProfileQueryId)
-        .then((result) => setProfiles((current) => [...new Map([...current, result.profile].map((item) => [item.id, item])).values()]))
-        .catch((error) => setProfileLoadError(error instanceof Error ? error.message : t('states.requestFailed')));
+        .then((result) => {
+          if (!isCurrentAdminProfileRequest(requestId, selectedProfileRequestRef.current, result.profile.id, selectedProfileQueryId)) return;
+          setProfiles((current) => [...new Map([...current, result.profile].map((item) => [item.id, item])).values()]);
+          editStudioProfile(result.profile);
+          setProfilePanelMode('overview');
+        })
+        .catch((error) => {
+          if (requestId === selectedProfileRequestRef.current) setProfileLoadError(error instanceof Error ? error.message : t('states.requestFailed'));
+        });
       return;
     }
     setProfileReviewOpen(true);
@@ -1120,8 +1135,6 @@ export function AdminPage() {
       profile_type: adminProfileTypeToUi(profile.profile_type),
       display_name: profile.display_name || '',
       category: adminCategoryToFormValue(profile.category),
-      city: profile.city || 'berlin',
-      area: profile.area || profile.work_area || '',
       ...adminLocationFormFromProfile(profile),
       location_visibility: profile.location_visibility || getAdminLocationChoice(profile),
       service_radius_km: profile.service_radius_km || 25,
@@ -2436,7 +2449,7 @@ export function AdminPage() {
       const country = getAdminLocationCountry(countries, studioForm.work_country);
       const cities = country.cities;
       const cityConfig = getAdminLocationCity(country, studioForm.work_city);
-      const isBerlin = normalizeLocationValue(cityConfig?.name || studioForm.work_city || '') === 'berlin';
+      const isBerlin = country.code === 'DE' && normalizeLocationValue(cityConfig?.name || studioForm.work_city || '') === 'berlin';
       const districts = isBerlin ? berlinDistrictOptions : cityConfig?.districts || [];
       return <div className="admin-form-grid">
         <AdminField label={t('admin.profileEditor.workCountry')}><select value={country.code} onChange={(event) => {
@@ -2448,7 +2461,7 @@ export function AdminPage() {
           setStudioForm({ ...applyAdminCitySelection(studioForm, event.target.value), location_input_source: 'automatic' });
         }} /></AdminField>
         <datalist id="admin-city-options">{cities.map((city) => <option key={city.name} value={city.name} />)}</datalist>
-        <AdminField label={t('profileDetails.berlinDistrict')}><select value={districts.includes(studioForm.work_area) ? studioForm.work_area : ''} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value, location_input_source: 'automatic' })}><option value="">{t('profileDetails.chooseDistrict')}</option>{districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></AdminField>
+        {isBerlin ? <AdminField label={t('profileDetails.berlinDistrict')}><select value={districts.includes(studioForm.work_area) ? studioForm.work_area : ''} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value, location_input_source: 'automatic' })}><option value="">{t('profileDetails.chooseDistrict')}</option>{districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></AdminField> : null}
         <AdminField label={t('dashboard.advertiser.districtArea')}><input list="admin-district-options" placeholder={t('admin.profileEditor.areaPlaceholder')} value={studioForm.work_area} onChange={(event) => setStudioForm({ ...studioForm, work_area: event.target.value, area: event.target.value, location_input_source: 'automatic' })} /></AdminField>
         <datalist id="admin-district-options">{districts.map((district) => <option key={district} value={district} />)}</datalist>
         <AdminField label={t('admin.location.postalCode')}><input maxLength={20} placeholder="12043" value={studioForm.postal_code} onChange={(event) => {
@@ -4594,13 +4607,14 @@ function getAdminLocationCity(country: ReturnType<typeof getAdminLocationCountri
 }
 
 function applyAdminCitySelection<T extends {
-  work_city: string; city: string; work_area: string; area: string; postal_code: string;
+  work_country: string; work_city: string; city: string; work_area: string; area: string; postal_code: string;
   latitude: string; longitude: string; work_place_label: string; exact_address: string;
 }>(form: T, value: string): T {
   const workCity = value.trimStart();
   const resolved = resolveManualSearcherLocation(workCity);
   return {
     ...form,
+    work_country: resolveProfileCountry(form.work_country, workCity),
     work_city: workCity,
     city: workCity.trim() ? getLegacyCitySlug(workCity) : '',
     work_area: '',

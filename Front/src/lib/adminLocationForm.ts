@@ -1,5 +1,7 @@
 import type { LocationGeocodeResult } from './api';
 import type { Profile } from '../types';
+import { berlinDistrictOptions, resolveManualSearcherLocation } from './geo';
+import { citySlug, getCityLabel, normalizeCountry, resolveProfileCountry } from './globalLocations';
 
 export type AdminMapPoint = { latitude: number; longitude: number };
 
@@ -66,18 +68,57 @@ export function adminLocationSavePayload(form: AdminLocationForm) {
 }
 
 export function adminLocationFormFromProfile(profile: Profile) {
+  const rawCity = String(profile.work_city || profile.city || '').trim();
+  const workCity = getCityLabel(rawCity);
+  const workCountry = resolveProfileCountry(profile.work_country, workCity);
+  const storedCountry = normalizeCountry(profile.work_country);
+  const cityPoint = resolveManualSearcherLocation(workCity);
+  const savedLatitude = formCoordinate(profile.latitude, -90, 90);
+  const savedLongitude = formCoordinate(profile.longitude, -180, 180);
+  const hasSavedPoint = savedLatitude !== null && savedLongitude !== null;
+  const legacyBerlinFallback = Boolean(
+    hasSavedPoint
+    && cityPoint
+    && storedCountry === 'DE'
+    && workCountry !== 'DE'
+    && Math.abs(savedLatitude - 52.52) <= 0.02
+    && Math.abs(savedLongitude - 13.405) <= 0.03
+  );
+  const latitude = !hasSavedPoint || legacyBerlinFallback ? cityPoint?.lat ?? null : savedLatitude;
+  const longitude = !hasSavedPoint || legacyBerlinFallback ? cityPoint?.lng ?? null : savedLongitude;
+  const workArea = legacyBerlinFallback && isBerlinDistrict(profile.work_area || profile.area) ? '' : profile.work_area || profile.area || '';
+  const postalCode = legacyBerlinFallback && /^1[0-4]\d{3}$/.test(String(profile.postal_code || '').trim()) ? '' : profile.postal_code || '';
+  const exactAddress = legacyBerlinFallback && /\bberlin\b/i.test(String(profile.exact_address || '')) ? '' : profile.exact_address || '';
+  const placeLabel = legacyBerlinFallback && /\bberlin\b/i.test(String(profile.work_place_label || '')) ? '' : profile.work_place_label || '';
   return {
-    work_country: profile.work_country || 'DE',
-    work_city: profile.work_city || profile.city || '',
-    work_area: profile.work_area || profile.area || '',
-    postal_code: profile.postal_code || '',
-    work_place_label: profile.work_place_label || '',
-    exact_address: profile.exact_address || '',
-    latitude: profile.latitude === null || profile.latitude === undefined ? '' : String(profile.latitude),
-    longitude: profile.longitude === null || profile.longitude === undefined ? '' : String(profile.longitude),
+    work_country: workCountry,
+    work_city: workCity,
+    city: workCity ? citySlug(workCity) : '',
+    work_area: workArea,
+    area: workArea,
+    postal_code: postalCode,
+    work_place_label: placeLabel,
+    exact_address: exactAddress,
+    latitude: latitude === null ? '' : String(latitude),
+    longitude: longitude === null ? '' : String(longitude),
     location_mode: profile.location_mode || 'city_only',
     location_visibility: profile.location_visibility,
     location_input_source: profile.location_input_source || 'automatic',
     location_precision: profile.location_precision || null
   };
+}
+
+export function isCurrentAdminProfileRequest(requestId: number, currentRequestId: number, requestedProfileId: string, selectedProfileId: string) {
+  return requestId === currentRequestId && requestedProfileId === selectedProfileId;
+}
+
+function formCoordinate(value: unknown, min: number, max: number) {
+  if (value === null || value === undefined || value === '') return null;
+  const coordinate = Number(value);
+  return Number.isFinite(coordinate) && coordinate >= min && coordinate <= max ? coordinate : null;
+}
+
+function isBerlinDistrict(value: unknown) {
+  const normalized = String(value || '').trim().toLocaleLowerCase('de-DE');
+  return berlinDistrictOptions.some((district) => district.toLocaleLowerCase('de-DE') === normalized);
 }

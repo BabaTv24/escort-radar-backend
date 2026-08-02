@@ -44,6 +44,7 @@ const cityCenters: Record<string, { lat: number; lng: number }> = {
   gdansk: { lat: 54.352, lng: 18.6466 },
   lodz: { lat: 51.7592, lng: 19.456 },
   szczecin: { lat: 53.4285, lng: 14.5528 },
+  suwalki: { lat: 54.1115, lng: 22.9308 },
   katowice: { lat: 50.2649, lng: 19.0238 },
   lublin: { lat: 51.2465, lng: 22.5684 },
   bydgoszcz: { lat: 53.1235, lng: 18.0084 },

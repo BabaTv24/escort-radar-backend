@@ -1,6 +1,6 @@
 export const globalCountries = [
   { code: 'DE', labels: ['Germany', 'Niemcy', 'Deutschland'], cities: ['Berlin', 'Hamburg', 'Muenchen', 'Koeln', 'Frankfurt am Main', 'Duesseldorf', 'Stuttgart', 'Dortmund', 'Leipzig', 'Hannover', 'Bremen', 'Nuernberg', 'Dresden', 'Essen', 'Duisburg', 'Bochum'] },
-  { code: 'PL', labels: ['Poland', 'Polska', 'Polen'], cities: ['Warszawa', 'Krakow', 'Wroclaw', 'Poznan', 'Gdansk', 'Lodz', 'Szczecin', 'Katowice', 'Lublin', 'Bydgoszcz', 'Swiebodzin', 'Stargard', 'Koszalin', 'Kolobrzeg'] },
+  { code: 'PL', labels: ['Poland', 'Polska', 'Polen'], cities: ['Warszawa', 'Krakow', 'Wroclaw', 'Poznan', 'Gdansk', 'Lodz', 'Szczecin', 'Suwalki', 'Katowice', 'Lublin', 'Bydgoszcz', 'Swiebodzin', 'Stargard', 'Koszalin', 'Kolobrzeg'] },
   { code: 'NL', labels: ['Netherlands', 'Holandia', 'Niederlande'], cities: ['Amsterdam', 'Rotterdam', 'Den Haag', 'Utrecht', 'Eindhoven'] },
   { code: 'BE', labels: ['Belgium', 'Belgia', 'Belgien'], cities: ['Brussels', 'Antwerp', 'Gent', 'Liege'] },
   { code: 'LU', labels: ['Luxembourg', 'Luksemburg', 'Luxemburg'], cities: ['Luxembourg'] },
@@ -18,7 +18,8 @@ export function normalizeCountry(value: unknown) {
 }
 
 export function normalizeCity(value: unknown) {
-  return citySlug(String(value || ''));
+  const slug = citySlug(String(value || ''));
+  return slug === 'stargard-szczecinski' ? 'stargard' : slug;
 }
 
 export function citySlug(value: string) {
@@ -74,6 +75,7 @@ const cityLocations: Record<string, Omit<ResolvedCityLocation, 'precision' | 'ap
   gdansk: { canonical_city: 'Gdansk', country_code: 'PL', latitude: 54.352, longitude: 18.6466 },
   lodz: { canonical_city: 'Lodz', country_code: 'PL', latitude: 51.7592, longitude: 19.456 },
   szczecin: { canonical_city: 'Szczecin', country_code: 'PL', latitude: 53.4285, longitude: 14.5528 },
+  suwalki: { canonical_city: 'Suwalki', country_code: 'PL', latitude: 54.1115, longitude: 22.9308 },
   katowice: { canonical_city: 'Katowice', country_code: 'PL', latitude: 50.2649, longitude: 19.0238 },
   lublin: { canonical_city: 'Lublin', country_code: 'PL', latitude: 51.2465, longitude: 22.5684 },
   bydgoszcz: { canonical_city: 'Bydgoszcz', country_code: 'PL', latitude: 53.1235, longitude: 18.0084 },

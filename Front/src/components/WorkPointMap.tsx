@@ -15,6 +15,7 @@ type WorkPointMapProps = {
 };
 
 const OPEN_FREE_MAP_STYLE = 'https://tiles.openfreemap.org/styles/dark';
+const EMPTY_MAP_CENTER = { lat: 50.1109, lng: 10.4515 };
 maplibregl.setWorkerUrl(mapLibreWorkerUrl);
 
 export function WorkPointMap({
@@ -30,9 +31,11 @@ export function WorkPointMap({
   const mapRef = useRef<MapLibreMap | null>(null);
   const markerRef = useRef<MapLibreMarker | null>(null);
   const onChangeRef = useRef(onChange);
+  const pointRef = useRef(toPoint(latitude, longitude));
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   onChangeRef.current = onChange;
+  pointRef.current = toPoint(latitude, longitude);
 
   useEffect(() => {
     if (!mapNode.current) return;
@@ -41,8 +44,6 @@ export function WorkPointMap({
     let marker: MapLibreMarker | null = null;
     let observer: ResizeObserver | null = null;
     let loadTimeout: number | null = null;
-    const start = toPoint(latitude, longitude) || { lat: 52.52, lng: 13.405 };
-
     const resize = () => {
       if (!map || !mapNode.current || mapNode.current.clientWidth < 10 || mapNode.current.clientHeight < 10) return;
       map.resize();
@@ -54,11 +55,13 @@ export function WorkPointMap({
         if (!response.ok) throw new Error(`Map style HTTP ${response.status}`);
         const style = await response.json() as StyleSpecification;
         if (!active || !mapNode.current) return;
+        const initialPoint = pointRef.current;
+        const start = initialPoint || EMPTY_MAP_CENTER;
         map = new maplibregl.Map({
           container: mapNode.current,
           style,
           center: [start.lng, start.lat],
-          zoom: toPoint(latitude, longitude) ? 15 : 11,
+          zoom: initialPoint ? 15 : 4,
           minZoom: 2,
           maxZoom: 22,
           attributionControl: false
@@ -72,6 +75,7 @@ export function WorkPointMap({
         marker = new maplibregl.Marker({ draggable: !readOnly })
           .setLngLat([start.lng, start.lat])
           .addTo(map);
+        marker.getElement().hidden = !initialPoint;
         markerRef.current = marker;
 
         const setPoint = (lng: number, lat: number) => {
@@ -133,9 +137,12 @@ export function WorkPointMap({
 
   useEffect(() => {
     const point = toPoint(latitude, longitude);
-    if (!point || !mapRef.current || !markerRef.current) return;
-    markerRef.current.setLngLat([point.lng, point.lat]);
-    mapRef.current.setCenter([point.lng, point.lat]);
+    if (!mapRef.current || !markerRef.current) return;
+    const next = point || EMPTY_MAP_CENTER;
+    markerRef.current.getElement().hidden = !point;
+    markerRef.current.setLngLat([next.lng, next.lat]);
+    mapRef.current.setCenter([next.lng, next.lat]);
+    mapRef.current.setZoom(point ? 15 : 4);
     window.requestAnimationFrame(() => mapRef.current?.resize());
   }, [latitude, longitude]);
 

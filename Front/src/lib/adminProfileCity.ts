@@ -1,4 +1,5 @@
 import type { Profile } from '../types';
+import { resolveProfileCountry } from './globalLocations';
 
 export const unknownAdminProfileCityKey = '__unknown_city__';
 export const unknownAdminProfileCountryKey = '__unknown_country__';
@@ -25,16 +26,6 @@ const countryAliases: Record<string, string> = {
   cz: 'CZ', czechia: 'CZ', 'czech republic': 'CZ', czechy: 'CZ',
   at: 'AT', austria: 'AT', osterreich: 'AT'
 };
-
-const polishCityCountryOverrides = new Set([
-  'bydgoszcz',
-  'kolobrzeg',
-  'koszalin',
-  'stargard',
-  'stargard szczecinski',
-  'szczecin',
-  'poznan'
-]);
 
 const countryNames: Record<string, Record<string, string>> = {
   PL: { DE: 'Niemcy', PL: 'Polska', NL: 'Holandia', CZ: 'Republika Czeska', AT: 'Austria' },
@@ -65,7 +56,8 @@ export function normalizeAdminProfileCitySearch(value: unknown) {
 
 export function normalizeAdminProfileCountry(value: unknown, city?: unknown) {
   const cityKey = normalizeAdminProfileCitySearch(city);
-  if (polishCityCountryOverrides.has(cityKey)) return 'PL';
+  const resolved = resolveProfileCountry(value, city);
+  if (resolved) return resolved;
   const normalized = normalizeAdminProfileCitySearch(value);
   const explicit = countryAliases[normalized];
   if (explicit) return explicit;
