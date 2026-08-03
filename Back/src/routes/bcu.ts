@@ -8,7 +8,8 @@ import {
   getBcuLedgerForUser,
   getBcuWalletForUser,
   getOrCreateBcuWalletForUser,
-  getUserEntitlements
+  getUserEntitlements,
+  normalizeBcuDatabaseInteger
 } from '../services/bcuWallet.js';
 import { asyncHandler } from '../validation.js';
 
@@ -66,10 +67,11 @@ bcuRouter.post('/products/:productCode/activate', asyncHandler(async (req, res) 
   });
 }));
 
-function serializeWallet(wallet: Awaited<ReturnType<typeof getBcuWalletForUser>>) {
+export function serializeWallet(wallet: Awaited<ReturnType<typeof getBcuWalletForUser>>) {
   if (!wallet) return null;
-  const lockedBalanceBcu = wallet.locked_balance_bcu || '0';
-  const availableBalanceBcu = (BigInt(wallet.balance_bcu) - BigInt(lockedBalanceBcu)).toString();
+  const balanceBcu = normalizeBcuDatabaseInteger(wallet.balance_bcu);
+  const lockedBalanceBcu = normalizeBcuDatabaseInteger(wallet.locked_balance_bcu ?? 0);
+  const availableBalanceBcu = (BigInt(balanceBcu) - BigInt(lockedBalanceBcu)).toString();
   return {
     public_wallet_id: wallet.public_wallet_id,
     balance_bcu: wallet.balance_bcu,
@@ -90,7 +92,7 @@ function serializeWallet(wallet: Awaited<ReturnType<typeof getBcuWalletForUser>>
   };
 }
 
-function serializeLedgerEntry(entry: Awaited<ReturnType<typeof getBcuLedgerForUser>>[number]) {
+export function serializeLedgerEntry(entry: Awaited<ReturnType<typeof getBcuLedgerForUser>>[number]) {
   return {
     id: entry.id,
     amount_bcu: entry.amount_bcu,
@@ -104,7 +106,7 @@ function serializeLedgerEntry(entry: Awaited<ReturnType<typeof getBcuLedgerForUs
   };
 }
 
-function serializeProduct(product: Awaited<ReturnType<typeof getActiveBcuProducts>>[number]) {
+export function serializeProduct(product: Awaited<ReturnType<typeof getActiveBcuProducts>>[number]) {
   return {
     product_code: product.product_code,
     display_name: product.display_name,

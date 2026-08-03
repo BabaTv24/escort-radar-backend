@@ -2,6 +2,8 @@ import { supabaseAdmin } from '../supabase.js';
 
 export const BCU_PER_BC = 10000n;
 
+export type BcuDatabaseInteger = string | number;
+
 const bcAmountPattern = /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/;
 const bcuAmountPattern = /^[1-9]\d*$/;
 const transactionTypePattern = /^[a-z0-9_:.:-]{2,80}$/;
@@ -14,10 +16,10 @@ export type BcuWallet = {
   id: string;
   user_id: string;
   public_wallet_id: string;
-  balance_bcu: string;
-  locked_balance_bcu: string;
-  lifetime_credit_bcu: string;
-  lifetime_debit_bcu: string;
+  balance_bcu: BcuDatabaseInteger;
+  locked_balance_bcu: BcuDatabaseInteger;
+  lifetime_credit_bcu: BcuDatabaseInteger;
+  lifetime_debit_bcu: BcuDatabaseInteger;
   frozen: boolean;
   migration_status: string;
   migrated_at: string | null;
@@ -29,7 +31,7 @@ export type BcuLedgerEntry = {
   id: string;
   wallet_id: string;
   user_id: string;
-  amount_bcu: string;
+  amount_bcu: BcuDatabaseInteger;
   direction: 'credit' | 'debit';
   transaction_type: string;
   status: string;
@@ -75,7 +77,7 @@ export type SystemBcuProduct = {
   id: string;
   product_code: string;
   display_name: string;
-  amount_bcu: string;
+  amount_bcu: BcuDatabaseInteger;
   operation_type: 'credit' | 'debit' | 'transfer';
   entitlement_type: BcuEntitlementType | null;
   duration_days: number | null;
@@ -102,7 +104,7 @@ export type UserEntitlement = {
 
 export type BcuActivationResult = {
   product_code: string;
-  amount_bcu: string;
+  amount_bcu: BcuDatabaseInteger;
   charged: boolean;
   ledger_entry: BcuLedgerEntry | null;
   entitlement: UserEntitlement | null;
@@ -118,9 +120,27 @@ export function bcToBcu(amountBc: string) {
   return (wholeBcu + fractionalBcu).toString();
 }
 
-export function bcuToBc(amountBcu: string) {
+export function normalizeBcuDatabaseInteger(amountBcu: BcuDatabaseInteger): string {
+  if (typeof amountBcu === 'number') {
+    if (!Number.isFinite(amountBcu) || !Number.isSafeInteger(amountBcu) || amountBcu < 0) {
+      throw new Error('BCU amount must be a non-negative integer string or safe integer number');
+    }
+    return String(amountBcu);
+  }
+
+  if (typeof amountBcu !== 'string') {
+    throw new Error('BCU amount must be a non-negative integer string or safe integer number');
+  }
+
   const normalized = amountBcu.trim();
-  if (!/^(?:0|[1-9]\d*)$/.test(normalized)) throw new Error('BCU amount must be a non-negative integer string');
+  if (!/^(?:0|[1-9]\d*)$/.test(normalized)) {
+    throw new Error('BCU amount must be a non-negative integer string or safe integer number');
+  }
+  return normalized;
+}
+
+export function bcuToBc(amountBcu: BcuDatabaseInteger) {
+  const normalized = normalizeBcuDatabaseInteger(amountBcu);
 
   const value = BigInt(normalized);
   const whole = value / BCU_PER_BC;
