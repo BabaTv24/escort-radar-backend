@@ -8,6 +8,13 @@ import { api } from '../lib/api';
 import { waitForSupabaseSession } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor } from '../components/AvailabilityHoursEditor';
+import {
+  AdvertiserDashboardOverview,
+  AdvertiserDashboardShell,
+  DashboardSectionPlaceholder,
+  resolveAdvertiserDashboardSection,
+  type AdvertiserDashboardSection
+} from '../components/advertiser-dashboard/AdvertiserDashboardShell';
 import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, SponsoredProfileDashboard, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
@@ -486,7 +493,7 @@ export function DashboardPage() {
       const data = await api.myBookingRequests(accessToken);
       setBookingRequests(data.booking_requests);
     } catch {
-      setBookingRequests(demoBookingRequests);
+      setBookingRequests([]);
     }
   }
 
@@ -881,17 +888,6 @@ export function DashboardPage() {
     );
   }
 
-  if (authAccountType === 'business') {
-    return (
-      <BusinessDashboard
-        userEmail={userEmail}
-        message={message}
-        onActivateSubscription={startBusinessSubscription}
-        onLogout={logout}
-      />
-    );
-  }
-
   async function removeClientFavorite(profileId: string) {
     if (!token) return;
     try {
@@ -904,9 +900,9 @@ export function DashboardPage() {
     }
   }
 
-  if (authAccountType === 'escort') {
+  if (authAccountType === 'escort' || authAccountType === 'business') {
     return (
-      <AdvertiserOneHandDashboard
+      <AdvertiserDashboardWorkspace
         profile={profile}
         savedProfile={savedProfile}
         userEmail={userEmail}
@@ -922,10 +918,8 @@ export function DashboardPage() {
         onSetCoverImage={setCoverImage}
         onDeleteImage={deleteImage}
         onSaveDraft={persistProfile}
-        onActivateSubscription={startEscortSubscription}
+        onActivateSubscription={authAccountType === 'business' ? startBusinessSubscription : startEscortSubscription}
         onLogout={logout}
-        bcuWallet={bcuWallet}
-        bcuLedger={bcuLedger}
         sponsoredDashboard={sponsoredDashboard}
       />
     );
@@ -1247,7 +1241,7 @@ export function DashboardPage() {
           {creatorTab === 'visibility' && <section className="form-panel elevated">
             <h2><CalendarDays size={18} /> {t('dashboard.bookingRequests')}</h2>
             <div className="booking-list">
-              {(bookingRequests.length ? bookingRequests : demoBookingRequests).map((booking) => (
+              {bookingRequests.map((booking) => (
                 <div className="booking-row" key={booking.id}>
                   <div>
                     <strong>{booking.requested_date} / {booking.requested_time}</strong>
@@ -2171,7 +2165,7 @@ function MobileCreatorDock({ savedProfile, onUpload, onLogout }: { savedProfile:
   );
 }
 
-function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onReverseLocation, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onActivateSubscription, onLogout, bcuWallet, bcuLedger, sponsoredDashboard }: {
+type AdvertiserProfileSectionProps = {
   profile: Partial<Profile>;
   savedProfile: Profile | null;
   userEmail: string;
@@ -2189,12 +2183,57 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   onSaveDraft: (profile: Partial<Profile>, successMessage?: string) => Promise<void>;
   onActivateSubscription: () => void;
   onLogout: () => void;
-  bcuWallet: BcuWallet | null;
-  bcuLedger: BcuLedgerEntry[];
   sponsoredDashboard: SponsoredProfileDashboard | null;
-}) {
+};
+
+function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps) {
   const { t } = useI18n();
-  const [panel, setPanel] = useState<'setup' | 'waiting' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text' | 'additional' | 'account' | 'visibility'>(savedProfile?.owner_activation_status === 'awaiting_owner_activation' ? 'waiting' : savedProfile ? 'operator' : 'setup');
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activeSection = resolveAdvertiserDashboardSection(searchParams.get('section'), location.hash);
+
+  function selectSection(section: AdvertiserDashboardSection) {
+    const nextParams = new URLSearchParams(searchParams);
+    if (section === 'overview') nextParams.delete('section');
+    else nextParams.set('section', section);
+    navigate({ pathname: location.pathname, search: nextParams.size ? `?${nextParams.toString()}` : '', hash: '' });
+  }
+
+  return (
+    <AdvertiserDashboardShell activeSection={activeSection} email={props.userEmail} onSectionChange={selectSection} onLogout={props.onLogout}>
+      {activeSection === 'overview' ? (
+        <AdvertiserDashboardOverview
+          profile={props.savedProfile}
+          draft={props.profile}
+          subscriptionProgress={<AdvertiserSubscriptionProgress profile={props.savedProfile || props.profile} />}
+          onEditProfile={() => selectSection('profile')}
+        />
+      ) : null}
+      {activeSection === 'profile' || activeSection === 'settings' ? (
+        <section className="advertiser-dashboard-section" aria-labelledby={`advertiser-${activeSection}-heading`}>
+          <header className="advertiser-dashboard-heading compact">
+            <div>
+              <p className="eyebrow">Escort Radar</p>
+              <h1 id={`advertiser-${activeSection}-heading`}>{t(`advertiserDashboard.section.${activeSection}`)}</h1>
+              <p>{t(`advertiserDashboard.${activeSection}.subtitle`)}</p>
+            </div>
+          </header>
+          <AdvertiserProfileSection {...props} mode={activeSection} />
+        </section>
+      ) : null}
+      {!['overview', 'profile', 'settings'].includes(activeSection) ? (
+        <DashboardSectionPlaceholder section={activeSection as Exclude<AdvertiserDashboardSection, 'overview' | 'profile' | 'settings'>} />
+      ) : null}
+    </AdvertiserDashboardShell>
+  );
+}
+
+type AdvertiserProfilePanel = 'setup' | 'waiting' | 'photos' | 'location' | 'operator' | 'prices' | 'services' | 'text' | 'additional' | 'account' | 'visibility';
+
+function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCount, nearbyClients, notifications, dashboardStatus, message, uploadStatus, onProfileChange, onReverseLocation, onUploadImage, onSetCoverImage, onDeleteImage, onSaveDraft, onActivateSubscription, onLogout, sponsoredDashboard, mode }: AdvertiserProfileSectionProps & { mode: 'profile' | 'settings' }) {
+  const { t } = useI18n();
+  const [panel, setPanel] = useState<AdvertiserProfilePanel>(mode === 'settings' ? 'account' : savedProfile?.owner_activation_status === 'awaiting_owner_activation' ? 'waiting' : savedProfile ? 'operator' : 'setup');
   const [serviceSearch, setServiceSearch] = useState('');
   const [geoMessage, setGeoMessage] = useState('');
   const [locationResolving, setLocationResolving] = useState(false);
@@ -2220,8 +2259,11 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   const imageCount = savedProfile?.profile_images?.length || 0;
   const photoLimit = getProfilePhotoLimit(savedProfile);
   const photoInputDisabled = !savedProfile || imageCount >= photoLimit || uploadStatus === 'uploading';
-  const favoriteGifts = bcuLedger.filter((entry) => entry.direction === 'credit' && entry.transaction_type === 'favorite_received');
-  const favoriteGiftTotal = favoriteGifts.reduce((sum, entry) => sum + Number(entry.amount_bc), 0);
+
+  useEffect(() => {
+    if (mode === 'settings' && panel !== 'account' && panel !== 'visibility') setPanel('account');
+    if (mode === 'profile' && (panel === 'account' || panel === 'visibility')) setPanel(savedProfile ? 'operator' : 'setup');
+  }, [mode, panel, savedProfile]);
 
   async function reverseWorkPoint(point: { latitude: number; longitude: number }) {
     setLocationResolving(true);
@@ -2471,7 +2513,7 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
   }, {});
 
   return (
-    <div className="page dashboard-page one-hand-dashboard">
+    <div className="one-hand-dashboard advertiser-profile-section">
       <section className="one-hand-status">
         <div className="one-hand-photo">
           {primaryImage ? <img src={primaryImage} alt="" /> : <UserRound size={34} />}
@@ -2481,23 +2523,13 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
           <h1>{displayName}</h1>
           <p><MapPin size={14} /> {workLocationLabel}</p>
         </div>
-        <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> <span>Aktywuj 30 dni 333 BC</span></button>
+        <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onActivateSubscription}><CreditCard size={16} /> <span>{t('subscription.activate')}</span></button>
         <button className="one-hand-logout er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={onLogout}><LogOut size={18} /></button>
       </section>
 
       <AdvertiserSubscriptionProgress profile={savedProfile || profile} />
 
-      {bcuWallet && <section className="dashboard-card">
-        <span className="eyebrow">{t('favorites.receivedTitle')}</span>
-        <h2>{bcuWallet.balance_bc} BC</h2>
-        <p>{t('favorites.receivedSummary').replace('{{count}}', String(favoriteGifts.length)).replace('{{amount}}', String(favoriteGiftTotal))}</p>
-        {favoriteGifts.slice(0, 10).map((entry, index) => <div className="booking-row" key={`${entry.created_at}-${index}`}>
-          <div><strong>{t('favorites.receivedAnonymous')}</strong><p>{new Date(entry.created_at).toLocaleString()}</p></div>
-          <span>+{entry.amount_bc} BC</span>
-        </div>)}
-      </section>}
-
-      <section className="one-hand-status-toggle" aria-label={t('dashboard.advertiser.availabilityStatus')}>
+      {mode === 'profile' ? <section className="one-hand-status-toggle" aria-label={t('dashboard.advertiser.availabilityStatus')}>
         {[
           'ONLINE_NOW',
           'AVAILABLE_TODAY',
@@ -2515,9 +2547,10 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
             <span>{t(`dashboard.advertiser.status.${status}`)}</span>
           </button>
         ))}
-      </section>
+      </section> : null}
 
       <section className="one-hand-actions" aria-label={t('dashboard.advertiser.primaryActions')}>
+        {mode === 'profile' ? <>
         {sponsoredDashboard?.profiles.length ? <ActionButton active={panel === 'waiting'} icon={<Flame size={22} />} label="Czekają na Ciebie" onClick={() => setPanel('waiting')} /> : null}
         {!savedProfile && <ActionButton active={panel === 'setup'} icon={<UserRound size={22} />} label={t('dashboard.advertiser.setup')} onClick={() => setPanel('setup')} />}
         <ActionButton active={panel === 'photos'} icon={<ImagePlus size={22} />} label={t('dashboard.advertiser.photos')} onClick={() => setPanel('photos')} />
@@ -2527,8 +2560,10 @@ function AdvertiserOneHandDashboard({ profile, savedProfile, userEmail, bookingC
         <ActionButton active={panel === 'services'} icon={<Sparkles size={22} />} label={t('dashboard.advertiser.services')} onClick={() => setPanel('services')} />
         <ActionButton active={panel === 'text'} icon={<UserRound size={22} />} label={t('dashboard.advertiser.profileText')} onClick={() => setPanel('text')} />
         <ActionButton active={panel === 'additional'} icon={<Clock size={22} />} label={t('availability.additionalInformation')} onClick={() => setPanel('additional')} />
+        </> : <>
         <ActionButton active={panel === 'account'} icon={<UserRound size={22} />} label={t('dashboard.account.title')} onClick={() => setPanel('account')} />
         <ActionButton active={panel === 'visibility'} icon={<BadgeCheck size={22} />} label={t('dashboard.visibility.title')} onClick={() => setPanel('visibility')} />
+        </>}
       </section>
 
       <form
@@ -2998,7 +3033,7 @@ function AdvertiserSubscriptionProgress({ profile }: { profile: Partial<Profile>
 
 function ActionButton({ icon, label, badge, active, onClick }: { icon: ReactNode; label: string; badge?: number; active?: boolean; onClick: () => void }) {
   return (
-    <button className={`er-btn er-glass-btn er-glass-btn--sm ${active ? 'active er-glass-btn--active er-glass-btn--cyan' : 'er-glass-btn--cyan'}`} type="button" onClick={onClick}>
+    <button className={`er-btn er-glass-btn er-glass-btn--sm ${active ? 'active er-glass-btn--active er-glass-btn--gold' : ''}`} type="button" onClick={onClick}>
       {badge ? <span className="one-hand-badge">{badge}</span> : null}
       {icon}
       <span>{label}</span>
@@ -3088,20 +3123,6 @@ function getProfileCompleteness(profile: Partial<Profile>, savedProfile: Profile
   ];
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
-
-const demoBookingRequests: BookingRequest[] = [
-  {
-    id: 'demo-booking-1',
-    profile_id: 'preview',
-    requester_email: 'vip@example.com',
-    requested_date: '2026-06-01',
-    requested_time: '21:00',
-    duration_minutes: 120,
-    message: '',
-    status: 'pending',
-    created_at: new Date().toISOString()
-  }
-];
 
 function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null): Profile {
   const images = savedProfile?.profile_images?.length ? savedProfile.profile_images : [];
