@@ -15,6 +15,7 @@ import {
   resolveAdvertiserDashboardSection,
   type AdvertiserDashboardSection
 } from '../components/advertiser-dashboard/AdvertiserDashboardShell';
+import { AdvertiserLocationSection } from '../components/advertiser-dashboard/AdvertiserLocationSection';
 import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, SponsoredProfileDashboard, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
@@ -536,7 +537,7 @@ export function DashboardPage() {
     }
   }
 
-  async function persistProfile(draftProfile: Partial<Profile> = profile, successMessage?: string) {
+  async function persistProfile(draftProfile: Partial<Profile> = profile, successMessage?: string, reloadDashboard = true, rethrowError = false) {
     setAuthStatus('idle');
     setDashboardStatus('saving');
     setMessage(t('dashboard.saving'));
@@ -554,7 +555,7 @@ export function DashboardPage() {
 
       setSavedProfile(result.profile);
       setProfile(profileToForm(result.profile));
-      await loadDashboard(token);
+      if (reloadDashboard) await loadDashboard(token);
       setProfileMode('edit');
       setDashboardStatus('success');
       setMessage(successMessage || t('dashboard.saved'));
@@ -564,6 +565,7 @@ export function DashboardPage() {
       const nextError = error instanceof Error ? error.message : t('states.requestFailed');
       setMessage(nextError);
       setLastApiError(nextError);
+      if (rethrowError) throw error;
     }
   }
 
@@ -657,6 +659,15 @@ export function DashboardPage() {
   async function reverseProfilePoint(point: { latitude: number; longitude: number }) {
     if (!token) throw new Error(t('dashboard.signInFirst'));
     return (await api.reverseProfileLocation(token, point.latitude, point.longitude)).location;
+  }
+
+  async function searchProfileLocation(location: Partial<Profile>) {
+    if (!token) throw new Error(t('dashboard.signInFirst'));
+    return (await api.geocodeProfileLocation(token, location)).location;
+  }
+
+  async function persistProfileLocation(draftProfile: Partial<Profile>, successMessage?: string) {
+    await persistProfile(draftProfile, successMessage, false, true);
   }
 
   async function setCoverImage(imageId: string) {
@@ -914,6 +925,8 @@ export function DashboardPage() {
         uploadStatus={uploadStatus}
         onProfileChange={setProfile}
         onReverseLocation={reverseProfilePoint}
+        onSearchLocation={searchProfileLocation}
+        onSaveLocation={persistProfileLocation}
         onUploadImage={uploadImage}
         onSetCoverImage={setCoverImage}
         onDeleteImage={deleteImage}
@@ -2177,6 +2190,8 @@ type AdvertiserProfileSectionProps = {
   uploadStatus: string;
   onProfileChange: (profile: Partial<Profile>) => void;
   onReverseLocation: (point: { latitude: number; longitude: number }) => Promise<import('../lib/api').LocationGeocodeResult>;
+  onSearchLocation: (location: Partial<Profile>) => Promise<import('../lib/api').LocationGeocodeResult>;
+  onSaveLocation: (profile: Partial<Profile>, successMessage?: string) => Promise<void>;
   onUploadImage: (event: ChangeEvent<HTMLInputElement>) => void;
   onSetCoverImage: (imageId: string) => void;
   onDeleteImage: (imageId: string) => void;
@@ -2222,7 +2237,17 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps) {
           <AdvertiserProfileSection {...props} mode={activeSection} />
         </section>
       ) : null}
-      {!['overview', 'profile', 'settings'].includes(activeSection) ? (
+      {activeSection === 'location' ? (
+        <AdvertiserLocationSection
+          profile={props.profile}
+          dashboardStatus={props.dashboardStatus}
+          onProfileChange={props.onProfileChange}
+          onReverseLocation={props.onReverseLocation}
+          onSearchLocation={props.onSearchLocation}
+          onSaveLocation={props.onSaveLocation}
+        />
+      ) : null}
+      {!['overview', 'profile', 'location', 'settings'].includes(activeSection) ? (
         <DashboardSectionPlaceholder section={activeSection as Exclude<AdvertiserDashboardSection, 'overview' | 'profile' | 'settings'>} />
       ) : null}
     </AdvertiserDashboardShell>

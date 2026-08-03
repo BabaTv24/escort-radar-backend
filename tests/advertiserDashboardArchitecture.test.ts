@@ -54,8 +54,12 @@ test('overview uses real profile fields and does not fall back to demo bookings'
 });
 
 test('unfinished sections are explicit placeholders without fake action controls', async () => {
-  const shell = await readFile(new URL('../Front/src/components/advertiser-dashboard/AdvertiserDashboardShell.tsx', import.meta.url), 'utf8');
+  const [shell, dashboard] = await Promise.all([
+    readFile(new URL('../Front/src/components/advertiser-dashboard/AdvertiserDashboardShell.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8')
+  ]);
   const placeholder = shell.slice(shell.indexOf('export function DashboardSectionPlaceholder'), shell.indexOf('function getAdvertiserProfileCompletion'));
   assert.match(placeholder, /advertiserDashboard\.placeholder\.eyebrow/);
   assert.doesNotMatch(placeholder, /<button|onClick/);
+  assert.match(dashboard, /!\['overview', 'profile', 'location', 'settings'\]\.includes\(activeSection\)/);
 });

@@ -13,7 +13,7 @@ import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 import { isRadarRequest, prepareRadarCandidatePool } from '../radarPool.js';
 import { hasActiveEntitlement } from '../services/bcuWallet.js';
 import { canReadExactProfileLocation, exactProfileLocationPayload } from '../profileLocationAccess.js';
-import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, resolveAdminLocation, reverseGeocodeAdminLocation, validateManualAdminLocation, type AdminLocationResolution } from '../adminLocationGeocoding.js';
+import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, resolveAdminLocation, resolveManualAdminLocationForSave, reverseGeocodeAdminLocation, type AdminLocationResolution } from '../adminLocationGeocoding.js';
 
 export const profilesRouter = Router();
 
@@ -27,6 +27,20 @@ profilesRouter.post('/location/reverse-geocode', verifyUser, requireAdvertiserOn
   }
 }));
 
+profilesRouter.post('/location/geocode', verifyUser, requireAdvertiserOnboardingAccess, asyncHandler(async (req, res) => {
+  try {
+    const location = await resolveAdminLocation({
+      ...req.body,
+      location_mode: 'approximate',
+      location_visibility: 'exact',
+      location_input_source: 'automatic'
+    });
+    res.json({ location });
+  } catch (error) {
+    if (error instanceof AdminLocationGeocodingError) return res.status(error.status || 422).json({ error: error.message, code: error.code });
+    throw error;
+  }
+}));
 profilesRouter.get('/', asyncHandler(async (req, res) => {
   const startedAt = Date.now();
   res.set('Cache-Control', 'no-store, max-age=0');
@@ -322,7 +336,7 @@ profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHan
   let locationResolution: AdminLocationResolution;
   try {
     locationResolution = result.data.location_input_source === 'manual' && result.data.location_visibility === 'exact'
-      ? validateManualAdminLocation(result.data)
+      ? await resolveManualAdminLocationForSave(result.data)
       : await resolveAdminLocation(result.data);
   } catch (error) {
     if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
@@ -420,7 +434,7 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
   if (locationChanged || addressOrPrivacyChanged) {
     try {
       const locationResolution = manualExactPoint
-        ? validateManualAdminLocation(profileData)
+        ? await resolveManualAdminLocationForSave(profileData)
         : await resolveAdminLocation(profileData);
       locationPatch = profileLocationPatch(locationResolution, manualExactPoint ? 'manual' : 'automatic');
     } catch (error) {

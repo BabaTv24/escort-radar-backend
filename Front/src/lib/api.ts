@@ -320,6 +320,9 @@ export const api = {
   reverseProfileLocation: (token: string, latitude: number, longitude: number) => request<{ location: LocationGeocodeResult }>('/api/profiles/location/reverse-geocode', {
     method: 'POST', token, body: JSON.stringify({ latitude, longitude })
   }),
+  geocodeProfileLocation: (token: string, body: Partial<Profile>) => request<{ location: LocationGeocodeResult }>('/api/profiles/location/geocode', {
+    method: 'POST', token, body: JSON.stringify(body)
+  }),
   uploadImage: (token: string, form: FormData) => request<{ image: unknown }>('/api/uploads/profile-image', {
     method: 'POST',
     token,
