@@ -53,7 +53,7 @@ test('overview uses real profile fields and does not fall back to demo bookings'
   assert.doesNotMatch(shell, /views|clients|conversations|balance_bc/);
 });
 
-test('unfinished sections are explicit placeholders without fake action controls', async () => {
+test('unfinished sections are explicit placeholders while stage-three sections use production modules', async () => {
   const [shell, dashboard] = await Promise.all([
     readFile(new URL('../Front/src/components/advertiser-dashboard/AdvertiserDashboardShell.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8')
@@ -61,5 +61,7 @@ test('unfinished sections are explicit placeholders without fake action controls
   const placeholder = shell.slice(shell.indexOf('export function DashboardSectionPlaceholder'), shell.indexOf('function getAdvertiserProfileCompletion'));
   assert.match(placeholder, /advertiserDashboard\.placeholder\.eyebrow/);
   assert.doesNotMatch(placeholder, /<button|onClick/);
-  assert.match(dashboard, /!\['overview', 'profile', 'location', 'settings'\]\.includes\(activeSection\)/);
+  assert.match(dashboard, /activeSection === 'wallet'[\s\S]*AdvertiserWalletSection/);
+  assert.match(dashboard, /activeSection === 'referrals'[\s\S]*AdvertiserReferralSection/);
+  assert.match(dashboard, /!\['overview', 'profile', 'location', 'wallet', 'referrals', 'settings'\]\.includes\(activeSection\)/);
 });

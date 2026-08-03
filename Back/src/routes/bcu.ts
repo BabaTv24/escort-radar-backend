@@ -7,6 +7,7 @@ import {
   getActiveBcuProducts,
   getBcuLedgerForUser,
   getBcuWalletForUser,
+  getOrCreateBcuWalletForUser,
   getUserEntitlements
 } from '../services/bcuWallet.js';
 import { asyncHandler } from '../validation.js';
@@ -20,8 +21,8 @@ bcuRouter.use((_, res, next) => {
 });
 
 bcuRouter.get('/wallet', asyncHandler(async (req, res) => {
-  const wallet = await getBcuWalletForUser(req.user!.id);
-  res.json({ wallet: wallet ? serializeWallet(wallet) : null });
+  const wallet = await getOrCreateBcuWalletForUser(req.user!.id);
+  res.json({ wallet: serializeWallet(wallet) });
 }));
 
 bcuRouter.get('/ledger', asyncHandler(async (req, res) => {

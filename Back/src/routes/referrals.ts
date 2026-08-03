@@ -46,7 +46,8 @@ referralsRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
     referredByDisplay = data?.display_name || 'Użytkownik Escort Radar';
   }
   const own = (tree || []).find((node: Record<string, unknown>) => node.user_id === req.user!.id);
-  res.json({ referralCode: referral.referral_code, referralLink: referral.referral_link,
+  const referralLink = `https://escort-radar.fun/register?ref=${encodeURIComponent(referral.referral_code)}`;
+  res.json({ referralCode: referral.referral_code, referralLink,
     directReferralsCount: direct || 0, totalDescendantsCount: Number(own?.total_descendants_count || 0),
     referredByDisplay, registrationSource: referral.registration_source, referralDepth: referral.referral_depth });
 }));

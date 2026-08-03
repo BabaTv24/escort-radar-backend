@@ -16,6 +16,8 @@ import {
   type AdvertiserDashboardSection
 } from '../components/advertiser-dashboard/AdvertiserDashboardShell';
 import { AdvertiserLocationSection } from '../components/advertiser-dashboard/AdvertiserLocationSection';
+import { AdvertiserWalletSection } from '../components/advertiser-dashboard/AdvertiserWalletSection';
+import { AdvertiserReferralSection } from '../components/advertiser-dashboard/AdvertiserReferralSection';
 import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, SponsoredProfileDashboard, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
@@ -914,6 +916,7 @@ export function DashboardPage() {
   if (authAccountType === 'escort' || authAccountType === 'business') {
     return (
       <AdvertiserDashboardWorkspace
+        token={token}
         profile={profile}
         savedProfile={savedProfile}
         userEmail={userEmail}
@@ -2201,7 +2204,7 @@ type AdvertiserProfileSectionProps = {
   sponsoredDashboard: SponsoredProfileDashboard | null;
 };
 
-function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps) {
+function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps & { token: string }) {
   const { t } = useI18n();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -2247,7 +2250,9 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps) {
           onSaveLocation={props.onSaveLocation}
         />
       ) : null}
-      {!['overview', 'profile', 'location', 'settings'].includes(activeSection) ? (
+      {activeSection === 'wallet' ? <AdvertiserWalletSection token={props.token} /> : null}
+      {activeSection === 'referrals' ? <AdvertiserReferralSection token={props.token} /> : null}
+      {!['overview', 'profile', 'location', 'wallet', 'referrals', 'settings'].includes(activeSection) ? (
         <DashboardSectionPlaceholder section={activeSection as Exclude<AdvertiserDashboardSection, 'overview' | 'profile' | 'settings'>} />
       ) : null}
     </AdvertiserDashboardShell>

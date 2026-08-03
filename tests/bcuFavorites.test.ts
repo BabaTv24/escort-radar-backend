@@ -75,7 +75,7 @@ test('static concurrency and restore contract uses paid-pair and ledger uniquene
 
 test('recipient dashboard serializer excludes client identity and ledger internals', async () => {
   const route = await readFile(new URL('../Back/src/routes/bcu.ts', import.meta.url), 'utf8');
-  const dashboard = await readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8');
+  const dashboard = await readFile(new URL('../Front/src/components/advertiser-dashboard/AdvertiserWalletSection.tsx', import.meta.url), 'utf8');
   const serializer = route.slice(route.indexOf('function serializeLedgerEntry'));
   assert.doesNotMatch(serializer, /source_user_id|idempotency_key|metadata|created_by/);
   assert.match(dashboard, /transaction_type === 'favorite_received'/);
