@@ -2298,7 +2298,7 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
   async function reverseWorkPoint(point: { latitude: number; longitude: number }) {
     setLocationResolving(true);
     setLocationError('');
-    setGeoMessage('Rozpoznawanie adresu…');
+    setGeoMessage(t('advertiserDashboard.location.resolving'));
     try {
       const location = await onReverseLocation(point);
       onProfileChange({
@@ -2318,10 +2318,9 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
         location_precision: location.precision === 'city' ? 'city' : location.precision === 'postal_area' ? 'postal_area' : 'exact',
         location_input_source: 'manual'
       });
-      setGeoMessage('Adres rozpoznany. Zapisz profil, aby utrwalić lokalizację.');
-    } catch (error) {
-      const text = error instanceof Error ? error.message : 'Nie udało się rozpoznać adresu.';
-      setLocationError(text);
+      setGeoMessage(t('advertiserDashboard.location.markerSetNotice'));
+    } catch {
+      setLocationError(t('advertiserDashboard.location.reverseFailed'));
       setGeoMessage('');
     } finally {
       setLocationResolving(false);
@@ -2782,7 +2781,7 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
                 onProfileChange({ ...profile, latitude: point.latitude, longitude: point.longitude, location_mode: 'exact', location_visibility: 'exact', location_precision: 'exact', location_input_source: 'manual' });
                 void reverseWorkPoint(point);
               }} />
-              {locationResolving ? <p className="muted" role="status">Rozpoznawanie adresu…</p> : null}
+              {locationResolving ? <p className="muted" role="status">{t('advertiserDashboard.location.resolving')}</p> : null}
               {locationError ? <p className="error-text" role="alert">{locationError}</p> : null}
               <select value={profile.city || 'berlin'} onChange={(event) => onProfileChange({ ...profile, city: event.target.value, work_city: profile.work_city || normalizeCityName(event.target.value) })}>
                 {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}

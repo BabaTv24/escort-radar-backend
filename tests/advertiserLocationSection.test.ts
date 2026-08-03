@@ -85,7 +85,8 @@ test('location section uses shared map, parent profile state, explicit geolocati
   assert.doesNotMatch(section, /useState<Partial<Profile>>/);
   assert.match(section, /navigator\.geolocation\.getCurrentPosition/);
   assert.match(section, /if \(saving \|\| dashboardStatus === 'saving'\) return/);
-  assert.match(section, /Marker pozostaje ustawiony i nadal możesz go zapisać/);
+  assert.match(section, /advertiserDashboard\.location\.reverseFailed/);
+  assert.doesNotMatch(section, /error\.message|saveError\.message|searchError\.message/);
   assert.doesNotMatch(section, /google|maps\.googleapis/i);
   assert.match(map, /map\.on\('click'/);
   assert.match(map, /marker\.on\('dragend'/);
