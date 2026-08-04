@@ -21,9 +21,10 @@ import { AdvertiserReferralSection } from '../components/advertiser-dashboard/Ad
 import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, CoinTransaction, CoinWallet, Profile, ProfileImage, RadarNotification, SponsoredProfileDashboard, Tag } from '../types';
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
+import { CommunicationPlusCard } from '../components/CommunicationPlusCard';
 import { useI18n } from '../i18n';
 import QRCode from 'qrcode';
-import type { ReferralMe } from '../lib/api';
+import type { CommunicationPlusStatus, ReferralMe } from '../lib/api';
 import {
   audienceOptions,
   activePublicCategoryOptions,
@@ -199,6 +200,10 @@ export function DashboardPage() {
   const [bcuWallet, setBcuWallet] = useState<BcuWallet | null>(null);
   const [bcuLedger, setBcuLedger] = useState<BcuLedgerEntry[]>([]);
   const [bcuEntitlements, setBcuEntitlements] = useState<BcuEntitlement[]>([]);
+  const [communicationPlusStatus, setCommunicationPlusStatus] = useState<CommunicationPlusStatus | null>(null);
+  const [communicationPlusState, setCommunicationPlusState] = useState<'loading' | 'error' | 'ready'>('loading');
+  const [communicationPlusPurchasing, setCommunicationPlusPurchasing] = useState(false);
+  const [communicationPlusError, setCommunicationPlusError] = useState<string | null>(null);
   const [clientWalletSystem, setClientWalletSystem] = useState<'legacy' | 'bcu'>('legacy');
   const [marketProfiles, setMarketProfiles] = useState<Profile[]>([]);
   const [clientIntent, setClientIntent] = useState<ClientIntent | null>(null);
@@ -211,6 +216,8 @@ export function DashboardPage() {
   const [activationBusy, setActivationBusy] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const sessionActivatedRef = useRef(false);
+  const communicationPlusRequestRef = useRef(false);
+  const communicationPlusIdempotencyRef = useRef<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -439,6 +446,7 @@ export function DashboardPage() {
 
   async function loadClientDashboard(accessToken: string) {
     setDashboardStatus('loading');
+    setCommunicationPlusState('loading');
     try {
       const clientData = await api.clientPremiumDashboardMe(accessToken);
       await api.referralMe(accessToken).then(setReferralMe).catch(() => setReferralMe(null));
@@ -451,6 +459,7 @@ export function DashboardPage() {
         setCoinTransactions([]);
         setWallet(null);
         await api.myFavorites(accessToken).then((data) => setClientFavorites(data.favorites)).catch(() => setClientFavorites([]));
+        await loadCommunicationPlusStatus(accessToken);
       } else {
         setBcuWallet(null);
         setBcuLedger([]);
@@ -462,6 +471,8 @@ export function DashboardPage() {
           setClientFavorites(data.favorites);
           setWallet(data.wallet);
         }).catch(() => setClientFavorites([]));
+        setCommunicationPlusStatus(null);
+        setCommunicationPlusState('error');
       }
       await api.profiles('?city=berlin').then((data) => setMarketProfiles(data.profiles)).catch(() => setMarketProfiles([]));
       await api.clientIntentMe(accessToken).then((data) => {
@@ -497,6 +508,39 @@ export function DashboardPage() {
       setBookingRequests(data.booking_requests);
     } catch {
       setBookingRequests([]);
+    }
+  }
+
+  async function loadCommunicationPlusStatus(accessToken: string) {
+    setCommunicationPlusState('loading');
+    try {
+      const status = await api.communicationPlusStatus(accessToken);
+      setCommunicationPlusStatus(status);
+      setCommunicationPlusState('ready');
+    } catch {
+      setCommunicationPlusStatus(null);
+      setCommunicationPlusState('error');
+    }
+  }
+
+  async function purchaseCommunicationPlus() {
+    if (!token || communicationPlusRequestRef.current || communicationPlusPurchasing) return;
+    communicationPlusRequestRef.current = true;
+    setCommunicationPlusPurchasing(true);
+    setCommunicationPlusError(null);
+    const idempotencyKey = communicationPlusIdempotencyRef.current
+      || (globalThis.crypto?.randomUUID?.() ?? `cp-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    communicationPlusIdempotencyRef.current = idempotencyKey;
+    try {
+      await api.purchaseCommunicationPlus(token, idempotencyKey);
+      communicationPlusIdempotencyRef.current = null;
+      await loadClientDashboard(token);
+    } catch {
+      setCommunicationPlusError(t('communicationPlus.purchaseError'));
+      await loadCommunicationPlusStatus(token);
+    } finally {
+      communicationPlusRequestRef.current = false;
+      setCommunicationPlusPurchasing(false);
     }
   }
 
@@ -723,6 +767,12 @@ export function DashboardPage() {
     setBcuWallet(null);
     setBcuLedger([]);
     setBcuEntitlements([]);
+    setCommunicationPlusStatus(null);
+    setCommunicationPlusState('loading');
+    setCommunicationPlusPurchasing(false);
+    setCommunicationPlusError(null);
+    communicationPlusRequestRef.current = false;
+    communicationPlusIdempotencyRef.current = null;
     setClientWalletSystem('legacy');
     setClientActivation(null);
     setClientProfile(null);
@@ -875,6 +925,10 @@ export function DashboardPage() {
         coinWallet={coinWallet}
         bcuWallet={bcuWallet}
         bcuEntitlements={bcuEntitlements}
+        communicationPlusStatus={communicationPlusStatus}
+        communicationPlusState={communicationPlusState}
+        communicationPlusPurchasing={communicationPlusPurchasing}
+        communicationPlusError={communicationPlusError}
         walletSystem={clientWalletSystem}
         dashboardStatus={dashboardStatus}
         clientProfile={clientProfile}
@@ -886,6 +940,8 @@ export function DashboardPage() {
         activationBusy={activationBusy}
         avatarUploading={avatarUploading}
         onActivate={startClientActivation}
+        onPurchaseCommunicationPlus={purchaseCommunicationPlus}
+        onRetryCommunicationPlus={() => loadCommunicationPlusStatus(token)}
         onAvatarUpload={uploadClientAvatar}
         onLogout={logout}
         onRetry={() => loadClientDashboard(token)}
@@ -1406,11 +1462,15 @@ function getPublicReferralLink(activation: ClientActivation | null) {
 
 const CLIENT_REFERRAL_REWARD_COINS = 10;
 
-function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, walletSystem, dashboardStatus, clientProfile, activation, referral, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onAvatarUpload, onLogout, onRetry, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
+function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, communicationPlusStatus, communicationPlusState, communicationPlusPurchasing, communicationPlusError, walletSystem, dashboardStatus, clientProfile, activation, referral, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onPurchaseCommunicationPlus, onRetryCommunicationPlus, onAvatarUpload, onLogout, onRetry, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
   userEmail: string;
   coinWallet: CoinWallet | null;
   bcuWallet: BcuWallet | null;
   bcuEntitlements: BcuEntitlement[];
+  communicationPlusStatus: CommunicationPlusStatus | null;
+  communicationPlusState: 'loading' | 'error' | 'ready';
+  communicationPlusPurchasing: boolean;
+  communicationPlusError: string | null;
   walletSystem: 'legacy' | 'bcu';
   dashboardStatus: 'idle' | 'loading' | 'saving' | 'success' | 'error';
   clientProfile: ClientProfile | null;
@@ -1422,6 +1482,8 @@ function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, wa
   activationBusy: boolean;
   avatarUploading: boolean;
   onActivate: () => void;
+  onPurchaseCommunicationPlus: () => void;
+  onRetryCommunicationPlus: () => void;
   onAvatarUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onLogout: () => void;
   onRetry: () => void;
@@ -1737,6 +1799,15 @@ function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, wa
               {activation?.activated_at && <p className="muted">{t('clientOffice.activatedAt', { date: new Date(activation.activated_at).toLocaleDateString() })}</p>}
               {!activated && <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" type="button" disabled={activationBusy} onClick={onActivate}><span>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</span></button>}
             </section>
+
+            <CommunicationPlusCard
+              state={communicationPlusState}
+              status={communicationPlusStatus}
+              purchasing={communicationPlusPurchasing}
+              purchaseError={communicationPlusError}
+              onPurchase={onPurchaseCommunicationPlus}
+              onRetry={onRetryCommunicationPlus}
+            />
 
             <section className="client-office-card client-office-wallet client-bigcoins-wallet-card" id="wallet">
               <div className="client-office-card-header">

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * { box-sizing: border-box; } body { margin: 0; background: #070707; color: #f8f0dc; font: 14px Inter, sans-serif; }
+      main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
+      figure { margin: 0; display: grid; gap: 8px; } figcaption { color: #f4d77f; font-weight: 700; }
+      img { width: 100%; height: 844px; object-fit: cover; object-position: top; border: 1px solid rgba(244,215,127,.25); }
+      body.mobile main { width: 812px; grid-template-columns: 390px 390px; }
+      body.mobile img { height: 844px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <figure><figcaption>Mockup — źródło stylu i hierarchii</figcaption><img id="mockup" alt="" /></figure>
+      <figure><figcaption>ETAP 4A — aktualna implementacja</figcaption><img id="current" alt="" /></figure>
+    </main>
+    <script>
+      const mobile = new URLSearchParams(location.search).get('mode') === 'mobile';
+      document.body.classList.toggle('mobile', mobile);
+      document.querySelector('#mockup').src = mobile ? '/Mockup/Mockup_All_PWA_MOBILE.png' : '/Mockup/Klient_Dashbord.png';
+      document.querySelector('#current').src = mobile ? '/test-results/communication-plus-4a/mobile-390x844.png' : '/test-results/communication-plus-4a/desktop-1440x900.png';
+    </script>
+  </body>
+</html>

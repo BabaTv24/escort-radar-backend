@@ -38,6 +38,15 @@ export class ApiError extends Error {
 }
 
 export type ReferralMe = { referralCode: string; referralLink: string; directReferralsCount: number; totalDescendantsCount: number; referredByDisplay: string | null; registrationSource: string; referralDepth: number };
+export type CommunicationPlusStatus = {
+  client_premium_active: boolean;
+  communication_plus_active: boolean;
+  price_bcu: string;
+  price_bc: string;
+  available_balance_bcu: string;
+  available_balance_bc: string;
+  sufficient_balance: boolean;
+};
 export type AdminReferralNode = { userId: string; parentUserId: string | null; displayName: string; role: string; accountStatus: string; registrationSource: string; activationStatus: string; activationProvider: string | null; referralCode: string; referralDepth: number; createdAt: string; directChildrenCount: number; totalDescendantsCount: number; balanceBcu: number; hasProfile: boolean; isSponsoredProfile: boolean; isRoot: boolean };
 export type BulkProfilePublishStatus = 'published' | 'already_published' | 'skipped_moderation_pending' | 'skipped_unpaid_or_inactive_subscription' | 'skipped_suspended' | 'skipped_incomplete' | 'not_found' | 'failed';
 export type BulkProfilePublishResponse = {
@@ -623,6 +632,19 @@ export const api = {
   }),
   bcuWallet: (token: string) => request<{ wallet: BcuWallet | null }>('/api/bcu/wallet', { token }),
   bcuLedger: (token: string) => request<{ ledger: BcuLedgerEntry[] }>('/api/bcu/ledger', { token }),
+  communicationPlusStatus: (token: string) => request<CommunicationPlusStatus>('/api/bcu/communication-plus', { token }),
+  purchaseCommunicationPlus: (token: string, idempotencyKey: string) => request<{
+    product_code: 'communication_plus';
+    amount_bcu: string;
+    amount_bc: string;
+    charged: boolean;
+    ledger_entry: BcuLedgerEntry | null;
+    entitlement: BcuEntitlement;
+  }>('/api/bcu/communication-plus/purchase', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ idempotency_key: idempotencyKey })
+  }),
   tokenPurchaseIntent: (token: string, package_id?: string) => request('/api/tokens/purchase-intent', {
     method: 'POST',
     token,

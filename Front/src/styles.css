@@ -7715,6 +7715,65 @@ textarea:focus {
   justify-content: center;
 }
 
+.communication-plus-card {
+  border-color: var(--er-border-gold);
+  background:
+    radial-gradient(circle at 90% 0, rgba(244, 215, 127, .10), transparent 12rem),
+    var(--er-card);
+}
+
+.communication-plus-state,
+.communication-plus-features {
+  display: grid;
+  gap: .65rem;
+}
+
+.communication-plus-features span,
+.communication-plus-active {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .65rem .75rem;
+  border: 1px solid var(--er-border);
+  border-radius: var(--er-radius-sm);
+  background: var(--er-card-hover);
+}
+
+.communication-plus-features small {
+  margin-left: auto;
+  color: var(--er-muted);
+}
+
+.communication-plus-active {
+  border-color: rgba(54, 212, 134, .34);
+  color: var(--er-green);
+}
+
+.communication-plus-active p {
+  margin: .2rem 0 0;
+}
+
+.communication-plus-skeleton {
+  width: 100%;
+  height: 38px;
+  border-radius: var(--er-radius-sm);
+  background: linear-gradient(90deg, rgba(255,255,255,.04), rgba(244,215,127,.10), rgba(255,255,255,.04));
+  background-size: 200% 100%;
+  animation: client-office-skeleton 1.4s ease-in-out infinite;
+}
+
+.communication-plus-skeleton.short { width: 68%; }
+.communication-plus-error { color: var(--er-red) !important; }
+
+@keyframes client-office-skeleton {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .communication-plus-skeleton { animation: none; }
+}
+
 .client-office-settings-form {
   display: grid;
 }

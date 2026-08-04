@@ -1,17 +1,18 @@
 import { Router } from 'express';
 import { config } from '../config.js';
-import { verifyUser } from '../middleware/auth.js';
+import { requireAccountType, verifyUser } from '../middleware/auth.js';
 import {
-  activateBcuProduct,
   bcuToBc,
   getActiveBcuProducts,
   getBcuLedgerForUser,
   getBcuWalletForUser,
   getOrCreateBcuWalletForUser,
   getUserEntitlements,
-  normalizeBcuDatabaseInteger
+  normalizeBcuDatabaseInteger,
+  purchaseCommunicationPlus
 } from '../services/bcuWallet.js';
 import { asyncHandler } from '../validation.js';
+import { calculateAvailableBcu, hasSufficientAvailableBcu } from '../services/communicationPlus.js';
 
 export const bcuRouter = Router();
 
@@ -43,29 +44,90 @@ bcuRouter.get('/entitlements', asyncHandler(async (req, res) => {
   res.json({ entitlements: entitlements.map(serializeEntitlement) });
 }));
 
-bcuRouter.post('/products/:productCode/activate', asyncHandler(async (req, res) => {
+bcuRouter.get('/communication-plus', requireAccountType('client'), asyncHandler(async (req, res) => {
+  const [wallet, products, entitlements] = await Promise.all([
+    getBcuWalletForUser(req.user!.id),
+    getActiveBcuProducts(),
+    getUserEntitlements(req.user!.id)
+  ]);
+  const product = products.find((item) => item.product_code === 'communication_plus');
+  if (!product || normalizeBcuDatabaseInteger(product.amount_bcu) !== '1000000') {
+    return res.status(503).json({ error: 'Communication Plus is temporarily unavailable' });
+  }
+
+  const balanceBcu = normalizeBcuDatabaseInteger(wallet?.balance_bcu ?? 0);
+  const lockedBalanceBcu = normalizeBcuDatabaseInteger(wallet?.locked_balance_bcu ?? 0);
+  const availableBalanceBcu = calculateAvailableBcu(balanceBcu, lockedBalanceBcu);
+  const premiumActive = entitlements.some((item) => isActiveEntitlement(item, 'client_premium'));
+  const communicationPlusActive = entitlements.some((item) => isActiveEntitlement(item, 'communication_plus'));
+
+  res.json({
+    client_premium_active: premiumActive,
+    communication_plus_active: communicationPlusActive,
+    price_bcu: product.amount_bcu,
+    price_bc: bcuToBc(product.amount_bcu),
+    available_balance_bcu: availableBalanceBcu,
+    available_balance_bc: bcuToBc(availableBalanceBcu),
+    sufficient_balance: hasSufficientAvailableBcu(balanceBcu, lockedBalanceBcu, product.amount_bcu)
+  });
+}));
+
+bcuRouter.post('/communication-plus/purchase', requireAccountType('client'), async (req, res, next) => {
+  try {
+    const idempotencyKey = String(req.body?.idempotency_key || req.headers['idempotency-key'] || '').trim();
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      return res.status(400).json({ error: 'A valid idempotency key is required', code: 'IDEMPOTENCY_KEY_INVALID' });
+    }
+    const result = await purchaseCommunicationPlus({
+      userId: req.user!.id,
+      idempotencyKey,
+      metadata: typeof req.body?.metadata === 'object' && req.body.metadata !== null ? req.body.metadata : {}
+    });
+    return res.json({
+      product_code: result.product_code,
+      amount_bcu: result.amount_bcu,
+      amount_bc: bcuToBc(result.amount_bcu),
+      charged: result.charged,
+      ledger_entry: result.ledger_entry ? serializeLedgerEntry(result.ledger_entry) : null,
+      entitlement: result.entitlement ? serializeEntitlement(result.entitlement) : null
+    });
+  } catch (error) {
+    const mapped = mapCommunicationPlusError(error);
+    if (mapped) return res.status(mapped.status).json({ error: mapped.message, code: mapped.code });
+    return next(error);
+  }
+});
+
+bcuRouter.post('/products/:productCode/activate', requireAccountType('client'), async (req, res, next) => {
   const productCode = String(req.params.productCode || '');
   if (productCode !== 'communication_plus') {
     return res.status(403).json({ error: 'BCU product activation is not available for this product' });
   }
 
-  const idempotencyKey = String(req.body?.idempotency_key || req.headers['idempotency-key'] || '');
-  const result = await activateBcuProduct({
-    userId: req.user!.id,
-    productCode,
-    idempotencyKey,
-    metadata: typeof req.body?.metadata === 'object' && req.body.metadata !== null ? req.body.metadata : {}
-  });
-
-  res.json({
-    product_code: result.product_code,
-    amount_bcu: result.amount_bcu,
-    amount_bc: bcuToBc(result.amount_bcu),
-    charged: result.charged,
-    ledger_entry: result.ledger_entry ? serializeLedgerEntry(result.ledger_entry) : null,
-    entitlement: result.entitlement ? serializeEntitlement(result.entitlement) : null
-  });
-}));
+  try {
+    const idempotencyKey = String(req.body?.idempotency_key || req.headers['idempotency-key'] || '').trim();
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      return res.status(400).json({ error: 'A valid idempotency key is required', code: 'IDEMPOTENCY_KEY_INVALID' });
+    }
+    const result = await purchaseCommunicationPlus({
+      userId: req.user!.id,
+      idempotencyKey,
+      metadata: typeof req.body?.metadata === 'object' && req.body.metadata !== null ? req.body.metadata : {}
+    });
+    return res.json({
+      product_code: result.product_code,
+      amount_bcu: result.amount_bcu,
+      amount_bc: bcuToBc(result.amount_bcu),
+      charged: result.charged,
+      ledger_entry: result.ledger_entry ? serializeLedgerEntry(result.ledger_entry) : null,
+      entitlement: result.entitlement ? serializeEntitlement(result.entitlement) : null
+    });
+  } catch (error) {
+    const mapped = mapCommunicationPlusError(error);
+    if (mapped) return res.status(mapped.status).json({ error: mapped.message, code: mapped.code });
+    return next(error);
+  }
+});
 
 export function serializeWallet(wallet: Awaited<ReturnType<typeof getBcuWalletForUser>>) {
   if (!wallet) return null;
@@ -129,4 +191,24 @@ function serializeEntitlement(entitlement: Awaited<ReturnType<typeof getUserEnti
     created_at: entitlement.created_at,
     updated_at: entitlement.updated_at
   };
+}
+
+function isActiveEntitlement(entitlement: Awaited<ReturnType<typeof getUserEntitlements>>[number], type: 'client_premium' | 'communication_plus') {
+  return entitlement.entitlement_type === type
+    && entitlement.status === 'active'
+    && (!entitlement.ends_at || new Date(entitlement.ends_at).getTime() > Date.now());
+}
+
+export function mapCommunicationPlusError(error: unknown) {
+  const raw = error instanceof Error ? error.message : String((error as { message?: unknown })?.message || error || '');
+  const mappings = [
+    { match: 'BCU_CLIENT_PREMIUM_REQUIRED', status: 403, code: 'CLIENT_PREMIUM_REQUIRED', message: 'Active Client Premium is required' },
+    { match: 'BCU_INSUFFICIENT_AVAILABLE_BALANCE', status: 409, code: 'INSUFFICIENT_AVAILABLE_BALANCE', message: 'Insufficient available BC balance' },
+    { match: 'BCU_WALLET_FROZEN', status: 409, code: 'WALLET_FROZEN', message: 'BC wallet is frozen' },
+    { match: 'BCU_WALLET_NOT_FOUND', status: 409, code: 'WALLET_NOT_FOUND', message: 'BC wallet is not available' },
+    { match: 'BCU_IDEMPOTENCY_CONFLICT', status: 409, code: 'IDEMPOTENCY_CONFLICT', message: 'Purchase request conflicts with an earlier request' },
+    { match: 'BCU_IDEMPOTENCY_KEY_INVALID', status: 400, code: 'IDEMPOTENCY_KEY_INVALID', message: 'A valid idempotency key is required' },
+    { match: 'BCU_COMMUNICATION_PLUS_PRODUCT_INVALID', status: 503, code: 'PRODUCT_UNAVAILABLE', message: 'Communication Plus is temporarily unavailable' }
+  ] as const;
+  return mappings.find((item) => raw.includes(item.match)) || null;
 }

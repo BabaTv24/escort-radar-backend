@@ -1,0 +1,19 @@
+@media (max-width: 600px) {
+  .communication-plus-visual-fixture {
+    width: 378px !important;
+    margin: 6px !important;
+  }
+
+  .communication-plus-visual-fixture .client-office-main {
+    width: 100%;
+  }
+
+  .communication-plus-visual-fixture .client-office-hero,
+  .communication-plus-visual-fixture .client-office-left {
+    display: none;
+  }
+
+  .communication-plus-visual-fixture .client-office-topbar {
+    grid-template-columns: 1fr;
+  }
+}

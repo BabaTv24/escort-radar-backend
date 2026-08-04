@@ -110,6 +110,8 @@ export type BcuActivationResult = {
   entitlement: UserEntitlement | null;
 };
 
+export type CommunicationPlusPurchaseResult = BcuActivationResult;
+
 export function bcToBcu(amountBc: string) {
   const normalized = amountBc.trim();
   if (!bcAmountPattern.test(normalized)) throw new Error('BC amount must be a non-negative decimal with max 4 places');
@@ -281,4 +283,22 @@ export async function activateBcuProduct(input: {
   });
   if (error) throw error;
   return data as BcuActivationResult;
+}
+
+export async function purchaseCommunicationPlus(input: {
+  userId: string;
+  idempotencyKey: string;
+  metadata?: Record<string, unknown>;
+}): Promise<CommunicationPlusPurchaseResult> {
+  if (!input.idempotencyKey.trim() || input.idempotencyKey.trim().length > 128) {
+    throw new Error('BCU_IDEMPOTENCY_KEY_INVALID');
+  }
+
+  const { data, error } = await supabaseAdmin.rpc('purchase_communication_plus', {
+    p_user_id: input.userId,
+    p_idempotency_key: input.idempotencyKey.trim(),
+    p_metadata: input.metadata || {}
+  });
+  if (error) throw error;
+  return data as CommunicationPlusPurchaseResult;
 }
