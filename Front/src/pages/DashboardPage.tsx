@@ -55,6 +55,7 @@ import {
   profileTravelsLabel,
   showMaleProfileFields
 } from '../lib/profileDetails';
+import { getAdvertiserProfileCompleteness } from '../lib/advertiserProfileCompleteness';
 
 const emptyProfile: Partial<Profile> = {
   display_name: '',
@@ -1990,7 +1991,7 @@ function CreatorHeroPanel({ profile, savedProfile, wallet, userEmail, onUpload, 
 }) {
   const { t, option } = useI18n();
   const primary = savedProfile?.profile_images?.find((image) => image.is_primary) || savedProfile?.profile_images?.[0];
-  const completeness = getProfileCompleteness(profile, savedProfile);
+  const completeness = getAdvertiserProfileCompleteness(savedProfile || profile).percent;
   const status = profile.availability_status || 'unavailable';
   const referralUrl = savedProfile?.referral_code ? `https://escort-radar.fun/r/${savedProfile.referral_code}` : t('referral.pending');
 
@@ -2297,6 +2298,7 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps & { t
           draft={props.profile}
           subscriptionProgress={<AdvertiserSubscriptionProgress profile={props.savedProfile || props.profile} />}
           onEditProfile={() => selectSection('profile')}
+          onOpenCompletionSection={selectSection}
         />
       ) : null}
       {activeSection === 'profile' || activeSection === 'settings' ? (
@@ -3206,22 +3208,6 @@ function QrVisual({ seed }: { seed: string }) {
 
 function Metric({ label, value }: { label: string; value: unknown }) {
   return <div className="creator-metric"><span>{label}</span><strong>{String(value)}</strong></div>;
-}
-
-function getProfileCompleteness(profile: Partial<Profile>, savedProfile: Profile | null) {
-  const checks = [
-    profile.display_name,
-    profile.description,
-    profile.city,
-    profile.category,
-    profile.age,
-    profile.service_radius_km,
-    profile.price_1h,
-    profile.service_menu?.some((service) => service.enabled),
-    savedProfile?.profile_images?.length,
-    savedProfile?.verified
-  ];
-  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
 function previewProfile(profile: Partial<Profile>, savedProfile: Profile | null): Profile {

@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  AlertTriangle,
   CalendarDays,
+  CheckCircle2,
   LayoutDashboard,
   MapPin,
   MessageCircle,
@@ -12,6 +14,10 @@ import {
 } from 'lucide-react';
 import type { Profile } from '../../types';
 import { useI18n } from '../../i18n';
+import {
+  getAdvertiserProfileCompleteness,
+  type AdvertiserProfileCompletionSection
+} from '../../lib/advertiserProfileCompleteness';
 
 export const advertiserDashboardSections = [
   'overview',
@@ -102,16 +108,17 @@ export function AdvertiserDashboardNav({ activeSection, onSectionChange }: {
   );
 }
 
-export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgress, onEditProfile }: {
+export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgress, onEditProfile, onOpenCompletionSection }: {
   profile: Profile | null;
   draft: Partial<Profile>;
   subscriptionProgress: ReactNode;
   onEditProfile: () => void;
+  onOpenCompletionSection: (section: AdvertiserProfileCompletionSection) => void;
 }) {
   const { t } = useI18n();
   const source = profile || draft;
-  const completion = profile ? getAdvertiserProfileCompletion(source) : { completed: 0, total: 8, percent: 0 };
-  const warnings = getAdvertiserProfileWarnings(profile, draft, t);
+  const completion = getAdvertiserProfileCompleteness(profile);
+  const operationalWarnings = getAdvertiserOperationalWarnings(profile, t);
   const operatorStatus = source.operator_status || 'OFFLINE';
   const publicationLabel = !profile
     ? t('advertiserDashboard.status.notCreated')
@@ -145,13 +152,44 @@ export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgre
           <strong>{publicationLabel}</strong>
           <small>{profile?.moderation_status ? t(`admin.status.${profile.moderation_status}`) : t('advertiserDashboard.status.noModeration')}</small>
         </article>
-        <article className="advertiser-dashboard-summary-card">
+        <article className="advertiser-dashboard-summary-card advertiser-dashboard-completeness-card">
           <span>{t('advertiserDashboard.overview.completeness')}</span>
           <strong>{completion.percent}%</strong>
           <div className="advertiser-completion-track" aria-label={`${completion.percent}%`}>
             <i style={{ width: `${completion.percent}%` }} />
           </div>
           <small>{completion.completed}/{completion.total}</small>
+          {completion.missing.length ? (
+            <ul className="advertiser-completion-missing" aria-label={t('advertiserDashboard.completeness.missingList')}>
+              {completion.missing.map((item) => (
+                <li key={item.id}>
+                  <AlertTriangle size={17} aria-hidden="true" />
+                  <span>{t(item.labelKey)}</span>
+                  <button type="button" onClick={() => onOpenCompletionSection(item.section)}>
+                    {t('advertiserDashboard.completeness.completeAction')}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="advertiser-completion-success">{t('advertiserDashboard.completeness.allComplete')}</p>}
+          <details className="advertiser-completion-details">
+            <summary>{t('advertiserDashboard.completeness.showDetails')}</summary>
+            <ul className="advertiser-completion-checklist">
+              {completion.items.map((item) => (
+                <li key={item.id} className={item.complete ? 'complete' : 'missing'}>
+                  {item.complete
+                    ? <CheckCircle2 size={18} aria-hidden="true" />
+                    : <AlertTriangle size={18} aria-hidden="true" />}
+                  <span>{t(item.labelKey)}</span>
+                  {!item.complete ? (
+                    <button type="button" onClick={() => onOpenCompletionSection(item.section)}>
+                      {t('advertiserDashboard.completeness.completeAction')}
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
         </article>
       </div>
 
@@ -170,14 +208,35 @@ export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgre
           <div className="advertiser-dashboard-panel-head">
             <div>
               <p className="eyebrow">{t('advertiserDashboard.overview.attention')}</p>
-              <h2>{warnings.length ? t('advertiserDashboard.overview.actionNeeded') : t('advertiserDashboard.overview.ready')}</h2>
+              <h2>{completion.complete
+                ? t('advertiserDashboard.overview.ready')
+                : t(completion.missing.length === 1
+                  ? 'advertiserDashboard.overview.missingTitleOne'
+                  : 'advertiserDashboard.overview.missingTitleMany', { count: completion.missing.length })}</h2>
             </div>
           </div>
-          {warnings.length ? (
-            <ul className="advertiser-dashboard-warnings">
-              {warnings.map((warning) => <li key={warning}>{warning}</li>)}
-            </ul>
-          ) : <p className="advertiser-dashboard-empty-note">{t('advertiserDashboard.overview.noWarnings')}</p>}
+          {completion.complete ? (
+            <p className="advertiser-dashboard-empty-note">{t('advertiserDashboard.overview.noWarnings')}</p>
+          ) : (
+            <>
+              <p className="advertiser-dashboard-missing-summary">
+                {completion.missing.length === 1
+                  ? t('advertiserDashboard.overview.missingSummaryOne', { item: t(completion.missing[0].labelKey) })
+                  : t('advertiserDashboard.overview.missingSummaryMany', { count: completion.missing.length })}
+              </p>
+              <ul className="advertiser-dashboard-warnings">
+                {completion.missing.map((item) => <li key={item.id}>{t(item.labelKey)}</li>)}
+              </ul>
+            </>
+          )}
+          {operationalWarnings.length ? (
+            <div className="advertiser-dashboard-operational-warnings">
+              <strong>{t('advertiserDashboard.overview.otherAttention')}</strong>
+              <ul className="advertiser-dashboard-warnings">
+                {operationalWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            </div>
+          ) : null}
         </section>
       </div>
 
@@ -209,27 +268,8 @@ export function DashboardSectionPlaceholder({ section }: { section: Exclude<Adve
   );
 }
 
-function getAdvertiserProfileCompletion(profile: Partial<Profile>) {
-  const checks = [
-    Boolean(profile.display_name?.trim()),
-    Boolean(profile.description?.trim()),
-    Boolean(profile.profile_images?.length),
-    Boolean(profile.work_city || profile.city),
-    Boolean(profile.services?.length),
-    Boolean(profile.price_1h || profile.price_30min),
-    Boolean(profile.primary_phone || profile.phone || profile.whatsapp || profile.telegram),
-    Boolean(profile.opening_hours || profile.working_24_7 || profile.working_today_start)
-  ];
-  const completed = checks.filter(Boolean).length;
-  return { completed, total: checks.length, percent: Math.round((completed / checks.length) * 100) };
-}
-
-function getAdvertiserProfileWarnings(profile: Profile | null, draft: Partial<Profile>, t: (key: string) => string) {
-  const source = profile || draft;
+function getAdvertiserOperationalWarnings(profile: Profile | null, t: (key: string) => string) {
   const warnings: string[] = [];
-  if (!profile) warnings.push(t('advertiserDashboard.warning.notCreated'));
-  if (!source.profile_images?.length) warnings.push(t('advertiserDashboard.warning.photo'));
-  if (!(source.work_city || source.city)) warnings.push(t('advertiserDashboard.warning.location'));
   if (profile && !profile.is_published) warnings.push(t('advertiserDashboard.warning.notPublished'));
   if (profile && profile.subscription_status !== 'active' && !profile.is_test_account) warnings.push(t('advertiserDashboard.warning.subscription'));
   return warnings;

@@ -48,7 +48,7 @@ test('overview uses real profile fields and does not fall back to demo bookings'
   assert.match(shell, /source\.operator_status/);
   assert.match(shell, /profile\.is_published/);
   assert.match(shell, /profile\.subscription_status/);
-  assert.match(shell, /getAdvertiserProfileCompletion/);
+  assert.match(shell, /getAdvertiserProfileCompleteness/);
   assert.doesNotMatch(dashboard, /demoBookingRequests/);
   assert.doesNotMatch(shell, /views|clients|conversations|balance_bc/);
 });
@@ -58,7 +58,7 @@ test('unfinished sections are explicit placeholders while stage-three sections u
     readFile(new URL('../Front/src/components/advertiser-dashboard/AdvertiserDashboardShell.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../Front/src/pages/DashboardPage.tsx', import.meta.url), 'utf8')
   ]);
-  const placeholder = shell.slice(shell.indexOf('export function DashboardSectionPlaceholder'), shell.indexOf('function getAdvertiserProfileCompletion'));
+  const placeholder = shell.slice(shell.indexOf('export function DashboardSectionPlaceholder'), shell.indexOf('function getAdvertiserOperationalWarnings'));
   assert.match(placeholder, /advertiserDashboard\.placeholder\.eyebrow/);
   assert.doesNotMatch(placeholder, /<button|onClick/);
   assert.match(dashboard, /activeSection === 'wallet'[\s\S]*AdvertiserWalletSection/);
