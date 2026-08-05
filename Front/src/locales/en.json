@@ -241,6 +241,7 @@
   "phoneConflict.clear": "Phone clear",
   "phoneConflict.warning": "Phone warning",
   "phoneConflict.conflict": "Phone conflict",
+  "phone.errors.ownerConfirmationRequired": "Please confirm that all phone numbers on this profile belong to the same individual advertiser, then save again.",
   "referral.myId": "My ID",
   "referral.myLink": "My referral link",
   "referral.copy": "Copy link",

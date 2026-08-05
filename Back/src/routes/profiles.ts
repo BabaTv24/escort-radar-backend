@@ -14,6 +14,7 @@ import { isRadarRequest, prepareRadarCandidatePool } from '../radarPool.js';
 import { hasActiveEntitlement } from '../services/bcuWallet.js';
 import { canReadExactProfileLocation, exactProfileLocationPayload } from '../profileLocationAccess.js';
 import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, resolveAdminLocation, resolveManualAdminLocationForSave, reverseGeocodeAdminLocation, type AdminLocationResolution } from '../adminLocationGeocoding.js';
+import { evaluatePhoneRules, type PhoneRuleData } from '../phoneRules.js';
 
 export const profilesRouter = Router();
 
@@ -41,6 +42,7 @@ profilesRouter.post('/location/geocode', verifyUser, requireAdvertiserOnboarding
     throw error;
   }
 }));
+
 profilesRouter.get('/', asyncHandler(async (req, res) => {
   const startedAt = Date.now();
   res.set('Cache-Control', 'no-store, max-age=0');
@@ -329,8 +331,8 @@ profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHan
   }
   const phoneValidation = await validatePhoneRules(result.data, null);
   if ('error' in phoneValidation) {
-    logProfileDebug('POST /api/profiles phone_error', req, { status: 'error', error: phoneValidation.error });
-    return res.status(400).json({ error: phoneValidation.error });
+    logProfileDebug('POST /api/profiles phone_error', req, { status: 'error', error: phoneValidation.error, code: phoneValidation.code });
+    return res.status(400).json({ error: phoneValidation.error, code: phoneValidation.code });
   }
   const { tag_ids, profileData } = splitProfileTags(result.data);
   let locationResolution: AdminLocationResolution;
@@ -347,7 +349,7 @@ profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHan
   const isTestAccount = Boolean(req.body.is_test_account) || isSafeTestEmail(req.user?.email);
   const payload = {
     ...profileData,
-    ...profileLocationPatch(locationResolution, result.data.location_input_source === 'manual' ? 'manual' : 'automatic'),
+    ...profileLocationPatch(locationResolution, result.data.location_input_source === 'manual' ? 'manual' : 'automatic', result.data.location_input_source === 'manual'),
     ...phoneValidation.data,
     ...operatorStatusPatch(profileData.operator_status),
     user_id: req.user!.id,
@@ -408,8 +410,8 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
   }
   const phoneValidation = await validatePhoneRules(result.data, req.params.id);
   if ('error' in phoneValidation) {
-    logProfileDebug('PUT /api/profiles/:id phone_error', req, { status: 'error', profile_id: req.params.id, error: phoneValidation.error });
-    return res.status(400).json({ error: phoneValidation.error });
+    logProfileDebug('PUT /api/profiles/:id phone_error', req, { status: 'error', profile_id: req.params.id, error: phoneValidation.error, code: phoneValidation.code });
+    return res.status(400).json({ error: phoneValidation.error, code: phoneValidation.code });
   }
   const { tag_ids, profileData } = splitProfileTags(result.data);
   if (Array.isArray(profileData.services)) {
@@ -436,7 +438,7 @@ profilesRouter.put('/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncH
       const locationResolution = manualExactPoint
         ? await resolveManualAdminLocationForSave(profileData)
         : await resolveAdminLocation(profileData);
-      locationPatch = profileLocationPatch(locationResolution, manualExactPoint ? 'manual' : 'automatic');
+      locationPatch = profileLocationPatch(locationResolution, manualExactPoint ? 'manual' : 'automatic', manualExactPoint);
     } catch (error) {
       if (error instanceof AdminLocationGeocodingError) return res.status(422).json({ error: error.message, code: error.code });
       throw error;
@@ -537,17 +539,17 @@ function withImageUrls(profile: any, wallet?: any) {
   };
 }
 
-function profileLocationPatch(location: AdminLocationResolution, source: 'automatic' | 'manual') {
+function profileLocationPatch(location: AdminLocationResolution, source: 'automatic' | 'manual', replaceAddress = false) {
   const precision = location.precision === 'city' ? 'city' : location.precision === 'postal_area' ? 'postal_area' : 'exact';
   return {
     latitude: location.latitude,
     longitude: location.longitude,
     ...(location.work_country ? { work_country: location.work_country } : {}),
     ...(location.work_city ? { work_city: location.work_city, city: slugify(location.work_city) } : {}),
-    ...(location.work_area ? { work_area: location.work_area, area: location.work_area } : {}),
-    ...(location.postal_code ? { postal_code: location.postal_code } : {}),
-    ...(location.exact_address ? { exact_address: location.exact_address } : {}),
-    ...(location.work_place_label ? { work_place_label: location.work_place_label } : {}),
+    ...(replaceAddress || location.work_area ? { work_area: location.work_area || null, area: location.work_area || null } : {}),
+    ...(replaceAddress || location.postal_code ? { postal_code: location.postal_code || null } : {}),
+    ...(replaceAddress || location.exact_address ? { exact_address: location.exact_address || null } : {}),
+    ...(replaceAddress || location.work_place_label ? { work_place_label: location.work_place_label || null } : {}),
     location_mode: precision === 'city' ? 'city_only' : precision === 'postal_area' ? 'approximate' : 'exact',
     location_precision: precision,
     location_input_source: source
@@ -600,6 +602,8 @@ export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEf
     area: safeArea,
     work_area: safeArea,
     location_label: [safeArea, safeCity].filter(Boolean).join(', ') || null,
+    radar_latitude: effectiveLocation?.latitude ?? null,
+    radar_longitude: effectiveLocation?.longitude ?? null,
     latitude: effectiveLocation?.latitude ?? null,
     longitude: effectiveLocation?.longitude ?? null,
     location_approximate: effectiveLocation?.location_approximate ?? false,
@@ -790,17 +794,10 @@ function safeText(value: unknown) {
   return text ? text.slice(0, 120) : null;
 }
 
-async function validatePhoneRules(data: Record<string, any>, profileId: string | null) {
+async function validatePhoneRules(data: Record<string, any>, profileId: string | null): Promise<{ error: string; code?: string } | { data: PhoneRuleData }> {
   const primaryPhone = normalizePhone(data.primary_phone);
-  const additionalPhones = Array.isArray(data.additional_phones) ? data.additional_phones.map(normalizePhone).filter(Boolean) : [];
-  const ownerLabel = String(data.phone_owner_identity_label || data.display_name || '').trim().slice(0, 120);
-  const accountType = String(data.account_type || 'private');
+  let conflictingProfiles: Array<{ phone_owner_identity_label?: string | null }> = [];
 
-  if (accountType === 'private' && primaryPhone && !data.phone_rule_confirmed) {
-    return { error: 'Private accounts must confirm that all phone numbers belong to the same individual advertiser.' };
-  }
-
-  let phoneConflictStatus = 'clear';
   if (primaryPhone) {
     let query = supabaseAdmin
       .from('profiles')
@@ -809,24 +806,20 @@ async function validatePhoneRules(data: Record<string, any>, profileId: string |
 
     if (profileId) query = query.neq('id', profileId);
     const { data: matches, error } = await query.limit(20);
-    if (error) return { error: error.message };
-
-    const differentOwner = (matches || []).some((profile) => {
-      const existingLabel = String(profile.phone_owner_identity_label || '').trim().toLowerCase();
-      return existingLabel && ownerLabel && existingLabel !== ownerLabel.toLowerCase();
-    });
-    if (differentOwner && accountType === 'private') phoneConflictStatus = 'conflict';
-    else if ((matches || []).length) phoneConflictStatus = 'warning';
+    if (error) return { error: error.message, code: 'phone_lookup_failed' };
+    conflictingProfiles = matches || [];
   }
 
-  return {
-    data: {
-      primary_phone: primaryPhone || null,
-      additional_phones: additionalPhones,
-      phone_owner_identity_label: ownerLabel || null,
-      phone_conflict_status: phoneConflictStatus
-    }
-  };
+  return evaluatePhoneRules({
+    accountType: data.account_type,
+    primaryPhone: data.primary_phone,
+    additionalPhones: data.additional_phones,
+    // display_name is not an owner identity -- never fall back to it here (it must not
+    // influence phone_owner_identity_label or any conflict signal).
+    ownerLabel: data.phone_owner_identity_label,
+    phoneRuleConfirmed: data.phone_rule_confirmed,
+    conflictingProfiles
+  });
 }
 
 async function generateUniqueValue(column: 'public_user_id' | 'referral_code', generator: () => string) {

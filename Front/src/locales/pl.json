@@ -241,6 +241,7 @@
   "phoneConflict.clear": "Telefon OK",
   "phoneConflict.warning": "Ostrzeżenie telefonu",
   "phoneConflict.conflict": "Konflikt telefonu",
+  "phone.errors.ownerConfirmationRequired": "Potwierdź, że wszystkie numery telefonu na tym profilu należą do tej samej osoby ogłaszającej się, a następnie zapisz ponownie.",
   "referral.myId": "Moje ID",
   "referral.myLink": "Mój reflink",
   "referral.copy": "Kopiuj link",

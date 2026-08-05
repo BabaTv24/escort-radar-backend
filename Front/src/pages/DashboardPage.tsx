@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Heart, IdCard, ImagePlus, Link as LinkIcon, Lock, LogOut, MapPin, MessageCircle, QrCode, RadioTower, Settings, ShieldCheck, Sparkles, UploadCloud, UserRound, Video, Wand2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { clearLoginSessionHandoff, restoreLoginSessionHandoff, supabase } from '../lib/supabase';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { waitForSupabaseSession } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor } from '../components/AvailabilityHoursEditor';
@@ -609,7 +609,7 @@ export function DashboardPage() {
       setLastApiError('');
     } catch (error) {
       setDashboardStatus('error');
-      const nextError = error instanceof Error ? error.message : t('states.requestFailed');
+      const nextError = translateProfileSaveError(error, t);
       setMessage(nextError);
       setLastApiError(nextError);
       if (rethrowError) throw error;
@@ -1123,8 +1123,12 @@ export function DashboardPage() {
                 <input placeholder={t('form.additionalPhones')} value={(profile.additional_phones || []).join(', ')} onChange={(event) => setProfile({ ...profile, additional_phones: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} />
                 <input placeholder={t('form.phoneOwnerIdentity')} value={profile.phone_owner_identity_label || ''} onChange={(event) => setProfile({ ...profile, phone_owner_identity_label: event.target.value })} />
               </div>
-              {profile.account_type === 'private' && <p className="subscription-notice">{t('phone.privateWarning')}</p>}
-              <label className="premium-check"><input type="checkbox" checked={Boolean(profile.phone_rule_confirmed)} onChange={(event) => setProfile({ ...profile, phone_rule_confirmed: event.target.checked })} /> {t('phone.confirmSameOwner')}</label>
+              {profile.account_type === 'private' && (profile.additional_phones || []).length > 0 && (
+                <>
+                  <p className="subscription-notice">{t('phone.privateWarning')}</p>
+                  <label className="premium-check"><input type="checkbox" checked={Boolean(profile.phone_rule_confirmed)} onChange={(event) => setProfile({ ...profile, phone_rule_confirmed: event.target.checked })} /> {t('phone.confirmSameOwner')}</label>
+                </>
+              )}
               {savedProfile?.phone_conflict_status && savedProfile.phone_conflict_status !== 'clear' && <p className="error-text">{t(`phoneConflict.${savedProfile.phone_conflict_status}`)}</p>}
             </section>}
 
@@ -1401,6 +1405,19 @@ function clearLoginJustCompletedMarker() {
 
 function isAdvertiserAccount(accountType: DashboardAccountType) {
   return accountType === 'escort' || accountType === 'business';
+}
+
+const profileSaveErrorTranslationKeys: Record<string, string> = {
+  phone_owner_confirmation_required: 'phone.errors.ownerConfirmationRequired'
+};
+
+function translateProfileSaveError(error: unknown, t: (key: string) => string): string {
+  if (error instanceof ApiError) {
+    const code = typeof error.payload?.code === 'string' ? error.payload.code : '';
+    const translationKey = profileSaveErrorTranslationKeys[code];
+    if (translationKey) return t(translationKey);
+  }
+  return error instanceof Error ? error.message : t('states.requestFailed');
 }
 
 function profileStatusLabel(profile: Profile | null) {
@@ -3048,6 +3065,18 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
               <input type="password" autoComplete="new-password" placeholder={t('dashboard.account.newPassword')} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
               <input type="password" autoComplete="new-password" placeholder={t('dashboard.account.confirmNewPassword')} value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} />
             </div>
+            {profile.account_type === 'private' && (profile.additional_phones || []).length > 0 && (
+              <>
+                <p className="subscription-notice">{t('phone.privateWarning')}</p>
+                <label className="premium-check">
+                  <input type="checkbox" checked={Boolean(profile.phone_rule_confirmed)} onChange={(event) => onProfileChange({ ...profile, phone_rule_confirmed: event.target.checked })} />
+                  {' '}{t('phone.confirmSameOwner')}
+                </label>
+              </>
+            )}
+            {savedProfile?.phone_conflict_status && savedProfile.phone_conflict_status !== 'clear' && (
+              <p className="error-text">{t(`phoneConflict.${savedProfile.phone_conflict_status}`)}</p>
+            )}
             <p className="muted">{t('dashboard.account.passwordHelp')}</p>
             <div className="admin-actions-row">
               <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" disabled={passwordSaving} onClick={changePassword}><span>{passwordSaving ? t('states.loading') : t('dashboard.account.changePassword')}</span></button>
