@@ -112,39 +112,17 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
   });
 }));
 
+// Ownership is read from user_id only. Matching an unowned profile by owner_email used to
+// attach it to whoever signed up with that address, which is not proof of ownership.
+// Admin linking and the tokenized sponsored claim are the only ways to attach an owner.
 async function resolveAuthAccountType(userId: string, appMetadata: Record<string, unknown>): Promise<'client' | 'escort' | 'business'> {
-  let { data: profile } = await supabaseAdmin
+  const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('id, account_type')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-
-  if (!profile) {
-    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
-    const email = authUser.user?.email?.trim().toLowerCase();
-    if (email) {
-      const { data: emailProfiles } = await supabaseAdmin
-        .from('profiles')
-        .select('id, account_type, user_id')
-        .ilike('owner_email', email)
-        .is('user_id', null)
-        .order('created_at', { ascending: false })
-        .limit(2);
-      const emailProfile = emailProfiles?.length === 1 ? emailProfiles[0] : null;
-      if (emailProfile) {
-        const { data: linked } = await supabaseAdmin
-          .from('profiles')
-          .update({ user_id: userId })
-          .eq('id', emailProfile.id)
-          .is('user_id', null)
-          .select('id, account_type')
-          .maybeSingle();
-        profile = linked || null;
-      }
-    }
-  }
 
   const metadataType = normalizeAuthAccountType(appMetadata.auth_account_type);
   if (!profile) return metadataType || 'client';

@@ -177,37 +177,16 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
 
 profilesRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
   logProfileDebug('GET /api/profiles/me start', req, { status: 'start' });
-  let { data, error } = await supabaseAdmin
+  // Ownership is read from user_id only. Matching an unowned profile by owner_email used to
+  // attach it to whoever signed up with that address, which is not proof of ownership.
+  // Admin linking and the tokenized sponsored claim are the only ways to attach an owner.
+  const { data, error } = await supabaseAdmin
     .from('profiles')
     .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
     .eq('user_id', req.user!.id)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-
-  if (!data && !error && req.user?.email) {
-    const email = req.user.email.trim().toLowerCase();
-    const { data: emailProfiles, error: emailError } = await supabaseAdmin
-      .from('profiles')
-      .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
-      .ilike('owner_email', email)
-      .is('user_id', null)
-      .order('created_at', { ascending: false })
-      .limit(2);
-    const emailProfile = emailProfiles?.length === 1 ? emailProfiles[0] : null;
-    if (emailError) error = emailError;
-    if (emailProfile) {
-      const { data: linkedProfile, error: linkError } = await supabaseAdmin
-        .from('profiles')
-        .update({ user_id: req.user.id })
-        .eq('id', emailProfile.id)
-        .is('user_id', null)
-        .select('*, profile_images(*), profile_tags(tag_id, tags(*))')
-        .maybeSingle();
-      if (linkError) error = linkError;
-      data = linkedProfile || null;
-    }
-  }
 
   if (error) {
     logProfileDebug('GET /api/profiles/me error', req, { status: 'error', supabase_error: error.message });
@@ -233,10 +212,14 @@ profilesRouter.get('/:id/access', verifyUser, asyncHandler(async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select('id, primary_phone, additional_phones, whatsapp, telegram, profile_images(*)')
+    .select('id, primary_phone, additional_phones, whatsapp, telegram, status, is_published, moderation_status, shadowbanned, category, profile_images(*)')
     .eq('id', req.params.id)
     .single();
   if (error || !data) return res.status(404).json({ error: 'Profile not found' });
+  // Contact details are unlocked only for profiles the public listing would show anyway.
+  if (!isPublicProfile(data) || !isActivePublicCategory(data.category)) {
+    return res.status(404).json({ error: 'Profile not found' });
+  }
 
   const { data: vipUnlock } = await supabaseAdmin
     .from('vip_gallery_unlocks')
@@ -575,6 +558,9 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
 export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile), imageLimit = 4) {
   const { phone, primary_phone, additional_phones, whatsapp, telegram,
     admin_note, subscription_note, source_url, import_source, imported_at, source_url_normalized,
+    owner_email: _ownerEmail,
+    email: _email,
+    user_id: _userId,
     latitude, longitude,
     exact_address: _exactAddress,
     address: _address,
