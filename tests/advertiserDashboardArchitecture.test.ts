@@ -63,5 +63,6 @@ test('unfinished sections are explicit placeholders while stage-three sections u
   assert.doesNotMatch(placeholder, /<button|onClick/);
   assert.match(dashboard, /activeSection === 'wallet'[\s\S]*AdvertiserWalletSection/);
   assert.match(dashboard, /activeSection === 'referrals'[\s\S]*AdvertiserReferralSection/);
-  assert.match(dashboard, /!\['overview', 'profile', 'location', 'wallet', 'referrals', 'settings'\]\.includes\(activeSection\)/);
+  assert.match(dashboard, /activeSection === 'bookings'[\s\S]*AdvertiserBookingsSection/);
+  assert.match(dashboard, /!\['overview', 'profile', 'location', 'bookings', 'wallet', 'referrals', 'settings'\]\.includes\(activeSection\)/);
 });

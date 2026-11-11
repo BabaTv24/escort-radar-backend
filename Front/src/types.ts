@@ -226,8 +226,17 @@ export type BookingRequest = {
   message?: string | null;
   idempotency_key?: string;
   status: 'pending' | 'awaiting_owner_activation' | 'accepted' | 'rejected' | 'cancelled';
+  /** Server-derived: 'completed' for accepted bookings whose appointment has ended. */
+  display_status?: BookingDisplayStatus | null;
+  requester_user_id?: string | null;
+  /** Advertiser view only: the client's chosen display name (never account data). */
+  client_display_name?: string | null;
+  profiles?: { id: string; display_name?: string | null; city?: string | null; work_city?: string | null } | null;
   created_at: string;
+  updated_at?: string | null;
 };
+
+export type BookingDisplayStatus = BookingRequest['status'] | 'completed';
 
 export type AdminReport = {
   id: string;

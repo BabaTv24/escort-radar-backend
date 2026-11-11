@@ -22,6 +22,8 @@ import type { BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientA
 import type { Wallet } from '../types';
 import { ProfileCard } from '../components/ProfileCard';
 import { CommunicationPlusCard } from '../components/CommunicationPlusCard';
+import { ClientBookingsCard } from '../components/bookings/ClientBookingsCard';
+import { AdvertiserBookingsSection } from '../components/advertiser-dashboard/AdvertiserBookingsSection';
 import { useI18n } from '../i18n';
 import QRCode from 'qrcode';
 import type { CommunicationPlusStatus, ReferralMe } from '../lib/api';
@@ -953,6 +955,7 @@ export function DashboardPage() {
         onCreateIntent={(body) => createClientIntent(body)}
         onSavePersonalProfile={(body) => saveClientPersonalProfile(body)}
         favorites={clientFavorites}
+        token={token}
         onRemoveFavorite={removeClientFavorite}
       />
     );
@@ -1480,7 +1483,7 @@ function getPublicReferralLink(activation: ClientActivation | null) {
 
 const CLIENT_REFERRAL_REWARD_COINS = 10;
 
-function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, communicationPlusStatus, communicationPlusState, communicationPlusPurchasing, communicationPlusError, walletSystem, dashboardStatus, clientProfile, activation, referral, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onPurchaseCommunicationPlus, onRetryCommunicationPlus, onAvatarUpload, onLogout, onRetry, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
+function ClientDashboard({ token, userEmail, coinWallet, bcuWallet, bcuEntitlements, communicationPlusStatus, communicationPlusState, communicationPlusPurchasing, communicationPlusError, walletSystem, dashboardStatus, clientProfile, activation, referral, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onPurchaseCommunicationPlus, onRetryCommunicationPlus, onAvatarUpload, onLogout, onRetry, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
   userEmail: string;
   coinWallet: CoinWallet | null;
   bcuWallet: BcuWallet | null;
@@ -1513,6 +1516,7 @@ function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, co
   onSavePersonalProfile: (body: Partial<ClientPersonalProfile>) => void;
   favorites: ClientFavorite[];
   onRemoveFavorite: (profileId: string) => void;
+  token: string;
 }) {
   const { t, option } = useI18n();
   const activated = walletSystem === 'bcu'
@@ -1578,13 +1582,15 @@ function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, co
   const quickActions = [
     [t('nav.radar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin'],
     [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '#favorites'],
-    [t('clientOffice.coinWallet'), t('clientOffice.coinWalletCopy'), Gem, '#wallet'],
-    [t('clientOffice.accountSettings'), t('clientOffice.accountSettingsCopy'), Settings, '#settings']
+    [t('bookings.client.title'), t('bookings.client.quickCopy'), CalendarDays, '#bookings'],
+    [t('nav.messages'), t('chat.client.quickCopy'), MessageCircle, '#messages']
   ] as const;
   const sidebarItems = [
     [t('nav.dashboard'), '#office', ShieldCheck],
     [t('nav.radar'), '/city/berlin', RadioTower],
     [t('favorites.myFavorites'), '#favorites', Heart],
+    [t('bookings.client.title'), '#bookings', CalendarDays],
+    [t('nav.messages'), '#messages', MessageCircle],
     [t('clientOffice.coinWallet'), '#wallet', Gem],
     [t('dashboard.client.activity'), '#activity', Clock],
     [t('clientOffice.accountSettings'), '#settings', Settings]
@@ -1672,9 +1678,9 @@ function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, co
               </>
             );
             return href.startsWith('/') ? (
-              <Link className={`client-office-action er-btn er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#wallet' ? 'er-glass-btn--purple' : href.startsWith('/') ? 'er-glass-btn--gold' : 'er-glass-btn--cyan'}`} to={href} key={title}>{content}</Link>
+              <Link className={`client-office-action er-btn er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#messages' ? 'er-glass-btn--purple' : href.startsWith('/') ? 'er-glass-btn--gold' : 'er-glass-btn--cyan'}`} to={href} key={title}>{content}</Link>
             ) : (
-              <a className={`client-office-action er-btn er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#wallet' ? 'er-glass-btn--purple' : 'er-glass-btn--cyan'}`} href={href} key={title}>{content}</a>
+              <a className={`client-office-action er-btn er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#messages' ? 'er-glass-btn--purple' : 'er-glass-btn--cyan'}`} href={href} key={title}>{content}</a>
             );
           })}
         </section>
@@ -1754,6 +1760,8 @@ function ClientDashboard({ userEmail, coinWallet, bcuWallet, bcuEntitlements, co
                 {!matches.length && <p className="muted">{t('clientOffice.noLiveMatches')}</p>}
               </div>
             </section>
+
+            <ClientBookingsCard token={token} notifications={notifications} />
 
             <section className="client-office-card client-office-favorites client-favorites-section" id="favorites">
               <div className="client-office-card-header">
@@ -2340,9 +2348,10 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps & { t
           onSaveLocation={props.onSaveLocation}
         />
       ) : null}
+      {activeSection === 'bookings' ? <AdvertiserBookingsSection token={props.token} /> : null}
       {activeSection === 'wallet' ? <AdvertiserWalletSection token={props.token} /> : null}
       {activeSection === 'referrals' ? <AdvertiserReferralSection token={props.token} /> : null}
-      {!['overview', 'profile', 'location', 'wallet', 'referrals', 'settings'].includes(activeSection) ? (
+      {!['overview', 'profile', 'location', 'bookings', 'wallet', 'referrals', 'settings'].includes(activeSection) ? (
         <DashboardSectionPlaceholder section={activeSection as Exclude<AdvertiserDashboardSection, 'overview' | 'profile' | 'settings'>} />
       ) : null}
     </AdvertiserDashboardShell>

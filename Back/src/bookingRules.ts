@@ -28,6 +28,42 @@ export function ownerBookingTransitionAllowed(from: unknown, to: unknown) {
   return ownerTransitions[from].includes(to);
 }
 
+/** A client may withdraw a request only while the advertiser has not decided on it yet. */
+export function clientBookingCancelAllowed(from: unknown) {
+  return from === 'pending' || from === 'awaiting_owner_activation';
+}
+
+export type BookingDisplayStatus = BookingStatus | 'completed';
+
+/**
+ * 'completed' is derived, not stored: an accepted booking whose appointment has ended
+ * (in the profile's local time) is shown as completed. The database status stays 'accepted'.
+ */
+export function bookingDisplayStatus(
+  booking: { status: unknown; requested_date?: unknown; requested_time?: unknown; duration_minutes?: unknown },
+  now: Date,
+  timeZone: unknown
+): BookingDisplayStatus | null {
+  if (!isBookingStatus(booking.status)) return null;
+  if (booking.status !== 'accepted') return booking.status;
+  const date = String(booking.requested_date || '');
+  const time = String(booking.requested_time || '').slice(0, 5);
+  if (!datePattern.test(date) || !timePattern.test(time)) return 'accepted';
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+  const endLocal = new Date(Date.UTC(year, month - 1, day, hour, minute + Math.max(0, Number(booking.duration_minutes) || 0)));
+  const nowLocal = localWallClock(now, resolveBookingTimeZone(timeZone));
+  return endLocal.getTime() <= nowLocal.getTime() ? 'completed' : 'accepted';
+}
+
+/** The current wall-clock time in a time zone, expressed as a UTC-based Date for comparison. */
+function localWallClock(now: Date, timeZone: string) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  return new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute)));
+}
+
 export type BookingInputErrorCode =
   | 'BOOKING_FIELDS_REQUIRED'
   | 'BOOKING_IDEMPOTENCY_KEY_INVALID'

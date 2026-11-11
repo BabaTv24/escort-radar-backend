@@ -138,10 +138,13 @@ test('authorized paid booking uses the atomic BC RPC and a retry never charges t
     const first = await call('POST', '/api/booking-requests', 'client-token', validBooking());
     const retry = await call('POST', '/api/booking-requests', 'client-token', validBooking());
     assert.equal(first.status, 201);
-    assert.equal(retry.status, 201);
+    assert.equal(retry.status, 200);
+    assert.equal(retry.body.replayed, true);
     assert.equal(retry.body.booking_request.id, first.body.booking_request.id);
   });
-  assert.deepEqual(db.rpcCalls.map((item) => item.name), ['create_paid_booking_request', 'create_paid_booking_request']);
+  // The replay is answered from the stored request; the paying RPC (itself idempotent) runs once.
+  assert.deepEqual(db.rpcCalls.map((item) => item.name), ['create_paid_booking_request']);
+  assert.equal(db.tables.radar_notifications.filter((row) => row.event_type === 'booking_requested').length, 1);
   assert.equal(db.rpcCalls[0].args.p_client_user_id, 'client-1');
   assert.equal(db.tables.booking_requests.length, 1);
   assert.equal(db.tables.bcu_profile_interactions.length, 1);
@@ -282,4 +285,50 @@ test('migration 058 removes direct client writes to booking_requests', async () 
   assert.match(migration, /revoke all on public\.booking_requests from anon;/);
   assert.match(migration, /revoke insert, update, delete, truncate, references, trigger on public\.booking_requests from authenticated;/);
   assert.doesNotMatch(migration, /\b(delete from|truncate table|update public\.booking_requests set)\b/i);
+});
+
+test('client sees only own bookings, with derived completed status, and can cancel only undecided ones', async () => {
+  (await modulesPromise).config.bcuWalletEnabled = false;
+  const db = await seed();
+  db.tables.booking_requests.push(
+    { id: 'c-pending', profile_id: 'profile-1', requester_user_id: 'client-1', status: 'pending', requested_date: futureDate(2), requested_time: '10:00', duration_minutes: 60 },
+    { id: 'c-past', profile_id: 'profile-1', requester_user_id: 'client-1', status: 'accepted', requested_date: futureDate(-3), requested_time: '10:00', duration_minutes: 60 },
+    { id: 'c-future', profile_id: 'profile-1', requester_user_id: 'client-1', status: 'accepted', requested_date: futureDate(3), requested_time: '10:00', duration_minutes: 60 },
+    { id: 'other-client', profile_id: 'profile-1', requester_user_id: 'client-2', status: 'pending', requested_date: futureDate(2), requested_time: '10:00', duration_minutes: 60 }
+  );
+  await withServer(async (call) => {
+    assert.equal((await call('GET', '/api/booking-requests/mine')).status, 401);
+    assert.equal((await call('GET', '/api/booking-requests/mine', 'owner-token')).status, 403);
+    const mine = await call('GET', '/api/booking-requests/mine', 'client-token');
+    assert.equal(mine.status, 200);
+    const byId = Object.fromEntries(mine.body.booking_requests.map((row: any) => [row.id, row.display_status]));
+    assert.deepEqual(byId, { 'c-pending': 'pending', 'c-past': 'completed', 'c-future': 'accepted' });
+    assert.equal(mine.body.booking_requests[0].profiles.opening_hours, undefined);
+
+    assert.equal((await call('POST', '/api/booking-requests/other-client/cancel', 'client-token')).status, 404);
+    const acceptedCancel = await call('POST', '/api/booking-requests/c-future/cancel', 'client-token');
+    assert.equal(acceptedCancel.status, 409);
+    assert.equal(acceptedCancel.body.code, 'BOOKING_TRANSITION_INVALID');
+    assert.equal((await call('POST', '/api/booking-requests/c-pending/cancel', 'client-token')).status, 200);
+    assert.equal((await call('POST', '/api/booking-requests/c-pending/cancel', 'client-token')).status, 409);
+  });
+  assert.equal(db.tables.booking_requests.find((row) => row.id === 'c-pending')!.status, 'cancelled');
+  assert.equal(db.tables.booking_requests.find((row) => row.id === 'other-client')!.status, 'pending');
+  assert.deepEqual(db.tables.radar_notifications.map((row) => [row.user_id, row.event_type]), [['owner-1', 'booking_cancelled_by_client']]);
+});
+
+test('owner decisions notify the requesting client and the advertiser list hides account data', async () => {
+  (await modulesPromise).config.bcuWalletEnabled = false;
+  const db = await seed();
+  db.tables.client_profiles = [{ user_id: 'client-1', display_name: 'Alex' }];
+  db.tables.booking_requests.push({ id: 'o-1', profile_id: 'profile-1', requester_user_id: 'client-1', requester_email: 'alex@example.test', client_request_key: 'secret-key', status: 'pending', requested_date: futureDate(2), requested_time: '10:00', duration_minutes: 60, created_at: new Date().toISOString() });
+  await withServer(async (call) => {
+    const list = await call('GET', '/api/booking-requests/me', 'owner-token');
+    assert.equal(list.status, 200);
+    assert.equal(list.body.booking_requests[0].client_display_name, 'Alex');
+    assert.equal(list.body.booking_requests[0].client_request_key, undefined);
+    assert.equal((await call('GET', '/api/booking-requests/me', 'other-owner-token')).body.booking_requests.length, 0);
+    assert.equal((await call('PATCH', '/api/booking-requests/o-1/status', 'owner-token', { status: 'accepted' })).status, 200);
+  });
+  assert.deepEqual(db.tables.radar_notifications.map((row) => [row.user_id, row.recipient_type, row.event_type]), [['client-1', 'client', 'booking_accepted']]);
 });

@@ -369,6 +369,9 @@ export const api = {
   claimSponsoredProfile: (token: string, claimToken: string) => request<{ claimed: boolean; profile: Profile; history_transferred: boolean; agent_mode: 'owner_assistant'; transferred_balance_bcu: string }>(`/api/sponsored/claim`, { method: 'POST', token, body: JSON.stringify({ claim_token: claimToken }) }),
   requestVideochat: (token: string, profileId: string, idempotency_key: string) => request(`/api/sponsored/profiles/${profileId}/videochat`, { method: 'POST', token, body: JSON.stringify({ idempotency_key }) }),
   myBookingRequests: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/booking-requests/me', { token }),
+  myClientBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/booking-requests/mine', { token }),
+  cancelClientBooking: (token: string, id: string) => request<{ booking_request: BookingRequest }>(`/api/booking-requests/${id}/cancel`, { method: 'POST', token }),
+  markBookingNotificationsRead: (token: string) => request<{ updated: number }>('/api/booking-requests/notifications/read', { method: 'POST', token }),
   setBookingStatus: (token: string, id: string, status: BookingRequest['status']) => request<{ booking_request: BookingRequest }>(`/api/booking-requests/${id}/status`, {
     method: 'PATCH',
     token,

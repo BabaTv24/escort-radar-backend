@@ -1,0 +1,97 @@
+/* Booking lists (client office card + advertiser section). Scoped to .er-bookings-* / .er-booking-status. */
+.er-bookings-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(246, 211, 129, .16);
+  border-radius: var(--er-radius-sm, 8px);
+  background: var(--er-surface, #11100e);
+  color: var(--er-gold, #f4d77f);
+  cursor: pointer;
+}
+.er-bookings-icon-button:focus-visible { outline: 2px solid var(--er-gold, #f4d77f); outline-offset: 2px; }
+
+.er-bookings-filters { display: flex; flex-wrap: wrap; gap: .4rem; margin: .8rem 0; }
+.er-bookings-filters button {
+  min-height: 44px;
+  padding: .45rem .8rem;
+  border: 1px solid rgba(246, 211, 129, .16);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--er-muted, #a99f8e);
+  font: inherit;
+  font-size: .84rem;
+  cursor: pointer;
+}
+.er-bookings-filters button span { margin-left: .3rem; color: var(--er-text, #f8f0dc); font-weight: 700; }
+.er-bookings-filters button.active { border-color: rgba(244, 215, 127, .5); background: rgba(244, 215, 127, .1); color: var(--er-gold, #f4d77f); }
+
+.er-bookings-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.er-bookings-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .85rem 0;
+  border-top: 1px solid rgba(244, 215, 127, .1);
+  min-width: 0;
+}
+.er-bookings-row:first-child { border-top: 0; }
+.er-bookings-row-main { min-width: 0; display: grid; gap: .2rem; }
+.er-bookings-row-main strong { color: var(--er-text, #f8f0dc); overflow-wrap: anywhere; }
+.er-bookings-row-main span, .er-bookings-row-main small { color: var(--er-muted, #a99f8e); overflow-wrap: anywhere; }
+.er-bookings-row-main a { color: var(--er-gold, #f4d77f); }
+.er-bookings-row-side { display: grid; justify-items: end; gap: .5rem; flex: 0 0 auto; }
+.er-bookings-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
+.er-bookings-actions .button, .er-bookings-row-side > .button { min-height: 44px; }
+
+.er-booking-status {
+  display: inline-flex;
+  align-items: center;
+  padding: .2rem .6rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: .76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.er-booking-status.is-pending, .er-booking-status.is-awaiting_owner_activation { color: #f6b84b; }
+.er-booking-status.is-accepted { color: var(--er-green, #36d486); }
+.er-booking-status.is-completed { color: var(--er-gold, #f4d77f); }
+.er-booking-status.is-rejected { color: var(--er-red, #ef5c6d); }
+.er-booking-status.is-cancelled { color: #9a9aa4; }
+
+.er-bookings-notifications {
+  margin-top: .6rem;
+  padding: .7rem .8rem;
+  border: 1px solid rgba(246, 211, 129, .16);
+  border-radius: var(--er-radius-md, 14px);
+  background: var(--er-surface-2, #17130f);
+}
+.er-bookings-notifications-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.er-bookings-notifications-head strong { display: inline-flex; align-items: center; gap: .35rem; }
+.er-bookings-notifications ul { display: grid; gap: .35rem; margin: .5rem 0 0; padding: 0; list-style: none; }
+.er-bookings-notifications li { display: grid; gap: .1rem; color: var(--er-muted, #a99f8e); }
+.er-bookings-notifications li.unread span { color: var(--er-text, #f8f0dc); font-weight: 700; }
+.er-bookings-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 .3rem;
+  border-radius: 999px;
+  background: var(--er-gold, #f4d77f);
+  color: #070707;
+  font-size: .72rem;
+}
+
+.er-bookings-skeleton { display: grid; gap: .5rem; margin-top: .6rem; }
+.er-bookings-skeleton i { display: block; height: 3.2rem; border-radius: var(--er-radius-sm, 8px); background: linear-gradient(90deg, rgba(255,255,255,.03), rgba(255,255,255,.07), rgba(255,255,255,.03)); }
+
+@media (max-width: 720px) {
+  .er-bookings-row { flex-direction: column; }
+  .er-bookings-row-side { justify-items: start; width: 100%; }
+  .er-bookings-actions { justify-content: flex-start; }
+}

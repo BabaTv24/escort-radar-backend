@@ -66,11 +66,12 @@ test('copy action uses Clipboard API with a local fallback and confirmation stat
   assert.match(referral, /setCopied\(true\)/);
 });
 
-test('stage-three sections replace only wallet and referral placeholders', async () => {
+test('stage-three sections and bookings replace their placeholders', async () => {
   const dashboard = await read('../Front/src/pages/DashboardPage.tsx');
   assert.match(dashboard, /activeSection === 'wallet'[\s\S]*AdvertiserWalletSection/);
   assert.match(dashboard, /activeSection === 'referrals'[\s\S]*AdvertiserReferralSection/);
-  assert.match(dashboard, /!\['overview', 'profile', 'location', 'wallet', 'referrals', 'settings'\]\.includes\(activeSection\)/);
+  assert.match(dashboard, /activeSection === 'bookings'[\s\S]*AdvertiserBookingsSection/);
+  assert.match(dashboard, /!\['overview', 'profile', 'location', 'bookings', 'wallet', 'referrals', 'settings'\]\.includes\(activeSection\)/);
   assert.match(dashboard, /activeSection === 'location'[\s\S]*AdvertiserLocationSection/);
 });
 
