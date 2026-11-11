@@ -1,54 +1,104 @@
 import { Router } from 'express';
-import type { NextFunction, Request, Response } from 'express';
+import type { Response } from 'express';
+import { isBookingStatus, ownerBookingTransitionAllowed, validateBookingInput } from '../bookingRules.js';
+import { isActivePublicCategory } from '../categories.js';
 import { config } from '../config.js';
 import { requireAccountType, requireAdvertiserAccess, verifyUser } from '../middleware/auth.js';
+import { isPublicProfile } from '../publicProfiles.js';
+import { getClientActivationSummary } from '../services/clientActivation.js';
 import { supabaseAdmin } from '../supabase.js';
-import { asyncHandler, optionalText } from '../validation.js';
+import { asyncHandler } from '../validation.js';
 
 export const bookingRequestsRouter = Router();
 
-bookingRequestsRouter.post('/', requireBcuClientForPaidBooking, asyncHandler(async (req, res) => {
-  const profileId = String(req.body.profile_id || '');
-  const requesterEmail = String(req.body.requester_email || '').trim();
-  const requestedDate = String(req.body.requested_date || '');
-  const requestedTime = String(req.body.requested_time || '');
-  const durationMinutes = Number(req.body.duration_minutes || 0);
-  const idempotencyKey = String(req.body.idempotency_key || req.headers['idempotency-key'] || '').trim();
+// Booking requests are created only here, by an authenticated and activated client account.
+// The database no longer accepts direct inserts from anon/authenticated (migration 058).
+bookingRequestsRouter.post('/', verifyUser, requireAccountType('client'), asyncHandler(async (req, res) => {
+  const body = (req.body || {}) as Record<string, unknown>;
+  const profileId = String(body.profile_id || '').trim();
+  if (!profileId) return bookingError(res, 400, 'BOOKING_FIELDS_REQUIRED');
 
-  if (!profileId || !requesterEmail || !requestedDate || !requestedTime || !durationMinutes) {
-    return res.status(400).json({ error: 'profile_id, requester_email, requested_date, requested_time and duration_minutes are required' });
-  }
-  if (config.bcuWalletEnabled && (!idempotencyKey || idempotencyKey.length > 128)) {
-    return res.status(400).json({ error: 'A valid idempotency_key is required' });
-  }
+  const activation = await getClientActivationSummary(req.user!.id);
+  if (activation.state !== 'client_activated') return bookingError(res, 403, 'CLIENT_ACTIVATION_REQUIRED');
 
-  const { data, error } = config.bcuWalletEnabled
-    ? await supabaseAdmin.rpc('create_paid_booking_request', {
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('id, user_id, status, is_published, moderation_status, shadowbanned, category, opening_hours')
+    .eq('id', profileId)
+    .maybeSingle();
+  if (!profile || !isPublicProfile(profile) || !isActivePublicCategory(profile.category)) {
+    return bookingError(res, 404, 'PROFILE_NOT_AVAILABLE');
+  }
+  if (!profile.user_id) return bookingError(res, 409, 'PROFILE_NOT_BOOKABLE');
+  if (profile.user_id === req.user!.id) return bookingError(res, 400, 'BOOKING_OWN_PROFILE');
+
+  const validation = validateBookingInput(body, {
+    fallbackEmail: req.user!.email,
+    idempotencyHeader: req.headers['idempotency-key'],
+    timeZone: (profile.opening_hours as { timezone?: unknown } | null)?.timezone
+  });
+  if (!validation.ok) return bookingError(res, 400, validation.code);
+  const input = validation.value;
+
+  if (config.bcuWalletEnabled) {
+    // Atomic and idempotent per (client, profile, idempotency key): a retry never charges twice.
+    const { data, error } = await supabaseAdmin.rpc('create_paid_booking_request', {
       p_client_user_id: req.user!.id,
-      p_requester_email: requesterEmail || req.user!.email || '',
-      p_profile_id: profileId,
-      p_requested_date: requestedDate,
-      p_requested_time: requestedTime,
-      p_duration_minutes: Math.round(durationMinutes),
-      p_message: optionalText(req.body.message, 2000),
-      p_idempotency_key: idempotencyKey
-    })
-    : await supabaseAdmin.from('booking_requests').insert({
-      profile_id: profileId,
-      requester_email: requesterEmail.slice(0, 160),
-      requested_date: requestedDate,
-      requested_time: requestedTime,
-      duration_minutes: Math.min(Math.max(Math.round(durationMinutes), 30), 1440),
-      message: optionalText(req.body.message, 2000)
-    }).select().single();
+      p_requester_email: input.requesterEmail,
+      p_profile_id: profile.id,
+      p_requested_date: input.requestedDate,
+      p_requested_time: input.requestedTime,
+      p_duration_minutes: input.durationMinutes,
+      p_message: input.message,
+      p_idempotency_key: input.idempotencyKey
+    });
+    if (error) return mapPaidBookingError(res, error.message);
+    return res.status(201).json({ booking_request: data });
+  }
 
-  if (error) return res.status(error.message.includes('INSUFFICIENT') ? 402 : 400).json({ error: error.message });
+  const existing = await findClientBooking(req.user!.id, profile.id, input.idempotencyKey);
+  if (existing) return res.status(200).json({ booking_request: existing, replayed: true });
+
+  const { data, error } = await supabaseAdmin.from('booking_requests').insert({
+    profile_id: profile.id,
+    requester_user_id: req.user!.id,
+    requester_email: input.requesterEmail,
+    requested_date: input.requestedDate,
+    requested_time: input.requestedTime,
+    duration_minutes: input.durationMinutes,
+    message: input.message,
+    client_request_key: input.idempotencyKey
+  }).select().single();
+  if (error) {
+    if (error.code === '23505') {
+      const replay = await findClientBooking(req.user!.id, profile.id, input.idempotencyKey);
+      if (replay) return res.status(200).json({ booking_request: replay, replayed: true });
+    }
+    console.error('[BookingRequests] insert failed', error.message);
+    return bookingError(res, 500, 'BOOKING_CREATE_FAILED');
+  }
   res.status(201).json({ booking_request: data });
 }));
 
-function requireBcuClientForPaidBooking(req: Request, res: Response, next: NextFunction) {
-  if (!config.bcuWalletEnabled) return next();
-  return verifyUser(req, res, () => requireAccountType('client')(req, res, next));
+async function findClientBooking(userId: string, profileId: string, idempotencyKey: string) {
+  const { data } = await supabaseAdmin.from('booking_requests').select('*')
+    .eq('requester_user_id', userId)
+    .eq('profile_id', profileId)
+    .eq('client_request_key', idempotencyKey)
+    .maybeSingle();
+  return data;
+}
+
+function mapPaidBookingError(res: Response, message: string) {
+  if (message.includes('INSUFFICIENT')) return bookingError(res, 402, 'INSUFFICIENT_BC');
+  if (message.includes('PROFILE_NOT_AVAILABLE') || message.includes('PROFILE_NOT_FOUND')) return bookingError(res, 404, 'PROFILE_NOT_AVAILABLE');
+  if (message.includes('IDEMPOTENCY')) return bookingError(res, 409, 'BOOKING_IDEMPOTENCY_CONFLICT');
+  console.error('[BookingRequests] paid booking failed', message);
+  return bookingError(res, 400, 'BOOKING_CREATE_FAILED');
+}
+
+function bookingError(res: Response, status: number, code: string, extra: Record<string, unknown> = {}) {
+  return res.status(status).json({ error: code, code, ...extra });
 }
 
 bookingRequestsRouter.get('/me', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
@@ -89,33 +139,40 @@ bookingRequestsRouter.get('/profiles/:id', verifyUser, requireAdvertiserAccess, 
 }));
 
 bookingRequestsRouter.patch('/:id/status', verifyUser, requireAdvertiserAccess, asyncHandler(async (req, res) => {
-  const status = String(req.body.status || '');
-  if (!['pending', 'accepted', 'rejected', 'cancelled'].includes(status)) {
-    return res.status(400).json({ error: 'Invalid status' });
-  }
+  const status = String(req.body?.status || '');
+  if (!isBookingStatus(status)) return bookingError(res, 400, 'BOOKING_STATUS_INVALID');
 
   const { data: existing } = await supabaseAdmin
     .from('booking_requests')
     .select(config.bcuWalletEnabled
-      ? 'id, profile_id, profiles!inner(user_id, owner_activation_status)'
-      : 'id, profile_id, profiles!inner(user_id)')
+      ? 'id, status, profile_id, profiles!inner(user_id, owner_activation_status)'
+      : 'id, status, profile_id, profiles!inner(user_id)')
     .eq('id', req.params.id)
-    .single();
+    .maybeSingle();
 
-  if (!existing) return res.status(404).json({ error: 'Booking request not found' });
-  const ownerId = (existing.profiles as unknown as { user_id: string }).user_id;
-  if (ownerId !== req.user!.id) return res.status(403).json({ error: 'Not your booking request' });
-  if (config.bcuWalletEnabled && (existing.profiles as any).owner_activation_status === 'awaiting_owner_activation') {
-    return res.status(403).json({ error: 'Activate the sponsored profile before changing booking status' });
+  if (!existing) return bookingError(res, 404, 'BOOKING_NOT_FOUND');
+  const current = existing as unknown as { status: string; profiles: { user_id: string; owner_activation_status?: string } };
+  if (current.profiles.user_id !== req.user!.id) return bookingError(res, 403, 'BOOKING_FORBIDDEN');
+  if (config.bcuWalletEnabled && current.profiles.owner_activation_status === 'awaiting_owner_activation') {
+    return bookingError(res, 403, 'SPONSORED_PROFILE_ACTIVATION_REQUIRED');
+  }
+  if (!ownerBookingTransitionAllowed(current.status, status)) {
+    return bookingError(res, 409, 'BOOKING_TRANSITION_INVALID', { from: current.status, to: status });
   }
 
+  // Conditional on the status we validated, so a concurrent change cannot be overwritten.
   const { data, error } = await supabaseAdmin
     .from('booking_requests')
-    .update({ status })
+    .update({ status, updated_at: new Date().toISOString() })
     .eq('id', req.params.id)
+    .eq('status', current.status)
     .select()
-    .single();
+    .maybeSingle();
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    console.error('[BookingRequests] status update failed', error.message);
+    return bookingError(res, 500, 'BOOKING_UPDATE_FAILED');
+  }
+  if (!data) return bookingError(res, 409, 'BOOKING_STATUS_CHANGED');
   res.json({ booking_request: data });
 }));

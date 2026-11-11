@@ -12,6 +12,7 @@ import {
   purchaseCommunicationPlus
 } from '../services/bcuWallet.js';
 import { asyncHandler } from '../validation.js';
+import { COMMUNICATION_PLUS_SALES_ENABLED } from '../featureAvailability.js';
 import { calculateAvailableBcu, hasSufficientAvailableBcu } from '../services/communicationPlus.js';
 
 export const bcuRouter = Router();
@@ -64,6 +65,7 @@ bcuRouter.get('/communication-plus', requireAccountType('client'), asyncHandler(
   res.json({
     client_premium_active: premiumActive,
     communication_plus_active: communicationPlusActive,
+    sales_enabled: COMMUNICATION_PLUS_SALES_ENABLED,
     price_bcu: product.amount_bcu,
     price_bc: bcuToBc(product.amount_bcu),
     available_balance_bcu: availableBalanceBcu,
@@ -74,6 +76,10 @@ bcuRouter.get('/communication-plus', requireAccountType('client'), asyncHandler(
 
 bcuRouter.post('/communication-plus/purchase', requireAccountType('client'), async (req, res, next) => {
   try {
+    if (!COMMUNICATION_PLUS_SALES_ENABLED) {
+      // The entitlement does not unlock chat, video or booking yet, so it must not be sold.
+      return res.status(409).json({ error: 'Communication Plus is not available for purchase yet', code: 'COMMUNICATION_PLUS_NOT_AVAILABLE', charged: false });
+    }
     const idempotencyKey = String(req.body?.idempotency_key || req.headers['idempotency-key'] || '').trim();
     if (!idempotencyKey || idempotencyKey.length > 128) {
       return res.status(400).json({ error: 'A valid idempotency key is required', code: 'IDEMPOTENCY_KEY_INVALID' });
@@ -105,6 +111,10 @@ bcuRouter.post('/products/:productCode/activate', requireAccountType('client'), 
   }
 
   try {
+    if (!COMMUNICATION_PLUS_SALES_ENABLED) {
+      // The entitlement does not unlock chat, video or booking yet, so it must not be sold.
+      return res.status(409).json({ error: 'Communication Plus is not available for purchase yet', code: 'COMMUNICATION_PLUS_NOT_AVAILABLE', charged: false });
+    }
     const idempotencyKey = String(req.body?.idempotency_key || req.headers['idempotency-key'] || '').trim();
     if (!idempotencyKey || idempotencyKey.length > 128) {
       return res.status(400).json({ error: 'A valid idempotency key is required', code: 'IDEMPOTENCY_KEY_INVALID' });

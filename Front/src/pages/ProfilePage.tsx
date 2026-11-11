@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -22,6 +22,7 @@ import {
   X
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { resolveBookingError } from '../lib/bookingErrors';
 import { supabase } from '../lib/supabase';
 import type { ExactProfileLocation, Profile, ProfileAccess, SponsoredChatMessage, SponsoredChatSession } from '../types';
 import { ErrorState, LoadingState } from '../components/LoadingState';
@@ -45,6 +46,11 @@ export function ProfilePage() {
   const [retryKey, setRetryKey] = useState(0);
   const [reportMessage, setReportMessage] = useState('');
   const [bookingMessage, setBookingMessage] = useState('');
+  const [bookingError, setBookingError] = useState('');
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  // One idempotency key per booking attempt: retries after a network failure reuse it, so the
+  // backend returns the same request instead of creating (and charging) a second one.
+  const bookingAttemptKey = useRef<string | null>(null);
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [profileAccess, setProfileAccess] = useState<ProfileAccess | null>(null);
@@ -141,23 +147,40 @@ export function ProfilePage() {
 
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (paidSponsoredInteractionsEnabled && !clientToken) return navigate(`/login?next=${encodeURIComponent(`/profile/${profile!.id}`)}`);
+    if (bookingSubmitting) return;
+    const loginPath = `/login?next=${encodeURIComponent(`/profile/${profile!.id}`)}`;
+    if (!clientToken) return navigate(loginPath);
     if (paidSponsoredInteractionsEnabled && !window.confirm('Wysłanie zapytania booking kosztuje 5 BC. Kontynuować?')) return;
-    const form = new FormData(event.currentTarget);
-    await api.createBookingRequest(clientToken, {
-      profile_id: profile!.id,
-      requester_email: String(form.get('email') || ''),
-      requested_date: String(form.get('date') || ''),
-      requested_time: String(form.get('time') || ''),
-      duration_minutes: Number(form.get('duration') || 60),
-      message: String(form.get('message') || ''),
-      idempotency_key: crypto.randomUUID()
-    });
-    setBookingMessage(paidSponsoredInteractionsEnabled && profile!.owner_activation_status === 'awaiting_owner_activation'
-      ? 'Zapytanie zapisano ze statusem „oczekuje na aktywację”. Właściciel przejmie je po aktywacji konta.'
-      : t('profile.bookingSuccess'));
-    event.currentTarget.reset();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    bookingAttemptKey.current ||= crypto.randomUUID();
+    setBookingSubmitting(true);
+    setBookingError('');
+    setBookingMessage('');
+    try {
+      await api.createBookingRequest(clientToken, {
+        profile_id: profile!.id,
+        requester_email: String(form.get('email') || ''),
+        requested_date: String(form.get('date') || ''),
+        requested_time: String(form.get('time') || ''),
+        duration_minutes: Number(form.get('duration') || 60),
+        message: String(form.get('message') || ''),
+        idempotency_key: bookingAttemptKey.current
+      });
+      bookingAttemptKey.current = null;
+      setBookingMessage(paidSponsoredInteractionsEnabled && profile!.owner_activation_status === 'awaiting_owner_activation'
+        ? 'Zapytanie zapisano ze statusem „oczekuje na aktywację”. Właściciel przejmie je po aktywacji konta.'
+        : t('profile.bookingSuccess'));
+      formElement.reset();
+    } catch (error) {
+      const resolution = resolveBookingError(error);
+      if (resolution.kind === 'login') return navigate(loginPath);
+      setBookingError(t(resolution.key));
+    } finally {
+      setBookingSubmitting(false);
+    }
   }
+
 
   return (
     <div className="page premium-profile-page">
@@ -388,8 +411,10 @@ export function ProfilePage() {
                     <option value="240">240 min</option>
                   </select>
                   <textarea name="message" placeholder={t('form.message')} />
-                  <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit"><span>{t('buttons.sendBooking')}</span></button>
-                  {bookingMessage && <p className="success">{bookingMessage}</p>}
+                  <button className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="submit" disabled={bookingSubmitting} aria-busy={bookingSubmitting}><span>{bookingSubmitting ? t('states.loading') : t('buttons.sendBooking')}</span></button>
+                  {bookingMessage && <p className="success" role="status">{bookingMessage}</p>}
+                  {bookingError && <p className="error-text" role="alert">{bookingError}</p>}
+                  {bookingError === t('booking.error.insufficientBc') && <Link className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/coins"><span>{t('communicationPlus.addCoins')}</span></Link>}
                 </form>
               </section>
 
@@ -482,7 +507,7 @@ export function ProfilePage() {
             {canUsePremiumProfileFeatures && <a href="#booking" className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><CalendarDays size={16} /> <span>{t('profile.book')}</span></a>}
             <button className="button er-btn er-glass-btn er-glass-btn--pink er-glass-btn--md" type="button" disabled={favoriteBusy || (activated && favoriteSaved)} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}><Heart size={16} /> <span>{favoriteSaved ? t('favorites.alreadyFavorite') : `${t('favorites.addToFavorites')}${favoritesWalletSystem === 'bcu' ? ' · 5 BC' : ''}`}</span></button>
             <button className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={() => activated ? sendGift() : setAccessMessage(t('profile.activateRevealContact'))}><Gift size={16} /> <span>{t('profile.gift')}</span></button>
-            <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => paidSponsoredInteractionsEnabled ? requestVideochat() : setAccessMessage(activated ? t('profile.liveCamAvailable') : t('profile.activateRevealContact'))}><Video size={16} /> <span>{t('profile.live')}{paidSponsoredInteractionsEnabled ? ' · 7 BC' : ''}</span></button>
+            <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => setAccessMessage(t('profile.videoChatUnavailable'))}><Video size={16} /> <span>{t('profile.live')}</span></button>
           </div>
           {accessMessage && <p className={accessMessage === t('favorites.notEnoughTokens') ? 'error-text' : activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
           {accessMessage === t('favorites.notEnoughTokens') && <Link className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><span>{t('favorites.buyTokens')}</span></Link>}
@@ -564,16 +589,6 @@ export function ProfilePage() {
     }
   }
 
-  async function requestVideochat() {
-    if (!clientToken) return navigate(`/login?next=${encodeURIComponent(`/profile/${profile!.id}`)}`);
-    if (!window.confirm('Próba wideoczatu kosztuje 7 BC. Kontynuować?')) return;
-    try {
-      await api.requestVideochat(clientToken, profile!.id, crypto.randomUUID());
-      setAccessMessage('Próba wideoczatu została zapisana. Właściciel zobaczy ją po aktywacji konta.');
-    } catch (error) {
-      setAccessMessage(error instanceof Error ? error.message : t('states.requestFailed'));
-    }
-  }
 
   async function sendGift() {
     const session = await supabase.auth.getSession();

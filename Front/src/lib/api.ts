@@ -41,6 +41,8 @@ export type ReferralMe = { referralCode: string; referralLink: string; directRef
 export type CommunicationPlusStatus = {
   client_premium_active: boolean;
   communication_plus_active: boolean;
+  /** false while the entitlement does not unlock any delivered feature; purchases are refused server-side. */
+  sales_enabled?: boolean;
   price_bcu: string;
   price_bc: string;
   available_balance_bcu: string;

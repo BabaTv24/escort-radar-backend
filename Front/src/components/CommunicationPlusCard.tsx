@@ -53,6 +53,10 @@ export function CommunicationPlusCard({ state, status, purchasing, purchaseError
               <ShieldCheck size={18} />
               <div><strong>{t('communicationPlus.active')}</strong><p>{t('communicationPlus.activeCopy')}</p></div>
             </div>
+          ) : status.sales_enabled === false ? (
+            <div className="communication-plus-state" role="status">
+              <p>{t('communicationPlus.salesPaused')}</p>
+            </div>
           ) : !status.client_premium_active ? (
             <div className="communication-plus-state">
               <p>{t('communicationPlus.premiumRequired')}</p>

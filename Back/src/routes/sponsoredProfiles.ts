@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
+import { VIDEO_CHAT_IMPLEMENTED } from '../featureAvailability.js';
 import { requireAccountType, verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { answerAsSponsoredProfileAgent } from '../services/sponsoredProfileAgent.js';
@@ -83,6 +84,10 @@ sponsoredProfilesRouter.post('/chat/:sessionId/messages', asyncHandler(async (re
 }));
 
 sponsoredProfilesRouter.post('/profiles/:profileId/videochat', requireAccountType('client'), asyncHandler(async (req, res) => {
+  // Refuse before any BCU RPC: a call attempt must never be charged while video chat does not exist.
+  if (!VIDEO_CHAT_IMPLEMENTED) {
+    return res.status(409).json({ error: 'VIDEO_CHAT_NOT_AVAILABLE', code: 'VIDEO_CHAT_NOT_AVAILABLE', charged: false });
+  }
   const key = String(req.body.idempotency_key || req.headers['idempotency-key'] || '').trim();
   if (!key || key.length > 128) return res.status(400).json({ error: 'A valid idempotency_key is required' });
   const { data, error } = await supabaseAdmin.rpc('charge_bcu_profile_interaction', {
