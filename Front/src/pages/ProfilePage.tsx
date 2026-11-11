@@ -21,10 +21,11 @@ import {
   Video,
   X
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { resolveBookingError } from '../lib/bookingErrors';
 import { supabase } from '../lib/supabase';
-import type { ExactProfileLocation, Profile, ProfileAccess, SponsoredChatMessage, SponsoredChatSession } from '../types';
+import type { ExactProfileLocation, Profile, ProfileAccess, ProfileCommunication } from '../types';
+import { ChatThread } from '../components/chat/ChatThread';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { useI18n } from '../i18n';
 import { serviceLabel } from '../data/serviceCatalog';
@@ -64,11 +65,11 @@ export function ProfilePage() {
   const [activationBusy, setActivationBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
   const [clientToken, setClientToken] = useState('');
-  const [chatSession, setChatSession] = useState<SponsoredChatSession | null>(null);
-  const [chatMessages, setChatMessages] = useState<SponsoredChatMessage[]>([]);
-  const [chatDraft, setChatDraft] = useState('');
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
+  const [communication, setCommunication] = useState<ProfileCommunication | null>(null);
   const paidSponsoredInteractionsEnabled = import.meta.env.VITE_BCU_WALLET_ENABLED === 'true';
+  const chatAvailable = paidSponsoredInteractionsEnabled && communication?.chat_available === true;
   const { t, option } = useI18n();
 
   useEffect(() => {
@@ -78,6 +79,9 @@ export function ProfilePage() {
     setProfileAccessChecked(false);
     setExactLocation(null);
     setExactLocationChecked(false);
+    setChatSessionId(null);
+    setCommunication(null);
+    api.profileCommunication(id).then((data) => setCommunication(data.communication)).catch(() => setCommunication(null));
     api.profile(id)
       .then(async (data) => {
         const mapped = mapApiProfileToPublicProfile(data.profile);
@@ -418,20 +422,14 @@ export function ProfilePage() {
                 </form>
               </section>
 
-              {chatSession && (
+              {chatSessionId && clientToken && (
                 <section className="market-section sponsored-chat" id="profile-chat">
                   <div className="market-section-heading">
-                    <p className="eyebrow">Asystent Profilu Escort Radar · 3 BC</p>
-                    <h2>Czat z profilem</h2>
+                    <p className="eyebrow">{t('nav.messages')}</p>
+                    <h2>{t('chat.profile.title')}</h2>
                   </div>
                   {profile.owner_activation_status === 'awaiting_owner_activation' && <p className="subscription-notice">Konto nie zostało aktywowane przez właściciela. Odpowiada oznaczony agent AI, wyłącznie na podstawie danych profilu.</p>}
-                  <div className="sponsored-chat-history">
-                    {chatMessages.map((item) => <p key={item.id} className={`sponsored-chat-message is-${item.sender_type}`}><strong>{item.sender_type === 'client' ? 'Ty' : item.sender_type === 'owner' ? 'Właściciel' : 'Asystent Profilu Escort Radar'}</strong><span>{item.content}</span></p>)}
-                  </div>
-                  <form className="market-booking-form" onSubmit={sendChatMessage}>
-                    <textarea value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} maxLength={4000} required placeholder="Napisz wiadomość" />
-                    <button className="button primary" disabled={chatBusy} type="submit">{chatBusy ? t('states.loading') : 'Wyślij wiadomość'}</button>
-                  </form>
+                  <ChatThread token={clientToken} sessionId={chatSessionId} />
                 </section>
               )}
 
@@ -502,7 +500,7 @@ export function ProfilePage() {
             </div>
           )}
           <div className="market-contact-actions">
-            <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => paidSponsoredInteractionsEnabled && profile.sponsorship_type === 'admin_sponsored' ? openSponsoredChat() : activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><MessageCircle size={16} /> <span>{paidSponsoredInteractionsEnabled && profile.sponsorship_type === 'admin_sponsored' ? 'Czat · 3 BC' : t('nav.messages')}</span></button>
+            <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" disabled={chatBusy} onClick={() => chatAvailable ? openProfileChat() : activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><MessageCircle size={16} /> <span>{chatAvailable ? t('chat.profile.cta') : t('nav.messages')}</span></button>
             <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><Phone size={16} /> <span>{t('profile.call')}</span></button>
             {canUsePremiumProfileFeatures && <a href="#booking" className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><CalendarDays size={16} /> <span>{t('profile.book')}</span></a>}
             <button className="button er-btn er-glass-btn er-glass-btn--pink er-glass-btn--md" type="button" disabled={favoriteBusy || (activated && favoriteSaved)} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}><Heart size={16} /> <span>{favoriteSaved ? t('favorites.alreadyFavorite') : `${t('favorites.addToFavorites')}${favoritesWalletSystem === 'bcu' ? ' · 5 BC' : ''}`}</span></button>
@@ -557,38 +555,25 @@ export function ProfilePage() {
     }
   }
 
-  async function openSponsoredChat() {
+  async function openProfileChat() {
     if (!clientToken) return navigate(`/login?next=${encodeURIComponent(`/profile/${profile!.id}`)}`);
-    if (!chatSession && !window.confirm('Rozpoczęcie czatu kosztuje jednorazowo 3 BC. Kontynuować?')) return;
     setChatBusy(true);
     try {
-      const started = chatSession ? { session: chatSession } : await api.startSponsoredChat(clientToken, profile!.id);
-      const history = await api.sponsoredChat(clientToken, started.session.id);
-      setChatSession(history.session);
-      setChatMessages(history.messages);
+      // An existing conversation is reopened without a charge; only a new one asks for the one-time 3 BC.
+      const { conversations } = await api.chatConversations(clientToken);
+      const existing = conversations.find((item) => item.profile_id === profile!.id && item.my_role === 'client');
+      if (!existing && !window.confirm(t('chat.profile.confirmCharge'))) return;
+      const sessionId = existing ? existing.id : (await api.startSponsoredChat(clientToken, profile!.id)).session.id;
+      setChatSessionId(sessionId);
       window.requestAnimationFrame(() => document.getElementById('profile-chat')?.scrollIntoView({ behavior: 'smooth' }));
     } catch (error) {
-      setAccessMessage(error instanceof Error ? error.message : t('states.requestFailed'));
+      const code = error instanceof ApiError ? String(error.payload?.code || '') : '';
+      const key = { CLIENT_ACTIVATION_REQUIRED: 'chat.error.activation', TEXT_CHAT_DISABLED: 'chat.error.disabled', INSUFFICIENT_BC: 'chat.error.insufficientBc', PROFILE_NOT_AVAILABLE: 'chat.error.profileUnavailable' }[code];
+      setAccessMessage(t(key || 'chat.error.start'));
     } finally {
       setChatBusy(false);
     }
   }
-
-  async function sendChatMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!clientToken || !chatSession || !chatDraft.trim()) return;
-    setChatBusy(true);
-    try {
-      const sent = await api.sendSponsoredChatMessage(clientToken, chatSession.id, chatDraft.trim());
-      setChatMessages((current) => [...current, sent.message, ...(sent.agent_message ? [sent.agent_message] : [])]);
-      setChatDraft('');
-    } catch (error) {
-      setAccessMessage(error instanceof Error ? error.message : t('states.requestFailed'));
-    } finally {
-      setChatBusy(false);
-    }
-  }
-
 
   async function sendGift() {
     const session = await supabase.auth.getSession();

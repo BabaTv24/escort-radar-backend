@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, SponsoredChatMessage, SponsoredChatSession, SponsoredProfileDashboard, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, ChatConversation, CommunicationSettingsRow, ProfileCommunication, SponsoredChatMessage, SponsoredProfileDashboard, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { API_URL } from './apiBase';
 
 export type BulkPhotoModerationResponse = {
@@ -362,9 +362,16 @@ export const api = {
     token,
     body: JSON.stringify(body)
   }),
-  startSponsoredChat: (token: string, profileId: string) => request<{ session: SponsoredChatSession; charged_bc: string }>(`/api/sponsored/profiles/${profileId}/chat`, { method: 'POST', token }),
-  sponsoredChat: (token: string, sessionId: string) => request<{ session: SponsoredChatSession; messages: SponsoredChatMessage[] }>(`/api/sponsored/chat/${sessionId}`, { token }),
-  sendSponsoredChatMessage: (token: string, sessionId: string, content: string) => request<{ message: SponsoredChatMessage; agent_message: SponsoredChatMessage | null }>(`/api/sponsored/chat/${sessionId}/messages`, { method: 'POST', token, body: JSON.stringify({ content }) }),
+  startSponsoredChat: (token: string, profileId: string) => request<{ session: { id: string; profile_id: string }; charged_bc: string; existing: boolean }>(`/api/sponsored/profiles/${profileId}/chat`, { method: 'POST', token }),
+  sponsoredChat: (token: string, sessionId: string) => request<{ session: ChatConversation; messages: SponsoredChatMessage[] }>(`/api/sponsored/chat/${sessionId}`, { token }),
+  sendSponsoredChatMessage: (token: string, sessionId: string, content: string, locale?: string) => request<{ message: SponsoredChatMessage; agent_message: SponsoredChatMessage | null }>(`/api/sponsored/chat/${sessionId}/messages`, { method: 'POST', token, body: JSON.stringify({ content, locale }) }),
+  chatConversations: (token: string) => request<{ conversations: ChatConversation[]; unread_total: number }>('/api/sponsored/conversations', { token }),
+  markChatRead: (token: string, sessionId: string) => request<{ ok: boolean }>(`/api/sponsored/chat/${sessionId}/read`, { method: 'POST', token }),
+  takeoverChat: (token: string, sessionId: string) => request<{ session: ChatConversation }>(`/api/sponsored/chat/${sessionId}/takeover`, { method: 'POST', token }),
+  releaseChat: (token: string, sessionId: string) => request<{ session: ChatConversation }>(`/api/sponsored/chat/${sessionId}/release`, { method: 'POST', token }),
+  communicationSettings: (token: string) => request<{ profiles: CommunicationSettingsRow[] }>('/api/sponsored/communication-settings', { token }),
+  saveCommunicationSettings: (token: string, body: { profile_id: string; text_chat_enabled?: boolean; ai_assistant_enabled?: boolean }) => request<CommunicationSettingsRow>('/api/sponsored/communication-settings', { method: 'PUT', token, body: JSON.stringify(body) }),
+  profileCommunication: (profileId: string) => request<{ communication: ProfileCommunication }>(`/api/profiles/${profileId}/communication`),
   sponsoredProfileMe: (token: string) => request<SponsoredProfileDashboard>('/api/sponsored/me', { token }),
   claimSponsoredProfile: (token: string, claimToken: string) => request<{ claimed: boolean; profile: Profile; history_transferred: boolean; agent_mode: 'owner_assistant'; transferred_balance_bcu: string }>(`/api/sponsored/claim`, { method: 'POST', token, body: JSON.stringify({ claim_token: claimToken }) }),
   requestVideochat: (token: string, profileId: string, idempotency_key: string) => request(`/api/sponsored/profiles/${profileId}/videochat`, { method: 'POST', token, body: JSON.stringify({ idempotency_key }) }),

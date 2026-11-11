@@ -15,6 +15,8 @@ import { hasActiveEntitlement } from '../services/bcuWallet.js';
 import { canReadExactProfileLocation, exactProfileLocationPayload } from '../profileLocationAccess.js';
 import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, resolveAdminLocation, resolveManualAdminLocationForSave, reverseGeocodeAdminLocation, type AdminLocationResolution } from '../adminLocationGeocoding.js';
 import { evaluatePhoneRules, type PhoneRuleData } from '../phoneRules.js';
+import { config } from '../config.js';
+import { getCommunicationSettings, publicCommunication } from '../services/profileCommunication.js';
 
 export const profilesRouter = Router();
 
@@ -281,6 +283,16 @@ profilesRouter.get('/:id/location', verifyUser, asyncHandler(async (req, res) =>
   const payload = exactProfileLocationPayload(profile);
   if (!payload) return res.status(404).json({ error: 'Exact profile location is not available' });
   res.json(payload);
+}));
+
+/** Public: which communication channels the owner offers (booleans only, no private data). */
+profilesRouter.get('/:id/communication', asyncHandler(async (req, res) => {
+  const { data: profile } = await supabaseAdmin.from('profiles')
+    .select('id, user_id, status, is_published, moderation_status, shadowbanned, category, sponsorship_type')
+    .eq('id', req.params.id).maybeSingle();
+  if (!profile || !isPublicProfile(profile) || !isActivePublicCategory(profile.category)) return res.status(404).json({ error: 'Profile not found' });
+  const communication = publicCommunication(await getCommunicationSettings(profile));
+  res.json({ communication: { ...communication, chat_available: Boolean(profile.user_id) && config.bcuWalletEnabled && communication.text_chat } });
 }));
 
 profilesRouter.get('/:id', asyncHandler(async (req, res) => {

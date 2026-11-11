@@ -44,11 +44,12 @@ export function ClientBookingsCard({ token, notifications }: { token: string; no
     setFeedback(null);
     try {
       await api.cancelClientBooking(token, booking.id);
+      // Refresh first so the confirmation never appears next to a stale status.
+      await load();
       setFeedback({ tone: 'success', text: t('bookings.client.cancelled') });
-      await load();
     } catch {
-      setFeedback({ tone: 'error', text: t('bookings.client.cancelError') });
       await load();
+      setFeedback({ tone: 'error', text: t('bookings.client.cancelError') });
     } finally {
       setBusyId(null);
     }

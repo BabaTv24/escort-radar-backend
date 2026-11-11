@@ -579,6 +579,42 @@ export type SponsoredChatSession = {
   messages?: SponsoredChatMessage[];
 };
 
+export type ProfileCommunication = {
+  text_chat: boolean;
+  ai_assistant: boolean;
+  video_chat: boolean;
+  video_chat_implemented: boolean;
+  /** Public endpoint only: chat can be started right now (owner switch + BCU wallet enabled). */
+  chat_available?: boolean;
+};
+
+/** A conversation as returned by /api/sponsored/conversations and /api/sponsored/chat/:id (no private data). */
+export type ChatConversation = {
+  id: string;
+  profile_id: string;
+  profile_name: string | null;
+  my_role: 'client' | 'owner';
+  status: 'open' | 'owner_takeover' | 'closed';
+  handled_by: 'agent' | 'owner';
+  last_message_at: string;
+  created_at: string;
+  assistant_active: boolean;
+  awaiting_owner_activation: boolean;
+  communication: ProfileCommunication;
+  counterpart_name: string | null;
+  last_message?: { sender_type: SponsoredChatMessage['sender_type']; content: string; created_at: string } | null;
+  unread?: number;
+};
+
+export type CommunicationSettingsRow = {
+  profile_id: string;
+  display_name: string | null;
+  text_chat_enabled: boolean;
+  ai_assistant_enabled: boolean;
+  video_chat_enabled: false;
+  video_chat_implemented: false;
+};
+
 export type SponsoredProfileDashboard = {
   profiles: Profile[];
   stats: { messages: number; clients: number; booking_attempts: number; unread_clients: number };

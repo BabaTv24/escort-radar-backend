@@ -26,6 +26,12 @@ class Query implements PromiseLike<{ data: any; error: any; count?: number }> {
   select(columns = '*') { this.selectColumns = columns; return this; }
   insert(payload: Row | Row[]) { this.mode = 'insert'; this.payload = payload; return this; }
   update(payload: Row) { this.mode = 'update'; this.payload = payload; return this; }
+  upsert(payload: Row, options: { onConflict: string }) {
+    const existing = this.rows().find((row) => row[options.onConflict] === payload[options.onConflict]);
+    if (existing) { this.mode = 'update'; this.payload = payload; this.filters.push((row) => row[options.onConflict] === payload[options.onConflict]); }
+    else { this.mode = 'insert'; this.payload = payload; }
+    return this;
+  }
   eq(column: string, value: unknown) { this.filters.push((row) => readPath(row, column) === value); return this; }
   neq(column: string, value: unknown) { this.filters.push((row) => readPath(row, column) !== value); return this; }
   in(column: string, values: unknown[]) { this.filters.push((row) => values.includes(readPath(row, column))); return this; }

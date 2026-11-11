@@ -30,6 +30,23 @@ export async function notifyUser(notification: InAppNotification) {
   }
 }
 
+/** Chat sends one notification per profile until the recipient has read it, instead of one per message. */
+export async function notifyUserUnlessUnread(notification: InAppNotification) {
+  if (!notification.userId) return;
+  try {
+    let query = supabaseAdmin.from('radar_notifications').select('id')
+      .eq('user_id', notification.userId)
+      .eq('event_type', notification.eventType)
+      .is('read_at', null);
+    if (notification.profileId) query = query.eq('profile_id', notification.profileId);
+    const { data } = await query.limit(1);
+    if (data?.length) return;
+  } catch (error) {
+    console.error('[InAppNotifications] lookup failed', notification.eventType, error instanceof Error ? error.message : error);
+  }
+  await notifyUser(notification);
+}
+
 export async function markNotificationsRead(userId: string, eventTypePrefix: string) {
   const { data, error } = await supabaseAdmin.from('radar_notifications')
     .select('id, event_type')

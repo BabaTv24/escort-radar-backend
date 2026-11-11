@@ -107,3 +107,87 @@ function deterministicProfileAnswer(facts: Record<string, unknown>, question: st
   if (facts.description) return `Profil podaje: ${String(facts.description).slice(0, 700)}`;
   return 'Profil nie zawiera informacji pozwalających odpowiedzieć na to pytanie. Wiadomość pozostanie w historii dla właściciela po aktywacji konta.';
 }
+
+export type AssistantLocale = 'de' | 'pl' | 'en';
+
+export function parseAssistantLocale(value: unknown): AssistantLocale {
+  return value === 'pl' || value === 'en' ? value : 'de';
+}
+
+/** The first line of every owner-assistant message: the client always knows it is an AI system. */
+export function ownerAssistantDisclosure(profileName: string, locale: AssistantLocale) {
+  const name = profileName.trim() || 'Escort Radar';
+  return {
+    de: `KI-Assistent von ${name} — Sie sprechen mit einem KI-Assistenten.`,
+    pl: `Asystent AI profilu ${name} — rozmawiasz z asystentem AI, nie z osobą z profilu.`,
+    en: `AI assistant of ${name} — you are talking to an AI assistant.`
+  }[locale];
+}
+
+type OwnerAssistantTopic = 'price' | 'hours' | 'location' | 'languages' | 'services' | 'booking' | 'general';
+
+const ownerAssistantTopics: Array<[OwnerAssistantTopic, RegExp]> = [
+  ['booking', /book|buch|termin|rezerw|appointment|wizyt|spotka|date\b/i],
+  ['price', /pre(is|ise)|price|cost|kost|cen[ay]|koszt|ile\b|how much|wie viel/i],
+  ['hours', /zeit|uhr|hour|time|godzin|kiedy|when|wann|verfügbar|available|dostęp|heute|today|dziś/i],
+  ['location', /wo\b|where|gdzie|adres|address|ort|city|stadt|miast|lokal/i],
+  ['languages', /sprache|language|język|speak|sprichst|mówisz/i],
+  ['services', /service|leistung|usług|angebot|ofert|offer/i]
+];
+
+/**
+ * Rule-based owner assistant (no paid AI provider). It answers only from public profile fields,
+ * never confirms availability or appointments and always discloses that it is an AI.
+ */
+export function answerAsOwnerAssistant(profile: Record<string, unknown>, question: string, locale: AssistantLocale) {
+  const t = (de: string, pl: string, en: string) => ({ de, pl, en }[locale]);
+  const name = String(profile.display_name || '').trim();
+  const topic = ownerAssistantTopics.find(([, pattern]) => pattern.test(question))?.[0] || 'general';
+  const currency = String(profile.currency || 'EUR');
+  const prices = ([['30 min', profile.price_30min], ['1 h', profile.price_1h], ['2 h', profile.price_2h], ['3 h', profile.price_3h], [t('Nacht', 'noc', 'night'), profile.price_night]] as const)
+    .filter(([, value]) => Number(value) > 0)
+    .map(([label, value]) => `${label}: ${value} ${currency}`);
+  const languages = Array.isArray(profile.languages) ? profile.languages.filter(Boolean).map(String) : [];
+  const city = String(profile.work_city || profile.city || '').trim();
+  let body: string;
+  switch (topic) {
+    case 'price':
+      body = prices.length
+        ? t(`Laut Profil: ${prices.join(', ')}.`, `Ceny podane w profilu: ${prices.join(', ')}.`, `Prices listed on the profile: ${prices.join(', ')}.`)
+        : t('Im Profil sind keine Preise angegeben.', 'W profilu nie podano cen.', 'No prices are listed on the profile.');
+      break;
+    case 'hours':
+      body = t(
+        'Ich kann keine Verfügbarkeit zusagen. Die Zeiten im Profil sind nur eine Orientierung.',
+        'Nie mogę potwierdzić dostępności. Godziny w profilu są tylko orientacyjne.',
+        'I cannot promise availability. The hours on the profile are only a guide.'
+      );
+      break;
+    case 'location':
+      body = city
+        ? t(`Öffentlich angegeben ist ${city}. Genaue Adressen teile ich nicht.`, `Publicznie podane miasto to ${city}. Nie podaję dokładnych adresów.`, `The public location is ${city}. I do not share exact addresses.`)
+        : t('Im Profil ist kein öffentlicher Ort angegeben.', 'Profil nie podaje publicznej lokalizacji.', 'The profile does not list a public location.');
+      break;
+    case 'languages':
+      body = languages.length
+        ? t(`Sprachen laut Profil: ${languages.join(', ')}.`, `Języki według profilu: ${languages.join(', ')}.`, `Languages per the profile: ${languages.join(', ')}.`)
+        : t('Im Profil sind keine Sprachen angegeben.', 'W profilu nie podano języków.', 'No languages are listed on the profile.');
+      break;
+    case 'services':
+      body = t('Die angebotenen Leistungen stehen im Profil unter „Leistungen“.', 'Lista usług jest w profilu w sekcji „Usługi”.', 'The services are listed on the profile under “Services”.');
+      break;
+    case 'booking':
+      body = t(
+        'Ich kann keine Termine bestätigen. Bitte senden Sie über „Buchen“ im Profil eine Buchungsanfrage mit Datum und Uhrzeit.',
+        'Nie mogę potwierdzać terminów. Wyślij proszę zapytanie o rezerwację przyciskiem „Zarezerwuj” na profilu.',
+        'I cannot confirm appointments. Please send a booking request with date and time via “Book” on the profile.'
+      );
+      break;
+    default:
+      body = t('Danke für Ihre Nachricht – sie wurde weitergeleitet.', 'Dziękuję za wiadomość – została przekazana.', 'Thank you for your message – it has been passed on.');
+  }
+  const handover = name
+    ? t(`${name} antwortet persönlich, sobald möglich.`, `${name} odpowie osobiście, gdy tylko będzie to możliwe.`, `${name} will reply personally as soon as possible.`)
+    : '';
+  return { topic, content: `${ownerAssistantDisclosure(name, locale)}\n\n${body}${handover ? ` ${handover}` : ''}`.slice(0, 4000) };
+}

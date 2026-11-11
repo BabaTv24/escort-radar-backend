@@ -51,16 +51,18 @@ export function AdvertiserBookingsSection({ token }: { token: string }) {
     if (status !== 'accepted' && !window.confirm(t(status === 'rejected' ? 'bookings.advertiser.declineConfirm' : 'bookings.advertiser.cancelConfirm'))) return;
     setBusyId(booking.id);
     setFeedback(null);
+    let next: { tone: 'success' | 'error'; text: string };
     try {
       await api.setBookingStatus(token, booking.id, status);
-      setFeedback({ tone: 'success', text: t(`bookings.advertiser.changed.${status}`) });
+      next = { tone: 'success', text: t(`bookings.advertiser.changed.${status}`) };
     } catch (error) {
       const code = error instanceof ApiError ? String(error.payload?.code || '') : '';
-      setFeedback({ tone: 'error', text: t(code === 'BOOKING_TRANSITION_INVALID' || code === 'BOOKING_STATUS_CHANGED' ? 'bookings.advertiser.staleError' : 'bookings.advertiser.changeError') });
-    } finally {
-      setBusyId(null);
-      await load();
+      next = { tone: 'error', text: t(code === 'BOOKING_TRANSITION_INVALID' || code === 'BOOKING_STATUS_CHANGED' ? 'bookings.advertiser.staleError' : 'bookings.advertiser.changeError') };
     }
+    // Refresh first so the confirmation never appears next to a stale status.
+    await load();
+    setBusyId(null);
+    setFeedback(next);
   }
 
   const visible = grouped[tab];

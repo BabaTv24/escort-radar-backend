@@ -4,8 +4,8 @@ import { config } from '../config.js';
 import { VIDEO_CHAT_IMPLEMENTED } from '../featureAvailability.js';
 import { requireAccountType, verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
-import { answerAsSponsoredProfileAgent } from '../services/sponsoredProfileAgent.js';
-import { asyncHandler, optionalText } from '../validation.js';
+import { registerProfileChatRoutes } from './profileChatRoutes.js';
+import { asyncHandler } from '../validation.js';
 
 export const sponsoredProfilesRouter = Router();
 
@@ -15,73 +15,8 @@ sponsoredProfilesRouter.use((_req, res, next) => {
   return next();
 });
 
-sponsoredProfilesRouter.post('/profiles/:profileId/chat', requireAccountType('client'), asyncHandler(async (req, res) => {
-  const { data, error } = await supabaseAdmin.rpc('start_paid_profile_chat', {
-    p_client_user_id: req.user!.id,
-    p_client_email: req.user!.email || '',
-    p_profile_id: req.params.profileId
-  });
-  if (error) return sponsoredError(res, error.message);
-  res.status(201).json({ session: data, charged_bc: '3' });
-}));
-
-sponsoredProfilesRouter.get('/chat/:sessionId', asyncHandler(async (req, res) => {
-  const session = await ownedChatSession(req.params.sessionId, req.user!.id);
-  if (!session) return res.status(404).json({ error: 'Chat session not found' });
-  if (session.profile_owner_id === req.user!.id && session.owner_activation_status === 'awaiting_owner_activation') {
-    return res.status(403).json({ error: 'Activate the sponsored profile to access conversation history' });
-  }
-  const { data: messages, error } = await supabaseAdmin
-    .from('profile_chat_messages').select('*').eq('session_id', session.id)
-    .order('created_at', { ascending: true }).limit(300);
-  if (error) return res.status(400).json({ error: error.message });
-  if (session.profile_owner_id === req.user!.id) {
-    await supabaseAdmin.from('profile_chat_sessions').update({ owner_read_at: new Date().toISOString() }).eq('id', session.id);
-  }
-  res.json({ session, messages: messages || [] });
-}));
-
-sponsoredProfilesRouter.post('/chat/:sessionId/messages', asyncHandler(async (req, res) => {
-  const content = optionalText(req.body.content, 4000);
-  if (!content) return res.status(400).json({ error: 'Message is required' });
-  const session = await ownedChatSession(req.params.sessionId, req.user!.id);
-  if (!session) return res.status(404).json({ error: 'Chat session not found' });
-  const isClient = session.client_user_id === req.user!.id;
-  const senderType = isClient ? 'client' : 'owner';
-  if (!isClient && session.profile_owner_id !== req.user!.id) return res.status(403).json({ error: 'Chat access denied' });
-  if (!isClient && session.owner_activation_status === 'awaiting_owner_activation') {
-    return res.status(403).json({ error: 'Activate the sponsored profile before taking over this conversation' });
-  }
-
-  const { data: clientMessage, error: insertError } = await supabaseAdmin
-    .from('profile_chat_messages')
-    .insert({ session_id: session.id, sender_type: senderType, sender_user_id: req.user!.id, content })
-    .select().single();
-  if (insertError) return res.status(400).json({ error: insertError.message });
-  await supabaseAdmin.from('profile_chat_sessions')
-    .update({ last_message_at: new Date().toISOString(), owner_read_at: isClient ? null : new Date().toISOString() })
-    .eq('id', session.id);
-
-  let agentMessage: Record<string, unknown> | null = null;
-  if (isClient && session.owner_activation_status === 'awaiting_owner_activation'
-      && session.ai_agent_mode === 'pre_activation' && session.agent_active) {
-    const { data: history } = await supabaseAdmin.from('profile_chat_messages')
-      .select('sender_type, content').eq('session_id', session.id)
-      .order('created_at', { ascending: true }).limit(20);
-    const answer = await answerAsSponsoredProfileAgent(session.profile, (history || []) as any);
-    const { data } = await supabaseAdmin.from('profile_chat_messages').insert({
-      session_id: session.id,
-      sender_type: 'agent',
-      content: answer,
-      agent_disclosure_shown: true,
-      model: session.agent_model,
-      metadata: { profile_facts_only: true, owner_impersonation_forbidden: true }
-    }).select().single();
-    agentMessage = data;
-    await supabaseAdmin.from('profile_chat_sessions').update({ last_message_at: new Date().toISOString() }).eq('id', session.id);
-  }
-  res.status(201).json({ message: clientMessage, agent_message: agentMessage });
-}));
+// Text chat routes (start, list, read, send, takeover, settings) live in profileChatRoutes.ts.
+registerProfileChatRoutes(sponsoredProfilesRouter);
 
 sponsoredProfilesRouter.post('/profiles/:profileId/videochat', requireAccountType('client'), asyncHandler(async (req, res) => {
   // Refuse before any BCU RPC: a call attempt must never be charged while video chat does not exist.
@@ -173,25 +108,6 @@ sponsoredProfilesRouter.post('/claim', asyncHandler(async (req, res) => {
   if (authUpdateError) return res.status(500).json({ error: 'SPONSORED_CLAIM_AUTH_SYNC_REQUIRED' });
   res.json({ ...data, history_transferred: true, agent_mode: 'owner_assistant' });
 }));
-
-async function ownedChatSession(sessionId: string, userId: string) {
-  const { data: session } = await supabaseAdmin.from('profile_chat_sessions')
-    .select('*, profiles!inner(*)').eq('id', sessionId).maybeSingle();
-  if (!session) return null;
-  const profile = session.profiles as Record<string, any>;
-  if (session.client_user_id !== userId && profile.user_id !== userId) return null;
-  const { data: agent } = await supabaseAdmin.from('profile_ai_agents')
-    .select('active, model').eq('profile_id', profile.id).maybeSingle();
-  return {
-    ...session,
-    profile,
-    profile_owner_id: profile.user_id,
-    owner_activation_status: profile.owner_activation_status,
-    ai_agent_mode: profile.ai_agent_mode,
-    agent_active: Boolean(agent?.active),
-    agent_model: agent?.model || null
-  };
-}
 
 function emptySponsoredStats() {
   return { messages: 0, clients: 0, booking_attempts: 0, unread_clients: 0 };

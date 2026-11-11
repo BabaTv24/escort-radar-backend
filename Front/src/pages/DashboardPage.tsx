@@ -24,6 +24,8 @@ import { ProfileCard } from '../components/ProfileCard';
 import { CommunicationPlusCard } from '../components/CommunicationPlusCard';
 import { ClientBookingsCard } from '../components/bookings/ClientBookingsCard';
 import { AdvertiserBookingsSection } from '../components/advertiser-dashboard/AdvertiserBookingsSection';
+import { AdvertiserMessagesSection } from '../components/advertiser-dashboard/AdvertiserMessagesSection';
+import { ChatInbox } from '../components/chat/ChatInbox';
 import { useI18n } from '../i18n';
 import QRCode from 'qrcode';
 import type { CommunicationPlusStatus, ReferralMe } from '../lib/api';
@@ -1519,6 +1521,7 @@ function ClientDashboard({ token, userEmail, coinWallet, bcuWallet, bcuEntitleme
   token: string;
 }) {
   const { t, option } = useI18n();
+  const [chatUnread, setChatUnread] = useState(0);
   const activated = walletSystem === 'bcu'
     ? bcuEntitlements.some((item) => item.entitlement_type === 'client_premium' && item.status === 'active')
     : activation?.state === 'client_activated';
@@ -1762,6 +1765,18 @@ function ClientDashboard({ token, userEmail, coinWallet, bcuWallet, bcuEntitleme
             </section>
 
             <ClientBookingsCard token={token} notifications={notifications} />
+
+            <section className="client-office-card er-chat-card" id="messages" aria-labelledby="client-messages-title">
+              <div className="client-office-card-header">
+                <div>
+                  <p className="eyebrow">{t('nav.messages')}</p>
+                  <h2 id="client-messages-title">{t('chat.client.title')}</h2>
+                  <p>{t('chat.client.subtitle')}</p>
+                </div>
+                {chatUnread ? <span className="er-chat-unread" aria-label={t('chat.unreadCount', { count: chatUnread })}>{chatUnread}</span> : <MessageCircle size={18} aria-hidden="true" />}
+              </div>
+              <ChatInbox token={token} role="client" emptyText={t('chat.client.empty')} onUnreadChange={setChatUnread} />
+            </section>
 
             <section className="client-office-card client-office-favorites client-favorites-section" id="favorites">
               <div className="client-office-card-header">
@@ -2348,10 +2363,11 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps & { t
           onSaveLocation={props.onSaveLocation}
         />
       ) : null}
+      {activeSection === 'messages' ? <AdvertiserMessagesSection token={props.token} /> : null}
       {activeSection === 'bookings' ? <AdvertiserBookingsSection token={props.token} /> : null}
       {activeSection === 'wallet' ? <AdvertiserWalletSection token={props.token} /> : null}
       {activeSection === 'referrals' ? <AdvertiserReferralSection token={props.token} /> : null}
-      {!['overview', 'profile', 'location', 'bookings', 'wallet', 'referrals', 'settings'].includes(activeSection) ? (
+      {!['overview', 'profile', 'location', 'messages', 'bookings', 'wallet', 'referrals', 'settings'].includes(activeSection) ? (
         <DashboardSectionPlaceholder section={activeSection as Exclude<AdvertiserDashboardSection, 'overview' | 'profile' | 'settings'>} />
       ) : null}
     </AdvertiserDashboardShell>
