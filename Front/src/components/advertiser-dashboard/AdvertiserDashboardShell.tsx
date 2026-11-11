@@ -53,8 +53,9 @@ export function resolveAdvertiserDashboardSection(value: string | null, hash = '
     : 'overview';
 }
 
-export function AdvertiserDashboardShell({ activeSection, email, onSectionChange, onLogout, children }: {
+export function AdvertiserDashboardShell({ activeSection, email, onSectionChange, onLogout, badges, children }: {
   activeSection: AdvertiserDashboardSection;
+  badges?: Partial<Record<AdvertiserDashboardSection, number>>;
   email: string;
   onSectionChange: (section: AdvertiserDashboardSection) => void;
   onLogout: () => void;
@@ -70,7 +71,7 @@ export function AdvertiserDashboardShell({ activeSection, email, onSectionChange
           <strong>{t('advertiserDashboard.workspace')}</strong>
           <small>{email}</small>
         </div>
-        <AdvertiserDashboardNav activeSection={activeSection} onSectionChange={onSectionChange} />
+        <AdvertiserDashboardNav activeSection={activeSection} onSectionChange={onSectionChange} badges={badges} />
         <button type="button" className="advertiser-dashboard-logout" onClick={onLogout}>
           {t('buttons.logout')}
         </button>
@@ -82,8 +83,9 @@ export function AdvertiserDashboardShell({ activeSection, email, onSectionChange
   );
 }
 
-export function AdvertiserDashboardNav({ activeSection, onSectionChange }: {
+export function AdvertiserDashboardNav({ activeSection, onSectionChange, badges }: {
   activeSection: AdvertiserDashboardSection;
+  badges?: Partial<Record<AdvertiserDashboardSection, number>>;
   onSectionChange: (section: AdvertiserDashboardSection) => void;
 }) {
   const { t } = useI18n();
@@ -91,6 +93,7 @@ export function AdvertiserDashboardNav({ activeSection, onSectionChange }: {
     <nav className="advertiser-dashboard-nav" aria-label={t('advertiserDashboard.navigation')}>
       {advertiserDashboardSections.map((section) => {
         const Icon = sectionIcons[section];
+        const badge = badges?.[section] || 0;
         return (
           <button
             key={section}
@@ -101,6 +104,7 @@ export function AdvertiserDashboardNav({ activeSection, onSectionChange }: {
           >
             <Icon size={18} aria-hidden="true" />
             <span>{t(`advertiserDashboard.section.${section}`)}</span>
+            {badge > 0 ? <span className="er-nav-badge" data-badge={section} aria-label={t('activity.badgeLabel', { count: badge })}>{badge > 99 ? '99+' : badge}</span> : null}
           </button>
         );
       })}
@@ -108,8 +112,9 @@ export function AdvertiserDashboardNav({ activeSection, onSectionChange }: {
   );
 }
 
-export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgress, onEditProfile, onOpenCompletionSection }: {
+export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgress, businessActivity, onEditProfile, onOpenCompletionSection }: {
   profile: Profile | null;
+  businessActivity?: ReactNode;
   draft: Partial<Profile>;
   subscriptionProgress: ReactNode;
   onEditProfile: () => void;
@@ -140,6 +145,8 @@ export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgre
           {t('advertiserDashboard.overview.editProfile')}
         </button>
       </header>
+
+      {businessActivity}
 
       <div className="advertiser-dashboard-summary-grid">
         <article className="advertiser-dashboard-summary-card">

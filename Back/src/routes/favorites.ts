@@ -7,6 +7,7 @@ import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 import { config } from '../config.js';
 import { addBcuFavorite } from '../services/bcuFavorites.js';
 import { bcuToBc, getBcuWalletForUser } from '../services/bcuWallet.js';
+import { notifyUser } from '../services/inAppNotifications.js';
 
 export const favoritesRouter = Router();
 
@@ -48,6 +49,17 @@ favoritesRouter.post('/:profileId', asyncHandler(async (req, res) => {
   if (config.bcuWalletEnabled) {
     try {
       const result = await addBcuFavorite(req.user!.id, profileId);
+      // Only the first, paid add notifies the owner; the admirer stays anonymous.
+      if (result.charged) {
+        await notifyUser({
+          userId: profile.user_id,
+          recipientType: 'advertiser',
+          eventType: 'favorite_received',
+          title: 'New admirer',
+          body: `+${bcuToBc(result.amount_bcu)} BC`,
+          profileId
+        });
+      }
       return res.status(201).json({
         favorite: true,
         charged: result.charged,

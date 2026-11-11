@@ -670,3 +670,23 @@ export type ExactProfileLocation = {
   longitude: number;
   precision: 'exact';
 };
+
+export type RevenueLine = { bc: string; count: number };
+
+/** Server-computed advertiser business counters; revenue comes from completed ledger credits only. */
+export type AdvertiserActivity = {
+  profiles_count: number;
+  new_bookings: number;
+  active_bookings: number;
+  unread_messages: number;
+  admirers_total: number;
+  new_admirers: number;
+  wallet: { available_bc: string; locked_bc: string } | null;
+  revenue: {
+    favorites: RevenueLine;
+    text_chat: RevenueLine;
+    video_chat: RevenueLine;
+    digital_total_bc: string;
+    booking_fees: RevenueLine;
+  } | null;
+};

@@ -9,7 +9,7 @@ import '../chat/chat.css';
 type SettingKey = 'text_chat_enabled' | 'ai_assistant_enabled';
 
 /** Advertiser messages: per-profile Text chat / AI assistant switches and the customer conversations. */
-export function AdvertiserMessagesSection({ token }: { token: string }) {
+export function AdvertiserMessagesSection({ token, onChanged }: { token: string; onChanged?: () => void }) {
   const { t } = useI18n();
   const [profiles, setProfiles] = useState<CommunicationSettingsRow[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'unavailable'>('loading');
@@ -101,7 +101,7 @@ export function AdvertiserMessagesSection({ token }: { token: string }) {
             <h2 id="advertiser-conversations-title">{t('chat.advertiser.conversations')}</h2>
           </div>
         </div>
-        <ChatInbox token={token} role="owner" emptyText={t('chat.advertiser.empty')} />
+        <ChatInbox token={token} role="owner" emptyText={t('chat.advertiser.empty')} onUnreadChange={onChanged} />
       </section>
     </section>
   );

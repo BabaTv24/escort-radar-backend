@@ -25,6 +25,7 @@ import { CommunicationPlusCard } from '../components/CommunicationPlusCard';
 import { ClientBookingsCard } from '../components/bookings/ClientBookingsCard';
 import { AdvertiserBookingsSection } from '../components/advertiser-dashboard/AdvertiserBookingsSection';
 import { AdvertiserMessagesSection } from '../components/advertiser-dashboard/AdvertiserMessagesSection';
+import { AdvertiserActivityCounters, DigitalRevenuePanel, activityBadges, useAdvertiserActivity } from '../components/advertiser-dashboard/AdvertiserBusinessActivity';
 import { ChatInbox } from '../components/chat/ChatInbox';
 import { useI18n } from '../i18n';
 import QRCode from 'qrcode';
@@ -2322,6 +2323,13 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps & { t
   const navigate = useNavigate();
   const location = useLocation();
   const activeSection = resolveAdvertiserDashboardSection(searchParams.get('section'), location.hash);
+  const { activity, failed: activityFailed, refresh: refreshActivity } = useAdvertiserActivity(props.token);
+
+  // Counters follow the section the advertiser opens; the earnings view acknowledges new admirers.
+  useEffect(() => {
+    if (activeSection !== 'wallet') { void refreshActivity(); return; }
+    void api.markAdmirersRead(props.token).catch(() => undefined).finally(() => void refreshActivity());
+  }, [activeSection, props.token, refreshActivity]);
 
   function selectSection(section: AdvertiserDashboardSection) {
     const nextParams = new URLSearchParams(searchParams);
@@ -2331,12 +2339,13 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps & { t
   }
 
   return (
-    <AdvertiserDashboardShell activeSection={activeSection} email={props.userEmail} onSectionChange={selectSection} onLogout={props.onLogout}>
+    <AdvertiserDashboardShell activeSection={activeSection} email={props.userEmail} onSectionChange={selectSection} onLogout={props.onLogout} badges={activityBadges(activity)}>
       {activeSection === 'overview' ? (
         <AdvertiserDashboardOverview
           profile={props.savedProfile}
           draft={props.profile}
           subscriptionProgress={<AdvertiserSubscriptionProgress profile={props.savedProfile || props.profile} />}
+          businessActivity={<><AdvertiserActivityCounters activity={activity} failed={activityFailed} onOpen={selectSection} /><DigitalRevenuePanel activity={activity} /></>}
           onEditProfile={() => selectSection('profile')}
           onOpenCompletionSection={selectSection}
         />
@@ -2363,9 +2372,9 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps & { t
           onSaveLocation={props.onSaveLocation}
         />
       ) : null}
-      {activeSection === 'messages' ? <AdvertiserMessagesSection token={props.token} /> : null}
-      {activeSection === 'bookings' ? <AdvertiserBookingsSection token={props.token} /> : null}
-      {activeSection === 'wallet' ? <AdvertiserWalletSection token={props.token} /> : null}
+      {activeSection === 'messages' ? <AdvertiserMessagesSection token={props.token} onChanged={refreshActivity} /> : null}
+      {activeSection === 'bookings' ? <AdvertiserBookingsSection token={props.token} onChanged={refreshActivity} /> : null}
+      {activeSection === 'wallet' ? <><AdvertiserWalletSection token={props.token} /><DigitalRevenuePanel activity={activity} /></> : null}
       {activeSection === 'referrals' ? <AdvertiserReferralSection token={props.token} /> : null}
       {!['overview', 'profile', 'location', 'messages', 'bookings', 'wallet', 'referrals', 'settings'].includes(activeSection) ? (
         <DashboardSectionPlaceholder section={activeSection as Exclude<AdvertiserDashboardSection, 'overview' | 'profile' | 'settings'>} />

@@ -1,4 +1,4 @@
-import type { AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, ChatConversation, CommunicationSettingsRow, ProfileCommunication, SponsoredChatMessage, SponsoredProfileDashboard, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
+import type { AdvertiserActivity, AdminActivity, AdminReport, AdminStats, BcCoinPackage, BcuEntitlement, BcuLedgerEntry, BcuWallet, BookingRequest, ClientActivation, ClientFavorite, ClientIntent, ClientPersonalProfile, ClientProfile, ClientSearchPreferences, CoinTransaction, CoinWallet, Gift, HermesProfilePreview, MasterAdminWallet, Profile, ProfileAccess, RadarNotification, ChatConversation, CommunicationSettingsRow, ProfileCommunication, SponsoredChatMessage, SponsoredProfileDashboard, Tag, TokenPackage, TokenPurchaseRequest, TokenTransaction, Wallet } from '../types';
 import { API_URL } from './apiBase';
 
 export type BulkPhotoModerationResponse = {
@@ -379,6 +379,8 @@ export const api = {
   myClientBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/booking-requests/mine', { token }),
   cancelClientBooking: (token: string, id: string) => request<{ booking_request: BookingRequest }>(`/api/booking-requests/${id}/cancel`, { method: 'POST', token }),
   markBookingNotificationsRead: (token: string) => request<{ updated: number }>('/api/booking-requests/notifications/read', { method: 'POST', token }),
+  advertiserActivity: (token: string) => request<AdvertiserActivity>('/api/advertiser/activity', { token }),
+  markAdmirersRead: (token: string) => request<{ updated: number }>('/api/advertiser/activity/admirers/read', { method: 'POST', token }),
   setBookingStatus: (token: string, id: string, status: BookingRequest['status']) => request<{ booking_request: BookingRequest }>(`/api/booking-requests/${id}/status`, {
     method: 'PATCH',
     token,

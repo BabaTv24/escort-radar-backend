@@ -14,7 +14,7 @@ const REFRESH_MS = 30_000;
 const tabOf = (status: BookingDisplayStatus): Tab => (isUndecided(status) ? 'incoming' : status === 'accepted' ? 'upcoming' : 'history');
 
 /** Advertiser dashboard: incoming booking requests for every profile owned by the account (individual or business). */
-export function AdvertiserBookingsSection({ token }: { token: string }) {
+export function AdvertiserBookingsSection({ token, onChanged }: { token: string; onChanged?: () => void }) {
   const { t, lang } = useI18n();
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [state, setState] = useState<LoadState>('loading');
@@ -61,6 +61,7 @@ export function AdvertiserBookingsSection({ token }: { token: string }) {
     }
     // Refresh first so the confirmation never appears next to a stale status.
     await load();
+    onChanged?.();
     setBusyId(null);
     setFeedback(next);
   }

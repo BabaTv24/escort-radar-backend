@@ -278,7 +278,7 @@ function publicMessage(message: Row) {
   };
 }
 
-function countUnread(messages: Row[], role: ChatRole, session: Row) {
+export function countUnread(messages: Row[], role: ChatRole, session: Row) {
   const readAt = role === 'owner' ? session.owner_read_at : session.client_read_at;
   return messages.filter((message) => {
     const fromOtherSide = role === 'owner' ? message.sender_type === 'client' : message.sender_type !== 'client';
