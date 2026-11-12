@@ -2,7 +2,9 @@
 
 Misja ER-V1-CORE-003. Dokument zapisuje zweryfikowane kontrakty BC z kodu i migracji oraz wymagania dla wideoczatu. Wideoczat **nie jest zaimplementowany** i nie może pobierać BC.
 
-## 1. Zweryfikowane kontrakty BC
+> **Zastąpione częściowo przez `ESCORT_RADAR_BUSINESS_CONTRACT_V1.md` (migracja 060).** Ulubione i zapytania o rezerwację są dziś bezpłatne. Wiersze „Ulubione” i „Zapytanie o rezerwację” w tabeli poniżej opisują historyczne opłaty, które zostają w ledgerze. Prezenty Diamond I–V to osobna operacja (`send_bcu_profile_gift`).
+
+## 1. Zweryfikowane kontrakty BC (stan sprzed kontraktu V1)
 
 1 BC = 10 000 BCU. Każda opłata to jedna transakcja SQL z parą wpisów w `bcu_ledger_entries`:
 - debet u klienta;

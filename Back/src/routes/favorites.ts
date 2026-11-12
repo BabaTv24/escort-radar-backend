@@ -5,13 +5,12 @@ import { asyncHandler, optionalText } from '../validation.js';
 import { getClientActivationSummary } from '../services/clientActivation.js';
 import { getOrCreateWalletForUser } from '../services/tokenWallet.js';
 import { config } from '../config.js';
-import { addBcuFavorite } from '../services/bcuFavorites.js';
+import { isPublicProfile } from '../publicProfiles.js';
+import { isActivePublicCategory } from '../categories.js';
 import { bcuToBc, getBcuWalletForUser } from '../services/bcuWallet.js';
 import { notifyUser } from '../services/inAppNotifications.js';
 
 export const favoritesRouter = Router();
-
-const FAVORITE_TOKEN_COST = 1;
 
 favoritesRouter.use(verifyUser);
 
@@ -41,81 +40,56 @@ favoritesRouter.post('/:profileId', asyncHandler(async (req, res) => {
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('id, user_id')
+    .select('id, user_id, status, is_published, moderation_status, shadowbanned, category')
     .eq('id', profileId)
     .maybeSingle();
-  if (!profile) return res.status(404).json({ error: 'Profile not found' });
+  if (!profile || !isPublicProfile(profile) || !isActivePublicCategory(profile.category)) {
+    return res.status(404).json({ error: 'Profile not found', code: 'PROFILE_NOT_FOUND' });
+  }
+  if (profile.user_id === req.user!.id) return res.status(400).json({ error: 'You cannot add your own profile', code: 'SELF_FAVORITE_NOT_ALLOWED' });
 
-  if (config.bcuWalletEnabled) {
-    try {
-      const result = await addBcuFavorite(req.user!.id, profileId);
-      // Only the first, paid add notifies the owner; the admirer stays anonymous.
-      if (result.charged) {
-        await notifyUser({
-          userId: profile.user_id,
-          recipientType: 'advertiser',
-          eventType: 'favorite_received',
-          title: 'New admirer',
-          body: `+${bcuToBc(result.amount_bcu)} BC`,
-          profileId
-        });
-      }
-      return res.status(201).json({
-        favorite: true,
-        charged: result.charged,
-        amount_bcu: result.amount_bcu,
-        amount_bc: bcuToBc(result.amount_bcu),
-        recipient: { profile_id: result.profile_id, credited: result.recipient_credited }
-      });
-    } catch (error) {
-      const code = favoriteDomainCode(error);
-      const status = code === 'INSUFFICIENT_BCU' ? 402 : code === 'PROFILE_NOT_FOUND' ? 404 : code === 'FAVORITE_CONFIGURATION_ERROR' ? 503 : 403;
-      return res.status(status).json({ error: favoriteDomainMessage(code), code });
+  // Business contract V1: saving a favorite is free for activated Premium clients. It never moves BC;
+  // voluntary gifts are a separate operation (/api/gifts).
+  if (!isAdmin(req.user?.app_metadata)) {
+    const activation = await getClientActivationSummary(req.user!.id);
+    if (activation.state !== 'client_activated') {
+      return res.status(403).json({ error: 'Active Client Premium is required', code: 'PREMIUM_REQUIRED' });
     }
   }
 
-  const adminOrOwner = isAdmin(req.user?.app_metadata) || profile.user_id === req.user!.id;
-  if (adminOrOwner) {
-    const { data: favorite, error } = await supabaseAdmin
-      .from('client_favorites')
-      .upsert({ client_id: req.user!.id, profile_id: profileId }, { onConflict: 'client_id,profile_id' })
-      .select()
-      .single();
-    if (error) return res.status(400).json({ error: error.message });
-    const wallet = await getOrCreateWallet(req.user!.id);
-    return res.status(201).json({ favorite, wallet, already_favorited: false, charged: 0 });
-  }
-
-  const activation = await getClientActivationSummary(req.user!.id);
-  if (activation.state !== 'client_activated') return res.status(403).json({ error: 'Client activation required' });
-
-  const { data: result, error } = await supabaseAdmin.rpc('add_client_favorite_with_token', {
-    p_client_id: req.user!.id,
-    p_profile_id: profileId,
-    p_cost: FAVORITE_TOKEN_COST
-  });
-  if (error) {
-    if (String(error.message || '').includes('NOT_ENOUGH_TOKENS')) {
-      return res.status(402).json({ error: 'Not enough tokens', code: 'NOT_ENOUGH_TOKENS' });
-    }
-    return res.status(400).json({ error: error.message });
-  }
-
-  const wallet = await getOrCreateWallet(req.user!.id);
-  const { data: favorite } = await supabaseAdmin
+  const { data: existingFavorite } = await supabaseAdmin
     .from('client_favorites')
-    .select('*')
+    .select('id')
     .eq('client_id', req.user!.id)
     .eq('profile_id', profileId)
     .maybeSingle();
-
-  res.status(201).json({
-    favorite,
-    wallet,
-    already_favorited: Boolean(result?.already_favorited),
-    already_exists: Boolean(result?.already_favorited),
-    charged: Number(result?.charged || 0),
-    new_balance: Number(result?.new_balance ?? result?.wallet_balance ?? wallet?.escort_token_balance ?? 0)
+  let created = false;
+  if (!existingFavorite) {
+    // The unique (client_id, profile_id) index settles concurrent saves: only one insert wins.
+    const { error } = await supabaseAdmin.from('client_favorites').insert({ client_id: req.user!.id, profile_id: profileId });
+    if (error && error.code !== '23505') return res.status(400).json({ error: error.message });
+    created = !error;
+  }
+  // A new admirer is announced to the owner once per relationship; the client stays anonymous.
+  if (created) {
+    await notifyUser({
+      userId: profile.user_id,
+      recipientType: 'advertiser',
+      eventType: 'favorite_received',
+      title: 'New admirer',
+      body: 'A client saved your profile',
+      profileId
+    });
+  }
+  const wallet = config.bcuWalletEnabled ? serializeBcuFavoriteWallet(await getBcuWalletForUser(req.user!.id)) : await getOrCreateWallet(req.user!.id);
+  return res.status(201).json({
+    favorite: true,
+    already_favorited: !created,
+    already_exists: !created,
+    charged: false,
+    amount_bcu: '0',
+    amount_bc: '0',
+    wallet
   });
 }));
 
@@ -138,25 +112,6 @@ async function getOrCreateWallet(userId: string) {
 function isAdmin(metadata: Record<string, unknown> | undefined) {
   const role = String(metadata?.role || metadata?.auth_account_type || '').toLowerCase();
   return role === 'admin' || role === 'moderator';
-}
-
-const favoriteCodes = ['PREMIUM_REQUIRED', 'INSUFFICIENT_BCU', 'PROFILE_NOT_FOUND', 'FAVORITE_RECIPIENT_NOT_AVAILABLE', 'SELF_FAVORITE_NOT_ALLOWED', 'WALLET_FROZEN', 'BCU_WALLET_NOT_FOUND', 'IDEMPOTENCY_CONFLICT', 'FAVORITE_CONFIGURATION_ERROR'] as const;
-type FavoriteCode = typeof favoriteCodes[number];
-
-function favoriteDomainCode(error: unknown): FavoriteCode {
-  const message = String((error as { message?: string })?.message || error || '');
-  if (message.includes('BCU_FAVORITE_PRODUCT_INVALID')) return 'FAVORITE_CONFIGURATION_ERROR';
-  return favoriteCodes.find((code) => message.includes(code)) || 'FAVORITE_CONFIGURATION_ERROR';
-}
-
-function favoriteDomainMessage(code: FavoriteCode) {
-  return ({
-    PREMIUM_REQUIRED: 'Active Client Premium is required', INSUFFICIENT_BCU: 'Insufficient BC balance',
-    PROFILE_NOT_FOUND: 'Profile not found', FAVORITE_RECIPIENT_NOT_AVAILABLE: 'Profile cannot receive a favorite gift',
-    SELF_FAVORITE_NOT_ALLOWED: 'You cannot add your own profile', WALLET_FROZEN: 'Wallet is frozen',
-    BCU_WALLET_NOT_FOUND: 'Premium wallet is not available',
-    IDEMPOTENCY_CONFLICT: 'Favorite request conflict', FAVORITE_CONFIGURATION_ERROR: 'Favorites are temporarily unavailable'
-  } as const)[code];
 }
 
 function isUuid(value: string) {

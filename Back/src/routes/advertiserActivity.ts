@@ -11,8 +11,12 @@ import { countUnread } from './profileChatRoutes.js';
 type Row = Record<string, any>;
 const AWAITING = 'awaiting_owner_activation';
 
-/** Ledger credit types that count as digital earnings. Booking fees are reported separately, never mixed in. */
+/**
+ * Ledger credit types that count as digital earnings. Booking fees are reported separately, never mixed in.
+ * Favorites and booking requests are free since contract V1 (060); their lines show historical credits only.
+ */
 export const DIGITAL_REVENUE_TYPES = {
+  gifts: 'gift_received',
   favorites: 'favorite_received',
   text_chat: 'chat_received',
   video_chat: 'videochat_received'
@@ -115,6 +119,7 @@ async function revenueSummary(userId: string) {
   const line = (type: string) => ({ bc: bcuToBc((totals.get(type) || 0n).toString()), count: counts.get(type) || 0 });
   const digital = Object.values(DIGITAL_REVENUE_TYPES).reduce((sum, type) => sum + (totals.get(type) || 0n), 0n);
   return {
+    gifts: line(DIGITAL_REVENUE_TYPES.gifts),
     favorites: line(DIGITAL_REVENUE_TYPES.favorites),
     text_chat: line(DIGITAL_REVENUE_TYPES.text_chat),
     video_chat: line(DIGITAL_REVENUE_TYPES.video_chat),

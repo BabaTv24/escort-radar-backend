@@ -103,16 +103,11 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
     }
     setFavoriteState('saving');
     try {
-      const dashboard = await api.clientPremiumDashboardMe(token).catch(() => ({ wallet_system: 'legacy' as const }));
-      if (dashboard.wallet_system === 'bcu' && !window.confirm(t('favorites.bcuConfirmation'))) {
-        setFavoriteState('idle');
-        return;
-      }
+      // Favorites are free (business contract V1); no BC is charged and no confirmation is needed.
       const result = await api.addFavorite(token, profile.id);
       setFavoriteState('saved');
       onFavoriteChange?.(profile.id);
-      if ('amount_bcu' in result) setFavoriteMessage(result.charged ? t('favorites.bcuPaid') : t('favorites.bcuRestored'));
-      else setFavoriteMessage(result.already_exists || result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.favoriteAddedTokenCharged'));
+      setFavoriteMessage(result.already_favorited ? t('favorites.favoriteAlreadyAdded') : t('favorites.addedFree'));
     } catch (error) {
       setFavoriteState('idle');
       const message = error instanceof Error ? error.message : '';

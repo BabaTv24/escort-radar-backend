@@ -1326,8 +1326,8 @@
   "favorites.inFavorites": "In favorites",
   "favorites.favoriteRemoved": "Removed from favorites.",
   "favorites.notEnoughTokens": "Not enough BC Coins. Buy a package.",
-  "favorites.bcuConfirmation": "The first addition costs 5 BC. Re-adding a previously paid profile is free. The amount will be sent to the Advertiser as a gift.",
-  "favorites.bcuPaid": "Added to Favorites. 5 BC was sent to the Advertiser.",
+  "favorites.bcuConfirmation": "Saving a profile to Favorites is free.",
+  "favorites.bcuPaid": "Added to Favorites.",
   "favorites.bcuRestored": "Added again with no additional charge.",
   "favorites.premiumRequired": "Active Client Premium is required.",
   "favorites.activatePremium": "Activate Premium",
@@ -2398,7 +2398,7 @@
   ,"bookings.client.quickCopy": "Status of your appointment requests"
   ,"bookings.client.empty": "You have not sent any booking requests yet."
   ,"bookings.client.cancel": "Cancel request"
-  ,"bookings.client.cancelConfirm": "Cancel this request? The BC fee for sending it is not refunded."
+  ,"bookings.client.cancelConfirm": "Cancel this request?"
   ,"bookings.client.cancelled": "The request has been cancelled."
   ,"bookings.client.cancelError": "The request could not be cancelled. Its status may have changed – the list was refreshed."
   ,"bookings.notifications.title": "Notifications"
@@ -2496,12 +2496,14 @@
   ,"activity.loadError": "Activity counters could not be loaded."
   ,"revenue.eyebrow": "Per BC ledger"
   ,"revenue.title": "Digital earnings"
-  ,"revenue.favorites": "Favorite gifts"
+  ,"revenue.favorites": "Favorites (historical fees)"
   ,"revenue.textChat": "Text chat unlocks"
   ,"revenue.videoChat": "Video chat minutes"
   ,"revenue.videoUnavailable": "Video chat is not available yet"
   ,"revenue.transactions": "Transactions: {{count}}"
   ,"revenue.total": "Total earned BC (digital)"
-  ,"revenue.bookingFees": "Booking request fees, separate: {{amount}} BC ({{count}})"
+  ,"revenue.bookingFees": "Historical booking request fees (now free), shown separately: {{amount}} BC ({{count}})"
   ,"revenue.ledgerNote": "Posted credits only. Purchased BC, bonuses and locked BC are not included."
+  ,"favorites.addedFree": "Added to Favorites. Saving a profile is free."
+  ,"revenue.gifts": "Gifts"
 }

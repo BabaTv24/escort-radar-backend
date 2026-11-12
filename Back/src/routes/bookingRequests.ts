@@ -41,13 +41,14 @@ bookingRequestsRouter.post('/', verifyUser, requireAccountType('client'), asyncH
   if (!validation.ok) return bookingError(res, 400, validation.code);
   const input = validation.value;
 
-  // A retry of the same attempt returns the original request: no second charge, no second notification.
+  // A retry of the same attempt returns the original request: no second notification.
   const existing = await findClientBooking(req.user!.id, profile.id, input.idempotencyKey);
   if (existing) return res.status(200).json({ booking_request: existing, replayed: true });
 
   if (config.bcuWalletEnabled) {
-    // Atomic and idempotent per (client, profile, idempotency key): a retry never charges twice.
-    const { data, error } = await supabaseAdmin.rpc('create_paid_booking_request', {
+    // Booking requests are free (business contract V1): no BC moves. The old paid RPC is disabled
+    // in the database (060). Idempotent per (client, profile, idempotency key).
+    const { data, error } = await supabaseAdmin.rpc('create_booking_request', {
       p_client_user_id: req.user!.id,
       p_requester_email: input.requesterEmail,
       p_profile_id: profile.id,
@@ -57,9 +58,12 @@ bookingRequestsRouter.post('/', verifyUser, requireAccountType('client'), asyncH
       p_message: input.message,
       p_idempotency_key: input.idempotencyKey
     });
-    if (error) return mapPaidBookingError(res, error.message);
-    await notifyOwnerOfNewBooking(profile, data);
-    return res.status(201).json({ booking_request: data });
+    if (error) return mapBookingRpcError(res, error.message);
+    const result = data as { created?: boolean; booking?: Record<string, unknown> } | null;
+    // A concurrent retry of the same attempt gets the stored request back without a second notification.
+    if (!result?.created) return res.status(200).json({ booking_request: result?.booking ?? null, replayed: true });
+    await notifyOwnerOfNewBooking(profile, result.booking);
+    return res.status(201).json({ booking_request: result.booking });
   }
 
   const { data, error } = await supabaseAdmin.from('booking_requests').insert({
@@ -109,7 +113,7 @@ bookingRequestsRouter.get('/mine', verifyUser, requireAccountType('client'), asy
   });
 }));
 
-/** A client withdraws their own request while it is still undecided. BC already transferred is not refunded. */
+/** A client withdraws their own request while it is still undecided. Requests are free; historical fees are not refunded. */
 bookingRequestsRouter.post('/:id/cancel', verifyUser, requireAccountType('client'), asyncHandler(async (req, res) => {
   const { data: existing } = await supabaseAdmin
     .from('booking_requests')
@@ -185,11 +189,11 @@ async function findClientBooking(userId: string, profileId: string, idempotencyK
   return data;
 }
 
-function mapPaidBookingError(res: Response, message: string) {
-  if (message.includes('INSUFFICIENT')) return bookingError(res, 402, 'INSUFFICIENT_BC');
+function mapBookingRpcError(res: Response, message: string) {
+  if (message.includes('CLIENT_ACTIVATION_REQUIRED')) return bookingError(res, 403, 'CLIENT_ACTIVATION_REQUIRED');
   if (message.includes('PROFILE_NOT_AVAILABLE') || message.includes('PROFILE_NOT_FOUND')) return bookingError(res, 404, 'PROFILE_NOT_AVAILABLE');
   if (message.includes('IDEMPOTENCY')) return bookingError(res, 409, 'BOOKING_IDEMPOTENCY_CONFLICT');
-  console.error('[BookingRequests] paid booking failed', message);
+  console.error('[BookingRequests] booking create failed', message);
   return bookingError(res, 400, 'BOOKING_CREATE_FAILED');
 }
 

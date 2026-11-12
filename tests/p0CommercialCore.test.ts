@@ -48,17 +48,16 @@ async function seed(): Promise<FakeDatabase> {
   db.tables.client_referrals = [];
   db.tables.booking_requests = [];
   db.joins.profiles = (row) => db.tables.profiles.find((profile) => profile.id === row.profile_id) || null;
-  // Mirrors create_paid_booking_request: idempotent per (client, profile, key), one charge per new request.
-  db.rpcHandlers.create_paid_booking_request = (args) => {
+  // Mirrors create_booking_request (060): idempotent per (client, profile, key) and free - it never moves BC.
+  db.rpcHandlers.create_booking_request = (args) => {
     const existing = db.tables.booking_requests.find((row) => row.requester_user_id === args.p_client_user_id
       && row.profile_id === args.p_profile_id && row.client_request_key === args.p_idempotency_key);
-    if (existing) return { data: existing, error: null };
-    db.tables.bcu_profile_interactions ||= [];
-    db.tables.bcu_profile_interactions.push({ interaction_type: 'booking', amount_bcu: 50000 });
-    const row = { id: `paid-${db.tables.booking_requests.length + 1}`, profile_id: args.p_profile_id, requester_user_id: args.p_client_user_id, client_request_key: args.p_idempotency_key, status: 'pending' };
+    if (existing) return { data: { created: false, booking: existing }, error: null };
+    const row = { id: `booking-${db.tables.booking_requests.length + 1}`, profile_id: args.p_profile_id, requester_user_id: args.p_client_user_id, client_request_key: args.p_idempotency_key, status: 'pending' };
     db.tables.booking_requests.push(row);
-    return { data: row, error: null };
+    return { data: { created: true, booking: row }, error: null };
   };
+  db.rpcHandlers.create_paid_booking_request = () => ({ data: null, error: { message: 'PAID_BOOKING_DISABLED' } });
   installFakeSupabase(supabaseModule, db, users);
   return db;
 }
@@ -131,7 +130,7 @@ test('bookings for hidden, ownerless or own profiles and invalid dates are rejec
   assert.equal(db.tables.booking_requests.length, 0);
 });
 
-test('authorized paid booking uses the atomic BC RPC and a retry never charges twice', async () => {
+test('business contract V1: an authorized booking is free, uses the free RPC and a retry creates nothing new', async () => {
   (await modulesPromise).config.bcuWalletEnabled = true;
   const db = await seed();
   await withServer(async (call) => {
@@ -142,23 +141,38 @@ test('authorized paid booking uses the atomic BC RPC and a retry never charges t
     assert.equal(retry.body.replayed, true);
     assert.equal(retry.body.booking_request.id, first.body.booking_request.id);
   });
-  // The replay is answered from the stored request; the paying RPC (itself idempotent) runs once.
-  assert.deepEqual(db.rpcCalls.map((item) => item.name), ['create_paid_booking_request']);
+  assert.deepEqual(db.rpcCalls.map((item) => item.name), ['create_booking_request']);
   assert.equal(db.tables.radar_notifications.filter((row) => row.event_type === 'booking_requested').length, 1);
   assert.equal(db.rpcCalls[0].args.p_client_user_id, 'client-1');
   assert.equal(db.tables.booking_requests.length, 1);
-  assert.equal(db.tables.bcu_profile_interactions.length, 1);
+  assert.equal((db.tables.bcu_profile_interactions || []).length, 0);
 });
 
-test('insufficient BC is reported as 402 INSUFFICIENT_BC', async () => {
+test('a replay answered by the free RPC (concurrent retry) returns 200 and does not notify again', async () => {
   (await modulesPromise).config.bcuWalletEnabled = true;
   const db = await seed();
-  db.rpcHandlers.create_paid_booking_request = () => ({ data: null, error: { message: 'INSUFFICIENT_BCU' } });
+  // The race: the route's pre-check misses the row, then the locked RPC finds the request stored by the winner.
+  db.rpcHandlers.create_booking_request = () => ({ data: { created: false, booking: { id: 'stored-1', status: 'pending' } }, error: null });
   await withServer(async (call) => {
     const response = await call('POST', '/api/booking-requests', 'client-token', validBooking());
-    assert.equal(response.status, 402);
-    assert.equal(response.body.code, 'INSUFFICIENT_BC');
+    assert.equal(response.status, 200);
+    assert.equal(response.body.replayed, true);
+    assert.equal(response.body.booking_request.id, 'stored-1');
   });
+  assert.equal((db.tables.radar_notifications || []).filter((row) => row.event_type === 'booking_requested').length, 0);
+});
+
+test('no booking execution path can reach the old paid booking RPC', async () => {
+  const [route, migration] = await Promise.all([
+    read('Back/src/routes/bookingRequests.ts'),
+    read('supabase/migrations/060_v1_business_contract_lock.sql')
+  ]);
+  assert.doesNotMatch(route, /create_paid_booking_request|INSUFFICIENT_BC/);
+  assert.match(migration, /set active = false[\s\S]*where product_code = 'profile_booking'/);
+  assert.match(migration, /function public\.create_paid_booking_request[\s\S]*?raise exception 'PAID_BOOKING_DISABLED'/);
+  const free = migration.slice(migration.indexOf('function public.create_booking_request'), migration.indexOf('create table if not exists public.bcu_profile_gifts'));
+  assert.doesNotMatch(free, /apply_bcu_ledger_entry|charge_bcu_profile_interaction/);
+  assert.match(free, /client_activated/);
 });
 
 test('free booking path records the requester and is idempotent per attempt key', async () => {

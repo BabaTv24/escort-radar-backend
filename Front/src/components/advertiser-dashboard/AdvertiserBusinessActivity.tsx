@@ -81,6 +81,7 @@ export function DigitalRevenuePanel({ activity }: { activity: AdvertiserActivity
   const revenue = activity?.revenue;
   if (!activity || !revenue) return null;
   const rows = [
+    { key: 'gifts', label: t('revenue.gifts'), line: revenue.gifts ?? { bc: '0', count: 0 } },
     { key: 'favorites', label: t('revenue.favorites'), line: revenue.favorites },
     { key: 'text-chat', label: t('revenue.textChat'), line: revenue.text_chat },
     { key: 'video-chat', label: t('revenue.videoChat'), line: revenue.video_chat, note: t('revenue.videoUnavailable') }

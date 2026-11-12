@@ -159,30 +159,42 @@ test('acknowledging admirers marks only the caller\'s favorite notifications', a
   assert.deepEqual(unread.sort(), ['n-3', 'n-4']);
 });
 
-test('first paid favorite notifies the owner anonymously; a repeat add neither charges nor notifies', async () => {
+test('a free favorite notifies the owner once, anonymously, and never charges BC', async () => {
   const db = await seed();
-  db.tables.profiles.push({ id: '11111111-1111-4111-8111-111111111111', user_id: 'owner-1' });
+  db.tables.profiles.push({ id: '11111111-1111-4111-8111-111111111111', user_id: 'owner-1', status: 'active', is_published: true, moderation_status: 'approved', shadowbanned: false, category: 'ladies' });
   db.tables.radar_notifications = [];
-  let paid = false;
-  db.rpcHandlers.add_bcu_favorite_with_transfer = (args) => {
-    assert.equal(args.p_idempotency_key, `favorite:client-1:${args.p_profile_id}`);
-    const charged = !paid;
-    paid = true;
-    return { data: { favorite: true, charged, amount_bcu: '50000', profile_id: args.p_profile_id, recipient_credited: true }, error: null };
-  };
+  db.tables.client_activations = [{ user_id: 'client-1', state: 'client_activated' }];
+  db.tables.client_favorites = [];
   await withServer(async (call) => {
     const first = await call('POST', '/api/favorites/11111111-1111-4111-8111-111111111111', 'client-token');
     assert.equal(first.status, 201);
-    assert.equal(first.body.charged, true);
-    assert.equal(first.body.amount_bc, '5');
+    assert.equal(first.body.charged, false);
+    assert.equal(first.body.amount_bc, '0');
+    assert.equal(first.body.already_favorited, false);
     const again = await call('POST', '/api/favorites/11111111-1111-4111-8111-111111111111', 'client-token');
     assert.equal(again.body.charged, false);
+    assert.equal(again.body.already_favorited, true);
   });
+  assert.equal(db.rpcCalls.length, 0);
+  assert.equal(db.tables.client_favorites.length, 1);
   assert.equal(db.tables.radar_notifications.length, 1);
   const [notification] = db.tables.radar_notifications;
   assert.equal(notification.user_id, 'owner-1');
   assert.equal(notification.event_type, 'favorite_received');
-  assert.doesNotMatch(JSON.stringify(notification), /client-1|client@example/);
+  assert.doesNotMatch(JSON.stringify(notification), /client-1|client@example|BC/);
+});
+
+test('a FREE client cannot save favorites', async () => {
+  const db = await seed();
+  db.tables.profiles.push({ id: '11111111-1111-4111-8111-111111111111', user_id: 'owner-1', status: 'active', is_published: true, moderation_status: 'approved', shadowbanned: false, category: 'ladies' });
+  db.tables.client_activations = [];
+  db.tables.client_favorites = [];
+  await withServer(async (call) => {
+    const response = await call('POST', '/api/favorites/11111111-1111-4111-8111-111111111111', 'client-token');
+    assert.equal(response.status, 403);
+    assert.equal(response.body.code, 'PREMIUM_REQUIRED');
+  });
+  assert.equal(db.tables.client_favorites.length, 0);
 });
 
 test('dashboard wires counters, sidebar badges, revenue panel and refresh after mutations', async () => {

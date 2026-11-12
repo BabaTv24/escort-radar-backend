@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { requireAdmin, verifyUser } from '../middleware/auth.js';
+import { getAdvertiserAccess, getAuthAccountType, requireAdmin, verifyUser } from '../middleware/auth.js';
+import { getClientActivationSummary } from '../services/clientActivation.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler, optionalText } from '../validation.js';
 
@@ -30,7 +31,21 @@ referralsRouter.post('/assign-me', verifyUser, asyncHandler(async (req, res) => 
   return res.json({ assigned: true, referralCode: data?.referral_code });
 }));
 
+/**
+ * Business contract V1: only activated Premium clients, advertisers with an active subscription
+ * and admins receive a personal referral link and QR code. FREE clients receive none.
+ */
+export async function isReferralEligible(user: Parameters<typeof getAuthAccountType>[0] & { id: string }) {
+  const role = String(user.app_metadata?.role || '').toLowerCase();
+  if (role === 'admin' || user.app_metadata?.admin === true) return true;
+  if (getAuthAccountType(user) !== 'client') return Boolean(getAdvertiserAccess(user));
+  return (await getClientActivationSummary(user.id)).state === 'client_activated';
+}
+
 referralsRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
+  if (!(await isReferralEligible(req.user!))) {
+    return res.status(403).json({ error: 'Premium activation required for a personal referral code', code: 'REFERRAL_PREMIUM_REQUIRED', eligible: false });
+  }
   const { error: assignmentError } = await supabaseAdmin.rpc('assign_referral', { p_user_id: req.user!.id, p_referral_code: null, p_source: 'direct' });
   if (assignmentError) return res.status(503).json({ error: 'Referral assignment is temporarily unavailable' });
   const { data: referral, error } = await supabaseAdmin.from('client_referrals')

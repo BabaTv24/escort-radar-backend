@@ -683,6 +683,7 @@ export type AdvertiserActivity = {
   new_admirers: number;
   wallet: { available_bc: string; locked_bc: string } | null;
   revenue: {
+    gifts: RevenueLine;
     favorites: RevenueLine;
     text_chat: RevenueLine;
     video_chat: RevenueLine;

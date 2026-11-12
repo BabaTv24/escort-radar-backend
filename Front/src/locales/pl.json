@@ -1326,8 +1326,8 @@
   "favorites.inFavorites": "W ulubionych",
   "favorites.favoriteRemoved": "Usunieto z ulubionych.",
   "favorites.notEnoughTokens": "Brak BC Coins. Doladuj pakiet.",
-  "favorites.bcuConfirmation": "Pierwsze dodanie kosztuje 5 BC. Ponowne dodanie wcześniej opłaconego profilu jest bezpłatne. Kwota trafi jako prezent do Ogłoszeniodawcy.",
-  "favorites.bcuPaid": "Dodano do Ulubionych. 5 BC przekazano Ogłoszeniodawcy.",
+  "favorites.bcuConfirmation": "Zapisanie profilu w Ulubionych jest bezpłatne.",
+  "favorites.bcuPaid": "Dodano do Ulubionych.",
   "favorites.bcuRestored": "Dodano ponownie bez dodatkowej opłaty.",
   "favorites.premiumRequired": "Aktywne Client Premium jest wymagane.",
   "favorites.activatePremium": "Aktywuj Premium",
@@ -2398,7 +2398,7 @@
   ,"bookings.client.quickCopy": "Status zapytań o termin"
   ,"bookings.client.empty": "Nie masz jeszcze żadnych zapytań o rezerwację."
   ,"bookings.client.cancel": "Anuluj zapytanie"
-  ,"bookings.client.cancelConfirm": "Anulować to zapytanie? Opłata BC za wysłanie zapytania nie jest zwracana."
+  ,"bookings.client.cancelConfirm": "Anulować to zapytanie?"
   ,"bookings.client.cancelled": "Zapytanie zostało anulowane."
   ,"bookings.client.cancelError": "Nie udało się anulować zapytania. Status mógł się zmienić — lista została odświeżona."
   ,"bookings.notifications.title": "Powiadomienia"
@@ -2496,12 +2496,14 @@
   ,"activity.loadError": "Nie udało się wczytać liczników aktywności."
   ,"revenue.eyebrow": "Saldo z ledgera BC"
   ,"revenue.title": "Przychody cyfrowe"
-  ,"revenue.favorites": "Prezenty z Ulubionych"
+  ,"revenue.favorites": "Ulubione (historyczne opłaty)"
   ,"revenue.textChat": "Odblokowania czatu tekstowego"
   ,"revenue.videoChat": "Minuty wideoczatu"
   ,"revenue.videoUnavailable": "Wideoczat jest jeszcze niedostępny"
   ,"revenue.transactions": "Transakcje: {{count}}"
   ,"revenue.total": "Razem zarobione BC (cyfrowo)"
-  ,"revenue.bookingFees": "Opłaty za zapytania o rezerwację, osobno: {{amount}} BC ({{count}})"
+  ,"revenue.bookingFees": "Historyczne opłaty za zapytania o rezerwację (dziś bezpłatne), osobno: {{amount}} BC ({{count}})"
   ,"revenue.ledgerNote": "Tylko zaksięgowane wpływy. Kupione BC, bonusy i zablokowane BC nie są tu liczone."
+  ,"favorites.addedFree": "Dodano do Ulubionych. Zapisanie profilu jest bezpłatne."
+  ,"revenue.gifts": "Prezenty"
 }

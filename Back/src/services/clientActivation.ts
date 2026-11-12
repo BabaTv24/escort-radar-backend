@@ -22,11 +22,13 @@ export async function getClientActivationSummary(userId: string): Promise<Client
     supabaseAdmin.from('client_referrals').select('*').eq('user_id', userId).maybeSingle()
   ]);
 
+  const activated = activation?.state === 'client_activated';
+  // Business contract V1: a FREE client receives no personal referral code, link or QR code.
   return {
-    state: activation?.state === 'client_activated' ? 'client_activated' : 'client_free',
-    referral_code: referral?.referral_code || null,
-    referral_link: referral?.referral_link || null,
-    qr_image_url: await getQrImageUrl(userId, referral?.referral_code || null),
+    state: activated ? 'client_activated' : 'client_free',
+    referral_code: activated ? referral?.referral_code || null : null,
+    referral_link: activated ? referral?.referral_link || null : null,
+    qr_image_url: activated ? await getQrImageUrl(userId, referral?.referral_code || null) : null,
     activated_at: activation?.activated_at || null,
     clicks: Number(referral?.click_count || 0),
     registrations: Number(referral?.registration_count || 0),

@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-test('feature flag isolates legacy and BCU Favorites', async () => {
+test('business contract V1: favorites are free in both wallet modes and never call a paid RPC', async () => {
   const route = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');
-  assert.match(route, /if \(config\.bcuWalletEnabled\)/);
-  assert.match(route, /addBcuFavorite/);
-  assert.match(route, /add_client_favorite_with_token/);
+  const migration = await readFile(new URL('../supabase/migrations/060_v1_business_contract_lock.sql', import.meta.url), 'utf8');
+  assert.doesNotMatch(route, /addBcuFavorite|add_bcu_favorite_with_transfer|add_client_favorite_with_token/);
+  assert.match(route, /charged: false/);
+  assert.match(route, /activation\.state !== 'client_activated'/);
+  assert.match(migration, /set active = false[\s\S]*where product_code = 'favorite_profile'/);
 });
 
 test('migration 046 defines atomic paid-once transfer and restricted RPC', async () => {
@@ -82,21 +84,25 @@ test('recipient dashboard serializer excludes client identity and ledger interna
   assert.doesNotMatch(dashboard, /client_user_id/);
 });
 
-test('backend BCU branch uses session identity and never accepts price or recipient', async () => {
+test('backend favorite save uses session identity and never accepts price or recipient', async () => {
   const route = await readFile(new URL('../Back/src/routes/favorites.ts', import.meta.url), 'utf8');
-  assert.match(route, /addBcuFavorite\(req\.user!\.id, profileId\)/);
+  assert.match(route, /insert\(\{ client_id: req\.user!\.id, profile_id: profileId \}\)/);
   assert.doesNotMatch(route, /req\.body.*(?:amount|price|recipient|user_id)/);
-  assert.match(route, /if \(config\.bcuWalletEnabled\)/);
-  assert.match(route, /add_client_favorite_with_token/);
 });
 
-test('frontend sends only profile path and provides BCU confirmation states', async () => {
+test('frontend sends only profile path and shows no favorite price or confirmation', async () => {
   const api = await readFile(new URL('../Front/src/lib/api.ts', import.meta.url), 'utf8');
   const page = await readFile(new URL('../Front/src/pages/ProfilePage.tsx', import.meta.url), 'utf8');
+  const card = await readFile(new URL('../Front/src/components/ProfileCard.tsx', import.meta.url), 'utf8');
   const locales = await Promise.all(['pl', 'en', 'de'].map((locale) => readFile(new URL(`../Front/src/locales/${locale}.json`, import.meta.url), 'utf8')));
   assert.match(api, /addFavorite:[\s\S]*`\/api\/favorites\/\$\{profileId\}`[\s\S]*method: 'POST',[\s\S]*token/);
   assert.match(page, /favoriteBusy/);
-  assert.match(page, /favorites\.bcuConfirmation/);
-  assert.match(page, /favorites\.bcuRestored/);
-  for (const locale of locales) assert.match(locale, /"favorites\.(?:bcuConfirmation|premiumRequired|profileUnavailable)"/);
+  for (const source of [page, card]) {
+    assert.doesNotMatch(source, /favorites\.bcuConfirmation|· 5 BC/);
+    assert.match(source, /favorites\.addedFree/);
+  }
+  for (const locale of locales) {
+    assert.match(locale, /"favorites\.addedFree"/);
+    assert.doesNotMatch(locale, /"favorites\.bcu(?:Confirmation|Paid)": "[^"]*5 BC/);
+  }
 });

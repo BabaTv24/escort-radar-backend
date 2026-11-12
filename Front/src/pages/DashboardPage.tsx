@@ -1528,7 +1528,8 @@ function ClientDashboard({ token, userEmail, coinWallet, bcuWallet, bcuEntitleme
     : activation?.state === 'client_activated';
   const personalVerificationStatus = personalProfile?.verification_status || 'incomplete';
   const isVerifiedClient = personalVerificationStatus === 'verified';
-  const referralLink = referral?.referralLink || getPublicReferralLink(activation);
+  // FREE clients have no personal referral link or QR code (business contract V1).
+  const referralLink = activated ? referral?.referralLink || getPublicReferralLink(activation) : '';
   const [referralQrImageUrl, setReferralQrImageUrl] = useState('');
   const [referralCopied, setReferralCopied] = useState(false);
   useEffect(() => {

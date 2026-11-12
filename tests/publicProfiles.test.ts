@@ -966,7 +966,7 @@ test('visibility audit explains Berlin Hamburg marketplace matrix and category a
   assert.match(adminPageSource, /category: normalizeCategoryKey\(studioForm\.category\) \|\| studioForm\.category/);
 });
 
-test('client activation token bonus is 7 and favorites are token-gated', async () => {
+test('client activation token bonus is 7 and favorites are free', async () => {
   const configSource = await readFile(new URL('../Back/src/config.ts', import.meta.url), 'utf8');
   const clientActivationSource = await readFile(new URL('../Back/src/services/clientActivation.ts', import.meta.url), 'utf8');
   const tokenWalletSource = await readFile(new URL('../Back/src/services/tokenWallet.ts', import.meta.url), 'utf8');
@@ -1013,11 +1013,9 @@ test('client activation token bonus is 7 and favorites are token-gated', async (
   assert.match(plLocale, /"admin\.table\.token_balance": "BC Coins"/);
   assert.match(enLocale, /"admin\.table\.token_balance": "BC Coins"/);
   assert.match(deLocale, /"admin\.table\.token_balance": "BC Coins"/);
-  assert.match(favoritesSource, /FAVORITE_TOKEN_COST = 1/);
-  assert.match(favoritesSource, /add_client_favorite_with_token/);
-  assert.match(favoritesSource, /code: 'NOT_ENOUGH_TOKENS'/);
-  assert.match(favoritesSource, /new_balance/);
-  assert.match(apiSource, /new_balance\?: number/);
+  // Business contract V1: favorites are free; neither the legacy token charge nor the BCU transfer is called.
+  assert.doesNotMatch(favoritesSource, /FAVORITE_TOKEN_COST|add_client_favorite_with_token|add_bcu_favorite_with_transfer/);
+  assert.match(favoritesSource, /charged: false/);
   assert.match(migration, /create table if not exists public\.client_favorites/);
   assert.match(migration, /'favorite_profile'/);
   assert.match(rpcMigration, /returns jsonb/);
@@ -1421,8 +1419,7 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(supabaseSource, /autoRefreshToken: true/);
   assert.match(supabaseSource, /detectSessionInUrl: true/);
   assert.match(favoritesSource, /already_exists/);
-  assert.match(favoritesSource, /new_balance/);
-  assert.match(apiSource, /already_exists\?: boolean/);
+  assert.match(apiSource, /already_exists: boolean/);
   assert.match(dashboardSource, /id="favorites"/);
   assert.match(dashboardSource, /const sessionAttempts = recentLogin \? 60 : 20/);
   assert.match(dashboardSource, /waitForSupabaseSession\(sessionAttempts, 250\)/);
@@ -1439,7 +1436,7 @@ test('mobile auth bar exposes login register panel and logout actions', async ()
   assert.match(profileCardSource, /favorites\.alreadyFavorite/);
   assert.match(profileCardSource, /favorites\.buyTokens/);
   assert.match(profileCardSource, /onFavoriteChange\?\.\(profile\.id\)/);
-  assert.match(profileCardSource, /result\.already_exists \|\| result\.already_favorited/);
+  assert.match(profileCardSource, /result\.already_favorited \? t\('favorites\.favoriteAlreadyAdded'\)/);
   assert.match(profilePageSource, /favorites\.alreadyFavorite/);
   assert.match(profilePageSource, /encodeURIComponent\(`\/profile\/\$\{profile!\.id\}`\)/);
   assert.match(stylesSource, /Mobile auth and saved radar location hotfix/);

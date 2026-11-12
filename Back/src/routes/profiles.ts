@@ -15,6 +15,8 @@ import { hasActiveEntitlement } from '../services/bcuWallet.js';
 import { canReadExactProfileLocation, exactProfileLocationPayload } from '../profileLocationAccess.js';
 import { AdminLocationGeocodingError, adminAddressOrPrivacyChanged, adminLocationChanged, resolveAdminLocation, resolveManualAdminLocationForSave, reverseGeocodeAdminLocation, type AdminLocationResolution } from '../adminLocationGeocoding.js';
 import { evaluatePhoneRules, type PhoneRuleData } from '../phoneRules.js';
+import { VIDEO_CHAT_IMPLEMENTED } from '../featureAvailability.js';
+import { giftCatalog } from './gifts.js';
 import { config } from '../config.js';
 import { getCommunicationSettings, publicCommunication } from '../services/profileCommunication.js';
 
@@ -247,8 +249,9 @@ profilesRouter.get('/:id/access', verifyUser, asyncHandler(async (req, res) => {
       telegram: data.telegram,
       full_gallery: images,
       vip_gallery_unlocked: Boolean(vipUnlock),
-      gifts_enabled: true,
-      live_cam_enabled: true
+      // Only gift levels with a BOSS-approved price can be sent; video chat is not implemented.
+      gifts_enabled: (await giftCatalog()).some((gift) => gift.configured),
+      live_cam_enabled: VIDEO_CHAT_IMPLEMENTED
     }
   });
 }));
@@ -567,8 +570,13 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
   };
 }
 
-export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile), imageLimit = 4) {
-  const { phone, primary_phone, additional_phones, whatsapp, telegram,
+/**
+ * Public (FREE / anonymous) view of a profile. Business contract V1: only the first authorized image is public;
+ * additional approved images and contact details require Premium activation (GET /:id/access).
+ */
+export const PUBLIC_PROFILE_IMAGE_LIMIT = 1;
+export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile), imageLimit = PUBLIC_PROFILE_IMAGE_LIMIT) {
+  const { phone, primary_phone, additional_phones, whatsapp, telegram, business_phone: _businessPhone,
     admin_note, subscription_note, source_url, import_source, imported_at, source_url_normalized,
     owner_email: _ownerEmail,
     email: _email,
