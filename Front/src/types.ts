@@ -140,6 +140,8 @@ export type Profile = {
   location_visibility?: 'exact' | 'postal_area' | 'city_only' | 'hidden';
   latitude?: number | null;
   longitude?: number | null;
+  radar_latitude?: number | null;
+  radar_longitude?: number | null;
   location_approximate?: boolean;
   location_precision?: 'exact' | 'postal_area' | 'area' | 'city' | null;
   location_input_source?: 'automatic' | 'manual' | null;

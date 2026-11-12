@@ -3,7 +3,11 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.docker.example
+!.env.docker.frontend.example
 .env.local
+.env.docker
+.env.docker.frontend
 Front/.env
 Front/.env.*
 !Front/.env.example
@@ -14,3 +18,20 @@ Back/.env.*
 *.log
 coverage/
 deploy/
+supabase/.temp/
+artifacts/staging/
+backups/staging/
+*.staging.dump
+*.staging.log
+
+# Profile Scraper data must stay outside version control.
+EscortScraperData/
+tools/profile_scraper/data/
+tools/profile_scraper/.venv/
+tools/profile_scraper/.pytest-tmp/
+tools/profile_scraper/.pytest_cache/
+tools/profile_scraper/build/
+tools/profile_scraper/.build-temp-*/
+**/__pycache__/
+*.py[cod]
+*.egg-info/

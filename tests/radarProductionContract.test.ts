@@ -619,6 +619,26 @@ test('63 approximate profiles receive deterministic unique 350 metre display-onl
   assert.equal(feature.features[0].properties.id, firstLayout[7].profile.id);
 });
 
+test('privacy-safe exact and postal coordinates keep their own marker position instead of collapsing at the city centre', () => {
+  const item = (id: string, precision: 'approximate' | 'postal_area', lat: number, lng: number) => ({
+    profile: { id, display_name: id, city: 'Berlin', work_city: 'Berlin' },
+    distanceKm: 1,
+    operatorStatus: 'OFFLINE',
+    statusClass: 'offline',
+    favorite: false,
+    filterCoordinates: { lat, lng, label: 'Berlin', precision, approximate: true },
+    displayCoordinates: { lat, lng },
+    isApproximateLocation: true
+  }) as any;
+  const exactSafe = item('exact-safe', 'approximate', 52.48, 13.52);
+  const postalSafe = item('postal-safe', 'postal_area', 52.61, 13.32);
+  const layout = assignRadarDisplayCoordinates([exactSafe, postalSafe]);
+  assert.deepEqual(layout.map(({ displayCoordinates }) => displayCoordinates), [
+    { lat: 52.48, lng: 13.52 },
+    { lat: 52.61, lng: 13.32 }
+  ]);
+});
+
 test('approximate layout uses each profile city while city_only filtering stays privacy-safe', async () => {
   const itemForCity = (id: string, city: string) => ({
     profile: { id, display_name: id, city, work_city: city },
@@ -673,6 +693,8 @@ test('public radar contract hides city_only raw coordinates, contacts and galler
   assert.match(routeSource, /sanitizePublicProfile\(withImageUrls\(profile\), location, 1\)/);
   assert.match(routeSource, /phone, primary_phone, additional_phones, whatsapp, telegram/);
   assert.match(routeSource, /exact_address: _exactAddress/);
+  assert.match(routeSource, /radar_latitude: effectiveLocation\?\.latitude/);
+  assert.match(routeSource, /radar_longitude: effectiveLocation\?\.longitude/);
 });
 
 test('exact public coordinates equal the admin point while other privacy modes stay approximate', () => {
@@ -716,7 +738,7 @@ test('mobile Radar is content-sized, square, overflow-safe and reserves bottom n
   ]);
   const mobile = styles.slice(styles.lastIndexOf('@media (max-width: 720px)'), styles.indexOf('@media (prefers-reduced-motion', styles.lastIndexOf('@media (max-width: 720px)')));
   assert.match(mobile, /radar-map-surface[\s\S]*height:\s*auto;[\s\S]*aspect-ratio:\s*1\s*\/\s*1/);
-  assert.match(mobile, /radar-visual[\s\S]*top:\s*50%;[\s\S]*width:\s*calc\(100% - 24px\)/);
+  assert.match(mobile, /radar-map-viewport[\s\S]*top:\s*50%;[\s\S]*width:\s*calc\(100% - 24px\)/);
   assert.match(mobile, /padding-bottom:\s*calc\(var\(--er-mobile-nav-height[^;]+env\(safe-area-inset-bottom\)/);
   assert.match(mobile, /max-width:\s*100%/);
   assert.doesNotMatch(mobile, /radar-map-surface[\s\S]{0,180}height:\s*380px/);

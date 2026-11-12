@@ -17,7 +17,7 @@ import {
   type AdvertisementImage,
   type FunPageAdvertisementSettings
 } from '../funPageAdvertisement.js';
-import { supabaseAdmin } from '../supabase.js';
+import { publicStorageUrl, supabaseAdmin } from '../supabase.js';
 import { asyncHandler } from '../validation.js';
 import { writeAdminAuditLog } from '../services/adminAudit.js';
 
@@ -172,7 +172,7 @@ async function uploadAdvertisementImage(file: Express.Multer.File, advertisement
   const upload = await supabaseAdmin.storage.from(config.storageBucket).upload(storagePath, processed, { contentType: 'image/webp' });
   if (upload.error) throw new Error(upload.error.message);
   const { data } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(storagePath);
-  return { storagePath, publicUrl: data.publicUrl };
+  return { storagePath, publicUrl: publicStorageUrl(data.publicUrl) };
 }
 
 function isImageUsedElsewhere(settings: FunPageAdvertisementSettings, storagePath: string, excludedId: string) {

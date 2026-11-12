@@ -1,0 +1,70 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    command: npm run dev:backend
+    init: true
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: development
+      PORT: '4000'
+      FRONTEND_URL: http://localhost:5173
+      APP_URL: http://localhost:5173
+      STRIPE_ENABLED: 'false'
+      STRIPE_ESCORT_RADAR_ENABLED: 'false'
+      CCBILL_ENABLED: 'false'
+      PAYSAFE_ENABLED: 'false'
+      MANUAL_BANK_TRANSFER_ENABLED: 'false'
+      MANUAL_CRYPTO_ENABLED: 'false'
+      BCU_WALLET_ENABLED: 'true'
+      ALLOW_TEST_SEED: 'false'
+    volumes:
+      - ./Back:/app/Back
+    ports:
+      - 127.0.0.1:4000:4000
+    networks:
+      - default
+      - supabase_dev
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:4000/api/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    command: npm run dev:frontend
+    init: true
+    env_file:
+      - .env.docker.frontend
+    environment:
+      VITE_API_URL: http://backend:4000
+      VITE_MANUAL_BANK_TRANSFER_ENABLED: 'false'
+      VITE_BCU_WALLET_ENABLED: 'true'
+      VITE_STRIPE_ESCORT_RADAR_ENABLED: 'false'
+      CHOKIDAR_USEPOLLING: 'true'
+    volumes:
+      - ./Front:/app/Front
+    ports:
+      - 127.0.0.1:5173:5173
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:5173/').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+networks:
+  supabase_dev:
+    external: true
+    name: supabase_network_escort-radar-supabase-dev

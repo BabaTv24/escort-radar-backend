@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LogIn, Radar } from 'lucide-react';
 import { saveLoginSessionHandoff, supabase } from '../lib/supabase';
 import { useI18n } from '../i18n';
-import { getSafeNextPath, withTimeout } from '../lib/authRedirect';
+import { getSafeNextPath, waitForSupabaseSession, withTimeout } from '../lib/authRedirect';
 
 const rememberedEmailStorageKey = 'escortRadar.rememberedEmail';
 const loginJustCompletedStorageKey = 'escortRadar:loginJustCompleted';
@@ -16,6 +16,7 @@ export function LoginPage() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSlowLoginHelp, setShowSlowLoginHelp] = useState(false);
+  const [confirmationNotice, setConfirmationNotice] = useState('');
   const mountedRef = useRef(true);
   const loginRunId = useRef(0);
   const didRedirectRef = useRef(false);
@@ -24,6 +25,28 @@ export function LoginPage() {
   const { t } = useI18n();
   const nextParam = searchParams.get('next');
   const nextPath = useMemo(() => getSafeNextPath(searchParams), [searchParams]);
+  const arrivedFromEmailConfirmation = searchParams.get('confirmed') === '1';
+
+  // The confirmation link from the signup email lands here. Supabase may already have exchanged
+  // it for a session through detectSessionInUrl, so continue into the app when that happened and
+  // otherwise leave the person on a login form that explains the address is now confirmed.
+  useEffect(() => {
+    if (!arrivedFromEmailConfirmation) return;
+    let active = true;
+    setConfirmationNotice(t('auth.confirm.confirmedNotice'));
+
+    waitForSupabaseSession()
+      .then((session) => {
+        if (!active || !session) return;
+        didRedirectRef.current = true;
+        navigate(nextPath, { replace: true });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [arrivedFromEmailConfirmation, navigate, nextPath, t]);
 
   useEffect(() => {
     const savedEmail = localStorage.getItem(rememberedEmailStorageKey);
@@ -190,6 +213,7 @@ export function LoginPage() {
           <p className="eyebrow">{t('buttons.login')}</p>
           <h2>{t('auth.loginTitle')}</h2>
           <p className="muted mobile-login-help">{t('auth.mobileLoginHelp')}</p>
+          {confirmationNotice && <p className="subscription-notice">{confirmationNotice}</p>}
           <form className="stack" onSubmit={handleSubmit}>
             <input type="email" required autoComplete="email" placeholder={t('form.email')} value={email} onChange={(event) => setEmail(event.target.value)} />
             <label className="remember-email-control">

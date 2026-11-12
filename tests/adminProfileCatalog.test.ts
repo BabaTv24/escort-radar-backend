@@ -19,12 +19,13 @@ test('Bonn and Prague variants fall back to DE and CZ while an explicit valid co
 });
 
 test('controlled Polish cities override an incorrectly stored DE country', () => {
-  for (const city of ['Bydgoszcz', 'Kołobrzeg', 'Kolobrzeg', 'Koszalin', 'Stargard', 'Stargard Szczeciński', 'Stargard Szczecinski', 'Szczecin', 'Poznań', 'Poznan']) {
+  for (const city of ['Bydgoszcz', 'Kołobrzeg', 'Kolobrzeg', 'Koszalin', 'Stargard', 'Stargard Szczeciński', 'Stargard Szczecinski', 'Szczecin', 'Suwałki', 'Suwalki', 'Poznań', 'Poznan']) {
     assert.equal(resolveAdminProfileCountry({ work_country: 'DE', work_city: city }), 'PL', city);
   }
   assert.equal(resolveAdminProfileCountry({ work_country: 'DE', work_city: 'Bonn' }), 'DE');
   assert.equal(resolveAdminProfileCountry({ work_country: '', work_city: 'Prag' }), 'CZ');
   assert.equal(resolveAdminProfileCountry({ work_country: '', work_city: 'Praha' }), 'CZ');
+  assert.equal(aggregateAdminProfileCountries([{ id: 'suwalki', work_country: 'DE', work_city: 'Suwałki' }])[0].key, 'PL');
 });
 
 test('country and city aggregates preserve approved pending and unknown totals', () => {

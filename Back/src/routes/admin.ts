@@ -3,7 +3,7 @@ import multer from 'multer';
 import sharp from 'sharp';
 import { createHash, randomBytes } from 'node:crypto';
 import { requireAdmin, verifyAdminJwt } from '../middleware/auth.js';
-import { supabaseAdmin } from '../supabase.js';
+import { publicStorageUrl, supabaseAdmin } from '../supabase.js';
 import {
   allowedAdminReportStatuses,
   allowedModerationStatuses,
@@ -3798,9 +3798,9 @@ function withPublicImageUrl(image: any) {
   const { data } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(image.storage_path);
   return {
     ...image,
-    public_url: data.publicUrl,
-    url: data.publicUrl,
-    image_url: data.publicUrl,
+    public_url: publicStorageUrl(data.publicUrl),
+    url: publicStorageUrl(data.publicUrl),
+    image_url: publicStorageUrl(data.publicUrl),
     is_cover: Boolean(image.is_primary),
     is_hidden: Boolean(image.is_hidden),
     is_private: Boolean(image.is_private),

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Radar, ShieldCheck } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { MailCheck, Radar, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { useI18n } from '../i18n';
 
 const authAccountTypeOptions = ['client', 'escort', 'business'] as const;
@@ -21,7 +21,9 @@ export function RegisterPage() {
   const [confirmedAdult, setConfirmedAdult] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState('');
+  const [resendNotice, setResendNotice] = useState('');
+  const [resending, setResending] = useState(false);
   const { t } = useI18n();
   const requiresVerification = authAccountType === 'escort' || authAccountType === 'business';
 
@@ -41,23 +43,42 @@ export function RegisterPage() {
 
     setLoading(true);
     const referredByCode = searchParams.get('ref') || localStorage.getItem('escortRadar.referralCode') || '';
+    const normalizedEmail = email.trim().toLowerCase();
     try {
       await api.register({
-        email: email.trim(),
+        email: normalizedEmail,
         password,
         username,
         auth_account_type: authAccountType,
         identity,
         referred_by_code: referredByCode
       });
-      const result = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (result.error) return setMessage(result.error.message);
+      // Deliberately no sign in here. The account is unconfirmed until the link in the
+      // confirmation email is opened, so signing in would either fail or, worse, suggest that
+      // the account is already active.
       localStorage.removeItem('escortRadar.referralCode');
-      navigate('/dashboard');
+      setPassword('');
+      setRepeatPassword('');
+      setPendingConfirmationEmail(normalizedEmail);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('states.requestFailed'));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function resendConfirmationEmail() {
+    if (!pendingConfirmationEmail || resending) return;
+    setResendNotice('');
+    setResending(true);
+    try {
+      await api.resendConfirmationEmail({ email: pendingConfirmationEmail });
+      setResendNotice(t('auth.confirm.resendSent'));
+    } catch (error) {
+      const status = error instanceof ApiError ? error.status : 0;
+      setResendNotice(status === 429 ? t('auth.confirm.resendTooSoon') : t('auth.confirm.resendFailed'));
+    } finally {
+      setResending(false);
     }
   }
 
@@ -98,6 +119,28 @@ export function RegisterPage() {
             </>}
           </div>
         </div>
+        {pendingConfirmationEmail ? (
+          <div className="onboarding-card">
+            <p className="eyebrow">{t('onboarding.registerCard')}</p>
+            <h2><MailCheck size={20} /> {t('auth.confirm.title')}</h2>
+            <p>{t('auth.confirm.body', { email: pendingConfirmationEmail })}</p>
+            <p className="subscription-notice">
+              <ShieldCheck size={16} />
+              {t('auth.confirm.notActiveYet')}
+            </p>
+            <p className="muted">{t('auth.confirm.spamHint')}</p>
+            <button
+              className="button full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block"
+              type="button"
+              disabled={resending}
+              onClick={resendConfirmationEmail}
+            >
+              {resending ? t('states.loading') : t('auth.confirm.resend')}
+            </button>
+            <Link className="text-link" to="/login">{t('auth.confirm.backToLogin')}</Link>
+            {resendNotice && <p className="muted">{resendNotice}</p>}
+          </div>
+        ) : (
         <div className="onboarding-card">
           <p className="eyebrow">{t('onboarding.registerCard')}</p>
           <h2>{requiresVerification ? t('onboarding.createAccess') : t('auth.createFreeAccess')}</h2>
@@ -129,6 +172,7 @@ export function RegisterPage() {
           <Link className="text-link" to="/login">{t('auth.alreadyHaveAccount')}</Link>
           {message && <p className="error-text">{message}</p>}
         </div>
+        )}
       </section>
     </div>
   );

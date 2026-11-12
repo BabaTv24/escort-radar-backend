@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
 import { getAdvertiserOnboardingAccess, requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
-import { supabaseAdmin } from '../supabase.js';
+import { publicStorageUrl, supabaseAdmin } from '../supabase.js';
 import { config } from '../config.js';
 import { asyncHandler } from '../validation.js';
 
@@ -38,14 +38,14 @@ uploadsRouter.post('/client-avatar', verifyUser, upload.single('image'), asyncHa
     .from('client_profiles')
     .upsert({
       user_id: req.user!.id,
-      avatar_url: publicUrl.publicUrl,
+      avatar_url: publicStorageUrl(publicUrl.publicUrl),
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' })
     .select()
     .single();
 
   if (error) return res.status(400).json({ error: error.message });
-  res.status(201).json({ client_profile: data, avatar_url: publicUrl.publicUrl });
+  res.status(201).json({ client_profile: data, avatar_url: publicStorageUrl(publicUrl.publicUrl) });
 }));
 
 uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHandler(async (req, res) => {
@@ -181,7 +181,7 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
     image_id: data.id,
     storage_bucket: config.storageBucket,
     storage_path: storagePath,
-    public_url: publicUrl.publicUrl,
+    public_url: publicStorageUrl(publicUrl.publicUrl),
     file_mime: req.file.mimetype,
     file_size: req.file.size
   });
@@ -189,7 +189,7 @@ uploadsRouter.post('/profile-image', verifyUser, upload.single('image'), asyncHa
     image: {
       ...data,
       profile_id: profileId,
-      public_url: publicUrl.publicUrl,
+      public_url: publicStorageUrl(publicUrl.publicUrl),
       is_cover: Boolean(data.is_primary),
       moderation_status: data.moderation_status || 'pending'
     }
@@ -217,7 +217,7 @@ uploadsRouter.patch('/profile-image/:id/cover', verifyUser, requireAdvertiserOnb
 
   if (error) return res.status(400).json({ error: error.message });
   const { data: publicUrl } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(data.storage_path);
-  res.json({ image: { ...data, public_url: publicUrl.publicUrl, is_cover: true } });
+  res.json({ image: { ...data, public_url: publicStorageUrl(publicUrl.publicUrl), is_cover: true } });
 }));
 
 uploadsRouter.delete('/profile-image/:id', verifyUser, requireAdvertiserOnboardingAccess, asyncHandler(async (req, res) => {

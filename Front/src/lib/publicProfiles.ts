@@ -226,9 +226,6 @@ export function mapApiProfileToPublicProfile(input: unknown): Profile | null {
     outcall_fee: numberValue(raw.outcall_fee),
     profile_images: images,
     images
-  } as Profile & {
-    radar_latitude: number | null;
-    radar_longitude: number | null;
   };
 }
 

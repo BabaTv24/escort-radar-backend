@@ -1183,8 +1183,8 @@ test('city page keeps listing profiles as radar input and does not pre-empty the
   assert.match(radarPanelSource, /const effectiveLocation = searcherLocation/);
   assert.doesNotMatch(radarPanelSource, /localManualLocation/);
   assert.match(radarPanelSource, /type="range"/);
-  assert.match(radarPanelSource, /min=\{MIN_RADAR_RADIUS_METERS\}/);
-  assert.match(radarPanelSource, /max=\{MAX_RADAR_RADIUS_METERS\}/);
+  assert.match(radarPanelSource, /min=\{0\}/);
+  assert.match(radarPanelSource, /max=\{RADAR_RADIUS_STEPS_METERS\.length - 1\}/);
   assert.doesNotMatch(cityPageSource, /type="range"/);
   assert.match(radarPanelSource, /\[RadarLocationResolve\]/);
   assert.match(geoSource, /safeDistanceKm/);
@@ -1202,8 +1202,8 @@ test('city radar keeps the reference component boundaries and a circular MapLibr
   assert.match(radarPanelSource, /<RadarMapLibre/);
   assert.match(radarMapSource, /export function RadarMapLibre\(/);
   assert.match(stylesSource, /\.radar-city-page \.radar-main-stage \.radar-map-surface \{/);
-  assert.match(stylesSource, /\.radar-city-page \.radar-main-stage \.radar-visual \{[\s\S]*?aspect-ratio: 1;/);
-  assert.match(stylesSource, /width: 326px !important;[\s\S]*?aspect-ratio: 1;[\s\S]*?border-radius: 50% !important;/);
+  assert.match(stylesSource, /\.radar-city-page \.radar-main-stage \.radar-map-viewport \{[\s\S]*?width: min\(620px,[\s\S]*?max-width:/);
+  assert.match(stylesSource, /\.radar-city-page \.radar-main-stage \.radar-visual \{[\s\S]*?width: 100% !important;[\s\S]*?aspect-ratio: 1;/);
   assert.match(stylesSource, /\.radar-city-page \.radar-quick-filters \{[\s\S]*?overflow-x: auto;/);
 });
 

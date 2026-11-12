@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { supabaseAdmin } from '../supabase.js';
+import { publicStorageUrl, supabaseAdmin } from '../supabase.js';
 import { allowedCities, asyncHandler, normalizeOperatorStatus, normalizeProfileCategory, parseBoolean, slugify, validateProfileInput } from '../validation.js';
 import { getAuthAccountType, requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
 import { generatePublicUserId, generateReferralCode, normalizePhone } from '../utils/identity.js';
@@ -237,7 +237,7 @@ profilesRouter.get('/:id/access', verifyUser, asyncHandler(async (req, res) => {
     return !image.is_private || Boolean(vipUnlock);
   }).map((image: any) => {
     const { data: publicUrl } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
-    return { ...image, public_url: publicUrl.publicUrl, is_cover: Boolean(image.is_primary) };
+    return { ...image, public_url: publicStorageUrl(publicUrl.publicUrl), is_cover: Boolean(image.is_primary) };
   });
 
   res.json({
@@ -513,7 +513,7 @@ function withImageUrls(profile: any, wallet?: any) {
     return !image.is_private;
   }).map((image: any) => {
     const { data } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
-    return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
+    return { ...image, public_url: publicStorageUrl(data.publicUrl), is_cover: Boolean(image.is_primary) };
   }).sort((left: any, right: any) => {
     if (Boolean(left.is_primary) !== Boolean(right.is_primary)) return left.is_primary ? -1 : 1;
     return Number(left.sort_order || 0) - Number(right.sort_order || 0);
@@ -557,7 +557,7 @@ function profileLocationPatch(location: AdminLocationResolution, source: 'automa
 function withOwnerImageUrls(profile: any, wallet?: any) {
   const images = (profile.profile_images || []).map((image: any) => {
     const { data } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
-    return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
+    return { ...image, public_url: publicStorageUrl(data.publicUrl), is_cover: Boolean(image.is_primary) };
   }).sort((left: any, right: any) => {
     if (Boolean(left.is_primary) !== Boolean(right.is_primary)) return left.is_primary ? -1 : 1;
     return Number(left.sort_order || 0) - Number(right.sort_order || 0);

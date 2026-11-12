@@ -53,7 +53,9 @@ export function assignRadarDisplayCoordinates(items: RadarMapItem[], layoutUnive
   const approximateGroups = new Map<string, RadarMapItem[]>();
 
   for (const item of layoutUniverse) {
-    if (!item.isApproximateLocation) {
+    const needsCityOnlyLayout = item.filterCoordinates.precision === 'city'
+      || item.filterCoordinates.precision === 'city_fallback';
+    if (!needsCityOnlyLayout) {
       displayCoordinatesById.set(item.profile.id, {
         lat: item.filterCoordinates.lat,
         lng: item.filterCoordinates.lng

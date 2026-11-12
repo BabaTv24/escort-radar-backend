@@ -37,6 +37,15 @@ export class ApiError extends Error {
   }
 }
 
+// Registration never hands back a session or a user id: the account stays unconfirmed until the
+// confirmation link is opened, so there is nothing for the client to authenticate with yet.
+export type RegistrationResult = {
+  success: boolean;
+  requires_email_confirmation: boolean;
+  email: string;
+  auth_account_type: 'client' | 'escort' | 'business';
+};
+
 export type ReferralMe = { referralCode: string; referralLink: string; directReferralsCount: number; totalDescendantsCount: number; referredByDisplay: string | null; registrationSource: string; referralDepth: number };
 export type CommunicationPlusStatus = {
   client_premium_active: boolean;
@@ -304,7 +313,11 @@ export const api = {
     token,
     body: JSON.stringify(body)
   }),
-  register: (body: { email: string; password: string; username?: string; auth_account_type: 'client' | 'escort' | 'business'; identity?: string; referred_by_code?: string }) => request<{ user: { id: string; email?: string; auth_account_type: 'client' | 'escort' | 'business' } }>('/api/auth/register', {
+  register: (body: { email: string; password: string; username?: string; auth_account_type: 'client' | 'escort' | 'business'; identity?: string; referred_by_code?: string }) => request<RegistrationResult>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }),
+  resendConfirmationEmail: (body: { email: string }) => request<{ success: boolean; requires_email_confirmation: boolean }>('/api/auth/resend-confirmation', {
     method: 'POST',
     body: JSON.stringify(body)
   }),
