@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin, supabaseAnon } from '../supabase.js';
+import { deliverableStorageUrl } from '../mediaDelivery.js';
 import { asyncHandler } from '../validation.js';
 import { config } from '../config.js';
 import { recordClientRegistrationAttribution } from '../services/clientActivation.js';
@@ -36,7 +37,7 @@ authRouter.get('/me', verifyUser, asyncHandler(async (req, res) => {
         client_state: appMetadata.client_state || appMetadata.client_activation_state
       }
     },
-    client_profile: clientProfile || null
+    client_profile: clientProfile ? { ...clientProfile, avatar_url: deliverableStorageUrl(clientProfile.avatar_url, 'protected') } : null
   });
 }));
 

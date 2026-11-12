@@ -696,7 +696,7 @@ test('public radar contract hides city_only raw coordinates, contacts and galler
   const routeSource = await readFile(new URL('../Back/src/routes/profiles.ts', import.meta.url), 'utf8');
   const radarSelect = routeSource.slice(routeSource.indexOf('const radarSelect'), routeSource.indexOf("].join(', ')"));
   assert.doesNotMatch(radarSelect, /primary_phone|additional_phones|whatsapp|telegram|description/);
-  assert.match(routeSource, /sanitizePublicProfile\(withImageUrls\(profile\), location, 1\)/);
+  assert.match(routeSource, /sanitizePublicProfile\(withImageUrls\(profile, undefined, 'public'\), location, 1\)/);
   assert.match(routeSource, /phone, primary_phone, additional_phones, whatsapp, telegram/);
   assert.match(routeSource, /exact_address: _exactAddress/);
   assert.match(routeSource, /radar_latitude: effectiveLocation\?\.latitude/);

@@ -18,6 +18,7 @@ import {
   type FunPageAdvertisementSettings
 } from '../funPageAdvertisement.js';
 import { publicStorageUrl, supabaseAdmin } from '../supabase.js';
+import { storageImageUrl } from '../mediaDelivery.js';
 import { asyncHandler } from '../validation.js';
 import { writeAdminAuditLog } from '../services/adminAudit.js';
 
@@ -35,11 +36,11 @@ export const publicFunPageAdvertisementRouter = Router();
 export const adminFunPageAdvertisementRouter = Router();
 
 publicFunPageAdvertisementRouter.get('/', asyncHandler(async (_req, res) => {
-  res.json(toPublicFunPagePromotions(await readSettings()));
+  res.json(toPublicFunPagePromotions(deliverableSettings(await readSettings())));
 }));
 
 adminFunPageAdvertisementRouter.get('/', asyncHandler(async (_req, res) => {
-  res.json({ settings: await readSettings() });
+  res.json({ settings: deliverableSettings(await readSettings()) });
 }));
 
 adminFunPageAdvertisementRouter.post('/advertisements', asyncHandler(async (req, res) => {
@@ -48,7 +49,7 @@ adminFunPageAdvertisementRouter.post('/advertisements', asyncHandler(async (req,
   const advertisement = createEmptyFunPageAdvertisement(settings.advertisements.length);
   const saved = await saveSettings({ ...settings, advertisements: [...settings.advertisements, advertisement] });
   await audit(req, 'funpage_advertisement_created', { advertisement_id: advertisement.id });
-  res.status(201).json({ advertisement, settings: saved });
+  res.status(201).json({ advertisement, settings: deliverableSettings(saved) });
 }));
 
 adminFunPageAdvertisementRouter.patch('/advertisements/:id', advertisementUpload.single('image'), asyncHandler(async (req, res) => {
@@ -85,7 +86,7 @@ adminFunPageAdvertisementRouter.patch('/advertisements/:id', advertisementUpload
       const removal = await supabaseAdmin.storage.from(config.storageBucket).remove([current.image.storagePath]);
       if (removal.error) return res.status(200).json({ advertisement, settings: saved, warning: `Advertisement saved, but the old image could not be removed: ${removal.error.message}` });
     }
-    res.json({ advertisement, settings: saved });
+    res.json({ advertisement, settings: deliverableSettings(saved) });
   } catch (error) {
     if (uploadedPath) await supabaseAdmin.storage.from(config.storageBucket).remove([uploadedPath]).catch(() => undefined);
     res.status(400).json({ error: error instanceof Error ? error.message : 'Advertisement could not be saved' });
@@ -105,7 +106,7 @@ adminFunPageAdvertisementRouter.delete('/advertisements/:id/image', asyncHandler
     const removal = await supabaseAdmin.storage.from(config.storageBucket).remove([storagePath]);
     if (removal.error) return res.status(500).json({ error: `Image setting was removed, but storage deletion failed: ${removal.error.message}` });
   }
-  res.json({ settings: saved });
+  res.json({ settings: deliverableSettings(saved) });
 }));
 
 adminFunPageAdvertisementRouter.delete('/advertisements/:id', asyncHandler(async (req, res) => {
@@ -120,7 +121,7 @@ adminFunPageAdvertisementRouter.delete('/advertisements/:id', asyncHandler(async
     const removal = await supabaseAdmin.storage.from(config.storageBucket).remove([storagePath]);
     if (removal.error) return res.status(500).json({ error: `Advertisement was deleted, but image storage deletion failed: ${removal.error.message}` });
   }
-  res.json({ settings: saved });
+  res.json({ settings: deliverableSettings(saved) });
 }));
 
 adminFunPageAdvertisementRouter.put('/order', asyncHandler(async (req, res) => {
@@ -129,7 +130,7 @@ adminFunPageAdvertisementRouter.put('/order', asyncHandler(async (req, res) => {
   if (!reordered.ok) return res.status(400).json({ error: reordered.error });
   const saved = await saveSettings({ ...settings, advertisements: reordered.value });
   await audit(req, 'funpage_advertisements_reordered', { advertisement_ids: reordered.value.map((advertisement) => advertisement.id) });
-  res.json({ settings: saved });
+  res.json({ settings: deliverableSettings(saved) });
 }));
 
 adminFunPageAdvertisementRouter.patch('/configuration', asyncHandler(async (req, res) => {
@@ -142,7 +143,7 @@ adminFunPageAdvertisementRouter.patch('/configuration', asyncHandler(async (req,
     ticker_active: saved.ticker.active,
     ticker_speed: saved.ticker.speed
   });
-  res.json({ settings: saved });
+  res.json({ settings: deliverableSettings(saved) });
 }));
 
 adminFunPageAdvertisementRouter.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
@@ -181,4 +182,14 @@ function isImageUsedElsewhere(settings: FunPageAdvertisementSettings, storagePat
 
 async function audit(req: Request, action: string, details: Record<string, unknown>) {
   await writeAdminAuditLog(req.user?.email, action, 'app_settings', funPageAdvertisementSettingKey, details);
+}
+
+/** Admin previews of stored advertisement images go through authorized media URLs (the bucket may be private). */
+function deliverableSettings<T extends { advertisements: Array<{ image?: { publicUrl: string; storagePath: string } | null }> }>(settings: T): T {
+  return {
+    ...settings,
+    advertisements: settings.advertisements.map((advertisement) => advertisement.image
+      ? { ...advertisement, image: { ...advertisement.image, publicUrl: storageImageUrl(advertisement.image.storagePath, 'public') || advertisement.image.publicUrl } }
+      : advertisement)
+  };
 }
