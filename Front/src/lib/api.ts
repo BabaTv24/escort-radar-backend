@@ -700,10 +700,11 @@ export const api = {
   adminWallets: (token: string) => request<{ wallets: Wallet[] }>('/api/admin/wallets', { token }),
   adminTokenTransactions: (token: string) => request<{ transactions: TokenTransaction[] }>('/api/admin/token-transactions', { token }),
   adminClientActivationPayments: (token: string) => request<{ client_activation_payments: Record<string, unknown>[] }>('/api/admin/client-activation-payments', { token }),
-  adminManualPaymentOrders: (token: string) => request<{ orders: Record<string, unknown>[] }>('/api/admin/manual-payment-orders', { token }),
-  approveManualPaymentOrder: (token: string, id: string) => request<{ order: Record<string, unknown> }>(`/api/admin/manual-payment-orders/${id}/approve`, {
+  adminManualPaymentOrders: (token: string) => request<{ orders: Record<string, unknown>[]; summary?: Record<string, number> }>('/api/admin/manual-payment-orders', { token }),
+  approveManualPaymentOrder: (token: string, id: string, confirmation: { received_amount_eur: number; bank_reference?: string }) => request<{ order: Record<string, unknown>; already_applied?: boolean }>(`/api/admin/manual-payment-orders/${id}/approve`, {
     method: 'POST',
-    token
+    token,
+    body: JSON.stringify({ payment_received: true, ...confirmation })
   }),
   rejectManualPaymentOrder: (token: string, id: string, reason = '') => request<{ order: Record<string, unknown> }>(`/api/admin/manual-payment-orders/${id}/reject`, {
     method: 'POST',

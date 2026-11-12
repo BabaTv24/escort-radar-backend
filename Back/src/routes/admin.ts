@@ -32,7 +32,7 @@ import { isSupportedEscortClubHost, isSupportedEscortClubProfileUrl } from '../e
 import { assertPublicImportDns as secureAssertPublicImportDns, fetchPublicImportResource as secureFetchPublicImportResource, readImportResponseLimited as secureReadImportResponseLimited, validatePublicImportUrl as secureValidatePublicImportUrl } from '../publicImportSecurity.js';
 import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
 import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfile.js';
-import { applyManualPaymentOrder } from '../manualPayments.js';
+import { applyManualPaymentOrder, resolveManualPaymentProduct, summarizeManualPaymentOrders } from '../manualPayments.js';
 import { loadBcCoinPackages, normalizeBcCoinPackagePayload } from '../bcCoinPackages.js';
 import { resolveCityLocation } from '../locations.js';
 import { resolveAdminProfileSelection, validateAdminProfileSelection } from '../adminProfileSelection.js';
@@ -432,19 +432,30 @@ adminRouter.get('/client-activation-payments', asyncHandler(async (_req, res) =>
 }));
 
 adminRouter.get('/manual-payment-orders', asyncHandler(async (_req, res) => {
-  const { data, error } = await supabaseAdmin
-    .from('manual_payment_orders')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(500);
-  if (error) return res.status(500).json({ error: error.message });
+  const [ordersResult, summaryResult] = await Promise.all([
+    supabaseAdmin
+      .from('manual_payment_orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500),
+    supabaseAdmin
+      .from('manual_payment_orders')
+      .select('status, amount_cents, applied_at')
+      .limit(10000)
+  ]);
+  if (ordersResult.error) return res.status(500).json({ error: ordersResult.error.message });
+  if (summaryResult.error) return res.status(500).json({ error: summaryResult.error.message });
   res.json({
-    orders: (data || []).map((order) => ({
+    orders: (ordersResult.data || []).map((order) => ({
       ...order,
       payment_reference: order.metadata?.payment_reference || ''
-    }))
+    })),
+    summary: summarizeManualPaymentOrders(summaryResult.data || [])
   });
 }));
+
+/** An approval lock older than this is treated as abandoned (crashed request) and may be recovered. */
+const MANUAL_PAYMENT_STALE_LOCK_MS = 2 * 60 * 1000;
 
 adminRouter.post('/manual-payment-orders/:id/approve', asyncHandler(async (req, res) => {
   const { data: order, error } = await supabaseAdmin
@@ -453,14 +464,111 @@ adminRouter.post('/manual-payment-orders/:id/approve', asyncHandler(async (req, 
     .eq('id', req.params.id)
     .single();
   if (error || !order) return res.status(404).json({ error: error?.message || 'Manual payment order not found' });
-  if (!['pending', 'paid'].includes(String(order.status || 'pending'))) return res.status(409).json({ error: 'Manual payment order cannot be approved from current status' });
-  if (!order.applied_at) await applyManualPaymentOrder(order, req.user?.email);
+  const status = String(order.status || 'pending');
+  // Repeated approval of an applied order is a no-op: nothing is extended or credited twice.
+  if (status === 'paid' && order.applied_at) return res.json({ order, already_applied: true });
+  if (!['pending', 'paid'].includes(status)) return res.status(409).json({ error: 'Manual payment order cannot be approved from current status', code: 'ORDER_STATUS_CONFLICT' });
+
+  // Approval requires the admin to confirm the money arrived on the merchant account, with the received amount.
+  if (req.body?.payment_received !== true) {
+    return res.status(400).json({ error: 'Confirm that the payment was received on the merchant account', code: 'PAYMENT_RECEIPT_CONFIRMATION_REQUIRED' });
+  }
+  const receivedCents = Math.round(Number(req.body?.received_amount_eur) * 100);
+  if (!Number.isFinite(receivedCents) || receivedCents !== Number(order.amount_cents)) {
+    return res.status(409).json({ error: 'Received amount does not match the order amount', code: 'RECEIVED_AMOUNT_MISMATCH' });
+  }
+  const product = await resolveManualPaymentProduct(String(order.product_id || ''), order.purpose);
+  if (!product || product.purpose !== order.purpose || Number(product.amount_cents) !== Number(order.amount_cents)) {
+    return res.status(409).json({ error: 'Order product or amount does not match the catalog', code: 'PRODUCT_AMOUNT_MISMATCH' });
+  }
+
+  const approvedAt = new Date().toISOString();
+  const paymentConfirmation = {
+    received_amount_cents: receivedCents,
+    bank_reference: optionalText(req.body?.bank_reference, 200),
+    confirmed_by: req.user?.email || null,
+    confirmed_at: approvedAt
+  };
+  let lockedByThisRequest = false;
+  if (status === 'paid') {
+    // 'paid' without applied_at means another approval holds the lock. Only a stale lock (crashed request) is recovered.
+    const staleLock = Date.now() - Date.parse(String(order.approved_at || 0)) > MANUAL_PAYMENT_STALE_LOCK_MS;
+    if (!staleLock) return res.status(409).json({ error: 'Order approval is already in progress', code: 'ORDER_IN_PROGRESS' });
+    const { data: claim } = await supabaseAdmin.from('manual_payment_order_applications').select('applied_at').eq('order_id', req.params.id).maybeSingle();
+    if (claim) {
+      // The entitlement was applied but the final status write was lost: finish the order without applying again.
+      const { data: finished, error: finishError } = await supabaseAdmin
+        .from('manual_payment_orders')
+        .update({ applied_at: claim.applied_at })
+        .eq('id', req.params.id)
+        .is('applied_at', null)
+        .select()
+        .maybeSingle();
+      if (finishError) return res.status(400).json({ error: finishError.message });
+      return res.json({ order: finished || order, already_applied: true });
+    }
+    const { data: retaken, error: retakeError } = await supabaseAdmin
+      .from('manual_payment_orders')
+      .update({ approved_at: approvedAt, admin_email: req.user?.email || null, metadata: { ...(order.metadata || {}), payment_confirmation: paymentConfirmation } })
+      .eq('id', req.params.id)
+      .eq('status', 'paid')
+      .is('applied_at', null)
+      .eq('approved_at', order.approved_at)
+      .select()
+      .maybeSingle();
+    if (retakeError) return res.status(400).json({ error: retakeError.message });
+    if (!retaken) return res.status(409).json({ error: 'Order approval is already in progress', code: 'ORDER_IN_PROGRESS' });
+    order.metadata = retaken.metadata;
+    lockedByThisRequest = true;
+  }
+  if (status === 'pending') {
+    // Atomic lock: only one request moves the order out of 'pending'; a concurrent reject or approve sees the new status.
+    const { data: locked, error: lockError } = await supabaseAdmin
+      .from('manual_payment_orders')
+      .update({
+        status: 'paid',
+        approved_at: approvedAt,
+        admin_email: req.user?.email || null,
+        rejection_reason: null,
+        metadata: { ...(order.metadata || {}), payment_confirmation: paymentConfirmation }
+      })
+      .eq('id', req.params.id)
+      .eq('status', 'pending')
+      .is('applied_at', null)
+      .select()
+      .maybeSingle();
+    if (lockError) return res.status(400).json({ error: lockError.message });
+    if (!locked) {
+      const { data: current } = await supabaseAdmin.from('manual_payment_orders').select('*').eq('id', req.params.id).maybeSingle();
+      if (current?.status === 'paid' && current.applied_at) return res.json({ order: current, already_applied: true });
+      return res.status(409).json({ error: 'Order is being processed or its status changed', code: 'ORDER_STATUS_CONFLICT' });
+    }
+    order.metadata = locked.metadata;
+    lockedByThisRequest = true;
+  }
+
+  try {
+    await applyManualPaymentOrder(order, req.user?.email);
+  } catch (applyError) {
+    // Nothing was granted (the application claim is released), so the order returns to 'pending' for a retry.
+    if (lockedByThisRequest) {
+      await supabaseAdmin
+        .from('manual_payment_orders')
+        .update({ status: 'pending', approved_at: null, admin_email: null })
+        .eq('id', req.params.id)
+        .is('applied_at', null);
+    }
+    const message = applyError instanceof Error ? applyError.message : 'Payment could not be applied';
+    await logAdminAction(req.user?.email, 'manual_payment_order_apply_failed', 'manual_payment_order', req.params.id, { purpose: order.purpose, product_id: order.product_id, error: message });
+    return res.status(422).json({ error: message, code: 'PAYMENT_APPLICATION_FAILED' });
+  }
+
   const { data: updated, error: updateError } = await supabaseAdmin
     .from('manual_payment_orders')
     .update({
       status: 'paid',
-      approved_at: new Date().toISOString(),
-      applied_at: order.applied_at || new Date().toISOString(),
+      approved_at: approvedAt,
+      applied_at: new Date().toISOString(),
       admin_email: req.user?.email || null,
       rejection_reason: null
     })
@@ -468,7 +576,12 @@ adminRouter.post('/manual-payment-orders/:id/approve', asyncHandler(async (req, 
     .select()
     .single();
   if (updateError) return res.status(400).json({ error: updateError.message });
-  await logAdminAction(req.user?.email, 'manual_payment_order_approved', 'manual_payment_order', req.params.id, { purpose: order.purpose, product_id: order.product_id });
+  await logAdminAction(req.user?.email, 'manual_payment_order_approved', 'manual_payment_order', req.params.id, {
+    purpose: order.purpose,
+    product_id: order.product_id,
+    received_amount_cents: receivedCents,
+    bank_reference: paymentConfirmation.bank_reference
+  });
   res.json({ order: updated });
 }));
 

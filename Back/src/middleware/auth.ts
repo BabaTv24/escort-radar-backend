@@ -75,6 +75,14 @@ export function getAuthAccountType(user?: AuthUser): AuthAccountType {
   return value === 'escort' || value === 'business' ? value : 'client';
 }
 
+/** A manually paid subscription carries its end date; accounts without one keep their existing behaviour. */
+export function isPaidSubscriptionExpired(user?: AuthUser, now = Date.now()) {
+  const value = readAppMetadata(user, 'subscription_expires_at');
+  if (!value) return false;
+  const end = Date.parse(String(value));
+  return Number.isFinite(end) && end <= now;
+}
+
 export function getAdvertiserAccess(user?: AuthUser): AdvertiserAccess | null {
   const accountType = getAuthAccountType(user);
   if (accountType === 'client') return null;
@@ -83,7 +91,7 @@ export function getAdvertiserAccess(user?: AuthUser): AdvertiserAccess | null {
   const plan = String(readAppMetadata(user, 'plan') || '');
   const requiredPlan = accountType === 'escort' ? 'escort_monthly' : 'business_monthly';
 
-  if (subscriptionStatus !== 'active' || plan !== requiredPlan) return null;
+  if (subscriptionStatus !== 'active' || plan !== requiredPlan || isPaidSubscriptionExpired(user)) return null;
 
   return {
     accountType,
@@ -101,7 +109,7 @@ export function getAdvertiserOnboardingAccess(user?: AuthUser): AdvertiserAccess
   const subscriptionStatus = String(readAppMetadata(user, 'subscription_status') || 'trial');
   const metadataPlan = String(readAppMetadata(user, 'plan') || '');
   const requiredPlan = accountType === 'escort' ? 'escort_monthly' : 'business_monthly';
-  const active = subscriptionStatus === 'active' && (!metadataPlan || metadataPlan === requiredPlan);
+  const active = subscriptionStatus === 'active' && (!metadataPlan || metadataPlan === requiredPlan) && !isPaidSubscriptionExpired(user);
 
   return {
     accountType,

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Coins, Gem, LockKeyhole, RadioTower, Sparkles, Ticket } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import type { TokenPackage, Wallet } from '../types';
 import { useI18n } from '../i18n';
 
@@ -75,7 +75,9 @@ export function TokenShopPage() {
       setOrderReference(order.payment_reference || '');
       setMessage(`${tokenPackage.token_amount} ${t('tokens.short')}: ${order.instructions}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t('tokens.checkoutPending'));
+      // BC Coin packages are not on sale yet (backend: PRODUCT_NOT_AVAILABLE).
+      const code = error instanceof ApiError ? String(error.payload?.code || '') : '';
+      setMessage(code === 'PRODUCT_NOT_AVAILABLE' ? t('checkout.errors.PRODUCT_NOT_AVAILABLE') : error instanceof Error ? error.message : t('tokens.checkoutPending'));
     }
   }
 

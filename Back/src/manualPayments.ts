@@ -34,6 +34,57 @@ export const manualPaymentProducts = [
   }))
 ] as const;
 
+/**
+ * Products a customer may order today (BOSS: first revenue = Advertiser Premium + Client Premium).
+ * Agency plan and BC Coin packages stay closed until their sale is approved; historic orders remain readable.
+ * A code constant, not an env flag: opening a product for sale is a reviewed change.
+ */
+export const CUSTOMER_ORDER_PRODUCT_IDS: readonly string[] = ['client_activation', 'advertiser_30d'];
+
+/** Only bank transfer has real payment instructions (recipient + IBAN). Crypto/manual have none. */
+export const CUSTOMER_PAYMENT_PROVIDERS: readonly string[] = ['bank_transfer'];
+
+export function isCustomerOrderableProduct(productId: string) {
+  return CUSTOMER_ORDER_PRODUCT_IDS.includes(productId);
+}
+
+/** Bank transfer can only be offered when the merchant recipient, IBAN and legal operator are configured. */
+export function isBankTransferConfigured(settings: Pick<typeof config, 'manualBankTransferEnabled' | 'manualBankTransferRecipient' | 'manualBankTransferIban' | 'legalOperatorName'> = config) {
+  return Boolean(
+    settings.manualBankTransferEnabled
+    && String(settings.manualBankTransferRecipient || '').trim()
+    && String(settings.manualBankTransferIban || '').trim()
+    && String(settings.legalOperatorName || '').trim()
+  );
+}
+
+/** Renewal starts from the latest still-valid end date, whichever field holds it (manual payment, admin or Stripe). */
+export function subscriptionRenewalBase(profile: Record<string, any> | null | undefined, now = new Date()) {
+  const candidates = [profile?.premium_valid_until, profile?.subscription_end, profile?.subscription_expires_at]
+    .map((value) => (value ? new Date(String(value)) : null))
+    .filter((value): value is Date => Boolean(value && Number.isFinite(value.getTime())));
+  const latest = candidates.reduce<Date | null>((best, value) => (!best || value > best ? value : best), null);
+  return latest && latest > now ? latest : now;
+}
+
+/** Admin first-revenue figures. Only admin-confirmed ('paid') orders count as received revenue. */
+export function summarizeManualPaymentOrders(orders: Array<{ status?: string | null; amount_cents?: number | null; applied_at?: string | null }>) {
+  const summary = { created: 0, pending: 0, confirmed: 0, activated: 0, rejected: 0, cancelled: 0, pending_amount_eur: 0, received_revenue_eur: 0 };
+  for (const order of orders) {
+    const cents = Number(order.amount_cents || 0);
+    const status = String(order.status || 'pending');
+    summary.created += 1;
+    if (status === 'pending') { summary.pending += 1; summary.pending_amount_eur += cents; }
+    if (status === 'paid') { summary.confirmed += 1; summary.received_revenue_eur += cents; }
+    if (status === 'paid' && order.applied_at) summary.activated += 1;
+    if (status === 'rejected') summary.rejected += 1;
+    if (status === 'cancelled') summary.cancelled += 1;
+  }
+  summary.pending_amount_eur = summary.pending_amount_eur / 100;
+  summary.received_revenue_eur = summary.received_revenue_eur / 100;
+  return summary;
+}
+
 export function normalizeManualPaymentProvider(provider: string) {
   return provider === 'paysafecard' ? 'paysafe' : provider;
 }
@@ -108,7 +159,7 @@ async function applyManualSubscription(userId: string, order: Record<string, any
   const now = new Date();
   let readQuery = supabaseAdmin
     .from('profiles')
-    .select('id, premium_valid_until')
+    .select('id, premium_valid_until, subscription_end, subscription_expires_at')
     .eq('user_id', userId);
   if (order.profile_id) readQuery = readQuery.eq('id', order.profile_id);
   const { data: existingProfile, error: readError } = await readQuery
@@ -116,9 +167,20 @@ async function applyManualSubscription(userId: string, order: Record<string, any
     .limit(1)
     .maybeSingle();
   if (readError) throw readError;
-  const existingValidUntil = existingProfile?.premium_valid_until ? new Date(String(existingProfile.premium_valid_until)) : null;
-  const baseDate = existingValidUntil && Number.isFinite(existingValidUntil.getTime()) && existingValidUntil > now ? existingValidUntil : now;
-  const validUntil = new Date(baseDate.getTime() + Number(product.days || 30) * 24 * 60 * 60 * 1000);
+  // Never mark a subscription order as applied when there is no advertiser profile to activate.
+  if (!existingProfile) throw new Error('Advertiser profile not found for manual payment order');
+  // The end date is fixed once per order, so a retried approval re-applies the same date instead of extending twice.
+  const storedValidUntil = order.metadata?.subscription_valid_until ? new Date(String(order.metadata.subscription_valid_until)) : null;
+  const validUntil = storedValidUntil && Number.isFinite(storedValidUntil.getTime())
+    ? storedValidUntil
+    : new Date(subscriptionRenewalBase(existingProfile, now).getTime() + Number(product.days || 30) * 24 * 60 * 60 * 1000);
+  if (!storedValidUntil) {
+    const { error: pinError } = await supabaseAdmin
+      .from('manual_payment_orders')
+      .update({ metadata: { ...(order.metadata || {}), subscription_valid_until: validUntil.toISOString(), subscription_profile_id: existingProfile.id } })
+      .eq('id', order.id);
+    if (pinError) throw pinError;
+  }
   const plan = agency ? 'business_manual_30d' : 'advertiser_manual_30d';
   const patch = {
     subscription_status: 'active',
@@ -136,19 +198,25 @@ async function applyManualSubscription(userId: string, order: Record<string, any
     revenue_amount: 0,
     max_profiles: agency ? 30 : undefined
   };
-  const query = supabaseAdmin.from('profiles').update(patch).eq('user_id', userId);
-  if (order.profile_id) query.eq('id', order.profile_id);
-  const { error } = await query;
+  let query = supabaseAdmin.from('profiles').update(patch).eq('user_id', userId);
+  if (order.profile_id) query = query.eq('id', order.profile_id);
+  const { data: updatedProfiles, error } = await query.select('id');
   if (error) throw error;
-  const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
-  await supabaseAdmin.auth.admin.updateUserById(userId, {
+  if (!updatedProfiles?.length) throw new Error('Advertiser profile not found for manual payment order');
+  const { data, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (userError) throw userError;
+  const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
     app_metadata: {
       ...data.user?.app_metadata,
       subscription_status: 'active',
       plan: agency ? 'business_monthly' : 'escort_monthly',
+      // Advertiser access ends at this date (see getAdvertiserAccess); a later renewal moves it.
+      subscription_expires_at: validUntil.toISOString(),
       auth_account_type: agency ? 'business' : (data.user?.app_metadata?.auth_account_type || 'escort')
     }
   });
+  // Safe to throw: a retry re-applies the same pinned end date.
+  if (metadataError) throw metadataError;
 }
 
 async function applyManualTokenPackage(userId: string, order: Record<string, any>, product: Record<string, any>, adminEmail?: string) {

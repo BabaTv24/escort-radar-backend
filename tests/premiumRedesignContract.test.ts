@@ -101,7 +101,9 @@ test('registration offers Premium customer and individual advertiser; ESCORT Off
   assert.match(register, /aria-disabled="true"/);
   assert.match(register, /requestedType === 'business'[\s\S]*setAuthAccountType\('client'\)/);
   assert.match(auth, /authAccountType === 'business'[\s\S]*status\(403\)[\s\S]*ESCORT_OFFICE_CENTER_NOT_AVAILABLE/);
-  assert.match(pricing, /item\.id !== 'agency_30d' \|\| requestedProduct === 'agency_30d'/);
+  // ESCORT Office Center (agency plan) is not orderable at all; the pricing page shows it as coming soon only.
+  assert.doesNotMatch(pricing, /agency_30d/);
+  assert.match(pricing, /ESCORT Office Center[\s\S]*register\.path\.comingSoon/);
   const labels = await Promise.all(['pl', 'de', 'en'].map(async (language) => JSON.parse(await read(`Front/src/locales/${language}.json`))['register.path.comingSoon']));
   assert.deepEqual(labels, ['W przygotowaniu', 'In Entwicklung', 'Coming Soon']);
   const de = JSON.parse(await read('Front/src/locales/de.json')) as Record<string, string>;

@@ -715,26 +715,17 @@ test('merchant review footer exposes required public compliance links', async ()
   assert.match(legalSource, /<dt>Product<\/dt><dd>Escort Radar<\/dd>/);
 });
 
-test('pricing page lists required platform products, token packages and compliance text', async () => {
+test('pricing page lists the orderable products, bank transfer checkout and compliance text', async () => {
   const source = await readFile(new URL('../Front/src/pages/PricingPage.tsx', import.meta.url), 'utf8');
-  for (const text of [
-    'Client Activation',
-    '0.99 EUR',
-    'Solo Advertiser Premium Listing',
-    '49.99 EUR',
-    'Agency / Business Plan',
-    '499.00 EUR',
-    '10200 BC Coins',
-    '1530,00 EUR',
-    'The platform does not process payments for physical meetings between users.',
-    'discreet prepaid payment',
-    'manual bank transfer',
-    'CCBill card payments - coming soon',
-    'Paysafecard/Paysafe - coming soon',
-    'Payment reference'
-  ]) {
-    assert.match(source, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const en = JSON.parse(await readFile(new URL('../Front/src/locales/en.json', import.meta.url), 'utf8')) as Record<string, string>;
+  // First revenue: only Client Premium (0.99 EUR) and Premium Listing (49.99 EUR), by manually verified bank transfer.
+  for (const text of ["id: 'client_activation', cents: 99", "id: 'advertiser_30d', cents: 4999", "t('pricing.page.intro')", "t('checkout.reference')", "provider: 'bank_transfer'"]) {
+    assert.ok(source.includes(text), text);
   }
+  assert.match(en['pricing.page.intro'], /does not process payments for meetings between users/);
+  assert.match(en['checkout.reference'], /Payment reference/);
+  // Unavailable payment methods and unapproved products are not offered.
+  assert.doesNotMatch(source, /crypto|ccbill|paysafe|bc_\d+|agency_30d/i);
   assert.doesNotMatch(source, new RegExp(`anon${'ymous'} payment`, 'i'));
 });
 
@@ -753,7 +744,9 @@ test('manual payment orders migration and admin endpoints are present and idempo
   assert.doesNotMatch(paymentsSource, /req\.body\.email|req\.body\.user_id|req\.body\.amount_cents|req\.body\.status/);
   assert.match(adminSource, /\/manual-payment-orders/);
   assert.match(adminSource, /payment_reference/);
-  assert.match(adminSource, /if \(!order\.applied_at\) await applyManualPaymentOrder/);
+  // The entitlement is applied only by the request holding the order lock; an applied order is never applied again.
+  assert.match(adminSource, /await applyManualPaymentOrder\(order, req\.user\?\.email\)/);
+  assert.match(adminSource, /if \(status === 'paid' && order\.applied_at\) return res\.json\(\{ order, already_applied: true \}\)/);
   assert.match(manualSource, /manual_payment_order_id/);
 });
 

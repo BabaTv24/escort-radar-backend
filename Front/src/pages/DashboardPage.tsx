@@ -3318,9 +3318,11 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
 function AdvertiserSubscriptionSection({ profile, draft, onActivateSubscription }: { profile: Profile | null; draft: Partial<Profile>; onActivateSubscription: () => void }) {
   const { t } = useI18n();
   const source = profile || draft;
-  const status = String(source?.subscription_status || 'free');
-  const start = readDashboardSubscriptionStart(source);
   const end = readDashboardSubscriptionEnd(source);
+  const storedStatus = String(source?.subscription_status || 'free');
+  // A paid period that has ended is shown as expired, even before the next profile save updates the stored status.
+  const status = storedStatus === 'active' && end && Date.parse(String(end)) <= Date.now() ? 'expired' : storedStatus;
+  const start = readDashboardSubscriptionStart(source);
   return (
     <section className="pr-grid" aria-labelledby="advertiser-subscription-heading">
       <AdvertiserSectionHeading section="subscription" actions={<button type="button" className="pr-btn is-primary" onClick={onActivateSubscription}><CreditCard size={16} aria-hidden="true" /> {t(status === 'active' ? 'businessCenter.subscription.extend' : 'businessCenter.subscription.activate')}</button>} />

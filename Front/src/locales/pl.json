@@ -1079,7 +1079,7 @@
   "subscription.features": "Do 6 zdjęć, zaawansowane filtry, menu usług, requesty VIP i widoczność w City Radar.",
   "subscription.notice": "Ogłoszenie wymaga płatności i moderacji przed publiczną widocznością.",
   "subscription.testNotice": "Konto testowe: płatność jest pomijana dla live QA.",
-  "subscription.activate": "Aktywuj subskrypcję — wkrótce",
+  "subscription.activate": "Aktywuj subskrypcję · 49,99 € / 30 dni",
   "photos.counter": "{{count}}/{{max}} zdjęć",
   "photos.blurSoon": "Rozmycie twarzy — wkrótce",
   "photos.empty": "Nie przesłano jeszcze zdjęć.",
@@ -1791,7 +1791,7 @@
   "admin.table.instructions": "Instrukcje",
   "admin.table.payment_reference": "Tytul platnosci",
   "admin.payments.manualOrders": "Manualne zamowienia platnosci",
-  "admin.payments.manualOrdersHelp": "Pending bank transfer, crypto and provider-placeholder orders for discreet prepaid payment processing.",
+  "admin.payments.manualOrdersHelp": "Zamówienia płatne przelewem. Zatwierdzaj wyłącznie po sprawdzeniu wpływu na konto – zrzut ekranu ani oświadczenie klienta nie wystarczą.",
   "admin.payments.searchOrders": "Szukaj order ID, email, provider, status",
   "admin.dashboard.dailyRevenue": "Dzienny przychód",
   "admin.dashboard.monthlyRevenue": "Miesięczny przychód",
@@ -2825,4 +2825,50 @@
   ,"service.wytrysk": "Wytrysk"
   ,"service.wzajemna_masturbacja": "Wzajemna masturbacja"
   ,"service.zgniatanie_jader": "Zgniatanie jąder"
+  ,"pricing.page.title": "Cennik"
+  ,"pricing.page.intro": "Płatności dotyczą wyłącznie cyfrowego dostępu do platformy, widoczności profilu i narzędzi reklamowych. Platforma nie obsługuje płatności za spotkania między użytkownikami."
+  ,"checkout.product.client_activation": "Premium klienta"
+  ,"checkout.product.advertiser_30d": "Ogłoszenie Premium"
+  ,"checkout.interval.client_activation": "jednorazowo"
+  ,"checkout.interval.advertiser_30d": "30 dni"
+  ,"checkout.title": "Zamówienie – przelew bankowy"
+  ,"checkout.intro": "Tworzysz zamówienie. Aktywacja następuje dopiero po wpływie kwoty na nasze konto i ręcznej weryfikacji. To nie jest natychmiastowa płatność online."
+  ,"checkout.productLabel": "Produkt"
+  ,"checkout.amount": "Kwota"
+  ,"checkout.method": "Metoda płatności"
+  ,"checkout.methodValue": "Przelew bankowy (SEPA), ręczna weryfikacja"
+  ,"checkout.operator": "Usługodawca"
+  ,"checkout.account": "Konto"
+  ,"checkout.recipient": "Odbiorca"
+  ,"checkout.iban": "IBAN"
+  ,"checkout.bic": "BIC"
+  ,"checkout.bankName": "Bank"
+  ,"checkout.reference": "Tytuł przelewu (wpisz dokładnie)"
+  ,"checkout.orderId": "Numer zamówienia"
+  ,"checkout.status": "Status"
+  ,"checkout.statusPending": "Oczekuje – płatność jeszcze niepotwierdzona"
+  ,"checkout.statusProcessing": "Płatność potwierdzona – trwa aktywacja"
+  ,"checkout.statusPaid": "Płatność potwierdzona – aktywowano"
+  ,"checkout.statusRejected": "Odrzucone"
+  ,"checkout.statusCancelled": "Anulowane"
+  ,"checkout.notPaidYet": "Ważne: zamówienie nie jest jeszcze płatnością. Produkt będzie aktywny dopiero po potwierdzeniu wpływu płatności."
+  ,"checkout.nextSteps": "Co dalej: 1. Przelej dokładnie podaną kwotę z podanym tytułem przelewu. 2. Sprawdzimy wpływ na nasze konto. 3. Następnie produkt zostanie aktywowany i oznaczony tutaj jako potwierdzony."
+  ,"checkout.create": "Utwórz zamówienie"
+  ,"checkout.creating": "Tworzenie …"
+  ,"checkout.loginRequired": "Zaloguj się lub zarejestruj, aby utworzyć zamówienie."
+  ,"checkout.login": "Zaloguj się"
+  ,"checkout.register": "Zarejestruj się"
+  ,"checkout.reused": "Dla tego produktu istnieje już otwarte zamówienie. Użyj tych danych do płatności."
+  ,"checkout.myOrders": "Twoje zamówienia"
+  ,"checkout.support": "Pytania dotyczące płatności: {{email}}"
+  ,"checkout.errors.ALREADY_ACTIVE": "Premium jest już aktywne dla tego konta."
+  ,"checkout.errors.PROFILE_REQUIRED": "Najpierw utwórz profil ogłoszeniodawcy."
+  ,"checkout.errors.ADVERTISER_ACCOUNT_REQUIRED": "Ta subskrypcja jest dostępna tylko dla kont ogłoszeniodawców."
+  ,"checkout.errors.PRODUCT_NOT_AVAILABLE": "Ten produkt jest obecnie niedostępny."
+  ,"checkout.errors.PAYMENT_NOT_CONFIGURED": "Przelew bankowy jest obecnie niedostępny. Skontaktuj się z pomocą."
+  ,"checkout.errors.generic": "Nie udało się utworzyć zamówienia."
+  ,"admin.payments.confirmReceiptPrompt": "Czy wpływ na konto został sprawdzony?\nTytuł przelewu: {{reference}}\nKwota zamówienia: {{amount}} EUR\n\nWpisz kwotę faktycznie otrzymaną w EUR:"
+  ,"admin.payments.bankReferencePrompt": "Opcjonalnie: identyfikator transakcji z wyciągu"
+  ,"admin.payments.summary": "Zamówienia: {{created}} · oczekujące: {{pending}} ({{pendingAmount}}) · potwierdzone: {{confirmed}} · aktywowane: {{activated}} · odrzucone: {{rejected}} · anulowane: {{cancelled}} · otrzymany przychód: {{revenue}}"
+  ,"admin.payments.refundsUnsupported": "Zwroty nie są rejestrowane automatycznie; oczekujące zamówienia nie są liczone jako przychód."
 }

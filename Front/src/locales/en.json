@@ -1079,7 +1079,7 @@
   "subscription.features": "Up to 6 photos, advanced filters, service menu, VIP booking requests, and city radar visibility.",
   "subscription.notice": "Your listing requires payment and moderation before public visibility.",
   "subscription.testNotice": "Test account: payment is bypassed for live QA.",
-  "subscription.activate": "Activate subscription — coming soon",
+  "subscription.activate": "Activate subscription · €49.99 / 30 days",
   "photos.counter": "{{count}}/{{max}} photos",
   "photos.blurSoon": "Blur face — coming soon",
   "photos.empty": "No photos uploaded yet.",
@@ -1791,7 +1791,7 @@
   "admin.table.instructions": "Instructions",
   "admin.table.payment_reference": "Payment reference",
   "admin.payments.manualOrders": "Manual payment orders",
-  "admin.payments.manualOrdersHelp": "Pending bank transfer, crypto and provider-placeholder orders for discreet prepaid payment processing.",
+  "admin.payments.manualOrdersHelp": "Bank transfer orders. Approve only after checking the payment on the account statement – a screenshot or customer statement is not enough.",
   "admin.payments.searchOrders": "Search order ID, email, provider, status",
   "admin.dashboard.dailyRevenue": "Daily revenue",
   "admin.dashboard.monthlyRevenue": "Monthly revenue",
@@ -2825,4 +2825,50 @@
   ,"service.wytrysk": "Ejaculation"
   ,"service.wzajemna_masturbacja": "Mutual masturbation"
   ,"service.zgniatanie_jader": "Ballbusting"
+  ,"pricing.page.title": "Pricing"
+  ,"pricing.page.intro": "Payments cover digital platform access, profile visibility and advertising tools only. The platform does not process payments for meetings between users."
+  ,"checkout.product.client_activation": "Client Premium"
+  ,"checkout.product.advertiser_30d": "Premium Listing"
+  ,"checkout.interval.client_activation": "one-time"
+  ,"checkout.interval.advertiser_30d": "30 days"
+  ,"checkout.title": "Order by bank transfer"
+  ,"checkout.intro": "You are creating an order. Activation happens only after the amount has arrived on our account and has been checked manually. This is not an instant online checkout."
+  ,"checkout.productLabel": "Product"
+  ,"checkout.amount": "Amount"
+  ,"checkout.method": "Payment method"
+  ,"checkout.methodValue": "Bank transfer (SEPA), manual verification"
+  ,"checkout.operator": "Provider"
+  ,"checkout.account": "Account"
+  ,"checkout.recipient": "Recipient"
+  ,"checkout.iban": "IBAN"
+  ,"checkout.bic": "BIC"
+  ,"checkout.bankName": "Bank"
+  ,"checkout.reference": "Payment reference (enter exactly)"
+  ,"checkout.orderId": "Order number"
+  ,"checkout.status": "Status"
+  ,"checkout.statusPending": "Pending – payment not confirmed yet"
+  ,"checkout.statusProcessing": "Payment confirmed – activation in progress"
+  ,"checkout.statusPaid": "Payment confirmed – activated"
+  ,"checkout.statusRejected": "Rejected"
+  ,"checkout.statusCancelled": "Cancelled"
+  ,"checkout.notPaidYet": "Important: an order is not a payment. Your product becomes active only after the payment has been confirmed."
+  ,"checkout.nextSteps": "Next steps: 1. Transfer exactly the amount shown with the payment reference shown. 2. We check that the payment has arrived on our account. 3. Your product is then activated and shown here as confirmed."
+  ,"checkout.create": "Create order"
+  ,"checkout.creating": "Creating …"
+  ,"checkout.loginRequired": "Please log in or register to create an order."
+  ,"checkout.login": "Log in"
+  ,"checkout.register": "Register"
+  ,"checkout.reused": "There is already an open order for this product. Please use these payment details."
+  ,"checkout.myOrders": "Your orders"
+  ,"checkout.support": "Payment questions: {{email}}"
+  ,"checkout.errors.ALREADY_ACTIVE": "Premium is already active for this account."
+  ,"checkout.errors.PROFILE_REQUIRED": "Please create your advertiser profile first."
+  ,"checkout.errors.ADVERTISER_ACCOUNT_REQUIRED": "This subscription is available for advertiser accounts only."
+  ,"checkout.errors.PRODUCT_NOT_AVAILABLE": "This product is currently not available."
+  ,"checkout.errors.PAYMENT_NOT_CONFIGURED": "Bank transfer is currently not available. Please contact support."
+  ,"checkout.errors.generic": "The order could not be created."
+  ,"admin.payments.confirmReceiptPrompt": "Payment checked on the account statement?\nReference: {{reference}}\nOrder amount: {{amount}} EUR\n\nEnter the amount actually received in EUR:"
+  ,"admin.payments.bankReferencePrompt": "Optional: transaction ID from the account statement"
+  ,"admin.payments.summary": "Orders: {{created}} · pending: {{pending}} ({{pendingAmount}}) · confirmed: {{confirmed}} · activated: {{activated}} · rejected: {{rejected}} · cancelled: {{cancelled}} · received revenue: {{revenue}}"
+  ,"admin.payments.refundsUnsupported": "Refunds are not recorded automatically; pending orders do not count as revenue."
 }

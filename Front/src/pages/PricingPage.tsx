@@ -1,98 +1,127 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { useI18n } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { Seo } from '../components/Seo';
 
-const platformProducts = [
-  ['client_activation', 'client_activation', 'Client Activation', '0.99 EUR', 'one-time'],
-  ['advertiser_30d', 'advertiser_subscription', 'Solo Advertiser Premium Listing', '49.99 EUR', '30 days'],
-  ['agency_30d', 'agency_subscription', 'Agency / Business Plan', '499.00 EUR', '30 days']
-];
+/**
+ * Checkout for the two products sold today (bank transfer, manually verified).
+ * The backend decides what is orderable; this list only gives the static price cards.
+ */
+const checkoutProducts = [
+  { id: 'client_activation', cents: 99 },
+  { id: 'advertiser_30d', cents: 4999 }
+] as const;
 
-const tokenProducts = [
-  ['bc_66', 'token_package', '66 BC Coins', '9,99 EUR'],
-  ['bc_166', 'token_package', '166 BC Coins', '24,99 EUR'],
-  ['bc_666', 'token_package', '666 BC Coins', '99,99 EUR'],
-  ['bc_1200', 'token_package', '1200 BC Coins', '180,00 EUR'],
-  ['bc_2560', 'token_package', '2560 BC Coins', '384,00 EUR'],
-  ['bc_5200', 'token_package', '5200 BC Coins', '780,00 EUR'],
-  ['bc_10200', 'token_package', '10200 BC Coins', '1530,00 EUR']
-];
+const numberLocales: Record<string, string> = { de: 'de-DE', pl: 'pl-PL', en: 'en-GB' };
+
+type OrderView = {
+  id: string;
+  productId: string;
+  amount: number;
+  currency: string;
+  status: string;
+  appliedAt: string | null;
+  paymentReference: string;
+  createdAt?: string;
+};
+
+type BankTransfer = { enabled?: boolean; recipient?: string; iban?: string; bic?: string; bank_name?: string };
+
+const knownErrorCodes = ['ALREADY_ACTIVE', 'PROFILE_REQUIRED', 'ADVERTISER_ACCOUNT_REQUIRED', 'PRODUCT_NOT_AVAILABLE', 'PAYMENT_NOT_CONFIGURED'];
 
 export function PricingPage() {
-  const { t } = useI18n();
-  const fallbackProducts = useMemo(() => [...platformProducts, ...tokenProducts].map(([id, purpose, label, price]) => ({ id, purpose, label, price })), []);
-  const frontendBankTransferEnabled = String(import.meta.env.VITE_MANUAL_BANK_TRANSFER_ENABLED || 'true').toLowerCase() !== 'false';
-  const [products, setProducts] = useState(fallbackProducts);
-  const [providers, setProviders] = useState<Record<string, boolean>>({
-    manual: true,
-    bank_transfer: frontendBankTransferEnabled,
-    crypto: true,
-    ccbill: false,
-    paysafe: false
-  });
-  const [bankTransfer, setBankTransfer] = useState<Record<string, unknown>>({
-    enabled: frontendBankTransferEnabled,
-    recipient: import.meta.env.VITE_MANUAL_BANK_TRANSFER_RECIPIENT || '',
-    iban: import.meta.env.VITE_MANUAL_BANK_TRANSFER_IBAN || '',
-    bic: import.meta.env.VITE_MANUAL_BANK_TRANSFER_BIC || '',
-    bank_name: import.meta.env.VITE_MANUAL_BANK_TRANSFER_BANK_NAME || ''
-  });
-  const [accessToken, setAccessToken] = useState('');
-  const [accountEmail, setAccountEmail] = useState('');
+  const { t, lang } = useI18n();
+  const formatEur = (amount: number, currency = 'EUR') => `${amount.toLocaleString(numberLocales[lang] || 'de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
   const [searchParams] = useSearchParams();
   const requestedProduct = searchParams.get('product') || '';
-  const [productId, setProductId] = useState(requestedProduct || 'client_activation');
-  // ESCORT Office Center (agency plan) is a future product. It is not offered publicly; only the existing
-  // renewal link for historical business accounts (?product=agency_30d) can still select it.
-  const orderableProducts = products.filter((item) => item.id !== 'agency_30d' || requestedProduct === 'agency_30d');
-  const [provider, setProvider] = useState('bank_transfer');
+  const [productId, setProductId] = useState<string>(checkoutProducts.some((item) => item.id === requestedProduct) ? requestedProduct : 'client_activation');
+  const [accessToken, setAccessToken] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
+  const [bankTransfer, setBankTransfer] = useState<BankTransfer>({});
+  const [operator, setOperator] = useState('');
+  const [supportEmail, setSupportEmail] = useState('support@escort-radar.fun');
+  const [orderable, setOrderable] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [manualOrder, setManualOrder] = useState<Record<string, unknown> | null>(null);
+  const [currentOrder, setCurrentOrder] = useState<OrderView | null>(null);
+  const [reused, setReused] = useState(false);
+  const [orders, setOrders] = useState<OrderView[]>([]);
   const [error, setError] = useState('');
-  const selectedProduct = products.find((item) => item.id === productId) || products[0];
-  const manualOrderMetadata = (manualOrder?.metadata && typeof manualOrder.metadata === 'object') ? manualOrder.metadata as Record<string, unknown> : {};
+  const bankTransferReady = Boolean(bankTransfer.enabled && bankTransfer.recipient && bankTransfer.iban);
+  const selectedCents = checkoutProducts.find((item) => item.id === productId)?.cents || 0;
+  const selectedPrice = selectedCents ? formatEur(selectedCents / 100) : '';
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setAccessToken(data.session?.access_token || '');
+      const token = data.session?.access_token || '';
+      setAccessToken(token);
       setAccountEmail(data.session?.user.email || '');
+      if (token) loadOrders(token);
     });
     api.manualPaymentProducts()
       .then((response) => {
-        const mapped = response.products.map((item) => ({
-          id: String(item.id),
-          purpose: String(item.purpose),
-          label: String(item.label),
-          price: `${(Number(item.amount_cents || 0) / 100).toFixed(2)} ${String(item.currency || 'EUR')}`
-        }));
-        if (mapped.length) setProducts(mapped);
-        setProviders({ ...providers, ...(response.providers || {}) });
-        if (response.bank_transfer) setBankTransfer({ ...bankTransfer, ...response.bank_transfer });
-        if (response.default_provider && ['manual', 'bank_transfer', 'crypto'].includes(response.default_provider)) setProvider(response.default_provider);
+        setOrderable(response.products.map((item) => String(item.id)));
+        setBankTransfer((response.bank_transfer || {}) as BankTransfer);
+        setOperator(String((response as Record<string, unknown>).operator || ''));
+        if (response.support_email) setSupportEmail(response.support_email);
       })
-      .catch(() => undefined);
+      .catch(() => setOrderable([]));
   }, []);
 
-  async function createManualOrder() {
-    if (!selectedProduct || !accessToken) return;
+  function loadOrders(token: string) {
+    api.myManualPaymentOrders(token)
+      .then((response) => setOrders(response.orders
+        .filter((item) => checkoutProducts.some((product) => product.id === String(item.productCode)))
+        .map((item) => ({
+          id: String(item.orderId),
+          productId: String(item.productCode),
+          amount: Number(item.amount || 0),
+          currency: String(item.currency || 'EUR'),
+          status: String(item.status || 'pending'),
+          appliedAt: item.appliedAt ? String(item.appliedAt) : null,
+          paymentReference: String(item.paymentReference || ''),
+          createdAt: item.createdAt ? String(item.createdAt) : undefined
+        }))))
+      .catch(() => setOrders([]));
+  }
+
+  async function createOrder() {
+    if (!accessToken) return;
     setLoading(true);
     setError('');
-    setManualOrder(null);
+    setCurrentOrder(null);
     try {
-      const response = await api.createManualPaymentOrder(accessToken, {
-        provider,
-        productCode: selectedProduct.id
+      const response = await api.createManualPaymentOrder(accessToken, { provider: 'bank_transfer', productCode: productId });
+      const order = response.order;
+      setCurrentOrder({
+        id: String(order.id),
+        productId: String(order.product_id || productId),
+        amount: Number(order.amount_eur || 0),
+        currency: String(order.currency || 'EUR'),
+        status: String(order.status || 'pending'),
+        appliedAt: order.applied_at ? String(order.applied_at) : null,
+        paymentReference: String(response.payment_reference || '')
       });
-      setManualOrder({ ...response.order, bank_transfer: response.bank_transfer, payment_reference: response.payment_reference });
+      if (response.bank_transfer) setBankTransfer(response.bank_transfer as BankTransfer);
+      setReused(Boolean((response as Record<string, unknown>).reused));
+      loadOrders(accessToken);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Payment order could not be created.');
+      const code = err instanceof ApiError ? String(err.payload?.code || '') : '';
+      setError(knownErrorCodes.includes(code) ? t(`checkout.errors.${code}`) : t('checkout.errors.generic'));
     } finally {
       setLoading(false);
     }
   }
+
+  function statusLabel(order: OrderView) {
+    if (order.status === 'paid') return order.appliedAt ? t('checkout.statusPaid') : t('checkout.statusProcessing');
+    if (order.status === 'rejected') return t('checkout.statusRejected');
+    if (order.status === 'cancelled') return t('checkout.statusCancelled');
+    return t('checkout.statusPending');
+  }
+
+  const formatAmount = (order: OrderView) => formatEur(order.amount, order.currency);
 
   return (
     <div className="page narrow">
@@ -102,94 +131,95 @@ export function PricingPage() {
         canonical="https://escort-radar.fun/pricing"
       />
       <section className="legal-panel">
-        <p className="eyebrow">Escort Radar Pricing</p>
-        <h1>Pricing</h1>
-        <p>Payments are for digital platform access, profile visibility, advertising tools and internal credits only. The platform does not process payments for physical meetings between users.</p>
+        <p className="eyebrow">Escort Radar</p>
+        <h1>{t('pricing.page.title')}</h1>
+        <p>{t('pricing.page.intro')}</p>
         <div className="pricing-list">
-          {platformProducts.map(([id, , name, price, interval]) => (
-            id === 'agency_30d' ? (
-              <article className="feature pricing-coming-soon" key={name} aria-disabled="true">
-                <h2>ESCORT Office Center</h2>
-                <strong>{t('register.path.comingSoon')}</strong>
-                <p>{t('register.path.officeText')}</p>
-              </article>
-            ) : (
-              <article className="feature" key={name}>
-                <h2>{name}</h2>
-                <strong>{price}</strong>
-                <p>{interval}</p>
-              </article>
-            )
-          ))}
-        </div>
-        <h2>BC Coins packages</h2>
-        <div className="pricing-list">
-          {tokenProducts.map(([, , name, price]) => (
-            <article className="feature" key={name}>
-              <h2>{name}</h2>
-              <strong>{price}</strong>
-              <p>Internal digital credits for platform features.</p>
+          {checkoutProducts.map((product) => (
+            <article className="feature" key={product.id}>
+              <h2>{t(`checkout.product.${product.id}`)}</h2>
+              <strong>{formatEur(product.cents / 100)}</strong>
+              <p>{t(`checkout.interval.${product.id}`)}</p>
             </article>
           ))}
+          <article className="feature pricing-coming-soon" aria-disabled="true">
+            <h2>ESCORT Office Center</h2>
+            <strong>{t('register.path.comingSoon')}</strong>
+            <p>{t('register.path.officeText')}</p>
+          </article>
         </div>
-        <p className="subscription-notice">Card payments via CCBill are coming soon. Paysafecard/Paysafe is coming soon. Manual bank transfer and crypto may be available as discreet prepaid payment options.</p>
+
         <div className="manual-payment-box">
-          <h2>Discreet prepaid payment order</h2>
-          <div className="provider-strip">
-            <button type="button" className={provider === 'bank_transfer' ? 'active' : ''} disabled={!providers.bank_transfer} onClick={() => setProvider('bank_transfer')}>manual bank transfer</button>
-            <button type="button" className={provider === 'crypto' ? 'active' : ''} disabled={!providers.crypto} onClick={() => setProvider('crypto')}>crypto</button>
-            <button type="button" className={provider === 'manual' ? 'active' : ''} disabled={!providers.manual} onClick={() => setProvider('manual')}>manual</button>
-            <button type="button" disabled>CCBill card payments - coming soon</button>
-            <button type="button" disabled>Paysafecard/Paysafe - coming soon</button>
-          </div>
+          <h2>{t('checkout.title')}</h2>
+          <p>{t('checkout.intro')}</p>
           <div className="manual-payment-grid">
             <div className="manual-account-summary">
-              <span>Account email</span>
-              <strong>{accountEmail || t('tokens.loginRequired')}</strong>
+              <span>{t('checkout.account')}</span>
+              <strong>{accountEmail || '–'}</strong>
             </div>
             <label>
-              Product
-              <select value={productId} onChange={(event) => setProductId(event.target.value)}>
-                {orderableProducts.map((item) => <option key={item.id} value={item.id}>{item.label} - {item.price}</option>)}
+              {t('checkout.productLabel')}
+              <select value={productId} onChange={(event) => { setProductId(event.target.value); setCurrentOrder(null); setError(''); }}>
+                {checkoutProducts.map((product) => (
+                  <option key={product.id} value={product.id} disabled={orderable.length > 0 && !orderable.includes(product.id)}>
+                    {t(`checkout.product.${product.id}`)} – {formatEur(product.cents / 100)} ({t(`checkout.interval.${product.id}`)})
+                  </option>
+                ))}
               </select>
             </label>
-            <label>
-              Provider
-              <select value={provider} onChange={(event) => setProvider(event.target.value)}>
-                <option value="bank_transfer" disabled={!providers.bank_transfer}>manual bank transfer</option>
-                <option value="crypto" disabled={!providers.crypto}>Crypto</option>
-                <option value="manual" disabled={!providers.manual}>Manual</option>
-                <option value="ccbill" disabled={!providers.ccbill}>CCBill card payments - coming soon</option>
-                <option value="paysafe" disabled={!providers.paysafe}>Paysafecard/Paysafe - coming soon</option>
-              </select>
-            </label>
+            <div className="manual-account-summary">
+              <span>{t('checkout.method')}</span>
+              <strong>{t('checkout.methodValue')}</strong>
+            </div>
+            {operator ? (
+              <div className="manual-account-summary">
+                <span>{t('checkout.operator')}</span>
+                <strong>{operator}</strong>
+              </div>
+            ) : null}
           </div>
+          <p className="subscription-notice">{t('checkout.notPaidYet')}</p>
           {!accessToken ? (
-            <div className="hero-actions">
-              <Link className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login"><span>Login</span></Link>
-              <Link className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/register"><span>Register</span></Link>
-            </div>
+            <>
+              <p>{t('checkout.loginRequired')}</p>
+              <div className="hero-actions">
+                <Link className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" to="/login"><span>{t('checkout.login')}</span></Link>
+                <Link className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to={productId === 'advertiser_30d' ? '/register?type=escort' : '/register?type=client'}><span>{t('checkout.register')}</span></Link>
+              </div>
+            </>
+          ) : !bankTransferReady ? (
+            <p className="error-text">{t('checkout.errors.PAYMENT_NOT_CONFIGURED')}</p>
           ) : (
-            <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" disabled={loading} onClick={createManualOrder}><span>{loading ? 'Creating...' : 'Create pending order'}</span></button>
+            <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" type="button" disabled={loading} onClick={createOrder}>
+              <span>{loading ? t('checkout.creating') : `${t('checkout.create')} · ${selectedPrice}`}</span>
+            </button>
           )}
-          {error ? <p className="error-text">{error}</p> : null}
-          {manualOrder ? (
-            <div className="manual-order-result">
-              <p><strong>Order ID:</strong> {String(manualOrder.id || '-')}</p>
-              <p><strong>User email:</strong> {String(manualOrder.email || accountEmail)}</p>
-              <p><strong>Product:</strong> {String(manualOrder.product_label || selectedProduct?.label || '-')}</p>
-              <p><strong>Amount:</strong> {Number(manualOrder.amount_eur || 0).toFixed(2)} {String(manualOrder.currency || 'EUR')}</p>
-              <p><strong>Provider:</strong> {String(manualOrder.provider || provider)}</p>
-              <p><strong>Payment reference:</strong> {String(manualOrder.payment_reference || manualOrderMetadata.payment_reference || '-')}</p>
-              {provider === 'bank_transfer' ? (
-                <>
-                  <p><strong>Recipient:</strong> {String((manualOrder.bank_transfer as Record<string, unknown> | undefined)?.recipient || bankTransfer.recipient || '-')}</p>
-                  <p><strong>IBAN:</strong> {String((manualOrder.bank_transfer as Record<string, unknown> | undefined)?.iban || bankTransfer.iban || '-')}</p>
-                  {((manualOrder.bank_transfer as Record<string, unknown> | undefined)?.bic || bankTransfer.bic) ? <p><strong>BIC:</strong> {String((manualOrder.bank_transfer as Record<string, unknown> | undefined)?.bic || bankTransfer.bic)}</p> : null}
-                  {((manualOrder.bank_transfer as Record<string, unknown> | undefined)?.bank_name || bankTransfer.bank_name) ? <p><strong>Bank name:</strong> {String((manualOrder.bank_transfer as Record<string, unknown> | undefined)?.bank_name || bankTransfer.bank_name)}</p> : null}
-                </>
-              ) : null}
-              <p><strong>Instructions:</strong> {t('payments.manualBankTransferInstruction')}</p>
+          {error ? <p className="error-text" role="alert">{error}</p> : null}
+          {currentOrder ? (
+            <div className="manual-order-result" aria-live="polite">
+              {reused ? <p className="success">{t('checkout.reused')}</p> : null}
+              <p><strong>{t('checkout.status')}:</strong> {statusLabel(currentOrder)}</p>
+              <p><strong>{t('checkout.productLabel')}:</strong> {t(`checkout.product.${currentOrder.productId}`)} ({t(`checkout.interval.${currentOrder.productId}`)})</p>
+              <p><strong>{t('checkout.amount')}:</strong> {formatAmount(currentOrder)}</p>
+              <p><strong>{t('checkout.recipient')}:</strong> {bankTransfer.recipient || '–'}</p>
+              <p><strong>{t('checkout.iban')}:</strong> {bankTransfer.iban || '–'}</p>
+              {bankTransfer.bic ? <p><strong>{t('checkout.bic')}:</strong> {bankTransfer.bic}</p> : null}
+              {bankTransfer.bank_name ? <p><strong>{t('checkout.bankName')}:</strong> {bankTransfer.bank_name}</p> : null}
+              <p><strong>{t('checkout.reference')}:</strong> <code>{currentOrder.paymentReference || '–'}</code></p>
+              <p><strong>{t('checkout.orderId')}:</strong> {currentOrder.id}</p>
+              <p>{t('checkout.nextSteps')}</p>
+              <p className="muted">{t('checkout.support', { email: supportEmail })}</p>
+            </div>
+          ) : null}
+          {orders.length ? (
+            <div className="manual-order-history">
+              <h3>{t('checkout.myOrders')}</h3>
+              {orders.map((order) => (
+                <p key={order.id}>
+                  <strong>{t(`checkout.product.${order.productId}`)}</strong> · {formatAmount(order)} · {statusLabel(order)}
+                  {order.status === 'pending' && order.paymentReference ? <> · <code>{order.paymentReference}</code></> : null}
+                </p>
+              ))}
             </div>
           ) : null}
         </div>
@@ -197,4 +227,3 @@ export function PricingPage() {
     </div>
   );
 }
-

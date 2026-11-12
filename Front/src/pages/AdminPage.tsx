@@ -306,6 +306,7 @@ export function AdminPage() {
   const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
   const [clientActivationPayments, setClientActivationPayments] = useState<Record<string, any>[]>([]);
   const [manualPaymentOrders, setManualPaymentOrders] = useState<Record<string, any>[]>([]);
+  const [manualPaymentSummary, setManualPaymentSummary] = useState<Record<string, number> | null>(null);
   const [manualPaymentFilters, setManualPaymentFilters] = useState({ query: '', provider: 'all', status: 'all' });
   const [bcCoinPackages, setBcCoinPackages] = useState<BcCoinPackage[]>([]);
   const [newBcCoinPackage, setNewBcCoinPackage] = useState<Partial<BcCoinPackage>>({ ...emptyBcCoinPackageForm });
@@ -902,6 +903,7 @@ export function AdminPage() {
       setTransactions(transactionData.transactions);
       setClientActivationPayments(clientActivationPaymentData.client_activation_payments as Record<string, any>[]);
       setManualPaymentOrders(manualPaymentOrderData.orders as Record<string, any>[]);
+      setManualPaymentSummary((manualPaymentOrderData as { summary?: Record<string, number> }).summary || null);
       setPurchases(purchaseData.purchase_requests);
       setMasterWallets(masterData.master_wallets);
       setTags(tagData.tags);
@@ -3775,7 +3777,17 @@ export function AdminPage() {
     if (view === 'token-transactions' || view === 'payments' || view === 'manual-payment-orders') {
       const stripeTransactionColumns = ['email', 'transaction_type', 'amount', 'provider', 'stripe_ref', 'livemode', 'status', 'created_at'];
       const activationPaymentColumns = ['email', 'amount', 'currency', 'status', 'provider', 'livemode', 'stripe_session_id', 'stripe_payment_intent_id', 'created_at'];
-      const manualPaymentOrderColumns = ['id', 'email', 'provider', 'purpose', 'product_label', 'amount_eur', 'status', 'payment_reference', 'instructions', 'created_at'];
+      const manualPaymentOrderColumns = ['id', 'email', 'provider', 'purpose', 'product_label', 'amount_eur', 'status', 'payment_reference', 'applied_at', 'created_at'];
+      // Approval is only possible after the admin confirms the received amount from the account statement.
+      const approveManualOrder = (order: Record<string, any>) => {
+        const reference = String(order.payment_reference || order.metadata?.payment_reference || order.id);
+        const received = window.prompt(t('admin.payments.confirmReceiptPrompt', { reference, amount: Number(order.amount_eur || 0).toFixed(2) }), '');
+        if (received === null || !received.trim()) return;
+        const receivedAmount = Number(received.replace(',', '.'));
+        if (!Number.isFinite(receivedAmount)) return;
+        const bankReference = window.prompt(t('admin.payments.bankReferencePrompt'), '') || '';
+        action(() => api.approveManualPaymentOrder(token, String(order.id), { received_amount_eur: receivedAmount, bank_reference: bankReference.trim() || undefined }));
+      };
       const filteredManualPaymentOrders = manualPaymentOrders.filter((order) => {
         const query = manualPaymentFilters.query.trim().toLowerCase();
         const haystack = [order.id, order.email, order.provider, order.status, order.payment_reference, order.metadata?.payment_reference].map((item) => String(item || '').toLowerCase()).join(' ');
@@ -3811,6 +3823,21 @@ export function AdminPage() {
           <section className="admin-card">
             <h2>{t('admin.payments.manualOrders')}</h2>
             <p>{t('admin.payments.manualOrdersHelp')}</p>
+            {manualPaymentSummary ? (
+              <p>
+                <strong>{t('admin.payments.summary', {
+                  created: manualPaymentSummary.created ?? 0,
+                  pending: manualPaymentSummary.pending ?? 0,
+                  pendingAmount: formatEuro(manualPaymentSummary.pending_amount_eur ?? 0),
+                  confirmed: manualPaymentSummary.confirmed ?? 0,
+                  activated: manualPaymentSummary.activated ?? 0,
+                  rejected: manualPaymentSummary.rejected ?? 0,
+                  cancelled: manualPaymentSummary.cancelled ?? 0,
+                  revenue: formatEuro(manualPaymentSummary.received_revenue_eur ?? 0)
+                })}</strong>
+                <br /><small>{t('admin.payments.refundsUnsupported')}</small>
+              </p>
+            ) : null}
             <div className="admin-actions-row">
               <input placeholder={t('admin.payments.searchOrders')} value={manualPaymentFilters.query} onChange={(event) => setManualPaymentFilters({ ...manualPaymentFilters, query: event.target.value })} />
               <select value={manualPaymentFilters.provider} onChange={(event) => setManualPaymentFilters({ ...manualPaymentFilters, provider: event.target.value })}>
@@ -3826,11 +3853,12 @@ export function AdminPage() {
             if (key === 'amount_eur') return formatEuro(value);
             if (key === 'status') return <StatusBadge value={String(value || 'pending')} />;
             if (key === 'payment_reference') return value || row.metadata?.payment_reference || '-';
+            if (key === 'applied_at') return value ? formatDateTime(value) : '-';
             if (key === 'created_at') return formatDateTime(value);
             return value;
           }} actions={(order) => (
             <>
-              <Action title={t('admin.actions.approve')} disabled={String(order.status || '').toLowerCase() === 'paid'} onClick={() => action(() => api.approveManualPaymentOrder(token, String(order.id)))}><UserCheck size={15} /></Action>
+              <Action title={t('admin.actions.approve')} disabled={String(order.status || '').toLowerCase() === 'paid' && Boolean(order.applied_at)} onClick={() => approveManualOrder(order)}><UserCheck size={15} /></Action>
               <Action title={t('admin.actions.reject')} danger disabled={Boolean(order.applied_at) || String(order.status || '').toLowerCase() === 'rejected'} onClick={() => action(() => api.rejectManualPaymentOrder(token, String(order.id), 'Rejected by admin'))}><Ban size={15} /></Action>
               <Action title={t('admin.actions.view')} onClick={() => setModal({ title: String(order.id), body: JSON.stringify(order, null, 2) })}><Eye size={15} /></Action>
             </>

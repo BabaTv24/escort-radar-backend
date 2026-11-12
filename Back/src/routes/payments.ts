@@ -1,11 +1,20 @@
 import { Router, type Request, type Response } from 'express';
-import { verifyUser } from '../middleware/auth.js';
+import { getAuthAccountType, verifyUser } from '../middleware/auth.js';
 import { config } from '../config.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler, optionalText } from '../validation.js';
 import { createStripeCheckoutSession, sendStripeError } from '../services/stripePayments.js';
-import { buildPaymentReference, manualPaymentProducts, manualPaymentProviders, normalizeManualPaymentProvider, paymentReferenceInstruction, resolveManualPaymentProduct } from '../manualPayments.js';
-import { loadBcCoinPackages, toManualPaymentProduct } from '../bcCoinPackages.js';
+import {
+  buildPaymentReference,
+  CUSTOMER_PAYMENT_PROVIDERS,
+  isBankTransferConfigured,
+  isCustomerOrderableProduct,
+  manualPaymentProducts,
+  manualPaymentProviders,
+  normalizeManualPaymentProvider,
+  paymentReferenceInstruction,
+  resolveManualPaymentProduct
+} from '../manualPayments.js';
 
 export const paymentsRouter = Router();
 
@@ -90,21 +99,19 @@ paymentsRouter.post('/coins/checkout', verifyUser, asyncHandler(async (req, res)
 }));
 
 paymentsRouter.get('/manual-products', asyncHandler(async (_req, res) => {
-  const managedCoinProducts = (await loadBcCoinPackages({ activeOnly: true })).map(toManualPaymentProduct);
-  const products = [
-    ...manualPaymentProducts.filter((product) => product.purpose !== 'token_package'),
-    ...managedCoinProducts
-  ];
+  // Only products and payment methods a customer can complete today are offered.
+  const products = manualPaymentProducts.filter((product) => isCustomerOrderableProduct(product.id));
+  const bankTransferReady = isBankTransferConfigured();
   res.json({
     products,
     providers: {
-      manual: true,
-      bank_transfer: config.manualBankTransferEnabled,
-      crypto: config.manualCryptoEnabled,
-      ccbill: config.ccbillEnabled,
-      paysafe: config.paysafeEnabled
+      manual: false,
+      bank_transfer: bankTransferReady,
+      crypto: false,
+      ccbill: false,
+      paysafe: false
     },
-    default_provider: config.paymentDefaultProvider,
+    default_provider: 'bank_transfer',
     provider_labels: {
       manual: 'Manual confirmation',
       bank_transfer: 'manual bank transfer',
@@ -113,7 +120,7 @@ paymentsRouter.get('/manual-products', asyncHandler(async (_req, res) => {
       paysafe: config.paysafeEnabled ? 'Paysafecard/Paysafe' : 'Paysafecard/Paysafe - coming soon'
     },
     bank_transfer: {
-      enabled: config.manualBankTransferEnabled,
+      enabled: bankTransferReady,
       recipient: config.manualBankTransferRecipient,
       iban: config.manualBankTransferIban,
       bic: config.manualBankTransferBic,
@@ -125,6 +132,54 @@ paymentsRouter.get('/manual-products', asyncHandler(async (_req, res) => {
   });
 }));
 
+function bankTransferDetails() {
+  return {
+    enabled: isBankTransferConfigured(),
+    recipient: config.manualBankTransferRecipient,
+    iban: config.manualBankTransferIban,
+    bic: config.manualBankTransferBic,
+    bank_name: config.manualBankTransferBankName
+  };
+}
+
+function orderResponse(order: Record<string, any>, reused: boolean) {
+  const paymentReference = String(order.metadata?.payment_reference || '');
+  return {
+    order: { ...order, payment_reference: paymentReference },
+    reused,
+    instructions: order.instructions || paymentReferenceInstruction(order.id),
+    payment_reference: paymentReference,
+    bank_transfer: bankTransferDetails(),
+    operator: config.legalOperatorName,
+    support_email: config.supportEmail
+  };
+}
+
+/** Checks that the buyer can actually receive the product. Returns the advertiser profile to bind, if any. */
+async function checkOrderEligibility(req: Request, productId: string): Promise<{ error?: { status: number; code: string; message: string }; profileId?: string | null }> {
+  const userId = String(req.user!.id);
+  if (productId === 'client_activation') {
+    const { data: activation, error } = await supabaseAdmin.from('client_activations').select('state').eq('user_id', userId).maybeSingle();
+    if (error) throw error;
+    if (activation?.state === 'client_activated') return { error: { status: 409, code: 'ALREADY_ACTIVE', message: 'Premium is already active for this account' } };
+    return { profileId: null };
+  }
+  if (productId === 'advertiser_30d') {
+    if (getAuthAccountType(req.user) === 'client') return { error: { status: 409, code: 'ADVERTISER_ACCOUNT_REQUIRED', message: 'An advertiser account is required for this subscription' } };
+    const { data: profile, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (!profile) return { error: { status: 409, code: 'PROFILE_REQUIRED', message: 'Create your advertiser profile before ordering the subscription' } };
+    return { profileId: String(profile.id) };
+  }
+  return { error: { status: 409, code: 'PRODUCT_NOT_AVAILABLE', message: 'This product is not available' } };
+}
+
 async function createManualPaymentOrder(req: Request, res: Response) {
   const email = String(req.user?.email || '').toLowerCase();
   const userId = String(req.user?.id || '');
@@ -133,13 +188,28 @@ async function createManualPaymentOrder(req: Request, res: Response) {
   const productCode = optionalText(req.body.productCode || req.body.product_code || req.body.product_id, 80) || '';
   if (!email || !email.includes('@') || !userId) return res.status(401).json({ error: 'Authenticated user is required' });
   if (!manualPaymentProviders.includes(requestedProvider as any)) return res.status(400).json({ error: 'Unsupported payment provider' });
-  if (provider === 'ccbill' && !config.ccbillEnabled) return res.status(400).json({ error: 'CCBill card payments are coming soon' });
-  if (provider === 'paysafe' && !config.paysafeEnabled) return res.status(400).json({ error: 'Paysafe payments are coming soon' });
-  if (provider === 'bank_transfer' && !config.manualBankTransferEnabled) return res.status(400).json({ error: 'Bank transfer is currently disabled' });
-  if (provider === 'crypto' && !config.manualCryptoEnabled) return res.status(400).json({ error: 'Crypto payment is currently disabled' });
+  if (!CUSTOMER_PAYMENT_PROVIDERS.includes(provider)) return res.status(400).json({ error: 'This payment method is not available', code: 'PAYMENT_METHOD_NOT_AVAILABLE' });
+  if (!isBankTransferConfigured()) return res.status(503).json({ error: 'Bank transfer is not configured', code: 'PAYMENT_NOT_CONFIGURED' });
 
   const product = await resolveManualPaymentProduct(productCode);
   if (!product) return res.status(400).json({ error: 'Unknown payment product' });
+  if (!isCustomerOrderableProduct(product.id)) return res.status(409).json({ error: 'This product is not available', code: 'PRODUCT_NOT_AVAILABLE' });
+  const eligibility = await checkOrderEligibility(req, product.id);
+  if (eligibility.error) return res.status(eligibility.error.status).json({ error: eligibility.error.message, code: eligibility.error.code });
+
+  // One open order per product: a repeated click shows the same reference instead of a second order to pay.
+  const { data: openOrder, error: openOrderError } = await supabaseAdmin
+    .from('manual_payment_orders')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('product_id', product.id)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (openOrderError) return res.status(500).json({ error: openOrderError.message });
+  if (openOrder) return res.status(200).json(orderResponse(openOrder, true));
+
   const paymentReference = buildPaymentReference('pending', email);
   const { data, error } = await supabaseAdmin
     .from('manual_payment_orders')
@@ -154,7 +224,7 @@ async function createManualPaymentOrder(req: Request, res: Response) {
       amount_eur: product.amount_cents / 100,
       currency: product.currency,
       tokens_amount: 'total_tokens' in product ? product.total_tokens : ('tokens' in product ? product.tokens : null),
-      profile_id: null,
+      profile_id: eligibility.profileId || null,
       business_id: null,
       status: 'pending',
       instructions: '',
@@ -176,20 +246,9 @@ async function createManualPaymentOrder(req: Request, res: Response) {
     payment_reference: finalPaymentReference,
     payment_reference_template: config.manualBankTransferReferenceTemplate
   };
-  await supabaseAdmin.from('manual_payment_orders').update({ instructions, metadata: finalMetadata }).eq('id', data.id);
-  res.status(201).json({
-    order: { ...data, instructions, metadata: finalMetadata, payment_reference: finalPaymentReference },
-    instructions,
-    payment_reference: finalPaymentReference,
-    bank_transfer: {
-      enabled: config.manualBankTransferEnabled,
-      recipient: config.manualBankTransferRecipient,
-      iban: config.manualBankTransferIban,
-      bic: config.manualBankTransferBic,
-      bank_name: config.manualBankTransferBankName
-    },
-    support_email: config.supportEmail
-  });
+  const { error: finalizeError } = await supabaseAdmin.from('manual_payment_orders').update({ instructions, metadata: finalMetadata }).eq('id', data.id);
+  if (finalizeError) return res.status(500).json({ error: finalizeError.message });
+  res.status(201).json(orderResponse({ ...data, instructions, metadata: finalMetadata }, false));
 }
 
 paymentsRouter.post('/manual-orders', verifyUser, asyncHandler(createManualPaymentOrder));

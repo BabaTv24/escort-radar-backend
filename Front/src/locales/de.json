@@ -1079,7 +1079,7 @@
   "subscription.features": "Bis zu 6 Fotos, erweiterte Filter, Service-Menü, VIP-Buchungsanfragen und Sichtbarkeit im City Radar.",
   "subscription.notice": "Deine Anzeige benötigt Zahlung und Moderation vor öffentlicher Sichtbarkeit.",
   "subscription.testNotice": "Testkonto: Zahlung wird für Live-QA übersprungen.",
-  "subscription.activate": "Subscription aktivieren — kommt bald",
+  "subscription.activate": "Abo aktivieren · 49,99 € / 30 Tage",
   "photos.counter": "{{count}}/{{max}} Fotos",
   "photos.blurSoon": "Gesicht weichzeichnen — kommt bald",
   "photos.empty": "Noch keine Fotos hochgeladen.",
@@ -1791,7 +1791,7 @@
   "admin.table.instructions": "Anweisungen",
   "admin.table.payment_reference": "Verwendungszweck",
   "admin.payments.manualOrders": "Manuelle Zahlungsauftraege",
-  "admin.payments.manualOrdersHelp": "Ausstehende Bankueberweisung-, Krypto- und Provider-Platzhalterauftraege fuer discreet prepaid payment processing.",
+  "admin.payments.manualOrdersHelp": "Bestellungen per Banküberweisung. Freigabe nur nach geprüftem Zahlungseingang auf dem Konto – ein Screenshot oder eine Kundenaussage genügt nicht.",
   "admin.payments.searchOrders": "Bestell-ID, E-Mail, Provider, Status suchen",
   "admin.dashboard.dailyRevenue": "Tagesumsatz",
   "admin.dashboard.monthlyRevenue": "Monatsumsatz",
@@ -2825,4 +2825,50 @@
   ,"service.wytrysk": "Ejakulation"
   ,"service.wzajemna_masturbacja": "Gegenseitige Masturbation"
   ,"service.zgniatanie_jader": "Ballbusting"
+  ,"pricing.page.title": "Preise"
+  ,"pricing.page.intro": "Zahlungen gelten ausschließlich für digitalen Plattformzugang, Profil-Sichtbarkeit und Werbewerkzeuge. Die Plattform wickelt keine Zahlungen für Treffen zwischen Nutzern ab."
+  ,"checkout.product.client_activation": "Kunden-Premium"
+  ,"checkout.product.advertiser_30d": "Premium-Inserat"
+  ,"checkout.interval.client_activation": "einmalig"
+  ,"checkout.interval.advertiser_30d": "30 Tage"
+  ,"checkout.title": "Bestellung per Banküberweisung"
+  ,"checkout.intro": "Sie erstellen eine Bestellung. Aktiviert wird erst, wenn der Betrag auf unserem Konto eingegangen ist und manuell geprüft wurde. Dies ist kein sofortiger Online-Checkout."
+  ,"checkout.productLabel": "Produkt"
+  ,"checkout.amount": "Betrag"
+  ,"checkout.method": "Zahlungsart"
+  ,"checkout.methodValue": "Banküberweisung (SEPA), manuelle Prüfung"
+  ,"checkout.operator": "Anbieter"
+  ,"checkout.account": "Konto"
+  ,"checkout.recipient": "Empfänger"
+  ,"checkout.iban": "IBAN"
+  ,"checkout.bic": "BIC"
+  ,"checkout.bankName": "Bank"
+  ,"checkout.reference": "Verwendungszweck (genau so angeben)"
+  ,"checkout.orderId": "Bestellnummer"
+  ,"checkout.status": "Status"
+  ,"checkout.statusPending": "Ausstehend – Zahlung noch nicht bestätigt"
+  ,"checkout.statusProcessing": "Zahlung bestätigt – Aktivierung läuft"
+  ,"checkout.statusPaid": "Zahlung bestätigt – aktiviert"
+  ,"checkout.statusRejected": "Abgelehnt"
+  ,"checkout.statusCancelled": "Storniert"
+  ,"checkout.notPaidYet": "Wichtig: Eine Bestellung ist noch keine Zahlung. Ihr Produkt ist erst nach bestätigtem Zahlungseingang aktiv."
+  ,"checkout.nextSteps": "So geht es weiter: 1. Überweisen Sie genau den angezeigten Betrag mit dem angegebenen Verwendungszweck. 2. Wir prüfen den Zahlungseingang auf unserem Konto. 3. Danach wird Ihr Produkt aktiviert und hier als bestätigt angezeigt."
+  ,"checkout.create": "Bestellung erstellen"
+  ,"checkout.creating": "Wird erstellt …"
+  ,"checkout.loginRequired": "Bitte melden Sie sich an oder registrieren Sie sich, um eine Bestellung zu erstellen."
+  ,"checkout.login": "Anmelden"
+  ,"checkout.register": "Registrieren"
+  ,"checkout.reused": "Für dieses Produkt besteht bereits eine offene Bestellung. Bitte verwenden Sie diese Zahlungsdaten."
+  ,"checkout.myOrders": "Ihre Bestellungen"
+  ,"checkout.support": "Fragen zur Zahlung: {{email}}"
+  ,"checkout.errors.ALREADY_ACTIVE": "Premium ist für dieses Konto bereits aktiv."
+  ,"checkout.errors.PROFILE_REQUIRED": "Bitte legen Sie zuerst Ihr Inserentenprofil an."
+  ,"checkout.errors.ADVERTISER_ACCOUNT_REQUIRED": "Dieses Abo ist nur für Inserentenkonten verfügbar."
+  ,"checkout.errors.PRODUCT_NOT_AVAILABLE": "Dieses Produkt ist derzeit nicht verfügbar."
+  ,"checkout.errors.PAYMENT_NOT_CONFIGURED": "Banküberweisung ist derzeit nicht verfügbar. Bitte kontaktieren Sie den Support."
+  ,"checkout.errors.generic": "Die Bestellung konnte nicht erstellt werden."
+  ,"admin.payments.confirmReceiptPrompt": "Zahlungseingang auf dem Konto geprüft?\nVerwendungszweck: {{reference}}\nBestellbetrag: {{amount}} EUR\n\nTatsächlich eingegangenen Betrag in EUR eingeben:"
+  ,"admin.payments.bankReferencePrompt": "Optional: Transaktionsreferenz aus dem Kontoauszug"
+  ,"admin.payments.summary": "Bestellungen: {{created}} · ausstehend: {{pending}} ({{pendingAmount}}) · bestätigt: {{confirmed}} · aktiviert: {{activated}} · abgelehnt: {{rejected}} · storniert: {{cancelled}} · eingegangene Einnahmen: {{revenue}}"
+  ,"admin.payments.refundsUnsupported": "Rückerstattungen werden nicht automatisch erfasst; ausstehende Bestellungen zählen nicht als Einnahmen."
 }
