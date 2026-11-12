@@ -6,7 +6,7 @@ import {
   resolveAdvertiserDashboardSection
 } from '../Front/src/components/advertiser-dashboard/AdvertiserDashboardShell';
 
-test('advertiser dashboard exposes all stage-one sections', () => {
+test('advertiser dashboard exposes all Business Center sections', () => {
   assert.deepEqual(advertiserDashboardSections, [
     'overview',
     'profile',
@@ -14,6 +14,8 @@ test('advertiser dashboard exposes all stage-one sections', () => {
     'messages',
     'bookings',
     'wallet',
+    'earnings',
+    'subscription',
     'referrals',
     'settings'
   ]);
@@ -65,5 +67,5 @@ test('unfinished sections are explicit placeholders while stage-three sections u
   assert.match(dashboard, /activeSection === 'referrals'[\s\S]*AdvertiserReferralSection/);
   assert.match(dashboard, /activeSection === 'bookings'[\s\S]*AdvertiserBookingsSection/);
   assert.match(dashboard, /activeSection === 'messages'[\s\S]*AdvertiserMessagesSection/);
-  assert.match(dashboard, /!\['overview', 'profile', 'location', 'messages', 'bookings', 'wallet', 'referrals', 'settings'\]\.includes\(activeSection\)/);
+  assert.match(dashboard, /!\['overview', 'profile', 'location', 'messages', 'bookings', 'wallet', 'earnings', 'subscription', 'referrals', 'settings'\]\.includes\(activeSection\)/);
 });

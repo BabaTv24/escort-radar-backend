@@ -192,14 +192,14 @@
   "auth.continueWithGoogle": "Kontynuuj z Google",
   "auth.alreadyHaveAccount": "Masz juz konto? Zaloguj",
   "auth.needAccount": "Nie masz konta? Zarejestruj",
-  "auth.loginEyebrow": "Bezpieczny dostep",
+  "auth.loginEyebrow": "Bezpieczny dostęp",
   "auth.loginTitle": "Zaloguj do Escort Radar",
-  "auth.loginSubtitle": "Dostep do radaru, studia profilu, BC Coins i narzedzi premium marketplace.",
-  "auth.registrationClientNotice": "Tworzysz konto Premium klienta. Aktywacja dostępu kosztuje 0,99€.",
+  "auth.loginSubtitle": "Dostęp do radaru, studia profilu, BC Coins i narzędzi premium marketplace.",
+  "auth.registrationClientNotice": "Rejestracja jest bezpłatna. Premium (0,99 EUR jednorazowo) aktywujesz osobno w biurze klienta.",
   "auth.registrationPremiumNotice": "Publikacja profilu wymaga weryfikacji i aktywnego pakietu premium.",
-  "auth.createFreeClientAccount": "Aktywuj konto Premium za 0,99€",
-  "auth.createFreeAccess": "Aktywuj konto Premium klienta",
-  "auth.clientBenefitFree": "Konto Premium klienta",
+  "auth.createFreeClientAccount": "Załóż bezpłatne konto",
+  "auth.createFreeAccess": "Załóż bezpłatne konto klienta",
+  "auth.clientBenefitFree": "Bezpłatne konto klienta",
   "auth.clientBenefitRadar": "Dostęp do radaru",
   "auth.clientBenefitTokens": "BC Coins i odblokowania",
   "auth.confirm.title": "Sprawdź swoją skrzynkę e-mail",
@@ -213,11 +213,11 @@
   "auth.confirm.backToLogin": "Wróć do logowania",
   "auth.confirm.confirmedNotice": "Adres e-mail został potwierdzony. Możesz się teraz zalogować.",
   "authAccountType.client": "Klient",
-  "authAccountType.clientText": "Odkrywaj radar, zachowaj dostep i korzystaj z narzedzi premium.",
+  "authAccountType.clientText": "Odkrywaj radar, zapisuj profile i korzystaj z narzędzi premium.",
   "authAccountType.escort": "Escort",
-  "authAccountType.escortText": "Utworz zweryfikowany profil niezalezny i zarzadzaj rezerwacjami.",
+  "authAccountType.escortText": "Utwórz zweryfikowany profil niezależny i zarządzaj rezerwacjami.",
   "authAccountType.business": "Biznes",
-  "authAccountType.businessText": "Przygotuj dostep dla agencji, salonu, klubu lub live studia.",
+  "authAccountType.businessText": "Przygotuj dostęp dla agencji, salonu, klubu lub live studia.",
   "identity.male": "Mezczyzna",
   "identity.female": "Kobieta",
   "identity.trans": "Trans",
@@ -2516,4 +2516,119 @@
   ,"revenue.ledgerNote": "Tylko zaksięgowane wpływy. Kupione BC, bonusy i zablokowane BC nie są tu liczone."
   ,"favorites.addedFree": "Dodano do Ulubionych. Zapisanie profilu jest bezpłatne."
   ,"revenue.gifts": "Prezenty"
+  ,"clientDash.officeTitle": "Biuro klienta"
+  ,"clientDash.navLabel": "Nawigacja biura klienta"
+  ,"clientDash.nav.overview": "Przegląd"
+  ,"clientDash.nav.favorites": "Ulubione"
+  ,"clientDash.nav.bookings": "Rezerwacje"
+  ,"clientDash.nav.messages": "Wiadomości"
+  ,"clientDash.nav.wallet": "Portfel BC"
+  ,"clientDash.nav.referrals": "Polecenia"
+  ,"clientDash.nav.settings": "Ustawienia konta"
+  ,"clientDash.nav.radar": "LIVE Radar"
+  ,"clientDash.status.premium": "Klient Premium"
+  ,"clientDash.status.free": "Konto FREE"
+  ,"clientDash.openRadar": "Otwórz LIVE Radar"
+  ,"clientDash.loadError": "Nie udało się wczytać danych biura."
+  ,"clientDash.overview.subtitle": "Najważniejsze informacje o koncie w jednym miejscu."
+  ,"clientDash.overview.subtitleFree": "Przeglądasz w trybie FREE. Aktywuj Premium, aby odblokować pełne profile, rezerwacje i czat."
+  ,"clientDash.favorites.subtitle": "Zapisane profile. Zapisanie profilu jest bezpłatne dla klientów Premium."
+  ,"clientDash.bookings.subtitle": "Twoje zapytania o rezerwację i ich statusy. Zapytanie o rezerwację jest bezpłatne."
+  ,"clientDash.messages.subtitle": "Rozmowy z profilami. Odblokowanie czatu z profilem kosztuje jednorazowo 3 BC."
+  ,"clientDash.wallet.subtitle": "Saldo i pełna historia operacji BC z ledgera."
+  ,"clientDash.referrals.subtitle": "Osobisty link polecający i kod QR dla klientów Premium."
+  ,"clientDash.settings.subtitle": "Dane konta, prywatność i status Premium."
+  ,"clientDash.kpi.bookingsOpen": "Oczekujące: {{count}}"
+  ,"clientDash.kpi.conversations": "Rozmowy"
+  ,"clientDash.kpi.radarProfiles": "Profile na radarze · online: {{count}}"
+  ,"clientDash.offer.eyebrow": "Premium · 0,99 EUR jednorazowo"
+  ,"clientDash.offer.title": "Odblokuj pełny dostęp"
+  ,"clientDash.offer.copy": "Jedna płatność aktywuje konto Premium. Bez subskrypcji."
+  ,"clientDash.offer.benefit.gallery": "Pełne galerie zatwierdzonych zdjęć"
+  ,"clientDash.offer.benefit.contacts": "Numery telefonów i kontakty z profili"
+  ,"clientDash.offer.benefit.booking": "Bezpłatne zapytania o rezerwację"
+  ,"clientDash.offer.benefit.favorites": "Bezpłatne ulubione"
+  ,"clientDash.offer.benefit.chat": "Czat tekstowy: 3 BC jednorazowo za profil"
+  ,"clientDash.offer.benefit.referral": "Osobisty link polecający i kod QR"
+  ,"clientDash.offer.benefit.bonus": "7 BC na start w portfelu"
+  ,"clientDash.offer.note": "Aktywacja odbywa się na stronie płatności. Status Premium pojawia się dopiero po potwierdzeniu płatności."
+  ,"clientDash.lock.title": "Funkcja dla klientów Premium"
+  ,"clientDash.lock.copy": "Rezerwacje, ulubione i czat są dostępne po aktywacji Premium (0,99 EUR jednorazowo)."
+  ,"clientDash.account.eyebrow": "Status konta"
+  ,"clientDash.account.status": "Status"
+  ,"clientDash.account.active": "Aktywne"
+  ,"clientDash.account.since": "Aktywne od"
+  ,"clientDash.activity.title": "Ostatnie operacje BC"
+  ,"clientDash.activity.all": "Pełna historia"
+  ,"clientDash.empty.activity": "Brak operacji w portfelu."
+  ,"clientDash.empty.favorites": "Zapisuj profile z LIVE Radaru, aby szybko do nich wracać."
+  ,"clientDash.empty.radarTitle": "Brak profili w pobliżu"
+  ,"clientDash.messages.price": "Czat 3 BC / profil"
+  ,"clientDash.wallet.balance": "Saldo BC"
+  ,"clientDash.wallet.id": "Portfel {{id}}"
+  ,"clientDash.wallet.received": "Łącznie otrzymane"
+  ,"clientDash.wallet.spent": "Łącznie wydane"
+  ,"clientDash.wallet.closedEconomy": "BC działają wyłącznie w Escort Radar. Nie można ich wypłacić ani przekazać innym osobom."
+  ,"clientDash.wallet.ledgerEyebrow": "Ledger"
+  ,"clientDash.wallet.ledgerTitle": "Historia operacji"
+  ,"clientDash.features.title": "Cennik funkcji"
+  ,"clientDash.features.booking": "Zapytanie o rezerwację"
+  ,"clientDash.features.favorites": "Ulubione"
+  ,"clientDash.features.chat": "Czat tekstowy (jednorazowo za profil)"
+  ,"clientDash.features.gifts": "Prezenty Diamond"
+  ,"clientDash.features.video": "Wideoczat"
+  ,"clientDash.features.available": "Dostępne"
+  ,"clientDash.features.soon": "Wkrótce"
+  ,"clientDash.features.unavailable": "Niedostępny"
+  ,"clientDash.referrals.title": "Twój link polecający"
+  ,"clientDash.referrals.open": "Link i kod QR"
+  ,"clientDash.referrals.lockedQr": "Kod QR po aktywacji Premium"
+  ,"clientDash.referrals.lockedCopy": "Konto FREE nie ma osobistego linku ani kodu QR. Po aktywacji Premium otrzymasz {{count}} BC za każdego poleconego klienta, który aktywuje Premium."
+  ,"ledgerType.booking_sent": "Rezerwacja (historyczna opłata)"
+  ,"ledgerType.booking_received": "Rezerwacja otrzymana (historyczna)"
+  ,"ledgerType.favorite_sent": "Ulubione (historyczna opłata)"
+  ,"ledgerType.favorite_received": "Nowy wielbiciel (historyczny)"
+  ,"ledgerType.chat_sent": "Odblokowanie czatu"
+  ,"ledgerType.chat_received": "Czat odblokowany przez klienta"
+  ,"ledgerType.gift_sent": "Wysłany prezent"
+  ,"ledgerType.gift_received": "Otrzymany prezent"
+  ,"ledgerType.dev_seed_grant": "Zasilenie testowe (DEV)"
+  ,"ledgerType.client_premium_bonus": "Bonus Premium"
+  ,"ledgerType.referral_reward": "Nagroda za polecenie"
+  ,"ledgerType.bcu_product_communication_plus": "Communication Plus"
+  ,"ledgerType.bc_purchase": "Zakup BC"
+  ,"ledgerType.admin_adjustment": "Korekta administratora"
+  ,"businessCenter.title": "Business Center"
+  ,"businessCenter.details": "Szczegóły"
+  ,"businessCenter.subscriptionBadge": "Subskrypcja: {{status}}"
+  ,"businessCenter.subtitle.profile": "Dane profilu, zdjęcia, ceny, usługi i dostępność."
+  ,"businessCenter.subtitle.settings": "Ustawienia konta i widoczności."
+  ,"businessCenter.subtitle.earnings": "Zaksięgowane wpływy BC według źródła. Dane pochodzą z ledgera."
+  ,"businessCenter.subtitle.subscription": "Status, okres i odnowienie subskrypcji profilu."
+  ,"businessCenter.subscription.current": "Aktualna subskrypcja"
+  ,"businessCenter.subscription.plan": "Plan"
+  ,"businessCenter.subscription.start": "Początek"
+  ,"businessCenter.subscription.end": "Koniec"
+  ,"businessCenter.subscription.activate": "Aktywuj subskrypcję"
+  ,"businessCenter.subscription.extend": "Przedłuż subskrypcję"
+  ,"businessCenter.subscription.renewalEyebrow": "Odnowienie"
+  ,"businessCenter.subscription.renewalTitle": "Sposoby odnowienia"
+  ,"businessCenter.subscription.renewalPayment": "Płatność na stronie cennika"
+  ,"businessCenter.subscription.paymentPage": "Cennik"
+  ,"businessCenter.subscription.renewalBc": "Odnowienie za BC"
+  ,"businessCenter.subscription.renewalNote": "Odnowienie za BC będzie dostępne dopiero po zatwierdzeniu przelicznika. Do tego czasu żadne BC nie są pobierane za subskrypcję."
+  ,"advertiserDashboard.section.earnings": "Zarobki cyfrowe"
+  ,"advertiserDashboard.section.subscription": "Subskrypcja"
+  ,"advertiserDashboard.placeholder.earnings": "Zarobki cyfrowe"
+  ,"advertiserDashboard.placeholder.subscription": "Subskrypcja"
+  ,"clientDash.wallet.showAll": "Pokaż wszystkie ({{count}})"
+  ,"clientDash.wallet.showLess": "Pokaż mniej"
+  ,"profilePremium.lockTitle": "Pełny profil dla klientów Premium"
+  ,"profilePremium.lockCopy": "Galeria, kontakty, bezpłatna rezerwacja i czat po jednorazowej aktywacji za 0,99 EUR."
+  ,"profilePremium.activate": "Aktywuj Premium · 0,99 EUR"
+  ,"profilePremium.galleryLocked": "Pełna galeria w Premium"
+  ,"profilePremium.bookFree": "Rezerwuj · bezpłatnie"
+  ,"profilePremium.chatDisabled": "Ten profil nie ma włączonego czatu tekstowego."
+  ,"profilePremium.gifts": "Prezenty Diamond"
+  ,"profilePremium.giftsSoon": "Prezenty Diamond będą dostępne po ustaleniu cen. Teraz nic nie jest pobierane."
 }

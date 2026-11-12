@@ -2,11 +2,17 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
+  BadgeCheck,
   CalendarDays,
   CheckCircle2,
+  Coins,
+  CreditCard,
+  ExternalLink,
   LayoutDashboard,
+  LogOut,
   MapPin,
   MessageCircle,
+  PencilLine,
   Settings,
   UserRound,
   WalletCards,
@@ -26,6 +32,8 @@ export const advertiserDashboardSections = [
   'messages',
   'bookings',
   'wallet',
+  'earnings',
+  'subscription',
   'referrals',
   'settings'
 ] as const;
@@ -39,6 +47,8 @@ const sectionIcons = {
   messages: MessageCircle,
   bookings: CalendarDays,
   wallet: WalletCards,
+  earnings: Coins,
+  subscription: CreditCard,
   referrals: UsersRound,
   settings: Settings
 };
@@ -53,6 +63,7 @@ export function resolveAdvertiserDashboardSection(value: string | null, hash = '
     : 'overview';
 }
 
+/** Business Center frame: the shared Premium office layout (sidebar on desktop, section tabs on mobile). */
 export function AdvertiserDashboardShell({ activeSection, email, onSectionChange, onLogout, badges, children }: {
   activeSection: AdvertiserDashboardSection;
   badges?: Partial<Record<AdvertiserDashboardSection, number>>;
@@ -64,19 +75,35 @@ export function AdvertiserDashboardShell({ activeSection, email, onSectionChange
   const { t } = useI18n();
 
   return (
-    <div className="advertiser-dashboard-shell">
-      <aside className="advertiser-dashboard-sidebar">
-        <div className="advertiser-dashboard-brand">
-          <span className="eyebrow">Escort Radar</span>
-          <strong>{t('advertiserDashboard.workspace')}</strong>
+    <div className="pr-office advertiser-business-center">
+      <aside className="pr-sidebar" aria-label={t('advertiserDashboard.navigation')}>
+        <div className="pr-sidebar-brand">
+          <p className="pr-eyebrow">Escort Radar</p>
+          <strong>{t('businessCenter.title')}</strong>
           <small>{email}</small>
         </div>
         <AdvertiserDashboardNav activeSection={activeSection} onSectionChange={onSectionChange} badges={badges} />
-        <button type="button" className="advertiser-dashboard-logout" onClick={onLogout}>
-          {t('buttons.logout')}
-        </button>
+        <div className="pr-sidebar-foot">
+          <button type="button" className="pr-nav-item advertiser-dashboard-logout" onClick={onLogout}>
+            <LogOut size={18} aria-hidden="true" />
+            <span className="pr-nav-label">{t('buttons.logout')}</span>
+          </button>
+        </div>
       </aside>
-      <main className="advertiser-dashboard-workspace" id="advertiser-dashboard-content">
+      <main className="pr-main" id="advertiser-dashboard-content">
+        <nav className="pr-tabs" aria-label={t('advertiserDashboard.navigation')}>
+          {advertiserDashboardSections.map((section) => {
+            const Icon = sectionIcons[section];
+            const badge = badges?.[section] || 0;
+            return (
+              <button key={section} type="button" className={`pr-tab${activeSection === section ? ' is-active' : ''}`} aria-current={activeSection === section ? 'page' : undefined} onClick={() => onSectionChange(section)}>
+                <Icon size={15} aria-hidden="true" />
+                {t(`advertiserDashboard.section.${section}`)}
+                {badge > 0 ? <span className="pr-count er-nav-badge">{badge > 99 ? '99+' : badge}</span> : null}
+              </button>
+            );
+          })}
+        </nav>
         {children}
       </main>
     </div>
@@ -90,7 +117,7 @@ export function AdvertiserDashboardNav({ activeSection, onSectionChange, badges 
 }) {
   const { t } = useI18n();
   return (
-    <nav className="advertiser-dashboard-nav" aria-label={t('advertiserDashboard.navigation')}>
+    <nav className="pr-nav advertiser-dashboard-nav" aria-label={t('advertiserDashboard.navigation')}>
       {advertiserDashboardSections.map((section) => {
         const Icon = sectionIcons[section];
         const badge = badges?.[section] || 0;
@@ -98,13 +125,13 @@ export function AdvertiserDashboardNav({ activeSection, onSectionChange, badges 
           <button
             key={section}
             type="button"
-            className={activeSection === section ? 'active' : ''}
+            className={`pr-nav-item${activeSection === section ? ' is-active active' : ''}`}
             aria-current={activeSection === section ? 'page' : undefined}
             onClick={() => onSectionChange(section)}
           >
             <Icon size={18} aria-hidden="true" />
-            <span>{t(`advertiserDashboard.section.${section}`)}</span>
-            {badge > 0 ? <span className="er-nav-badge" data-badge={section} aria-label={t('activity.badgeLabel', { count: badge })}>{badge > 99 ? '99+' : badge}</span> : null}
+            <span className="pr-nav-label">{t(`advertiserDashboard.section.${section}`)}</span>
+            {badge > 0 ? <span className="pr-count er-nav-badge" data-badge={section} aria-label={t('activity.badgeLabel', { count: badge })}>{badge > 99 ? '99+' : badge}</span> : null}
           </button>
         );
       })}
@@ -112,19 +139,36 @@ export function AdvertiserDashboardNav({ activeSection, onSectionChange, badges 
   );
 }
 
-export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgress, businessActivity, onEditProfile, onOpenCompletionSection }: {
+export function AdvertiserSectionHeading({ section, actions }: { section: AdvertiserDashboardSection; actions?: ReactNode }) {
+  const { t } = useI18n();
+  return (
+    <header className="pr-hero">
+      <div>
+        <p className="pr-eyebrow">{t('businessCenter.title')}</p>
+        <h1 className="pr-title" id={`advertiser-${section}-heading`}>{t(`advertiserDashboard.section.${section}`)}</h1>
+        <p className="pr-lead">{t(`businessCenter.subtitle.${section}`)}</p>
+      </div>
+      {actions ? <div className="pr-hero-actions">{actions}</div> : null}
+    </header>
+  );
+}
+
+export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgress, businessActivity, earningsSummary, onEditProfile, onOpenCompletionSection, onOpenSection }: {
   profile: Profile | null;
   businessActivity?: ReactNode;
+  earningsSummary?: ReactNode;
   draft: Partial<Profile>;
   subscriptionProgress: ReactNode;
   onEditProfile: () => void;
   onOpenCompletionSection: (section: AdvertiserProfileCompletionSection) => void;
+  onOpenSection?: (section: AdvertiserDashboardSection) => void;
 }) {
   const { t } = useI18n();
   const source = profile || draft;
   const completion = getAdvertiserProfileCompleteness(profile);
   const operationalWarnings = getAdvertiserOperationalWarnings(profile, t);
   const operatorStatus = source.operator_status || 'OFFLINE';
+  const subscriptionActive = profile?.subscription_status === 'active';
   const publicationLabel = !profile
     ? t('advertiserDashboard.status.notCreated')
     : profile.is_published === true
@@ -134,53 +178,58 @@ export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgre
         : t('advertiserDashboard.status.publicationUnknown');
 
   return (
-    <section className="advertiser-dashboard-overview" aria-labelledby="advertiser-overview-title">
-      <header className="advertiser-dashboard-heading">
+    <section className="pr-grid advertiser-dashboard-overview" aria-labelledby="advertiser-overview-title">
+      <header className="pr-hero">
         <div>
-          <p className="eyebrow">Escort Radar</p>
-          <h1 id="advertiser-overview-title">{t('advertiserDashboard.overview.title')}</h1>
-          <p>{t('advertiserDashboard.overview.subtitle')}</p>
+          <p className="pr-eyebrow">{t('businessCenter.title')}</p>
+          <h1 className="pr-title" id="advertiser-overview-title">{source.display_name || t('advertiserDashboard.overview.title')}</h1>
+          <p className="pr-lead">{t('advertiserDashboard.overview.subtitle')}</p>
+          <div className="pr-badges">
+            <span className={`pr-badge ${profile?.is_published ? 'is-success' : 'is-warning'}`}>{publicationLabel}</span>
+            <span className={`pr-badge ${operatorStatus === 'OFFLINE' ? 'is-muted' : 'is-success'}`}>{t(`dashboard.advertiser.status.${operatorStatus}`)}</span>
+            <span className={`pr-badge ${subscriptionActive ? 'is-premium' : 'is-warning'}`}>{t('businessCenter.subscriptionBadge', { status: t(`admin.status.${profile?.subscription_status || 'free'}`) })}</span>
+            {profile?.moderation_status ? <span className="pr-badge is-plain">{t(`admin.status.${profile.moderation_status}`)}</span> : null}
+          </div>
         </div>
-        <button type="button" className="button primary" onClick={onEditProfile}>
-          {t('advertiserDashboard.overview.editProfile')}
-        </button>
+        <div className="pr-hero-actions">
+          <button type="button" className="pr-btn is-primary" onClick={onEditProfile}><PencilLine size={16} aria-hidden="true" /> {t('advertiserDashboard.overview.editProfile')}</button>
+          {profile ? <Link className="pr-btn" to={`/profile/${profile.id}`}><ExternalLink size={16} aria-hidden="true" /> {t('dashboard.viewPublicProfile')}</Link> : null}
+        </div>
       </header>
 
       {businessActivity}
 
-      <div className="advertiser-dashboard-summary-grid">
-        <article className="advertiser-dashboard-summary-card">
-          <span>{t('advertiserDashboard.overview.availability')}</span>
-          <strong>{t(`dashboard.advertiser.status.${operatorStatus}`)}</strong>
-          <small>{source.display_name || t('advertiserDashboard.status.notCreated')}</small>
-        </article>
-        <article className="advertiser-dashboard-summary-card">
-          <span>{t('advertiserDashboard.overview.publication')}</span>
-          <strong>{publicationLabel}</strong>
-          <small>{profile?.moderation_status ? t(`admin.status.${profile.moderation_status}`) : t('advertiserDashboard.status.noModeration')}</small>
-        </article>
-        <article className="advertiser-dashboard-summary-card advertiser-dashboard-completeness-card">
-          <span>{t('advertiserDashboard.overview.completeness')}</span>
-          <strong>{completion.percent}%</strong>
+      <div className="pr-grid-3 advertiser-overview-cards">
+        <section className="pr-card advertiser-dashboard-completeness-card" aria-labelledby="advertiser-completeness-title">
+          <div className="pr-card-head">
+            <div>
+              <p className="pr-eyebrow">{t('advertiserDashboard.overview.completeness')}</p>
+              <h2 className="pr-h2" id="advertiser-completeness-title">{completion.complete
+                ? t('advertiserDashboard.overview.ready')
+                : t(completion.missing.length === 1
+                  ? 'advertiserDashboard.overview.missingTitleOne'
+                  : 'advertiserDashboard.overview.missingTitleMany', { count: completion.missing.length })}</h2>
+            </div>
+            <span className="pr-badge is-premium is-plain pr-num">{completion.percent}%</span>
+          </div>
           <div className="advertiser-completion-track" aria-label={`${completion.percent}%`}>
             <i style={{ width: `${completion.percent}%` }} />
           </div>
-          <small>{completion.completed}/{completion.total}</small>
           {completion.missing.length ? (
             <ul className="advertiser-completion-missing" aria-label={t('advertiserDashboard.completeness.missingList')}>
               {completion.missing.map((item) => (
                 <li key={item.id}>
                   <AlertTriangle size={17} aria-hidden="true" />
                   <span>{t(item.labelKey)}</span>
-                  <button type="button" onClick={() => onOpenCompletionSection(item.section)}>
+                  <button type="button" className="pr-btn is-sm" onClick={() => onOpenCompletionSection(item.section)}>
                     {t('advertiserDashboard.completeness.completeAction')}
                   </button>
                 </li>
               ))}
             </ul>
-          ) : <p className="advertiser-completion-success">{t('advertiserDashboard.completeness.allComplete')}</p>}
+          ) : <p className="pr-muted advertiser-completion-success"><BadgeCheck size={16} aria-hidden="true" /> {t('advertiserDashboard.completeness.allComplete')}</p>}
           <details className="advertiser-completion-details">
-            <summary>{t('advertiserDashboard.completeness.showDetails')}</summary>
+            <summary>{t('advertiserDashboard.completeness.showDetails')} ({completion.completed}/{completion.total})</summary>
             <ul className="advertiser-completion-checklist">
               {completion.items.map((item) => (
                 <li key={item.id} className={item.complete ? 'complete' : 'missing'}>
@@ -197,45 +246,6 @@ export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgre
               ))}
             </ul>
           </details>
-        </article>
-      </div>
-
-      <div className="advertiser-dashboard-overview-grid">
-        <section className="advertiser-dashboard-panel">
-          <div className="advertiser-dashboard-panel-head">
-            <div>
-              <p className="eyebrow">{t('dashboard.visibility.subscription')}</p>
-              <h2>{t('advertiserDashboard.overview.subscription')}</h2>
-            </div>
-          </div>
-          {subscriptionProgress}
-        </section>
-
-        <section className="advertiser-dashboard-panel">
-          <div className="advertiser-dashboard-panel-head">
-            <div>
-              <p className="eyebrow">{t('advertiserDashboard.overview.attention')}</p>
-              <h2>{completion.complete
-                ? t('advertiserDashboard.overview.ready')
-                : t(completion.missing.length === 1
-                  ? 'advertiserDashboard.overview.missingTitleOne'
-                  : 'advertiserDashboard.overview.missingTitleMany', { count: completion.missing.length })}</h2>
-            </div>
-          </div>
-          {completion.complete ? (
-            <p className="advertiser-dashboard-empty-note">{t('advertiserDashboard.overview.noWarnings')}</p>
-          ) : (
-            <>
-              <p className="advertiser-dashboard-missing-summary">
-                {completion.missing.length === 1
-                  ? t('advertiserDashboard.overview.missingSummaryOne', { item: t(completion.missing[0].labelKey) })
-                  : t('advertiserDashboard.overview.missingSummaryMany', { count: completion.missing.length })}
-              </p>
-              <ul className="advertiser-dashboard-warnings">
-                {completion.missing.map((item) => <li key={item.id}>{t(item.labelKey)}</li>)}
-              </ul>
-            </>
-          )}
           {operationalWarnings.length ? (
             <div className="advertiser-dashboard-operational-warnings">
               <strong>{t('advertiserDashboard.overview.otherAttention')}</strong>
@@ -245,18 +255,19 @@ export function AdvertiserDashboardOverview({ profile, draft, subscriptionProgre
             </div>
           ) : null}
         </section>
-      </div>
 
-      <section className="advertiser-dashboard-panel advertiser-dashboard-quick-links">
-        <div>
-          <p className="eyebrow">{t('advertiserDashboard.overview.quickActions')}</p>
-          <h2>{t('advertiserDashboard.overview.profileActions')}</h2>
-        </div>
-        <div>
-          <button type="button" className="button primary" onClick={onEditProfile}>{t('advertiserDashboard.overview.editProfile')}</button>
-          {profile ? <Link className="button" to={`/profile/${profile.id}`}>{t('dashboard.viewPublicProfile')}</Link> : null}
-        </div>
-      </section>
+        <section className="pr-card" aria-labelledby="advertiser-subscription-overview">
+            <div className="pr-card-head">
+              <div>
+                <p className="pr-eyebrow">{t('dashboard.visibility.subscription')}</p>
+                <h2 className="pr-h2" id="advertiser-subscription-overview">{t('advertiserDashboard.overview.subscription')}</h2>
+              </div>
+              {onOpenSection ? <button type="button" className="pr-btn is-sm is-ghost" onClick={() => onOpenSection('subscription')}>{t('businessCenter.details')}</button> : null}
+            </div>
+            {subscriptionProgress}
+          </section>
+        {earningsSummary}
+      </div>
     </section>
   );
 }

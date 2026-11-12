@@ -196,7 +196,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="onboarding-shell">
+    <div className="onboarding-shell pr-auth">
       <div className="onboarding-bg" />
       <section className="onboarding-hero">
         <div className="onboarding-copy">

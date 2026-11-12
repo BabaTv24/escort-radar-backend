@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarCheck2, CalendarDays, Heart, Lock, MessageCircle, WalletCards } from 'lucide-react';
+import { CalendarCheck2, CalendarDays, Coins, Heart, Lock, MessageCircle, WalletCards } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import type { AdvertiserActivity } from '../../types';
@@ -59,14 +59,14 @@ export function AdvertiserActivityCounters({ activity, failed, onOpen }: {
 
   return (
     <section className="er-activity" aria-labelledby="er-activity-title">
-      <h2 id="er-activity-title" className="er-activity-title">{t('activity.title')}</h2>
-      {failed && !activity ? <p className="error-text" role="alert">{t('activity.loadError')}</p> : null}
+      <h2 id="er-activity-title" className="er-activity-title pr-eyebrow">{t('activity.title')}</h2>
+      {failed && !activity ? <p className="pr-notice is-error" role="alert">{t('activity.loadError')}</p> : null}
       <div className="er-activity-grid">
         {counters.map(({ key, label, count, section, Icon, highlight }) => (
-          <button key={key} type="button" className={`er-activity-counter${highlight ? ' highlight' : ''}`} data-counter={key} onClick={() => onOpen(section)}>
-            <Icon size={18} aria-hidden="true" />
-            <strong>{value(count)}</strong>
-            <span>{label}</span>
+          <button key={key} type="button" className={`pr-kpi er-activity-counter${highlight ? ' highlight' : ''}`} data-counter={key} onClick={() => onOpen(section)}>
+            <span className={`pr-icon-chip${key === 'new-messages' ? ' is-violet' : ''}`}><Icon size={18} aria-hidden="true" /></span>
+            <strong className="pr-kpi-value">{value(count)}</strong>
+            <span className="pr-kpi-label">{label}</span>
           </button>
         ))}
       </div>
@@ -87,11 +87,11 @@ export function DigitalRevenuePanel({ activity }: { activity: AdvertiserActivity
     { key: 'video-chat', label: t('revenue.videoChat'), line: revenue.video_chat, note: t('revenue.videoUnavailable') }
   ];
   return (
-    <section className="er-revenue advertiser-dashboard-panel" aria-labelledby="er-revenue-title">
-      <div className="advertiser-dashboard-panel-head">
+    <section className="er-revenue pr-card" aria-labelledby="er-revenue-title">
+      <div className="pr-card-head">
         <div>
-          <p className="eyebrow">{t('revenue.eyebrow')}</p>
-          <h2 id="er-revenue-title">{t('revenue.title')}</h2>
+          <p className="pr-eyebrow">{t('revenue.eyebrow')}</p>
+          <h2 className="pr-h2" id="er-revenue-title">{t('revenue.title')}</h2>
         </div>
       </div>
       <dl className="er-revenue-list">
@@ -110,6 +110,34 @@ export function DigitalRevenuePanel({ activity }: { activity: AdvertiserActivity
         {t('revenue.bookingFees', { amount: revenue.booking_fees.bc, count: revenue.booking_fees.count })}
       </p>
       <p className="er-revenue-footnote">{t('revenue.ledgerNote')}</p>
+    </section>
+  );
+}
+
+/** Overview card: the digital earnings total from the same ledger-based revenue lines as the Earnings section. */
+export function DigitalEarningsSummary({ activity, onOpen }: { activity: AdvertiserActivity | null; onOpen: () => void }) {
+  const { t } = useI18n();
+  const revenue = activity?.revenue;
+  return (
+    <section className="pr-card is-highlight" aria-labelledby="er-earnings-summary">
+      <div className="pr-card-head">
+        <div>
+          <p className="pr-eyebrow">{t('revenue.eyebrow')}</p>
+          <h2 className="pr-h2" id="er-earnings-summary">{t('revenue.title')}</h2>
+        </div>
+        <span className="pr-icon-chip"><Coins size={18} aria-hidden="true" /></span>
+      </div>
+      <div className="pr-balance">
+        <span className="pr-balance-value">{revenue ? revenue.digital_total_bc : '…'}<small>BC</small></span>
+        <span className="pr-muted">{t('revenue.total')}</span>
+      </div>
+      {revenue ? (
+        <dl className="pr-dl">
+          <div><dt>{t('revenue.textChat')}</dt><dd className="pr-num">{revenue.text_chat.bc} BC</dd></div>
+          <div><dt>{t('revenue.gifts')}</dt><dd className="pr-num">{(revenue.gifts ?? { bc: '0' }).bc} BC</dd></div>
+        </dl>
+      ) : null}
+      <button type="button" className="pr-btn" onClick={onOpen}>{t('businessCenter.details')}</button>
     </section>
   );
 }

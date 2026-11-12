@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { BadgeCheck, HeartHandshake, Home, Hotel, Languages, MapPin, MessageCircle, Radio, Star, Video, LockKeyhole } from 'lucide-react';
+import { BadgeCheck, HeartHandshake, Home, Hotel, Languages, MapPin, MessageCircle, Radio, Video, LockKeyhole } from 'lucide-react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
 import { serviceLabel } from '../data/serviceCatalog';
@@ -9,7 +9,7 @@ import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { formatDistanceKm } from '../lib/geo';
 
-export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: { profile: Profile; isFavorite?: boolean; onFavoriteChange?: (profileId: string) => void }) {
+export function ProfileCard({ profile, isFavorite = false, onFavoriteChange, showVisibilityReason = false }: { profile: Profile; isFavorite?: boolean; onFavoriteChange?: (profileId: string) => void; showVisibilityReason?: boolean }) {
   const { t, option } = useI18n();
   const [favoriteState, setFavoriteState] = useState<'idle' | 'saving' | 'saved'>(isFavorite ? 'saved' : 'idle');
   const [favoriteMessage, setFavoriteMessage] = useState('');
@@ -18,12 +18,10 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
   const operatorStatus = profile.operator_status || (status === 'available' ? 'ONLINE_NOW' : status === 'busy' ? 'BUSY' : 'OFFLINE');
   const operatorLabel = operatorStatusLabel(operatorStatus, t);
   const priceFrom = getPriceFrom(profile, t);
-  const reviewCount = 12 + (profile.id.length % 37);
-  const rating = (4.6 + (profile.id.length % 4) / 10).toFixed(1);
   const locationLabel = getPublicLocationLabel(profile, t);
   const distanceLabel = formatDistanceKm(profile.distance_km);
   const visitBadge = getVisitBadge(profile, t);
-  const isNew = profile.created_at ? Date.now() - new Date(profile.created_at).getTime() < 1000 * 60 * 60 * 24 * 14 : profile.id.length % 2 === 0;
+  const isNew = profile.created_at ? Date.now() - new Date(profile.created_at).getTime() < 1000 * 60 * 60 * 24 * 14 : false;
   const badges = [
     profile.is_sponsored ? 'SPONSOROWANY' : '',
     profile.is_seed_profile ? 'PREVIEW' : '',
@@ -60,7 +58,6 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
         </div>
         <div className="premium-card-meta">
           <strong>{priceFrom}</strong>
-          <span><Star size={14} /> {rating} ({reviewCount})</span>
         </div>
         <div className="mini-icon-row" aria-label="Profile features">
           {profile.visit_types?.includes('hotel') && <span title={t('profileCard.hotelVisit')}><Hotel size={15} /></span>}
@@ -79,7 +76,8 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange }: {
           {profile.radar_score ? <span>Radar {profile.radar_score}</span> : null}
         </div>
         {profile.services?.length ? <p className="muted line-clamp">{profile.services.slice(0, 4).map(serviceLabel).join(' - ')}</p> : null}
-        {profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
+        {/* The visibility reason is owner information; public visitors never see it. */}
+        {showVisibilityReason && profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>
         <div className="premium-card-actions">
           <button className="button icon-favorite-action er-btn er-glass-btn er-glass-btn--pink er-glass-btn--sm" type="button" disabled={favoriteState !== 'idle'} onClick={toggleFavorite} aria-label={favoriteState === 'saved' ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}>

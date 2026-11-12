@@ -389,6 +389,7 @@ export const api = {
   claimSponsoredProfile: (token: string, claimToken: string) => request<{ claimed: boolean; profile: Profile; history_transferred: boolean; agent_mode: 'owner_assistant'; transferred_balance_bcu: string }>(`/api/sponsored/claim`, { method: 'POST', token, body: JSON.stringify({ claim_token: claimToken }) }),
   requestVideochat: (token: string, profileId: string, idempotency_key: string) => request(`/api/sponsored/profiles/${profileId}/videochat`, { method: 'POST', token, body: JSON.stringify({ idempotency_key }) }),
   myBookingRequests: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/booking-requests/me', { token }),
+  giftCatalog: () => request<{ gifts: Array<{ level: number; name: string; product_code: string; configured: boolean; price_bc: string | null }> }>('/api/gifts/catalog'),
   myClientBookings: (token: string) => request<{ booking_requests: BookingRequest[] }>('/api/booking-requests/mine', { token }),
   cancelClientBooking: (token: string, id: string) => request<{ booking_request: BookingRequest }>(`/api/booking-requests/${id}/cancel`, { method: 'POST', token }),
   markBookingNotificationsRead: (token: string) => request<{ updated: number }>('/api/booking-requests/notifications/read', { method: 'POST', token }),
@@ -819,11 +820,6 @@ export const api = {
   trackReferralClick: (referral_code: string, landing_path = window.location.pathname) => request<{ ok: boolean }>('/api/client-activation/referral-click', {
     method: 'POST',
     body: JSON.stringify({ referral_code, landing_path })
-  }),
-  sendGift: (token: string, body: { profile_id: string; gift_type: string; coin_cost: number; message?: string }) => request<{ gift: Gift }>('/api/client-activation/gifts', {
-    method: 'POST',
-    token,
-    body: JSON.stringify(body)
   }),
   unlockVipGallery: (token: string, profile_id: string, coin_cost = 25) => request('/api/client-activation/vip-gallery-unlocks', {
     method: 'POST',

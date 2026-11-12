@@ -218,37 +218,12 @@ clientActivationRouter.post('/confirm', asyncHandler(async (req, res) => {
   res.json({ activation: await getClientActivationSummary(req.user!.id) });
 }));
 
-clientActivationRouter.post('/gifts', asyncHandler(async (req, res) => {
-  const profileId = optionalText(req.body.profile_id, 80);
-  const giftType = optionalText(req.body.gift_type, 80) || 'rose';
-  const coinCost = Number(req.body.coin_cost || 10);
-  if (!profileId || !Number.isFinite(coinCost) || coinCost <= 0) return res.status(400).json({ error: 'profile_id and coin_cost are required' });
-
-  const activation = await getClientActivationSummary(req.user!.id);
-  if (activation.state !== 'client_activated') return res.status(403).json({ error: 'Client activation required' });
-
-  const { data: profile } = await supabaseAdmin.from('profiles').select('id, user_id').eq('id', profileId).single();
-  if (!profile) return res.status(404).json({ error: 'Profile not found' });
-
-  const wallet = await getOrCreateCoinWallet(req.user!.id);
-  await grantCoins(wallet.id, req.user!.id, -coinCost, 'gift_sent', { profile_id: profileId, gift_type: giftType });
-
-  const { data: gift, error } = await supabaseAdmin
-    .from('gifts')
-    .insert({
-      sender_user_id: req.user!.id,
-      receiver_profile_id: profileId,
-      receiver_user_id: profile.user_id,
-      gift_type: giftType,
-      coin_cost: coinCost,
-      message: optionalText(req.body.message, 500)
-    })
-    .select()
-    .single();
-  if (error) return res.status(400).json({ error: error.message });
-
-  res.status(201).json({ gift });
-}));
+// Business contract V1: gifts are the Diamond I-V catalog at POST /api/gifts/:profileId, priced only in
+// the BCU product catalog. This legacy route let the caller choose the price and debited the legacy coin
+// wallet without crediting the advertiser, so it is retired and never charges anything.
+clientActivationRouter.post('/gifts', (_req, res) => {
+  res.status(410).json({ error: 'Gifts moved to the Diamond catalog', code: 'GIFTS_USE_CATALOG', charged: false });
+});
 
 clientActivationRouter.post('/vip-gallery-unlocks', asyncHandler(async (req, res) => {
   const profileId = optionalText(req.body.profile_id, 80);

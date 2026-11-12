@@ -16,7 +16,6 @@ import {
   MessageCircle,
   Phone,
   ShieldCheck,
-  Star,
   Tags,
   Video,
   X
@@ -97,6 +96,10 @@ export function ProfilePage() {
             .then((accessData) => setProfileAccess(accessData.access))
             .catch(() => setProfileAccess(null))
             .finally(() => setProfileAccessChecked(true));
+          // The saved state comes from the real favorites list, so a saved profile never offers "add" again.
+          api.myFavorites(token)
+            .then((data) => setFavoriteSaved(data.favorites.some((favorite) => favorite.profile_id === id)))
+            .catch(() => setFavoriteSaved(false));
           api.profileExactLocation(token, id)
             .then(setExactLocation)
             .catch(() => setExactLocation(null))
@@ -206,14 +209,12 @@ export function ProfilePage() {
                 <div className="market-badge-row">
                   {profile.verified && <span><BadgeCheck size={14} /> {t('profile.verified')}</span>}
                   <span>{t('profile.premium')}</span>
-                  <span><Video size={14} /> {t('profile.liveCam')}</span>
                 </div>
                 <span className={`status ${statusClass}`}>{statusLabel}</span>
                 <h1>{profile.display_name}</h1>
                 <p><MapPin size={15} /> {locationLabel}{profile.distance_km ? ` - ${profile.distance_km} km` : ''}</p>
                 {travelNotice && <p>{travelNotice}</p>}
                 <div className="market-hero-facts">
-                  <span><Star size={14} /> {t('profile.rating', { rating: '4.9' })}</span>
                   <span>{priceFrom}</span>
                   {profile.radar_score ? <span>{t('profile.radarScore', { score: profile.radar_score })}</span> : null}
                   <span>{profile.age ? t('profile.ageYears', { age: profile.age }) : t('profile.ageVerified')}</span>
@@ -234,7 +235,9 @@ export function ProfilePage() {
                   {!activated && <span><LockKeyhole size={15} /> {t('profile.unlockPhotos')}</span>}
                 </button>
               ))}
-              {!galleryImages.slice(1, 6).length && <span className="market-empty-inline">{t('profile.morePhotosSoon')}</span>}
+              {!galleryImages.slice(1, 6).length && (activated
+                ? <span className="market-empty-inline">{t('profile.morePhotosSoon')}</span>
+                : <button type="button" className="locked-gallery-thumb profile-gallery-premium-lock" onClick={startClientActivation}><span><LockKeyhole size={15} /> {t('profilePremium.galleryLocked')}</span></button>)}
             </div>
           </section>
 
@@ -361,7 +364,6 @@ export function ProfilePage() {
 
           <MarketSection tab="reviews" activeTab={activeTab} eyebrow={t('profile.tabs.reviews')} title={t('profile.verifiedFeedback')}>
             <div className="market-review-summary">
-              <strong><Star size={18} /> 4.9</strong>
               <span>{t('profile.reviewsModerated')}</span>
             </div>
             <div className="market-empty-state">
@@ -487,8 +489,16 @@ export function ProfilePage() {
             <span>{t('profile.from')}</span>
             <strong>{priceFrom}</strong>
           </div>
-          <div className="market-rating-line"><Star size={16} /> 4.9 <span>{t('profile.verifiedRating')}</span></div>
-          {!activated && <p className="subscription-notice">{t('profile.activateRevealContact')}</p>}
+          {!activated && (
+            <div className="pr-lock profile-premium-lock" role="note">
+              <LockKeyhole size={20} aria-hidden="true" color="var(--pr-gold)" />
+              <div>
+                <strong>{t('profilePremium.lockTitle')}</strong>
+                <p>{t('profilePremium.lockCopy')}</p>
+              </div>
+            </div>
+          )}
+          {!activated && <button className="pr-btn is-primary is-block" type="button" disabled={activationBusy} onClick={startClientActivation}>{t('profilePremium.activate')}</button>}
           {activated && (
             <div className="contact-unlocked-list">
               <p><Phone size={15} /> Phone: {profileAccess?.phone_number || contactFallback}</p>
@@ -496,13 +506,13 @@ export function ProfilePage() {
               <p><MessageCircle size={15} /> Telegram: {profileAccess?.telegram || contactFallback}</p>
             </div>
           )}
-          <div className="market-contact-actions">
-            <button className="button primary er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" disabled={chatBusy} onClick={() => chatAvailable ? openProfileChat() : activated ? setAccessMessage(profileAccess?.whatsapp || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><MessageCircle size={16} /> <span>{chatAvailable ? t('chat.profile.cta') : t('nav.messages')}</span></button>
-            <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}><Phone size={16} /> <span>{t('profile.call')}</span></button>
-            {canUsePremiumProfileFeatures && <a href="#booking" className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><CalendarDays size={16} /> <span>{t('profile.book')}</span></a>}
-            <button className="button er-btn er-glass-btn er-glass-btn--pink er-glass-btn--md" type="button" disabled={favoriteBusy || (activated && favoriteSaved)} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}><Heart size={16} /> <span>{favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</span></button>
-            <button className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button" onClick={() => activated ? sendGift() : setAccessMessage(t('profile.activateRevealContact'))}><Gift size={16} /> <span>{t('profile.gift')}</span></button>
-            <button className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md" type="button" onClick={() => setAccessMessage(t('profile.videoChatUnavailable'))}><Video size={16} /> <span>{t('profile.live')}</span></button>
+          <div className="market-contact-actions profile-actions-v2">
+            {canUsePremiumProfileFeatures && <a href="#booking" className="pr-btn is-primary"><CalendarDays size={16} /> <span>{t('profilePremium.bookFree')}</span></a>}
+            <button className="pr-btn" type="button" disabled={chatBusy} onClick={() => chatAvailable && activated ? openProfileChat() : activated ? setAccessMessage(t('profilePremium.chatDisabled')) : setAccessMessage(t('profile.activateRevealContact'))}>{activated ? <MessageCircle size={16} /> : <LockKeyhole size={15} />} <span>{chatAvailable ? t('chat.profile.cta') : t('nav.messages')}</span></button>
+            <button className="pr-btn" type="button" onClick={() => activated ? setAccessMessage(profileAccess?.phone_number || contactFallback) : setAccessMessage(t('profile.activateRevealContact'))}>{activated ? <Phone size={16} /> : <LockKeyhole size={15} />} <span>{t('profile.call')}</span></button>
+            <button className="pr-btn profile-action-wide" type="button" disabled={favoriteBusy || (activated && favoriteSaved)} onClick={() => activated ? toggleFavorite() : setAccessMessage(t('profile.activateRevealContact'))}>{activated ? <Heart size={16} /> : <LockKeyhole size={15} />} <span>{favoriteSaved ? t('favorites.alreadyFavorite') : t('favorites.addToFavorites')}</span></button>
+            <button className="pr-btn" type="button" aria-disabled="true" onClick={() => setAccessMessage(t('profilePremium.giftsSoon'))}><Gift size={16} /> <span>{t('profilePremium.gifts')}</span> <small className="pr-badge is-muted is-plain">{t('clientDash.features.soon')}</small></button>
+            <button className="pr-btn" type="button" aria-disabled="true" onClick={() => setAccessMessage(t('profile.videoChatUnavailable'))}><Video size={16} /> <span>{t('clientDash.features.video')}</span> <small className="pr-badge is-muted is-plain">{t('clientDash.features.unavailable')}</small></button>
           </div>
           {accessMessage && <p className={accessMessage === t('favorites.notEnoughTokens') ? 'error-text' : activated ? 'success' : 'subscription-notice'}>{accessMessage}</p>}
           {accessMessage === t('favorites.notEnoughTokens') && <Link className="button er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" to="/tokens"><span>{t('favorites.buyTokens')}</span></Link>}
@@ -570,14 +580,6 @@ export function ProfilePage() {
     } finally {
       setChatBusy(false);
     }
-  }
-
-  async function sendGift() {
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-    if (!token) return setAccessMessage(t('favorites.loginToSeeFavorites'));
-    await api.sendGift(token, { profile_id: profile!.id, gift_type: 'rose', coin_cost: 10 });
-    setAccessMessage(t('profile.giftSent'));
   }
 
   async function toggleFavorite() {

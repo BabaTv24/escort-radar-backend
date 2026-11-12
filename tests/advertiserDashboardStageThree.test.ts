@@ -72,7 +72,7 @@ test('stage-three sections and bookings replace their placeholders', async () =>
   assert.match(dashboard, /activeSection === 'referrals'[\s\S]*AdvertiserReferralSection/);
   assert.match(dashboard, /activeSection === 'bookings'[\s\S]*AdvertiserBookingsSection/);
   assert.match(dashboard, /activeSection === 'messages'[\s\S]*AdvertiserMessagesSection/);
-  assert.match(dashboard, /!\['overview', 'profile', 'location', 'messages', 'bookings', 'wallet', 'referrals', 'settings'\]\.includes\(activeSection\)/);
+  assert.match(dashboard, /!\['overview', 'profile', 'location', 'messages', 'bookings', 'wallet', 'earnings', 'subscription', 'referrals', 'settings'\]\.includes\(activeSection\)/);
   assert.match(dashboard, /activeSection === 'location'[\s\S]*AdvertiserLocationSection/);
 });
 

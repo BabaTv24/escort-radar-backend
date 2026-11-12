@@ -1537,7 +1537,7 @@ test('premium client favorites render photos and favorite-only actions', async (
   assert.match(dashboardSource, /profile\.profile_images/);
   assert.match(dashboardSource, /profile\.images/);
   assert.match(dashboardSource, /alternate\.photos\?\.\[0\]/);
-  assert.match(dashboardSource, /<Link className="button primary" to=\{`\/profile\/\$\{profile\.id\}`\}/);
+  assert.match(dashboardSource, /<Link className="pr-btn is-sm" to=\{`\/profile\/\$\{profile\.id\}`\}/);
   assert.match(dashboardSource, /favorites\.removeFromFavorites/);
   assert.doesNotMatch(dashboardSource, /<ProfileCard profile=\{favorite\.profile\}/);
 });

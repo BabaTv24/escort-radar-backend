@@ -11,6 +11,7 @@ import { AvailabilityHoursEditor } from '../components/AvailabilityHoursEditor';
 import {
   AdvertiserDashboardOverview,
   AdvertiserDashboardShell,
+  AdvertiserSectionHeading,
   DashboardSectionPlaceholder,
   resolveAdvertiserDashboardSection,
   type AdvertiserDashboardSection
@@ -25,8 +26,10 @@ import { CommunicationPlusCard } from '../components/CommunicationPlusCard';
 import { ClientBookingsCard } from '../components/bookings/ClientBookingsCard';
 import { AdvertiserBookingsSection } from '../components/advertiser-dashboard/AdvertiserBookingsSection';
 import { AdvertiserMessagesSection } from '../components/advertiser-dashboard/AdvertiserMessagesSection';
-import { AdvertiserActivityCounters, DigitalRevenuePanel, activityBadges, useAdvertiserActivity } from '../components/advertiser-dashboard/AdvertiserBusinessActivity';
+import { AdvertiserActivityCounters, DigitalEarningsSummary, DigitalRevenuePanel, activityBadges, useAdvertiserActivity } from '../components/advertiser-dashboard/AdvertiserBusinessActivity';
 import { ChatInbox } from '../components/chat/ChatInbox';
+import { ClientOfficeShell, resolveClientOfficeSection, type ClientOfficeSection } from '../components/client-dashboard/ClientOfficeShell';
+import { bookingStatusOf, isUndecided } from '../lib/bookingView';
 import { useI18n } from '../i18n';
 import QRCode from 'qrcode';
 import type { CommunicationPlusStatus, ReferralMe } from '../lib/api';
@@ -500,7 +503,8 @@ export function DashboardPage() {
       setSavedProfile(null);
       setProfile({ ...emptyProfile });
       setProfileMode('create');
-      setMessage(t('dashboard.client.ready'));
+      // A successful load needs no banner; the office itself shows the real account state.
+      setMessage('');
       setDashboardStatus('success');
     } catch {
       setDashboardStatus('error');
@@ -1485,8 +1489,21 @@ function getPublicReferralLink(activation: ClientActivation | null) {
 }
 
 const CLIENT_REFERRAL_REWARD_COINS = 10;
+const CLIENT_RADAR_CITY = 'berlin';
 
-function ClientDashboard({ token, userEmail, coinWallet, bcuWallet, bcuEntitlements, communicationPlusStatus, communicationPlusState, communicationPlusPurchasing, communicationPlusError, walletSystem, dashboardStatus, clientProfile, activation, referral, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onPurchaseCommunicationPlus, onRetryCommunicationPlus, onAvatarUpload, onLogout, onRetry, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: {
+const KNOWN_LEDGER_TYPES = new Set([
+  'booking_sent', 'booking_received', 'favorite_sent', 'favorite_received', 'chat_sent', 'chat_received',
+  'gift_sent', 'gift_received', 'dev_seed_grant', 'client_premium_bonus', 'referral_reward',
+  'bcu_product_communication_plus', 'bc_purchase', 'admin_adjustment'
+]);
+
+function ledgerTypeLabel(type: string, t: (key: string) => string) {
+  if (KNOWN_LEDGER_TYPES.has(type)) return t(`ledgerType.${type}`);
+  const text = type.replace(/[_-]+/g, ' ').trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : type;
+}
+
+type ClientDashboardProps = {
   userEmail: string;
   coinWallet: CoinWallet | null;
   bcuWallet: BcuWallet | null;
@@ -1520,24 +1537,60 @@ function ClientDashboard({ token, userEmail, coinWallet, bcuWallet, bcuEntitleme
   favorites: ClientFavorite[];
   onRemoveFavorite: (profileId: string) => void;
   token: string;
-}) {
+};
+
+/**
+ * Private Client Office. One authoritative Premium flag: the backend client activation
+ * (client_activations.state), the same state every paid or Premium-only endpoint checks.
+ */
+function ClientDashboard({ token, userEmail, coinWallet, bcuWallet, communicationPlusStatus, communicationPlusState, communicationPlusPurchasing, communicationPlusError, walletSystem, dashboardStatus, clientProfile, activation, referral, personalProfile, transactions, message, activationBusy, avatarUploading, onActivate, onPurchaseCommunicationPlus, onRetryCommunicationPlus, onAvatarUpload, onLogout, onRetry, marketProfiles, intent, matches, notifications, onCreateIntent, onSavePersonalProfile, favorites, onRemoveFavorite }: ClientDashboardProps) {
   const { t, option } = useI18n();
-  const [chatUnread, setChatUnread] = useState(0);
-  const activated = walletSystem === 'bcu'
-    ? bcuEntitlements.some((item) => item.entitlement_type === 'client_premium' && item.status === 'active')
-    : activation?.state === 'client_activated';
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const activeSection = resolveClientOfficeSection(location.hash, searchParams.get('section'));
+  const activated = activation?.state === 'client_activated';
   const personalVerificationStatus = personalProfile?.verification_status || 'incomplete';
-  const isVerifiedClient = personalVerificationStatus === 'verified';
   // FREE clients have no personal referral link or QR code (business contract V1).
   const referralLink = activated ? referral?.referralLink || getPublicReferralLink(activation) : '';
   const [referralQrImageUrl, setReferralQrImageUrl] = useState('');
   const [referralCopied, setReferralCopied] = useState(false);
+  const [bookingSummary, setBookingSummary] = useState<{ total: number; open: number } | null>(null);
+  const [chatUnread, setChatUnread] = useState(0);
+  const [chatCount, setChatCount] = useState<number | null>(null);
+  const [showFullLedger, setShowFullLedger] = useState(false);
+  const [gifts, setGifts] = useState<Array<{ level: number; name: string; configured: boolean; price_bc: string | null }> | null>(null);
+
   useEffect(() => {
     let active = true;
     if (!referralLink) { setReferralQrImageUrl(''); return; }
-    QRCode.toDataURL(referralLink, { width: 240, margin: 2, errorCorrectionLevel: 'M' }).then(url => { if (active) setReferralQrImageUrl(url); }).catch(() => { if (active) setReferralQrImageUrl(''); });
+    QRCode.toDataURL(referralLink, { width: 360, margin: 1, errorCorrectionLevel: 'M' }).then(url => { if (active) setReferralQrImageUrl(url); }).catch(() => { if (active) setReferralQrImageUrl(''); });
     return () => { active = false; };
   }, [referralLink]);
+
+  // Overview counters come from the same endpoints the Bookings and Messages sections use.
+  useEffect(() => {
+    let active = true;
+    api.myClientBookings(token).then((result) => {
+      if (!active) return;
+      const open = result.booking_requests.filter((booking) => isUndecided(bookingStatusOf(booking))).length;
+      setBookingSummary({ total: result.booking_requests.length, open });
+    }).catch(() => { if (active) setBookingSummary(null); });
+    api.chatConversations(token).then((result) => {
+      if (!active) return;
+      const mine = result.conversations.filter((item) => item.my_role === 'client');
+      setChatCount(mine.length);
+      setChatUnread(mine.reduce((sum, item) => sum + (item.unread || 0), 0));
+    }).catch(() => { if (active) setChatCount(null); });
+    return () => { active = false; };
+  }, [token, activeSection]);
+
+  useEffect(() => {
+    let active = true;
+    api.giftCatalog().then((result) => { if (active) setGifts(result.gifts); }).catch(() => { if (active) setGifts(null); });
+    return () => { active = false; };
+  }, []);
+
   async function copyReferralLink() {
     if (!referralLink) return;
     await navigator.clipboard?.writeText(referralLink);
@@ -1548,18 +1601,20 @@ function ClientDashboard({ token, userEmail, coinWallet, bcuWallet, bcuEntitleme
     if (navigator.share) await navigator.share({ title: t('referrals.title'), url: referralLink }).catch(() => undefined);
     else await copyReferralLink();
   }
+
+  function selectSection(section: ClientOfficeSection) {
+    navigate({ pathname: location.pathname, search: '', hash: section === 'overview' ? '' : `#${section}` });
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  }
+
   const displayName = clientProfile?.display_name || userEmail.split('@')[0] || t('clientOffice.clientFallback');
-  const city = clientProfile?.city || 'Berlin';
-  const statusLabel = activated ? t('clientOffice.premiumActive') : t('dashboard.client.freeStatus');
-  const availableProfiles = marketProfiles.filter((profile) => profile.available_now).length || Math.min(marketProfiles.length, 3);
-  const newToday = marketProfiles.filter((profile) => profile.created_at && new Date(profile.created_at).toDateString() === new Date().toDateString()).length;
-  const recentlyActive = marketProfiles.filter((profile) => profile.availability_status === 'available' || profile.available_now).length || availableProfiles;
+  const radarPath = `/city/${CLIENT_RADAR_CITY}`;
+  const availableNow = marketProfiles.filter((profile) => profile.available_now || profile.operator_status === 'ONLINE_NOW').length;
   const referralActivations = Number(activation?.activations || 0);
   const earnedReferralCoins = Number(activation?.earned_rewards ?? referralActivations * CLIENT_REFERRAL_REWARD_COINS);
-  const referralProgress = referralActivations > 0 ? 100 : 0;
   const [intentDraft, setIntentDraft] = useState<Partial<ClientIntent>>({
     status: 'LOOKING_NOW',
-    city: intent?.city || 'berlin',
+    city: intent?.city || CLIENT_RADAR_CITY,
     area: intent?.area || '',
     radius_km: intent?.radius_km || 25,
     category: intent?.category || 'ladies',
@@ -1572,375 +1627,437 @@ function ClientDashboard({ token, userEmail, coinWallet, bcuWallet, bcuEntitleme
     setPersonalDraft({ ...emptyClientPersonalProfile, ...(personalProfile || {}) });
   }, [personalProfile]);
 
-  const unlockChecklist = [
-    t('clientOffice.unlock.phone'),
-    t('clientOffice.unlock.whatsapp'),
-    t('clientOffice.unlock.telegram'),
-    t('clientOffice.unlock.galleries'),
-    t('clientOffice.unlock.gifts'),
-    t('clientOffice.unlock.referral'),
-    t('activation.activationTokenBonus')
-  ];
   const bigCoinsBalance = walletSystem === 'bcu'
     ? (bcuWallet?.balance_bc ?? '0')
     : Number(coinWallet?.balance ?? 0);
-  const quickActions = [
-    [t('nav.radar'), t('clientOffice.openRadarCopy'), RadioTower, '/city/berlin'],
-    [t('favorites.myFavorites'), t('clientOffice.favoritesCopy'), Heart, '#favorites'],
-    [t('bookings.client.title'), t('bookings.client.quickCopy'), CalendarDays, '#bookings'],
-    [t('nav.messages'), t('chat.client.quickCopy'), MessageCircle, '#messages']
-  ] as const;
-  const sidebarItems = [
-    [t('nav.dashboard'), '#office', ShieldCheck],
-    [t('nav.radar'), '/city/berlin', RadioTower],
-    [t('favorites.myFavorites'), '#favorites', Heart],
-    [t('bookings.client.title'), '#bookings', CalendarDays],
-    [t('nav.messages'), '#messages', MessageCircle],
-    [t('clientOffice.coinWallet'), '#wallet', Gem],
-    [t('dashboard.client.activity'), '#activity', Clock],
-    [t('clientOffice.accountSettings'), '#settings', Settings]
-  ] as const;
-  const radarProfiles = (matches.length ? matches : marketProfiles).slice(0, 6);
-  const spotlightProfile = radarProfiles[0] || marketProfiles[0];
-  const spotlightImage = spotlightProfile ? getProfileImageUrl(spotlightProfile) : '';
+  const balanceText = typeof bigCoinsBalance === 'number' ? bigCoinsBalance.toLocaleString() : bigCoinsBalance;
+  const nearbyProfiles = [...(matches.length ? matches : marketProfiles)]
+    .sort((left, right) => Number(Boolean(right.available_now)) - Number(Boolean(left.available_now)))
+    .slice(0, 8);
+  const giftsConfigured = Boolean(gifts?.some((gift) => gift.configured));
+
+  const premiumLock = (
+    <div className="pr-lock" role="note">
+      <Lock size={22} aria-hidden="true" color="var(--pr-gold)" />
+      <div>
+        <strong>{t('clientDash.lock.title')}</strong>
+        <p>{t('clientDash.lock.copy')}</p>
+      </div>
+      <button className="pr-btn is-primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('profilePremium.activate')}</button>
+    </div>
+  );
+
+  const premiumOffer = (
+    <section className="pr-card is-highlight" aria-labelledby="client-premium-offer">
+      <div className="pr-card-head">
+        <div>
+          <p className="pr-eyebrow">{t('clientDash.offer.eyebrow')}</p>
+          <h2 className="pr-h2" id="client-premium-offer">{t('clientDash.offer.title')}</h2>
+          <p className="pr-muted">{t('clientDash.offer.copy')}</p>
+        </div>
+        <span className="pr-icon-chip"><Sparkles size={18} aria-hidden="true" /></span>
+      </div>
+      <ul className="pr-check-list">
+        {['gallery', 'contacts', 'booking', 'favorites', 'chat', 'referral', 'bonus'].map((item) => (
+          <li key={item}><BadgeCheck size={17} aria-hidden="true" /> {t(`clientDash.offer.benefit.${item}`)}</li>
+        ))}
+      </ul>
+      <button className="pr-btn is-primary is-block" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('profilePremium.activate')}</button>
+      <p className="pr-muted">{t('clientDash.offer.note')}</p>
+    </section>
+  );
+
+  const ledgerRows = (limit: number) => transactions.slice(0, limit).map((transaction, index) => {
+    const amount = 'amount_bc' in transaction ? transaction.amount_bc : transaction.amount;
+    return (
+      <li className="pr-list-row" key={'id' in transaction ? transaction.id : `${transaction.created_at}:${transaction.transaction_type}:${index}`}>
+        <div>
+          <strong>{ledgerTypeLabel(transaction.transaction_type, t)}</strong>
+          <small>{new Date(transaction.created_at).toLocaleString()}</small>
+        </div>
+        <span className={`pr-amount ${transaction.direction === 'credit' ? 'is-credit' : 'is-debit'}`}>{transaction.direction === 'credit' ? '+' : '−'}{amount} BC</span>
+      </li>
+    );
+  });
+
+  const sectionHead = (section: ClientOfficeSection, extra?: ReactNode) => (
+    <header className="pr-hero">
+      <div>
+        <p className="pr-eyebrow">{t('clientDash.officeTitle')}</p>
+        <h1 className="pr-title">{t(`clientDash.nav.${section}`)}</h1>
+        <p className="pr-lead">{t(`clientDash.${section}.subtitle`)}</p>
+      </div>
+      {extra ? <div className="pr-hero-actions">{extra}</div> : null}
+    </header>
+  );
 
   return (
-    <div className="client-office-shell client-dashboard-shell" id="office">
-      <aside className="client-office-sidebar client-dashboard-sidebar">
-        <div className="client-office-brand">
-          <ShieldCheck size={24} />
-          <span>{t('clientOffice.title')}</span>
+    <ClientOfficeShell
+      active={activeSection}
+      onSelect={selectSection}
+      badges={{ messages: chatUnread, bookings: bookingSummary?.open || 0 }}
+      email={userEmail}
+      displayName={displayName}
+      avatarUrl={clientProfile?.avatar_url}
+      premium={activated}
+      balanceBc={balanceText}
+      radarPath={radarPath}
+      onLogout={onLogout}
+    >
+      {message ? <p className={`pr-notice ${dashboardStatus === 'error' ? 'is-error' : 'is-success'}`} role="status">{message}</p> : null}
+      {dashboardStatus === 'error' ? (
+        <div className="pr-notice is-error" role="alert">
+          {t('clientDash.loadError')} <button className="pr-btn is-sm" type="button" onClick={onRetry}>{t('states.retry')}</button>
         </div>
-        <nav className="client-office-nav" aria-label={t('nav.dashboard')}>
-          {sidebarItems.map(([label, href, Icon]) => (
-            href.startsWith('/') ? (
-              <Link className="client-office-nav-item" to={href} key={label}>
-                <Icon size={16} />
-                <span>{label}</span>
-              </Link>
-            ) : (
-              <a className="client-office-nav-item" href={href} key={label}>
-                <Icon size={16} />
-                <span>{label}</span>
-              </a>
-            )
-          ))}
-        </nav>
-        <button className="client-office-nav-item danger er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={onLogout}>
-          <LogOut size={16} />
-          <span>{t('buttons.logout')}</span>
-        </button>
-      </aside>
+      ) : null}
 
-      <main className="client-office-main client-dashboard-main">
-        <header className="client-office-topbar client-dashboard-header">
-          <div>
-            <p className="eyebrow">{t('clientOffice.eyebrow')}</p>
-            <strong>{t('clientOffice.title')}</strong>
-          </div>
-          <div className="client-office-search">
-            <RadioTower size={15} />
-            <span>{t('clientOffice.profilesNearCity', { city })}</span>
-          </div>
-          <Link className="client-office-credit-pill er-btn er-glass-btn er-glass-btn--purple er-glass-btn--sm" to="/coins">
-            <Gem size={15} />
-            <span>{bigCoinsBalance.toLocaleString()} {t('clientOffice.bigCoins')}</span>
-          </Link>
-          <button className="client-office-avatar-button" type="button" onClick={onLogout} aria-label={t('buttons.logout')}>
-            {clientProfile?.avatar_url ? <img src={clientProfile.avatar_url} alt="" /> : <UserRound size={18} />}
-          </button>
-        </header>
-
-        <section className="client-office-hero client-welcome-panel">
-          <div>
-            <p className="eyebrow">{t('clientOffice.eyebrow')}</p>
-            <h1>{t('dashboard.welcome')}, {displayName}</h1>
-            <p>{activated ? t('clientOffice.subtitleActive') : t('clientOffice.subtitleFree')}</p>
-            <div className="client-status-row">
-              <span className="client-status-badge premium"><ShieldCheck size={15} /> {statusLabel}</span>
-              <span className={`client-status-badge ${isVerifiedClient ? 'verified' : 'pending'}`}><BadgeCheck size={15} /> {t(`clientOffice.personal.status.${personalVerificationStatus}`)}</span>
-            </div>
-          </div>
-          <div className="client-office-hero-metrics">
-            <Metric label={t('clientOffice.coinBalance')} value={bigCoinsBalance.toLocaleString()} />
-            <Metric label={t('favorites.myFavorites')} value={favorites.length} />
-            <Metric label={t('clientOffice.availableNow')} value={availableProfiles || 0} />
-          </div>
-          <div className="client-office-hero-actions">
-            {!activated && <button className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" disabled={activationBusy} onClick={onActivate}><span>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</span></button>}
-          </div>
-        </section>
-
-        {message && <p className={activated ? 'success' : 'subscription-notice'}>{message}</p>}
-        {dashboardStatus === 'error' && <button className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" type="button" onClick={onRetry}><span>{t('states.retry')}</span></button>}
-
-        <section className="client-office-quick-actions client-quick-actions" aria-label={t('clientOffice.tools')}>
-          {quickActions.map(([title, copy, Icon, href]) => {
-            const content = (
-              <>
-                <Icon size={18} />
-                <span><strong>{title}</strong><small>{copy}</small></span>
-              </>
-            );
-            return href.startsWith('/') ? (
-              <Link className={`client-office-action er-btn er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#messages' ? 'er-glass-btn--purple' : href.startsWith('/') ? 'er-glass-btn--gold' : 'er-glass-btn--cyan'}`} to={href} key={title}>{content}</Link>
-            ) : (
-              <a className={`client-office-action er-btn er-glass-btn er-glass-btn--sm ${href === '#favorites' ? 'er-glass-btn--pink' : href === '#messages' ? 'er-glass-btn--purple' : 'er-glass-btn--cyan'}`} href={href} key={title}>{content}</a>
-            );
-          })}
-        </section>
-
-        <section className="client-office-grid">
-          <div className="client-office-left">
-            <section className="client-office-card client-office-radar client-radar-preview-section" id="radar">
-              <div className="client-office-card-header">
-                <div>
-                  <p className="eyebrow">{t('nav.radar')}</p>
-                  <h2>{t('clientOffice.profilesNearCity', { city })}</h2>
-                </div>
-                <Link className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" to="/city/berlin"><span>{t('clientOffice.viewNearby')}</span></Link>
+      {activeSection === 'overview' ? (
+        <>
+          <header className="pr-hero">
+            <div>
+              <p className="pr-eyebrow">{t('clientDash.officeTitle')}</p>
+              <h1 className="pr-title">{t('dashboard.welcome')}, {displayName}</h1>
+              <p className="pr-lead">{activated ? t('clientOffice.subtitleActive') : t('clientDash.overview.subtitleFree')}</p>
+              <div className="pr-badges">
+                <span className={`pr-badge ${activated ? 'is-premium' : 'is-muted'}`}>{activated ? t('clientDash.status.premium') : t('clientDash.status.free')}</span>
+                {activated && activation?.activated_at ? <span className="pr-badge is-plain">{t('clientOffice.activatedAt', { date: new Date(activation.activated_at).toLocaleDateString() })}</span> : null}
+                <span className={`pr-badge ${personalVerificationStatus === 'verified' ? 'is-success' : 'is-warning'}`}>{t(`clientOffice.personal.status.${personalVerificationStatus}`)}</span>
               </div>
-              <div className="client-office-radar-stage">
-                <div className="client-office-radar-filter">
-                  <label>
+            </div>
+            <div className="pr-hero-actions">
+              {!activated ? <button className="pr-btn is-primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('profilePremium.activate')}</button> : null}
+              <Link className={`pr-btn${activated ? ' is-primary' : ''}`} to={radarPath}><RadioTower size={17} aria-hidden="true" /> {t('clientDash.openRadar')}</Link>
+            </div>
+          </header>
+
+          <div className="pr-kpis is-5">
+            <button type="button" className="pr-kpi" onClick={() => selectSection('wallet')}>
+              <span className="pr-icon-chip"><Gem size={18} aria-hidden="true" /></span>
+              <span className="pr-kpi-value">{balanceText} BC</span>
+              <span className="pr-kpi-label">{t('clientDash.wallet.balance')}</span>
+            </button>
+            <button type="button" className="pr-kpi" onClick={() => selectSection('favorites')}>
+              <span className="pr-icon-chip"><Heart size={18} aria-hidden="true" /></span>
+              <span className="pr-kpi-value">{favorites.length}</span>
+              <span className="pr-kpi-label">{t('clientDash.nav.favorites')}</span>
+            </button>
+            <button type="button" className="pr-kpi" onClick={() => selectSection('bookings')}>
+              <span className="pr-icon-chip"><CalendarDays size={18} aria-hidden="true" /></span>
+              <span className="pr-kpi-value">{bookingSummary ? bookingSummary.total : '–'}</span>
+              <span className="pr-kpi-label">{bookingSummary?.open ? t('clientDash.kpi.bookingsOpen', { count: bookingSummary.open }) : t('clientDash.nav.bookings')}</span>
+            </button>
+            <button type="button" className="pr-kpi" onClick={() => selectSection('messages')}>
+              <span className="pr-icon-chip is-violet"><MessageCircle size={18} aria-hidden="true" /></span>
+              <span className="pr-kpi-value">{chatCount ?? '–'}</span>
+              <span className="pr-kpi-label">{chatUnread ? t('chat.unreadCount', { count: chatUnread }) : t('clientDash.kpi.conversations')}</span>
+              {chatUnread ? <span className="pr-count">{chatUnread}</span> : null}
+            </button>
+            <Link className="pr-kpi" to={radarPath}>
+              <span className="pr-icon-chip"><RadioTower size={18} aria-hidden="true" /></span>
+              <span className="pr-kpi-value">{marketProfiles.length}</span>
+              <span className="pr-kpi-label">{t('clientDash.kpi.radarProfiles', { count: availableNow })}</span>
+            </Link>
+          </div>
+
+          <div className="pr-grid-main">
+            <section className="pr-card" aria-labelledby="client-nearby-title">
+              <div className="pr-card-head">
+                <div>
+                  <p className="pr-eyebrow">{t('nav.radar')}</p>
+                  <h2 className="pr-h2" id="client-nearby-title">{t('clientOffice.profilesNearCity', { city: 'Berlin' })}</h2>
+                </div>
+                <Link className="pr-btn is-sm" to={radarPath}>{t('clientOffice.viewNearby')}</Link>
+              </div>
+              {nearbyProfiles.length ? (
+                <div className="pr-profile-grid">
+                  {nearbyProfiles.map((profile) => <ClientProfileTile key={profile.id} profile={profile} />)}
+                </div>
+              ) : (
+                <div className="pr-empty"><RadioTower size={22} aria-hidden="true" /><strong>{t('clientDash.empty.radarTitle')}</strong><p>{t('clientOffice.noLiveMatches')}</p></div>
+              )}
+              <details className="pr-card is-flat client-live-request">
+                <summary className="pr-h3">{t('clientOffice.liveTitle')}</summary>
+                <p className="pr-muted">{t('clientOffice.livePrivacy')}</p>
+                <div className="pr-form-grid">
+                  <label className="pr-field">
                     <span>{t('clientOffice.personal.city')}</span>
-                    <select value={intentDraft.city || 'berlin'} onChange={(event) => setIntentDraft({ ...intentDraft, city: event.target.value })}>
+                    <select value={intentDraft.city || CLIENT_RADAR_CITY} onChange={(event) => setIntentDraft({ ...intentDraft, city: event.target.value })}>
                       {['berlin', 'hamburg', 'hannover', 'koeln', 'muenchen', 'warszawa'].map((item) => <option key={item} value={item}>{item}</option>)}
                     </select>
                   </label>
-                  <label>
-                    <span>{t('clientOffice.area')}</span>
-                    <input placeholder={t('clientOffice.area')} value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
-                  </label>
-                  <label>
+                  <label className="pr-field">
                     <span>{t('radar.radius')}</span>
                     <select value={intentDraft.radius_km || 25} onChange={(event) => setIntentDraft({ ...intentDraft, radius_km: Number(event.target.value) })}>
                       {[5, 10, 25, 50, 100].map((item) => <option key={item} value={item}>{item} km</option>)}
                     </select>
                   </label>
-                  <button className="button primary full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" onClick={() => onCreateIntent({ ...intentDraft, status: 'LOOKING_NOW' })}><span>{t('clientOffice.createRequest')}</span></button>
+                  <label className="pr-field">
+                    <span>{t('clientOffice.area')}</span>
+                    <input placeholder={t('clientOffice.area')} value={intentDraft.area || ''} onChange={(event) => setIntentDraft({ ...intentDraft, area: event.target.value })} />
+                  </label>
+                  <div className="pr-field">
+                    <span aria-hidden="true">&nbsp;</span>
+                    <button className="pr-btn is-block" type="button" onClick={() => onCreateIntent({ ...intentDraft, status: 'LOOKING_NOW' })}>{t('clientOffice.createRequest')}</button>
+                  </div>
                 </div>
-                <div className="client-office-radar-map">
-                  <div className="client-office-radar-core"><RadioTower size={20} /></div>
-                  <div className="client-office-radar-pulse" />
-                  {radarProfiles.map((profile, index) => {
-                    const imageUrl = getProfileImageUrl(profile);
-                    return (
-                      <Link className={`client-office-radar-pin pin-${index + 1}`} to={`/profile/${profile.id}`} key={profile.id} aria-label={profile.display_name}>
-                        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <UserRound size={16} />}
-                      </Link>
-                    );
-                  })}
-                </div>
-                {spotlightProfile && (
-                  <article className="client-office-profile-preview">
-                    <div className="client-office-profile-cover">
-                      {spotlightImage ? <img src={spotlightImage} alt="" loading="lazy" /> : <UserRound size={44} />}
-                    </div>
+              </details>
+            </section>
+
+            <div className="pr-grid">
+              {activated ? (
+                <section className="pr-card" aria-labelledby="client-account-title">
+                  <div className="pr-card-head">
                     <div>
-                      <p className="eyebrow">{option(spotlightProfile.category || 'other')}</p>
-                      <h3>{spotlightProfile.display_name}</h3>
-                      <p><MapPin size={14} /> {spotlightProfile.work_city || spotlightProfile.city}{spotlightProfile.age ? ` - ${spotlightProfile.age}` : ''}</p>
+                      <p className="pr-eyebrow">{t('clientDash.account.eyebrow')}</p>
+                      <h2 className="pr-h2" id="client-account-title">{t('clientDash.status.premium')}</h2>
                     </div>
-                    <div className="client-office-preview-actions">
-                      <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" to={`/profile/${spotlightProfile.id}`}><MessageCircle size={15} /> <span>{t('buttons.viewProfile')}</span></Link>
-                      <Link className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm" to={`/profile/${spotlightProfile.id}`}><span>{t('booking.bookNow')}</span></Link>
-                    </div>
-                  </article>
-                )}
-              </div>
-              <div className="client-office-mini-metrics">
-                <Metric label={t('clientOffice.profilesNearCity', { city })} value={marketProfiles.length || 0} />
-                <Metric label={t('clientOffice.availableNow')} value={availableProfiles || 0} />
-                <Metric label={t('clientOffice.newToday')} value={newToday || 0} />
-                <Metric label={t('clientOffice.recentlyActive')} value={recentlyActive || 0} />
-              </div>
-              <div className="client-office-row-list">
-                {matches.slice(0, 3).map((match) => (
-                  <div className="client-office-row" key={match.id}>
-                    <div><strong>{match.display_name}</strong><p>{match.work_city || match.city} - {match.operator_status || match.availability_status}</p></div>
-                    <span>{match.match_score ?? match.radar_score ?? 0}</span>
+                    <span className="pr-icon-chip"><ShieldCheck size={18} aria-hidden="true" /></span>
                   </div>
-                ))}
-                {!matches.length && <p className="muted">{t('clientOffice.noLiveMatches')}</p>}
-              </div>
-            </section>
+                  <dl className="pr-dl">
+                    <div><dt>{t('clientDash.account.status')}</dt><dd><span className="pr-badge is-success">{t('clientDash.account.active')}</span></dd></div>
+                    {activation?.activated_at ? <div><dt>{t('clientDash.account.since')}</dt><dd>{new Date(activation.activated_at).toLocaleDateString()}</dd></div> : null}
+                    <div><dt>{t('referrals.direct')}</dt><dd>{referral?.directReferralsCount || 0}</dd></div>
+                    <div><dt>{t('clientOffice.earnedCoins')}</dt><dd>{earnedReferralCoins} BC</dd></div>
+                  </dl>
+                  <button className="pr-btn" type="button" onClick={() => selectSection('referrals')}><QrCode size={16} aria-hidden="true" /> {t('clientDash.referrals.open')}</button>
+                </section>
+              ) : premiumOffer}
 
-            <ClientBookingsCard token={token} notifications={notifications} />
-
-            <section className="client-office-card er-chat-card" id="messages" aria-labelledby="client-messages-title">
-              <div className="client-office-card-header">
-                <div>
-                  <p className="eyebrow">{t('nav.messages')}</p>
-                  <h2 id="client-messages-title">{t('chat.client.title')}</h2>
-                  <p>{t('chat.client.subtitle')}</p>
-                </div>
-                {chatUnread ? <span className="er-chat-unread" aria-label={t('chat.unreadCount', { count: chatUnread })}>{chatUnread}</span> : <MessageCircle size={18} aria-hidden="true" />}
-              </div>
-              <ChatInbox token={token} role="client" emptyText={t('chat.client.empty')} onUnreadChange={setChatUnread} />
-            </section>
-
-            <section className="client-office-card client-office-favorites client-favorites-section" id="favorites">
-              <div className="client-office-card-header">
-                <div>
-                  <p className="eyebrow">{t('favorites.myFavorites')}</p>
-                  <h2>{t('favorites.myFavorites')}</h2>
-                  <p>{t('favorites.favoritesDescription')}</p>
-                </div>
-                <span>{favorites.length}</span>
-              </div>
-              {favorites.length ? (
-                <div className="client-office-favorites-list">
-                  {favorites.slice(0, 4).map((favorite) => favorite.profile ? (
-                    <ClientOfficeFavoriteItem key={favorite.id} favorite={favorite} onRemoveFavorite={onRemoveFavorite} />
-                  ) : null)}
-                </div>
-              ) : (
-                <div className="market-empty-state">
-                  <Heart size={18} />
-                  <p>{t('favorites.noFavoritesYet')}</p>
-                  <Link className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md" to="/city/berlin"><span>{t('clientOffice.viewNearby')}</span></Link>
-                </div>
-              )}
-            </section>
-
-            <section className="client-office-card client-office-activity client-activity-section" id="activity">
-              <div className="client-office-card-header">
-                <div>
-                  <p className="eyebrow">{t('dashboard.client.activity')}</p>
-                  <h2>{t('dashboard.client.activity')}</h2>
-                </div>
-                <Clock size={18} />
-              </div>
-              <div className="client-office-row-list">
-                {transactions.slice(0, 5).map((transaction) => (
-                  <div className="client-office-row" key={'id' in transaction ? transaction.id : `${transaction.created_at}:${transaction.transaction_type}:${transaction.amount_bcu}`}>
-                    <div><strong>{transaction.transaction_type}</strong><p>{new Date(transaction.created_at).toLocaleString()}</p></div>
-                    <span>{transaction.direction === 'credit' ? '+' : '-'}{'amount_bc' in transaction ? transaction.amount_bc : transaction.amount} {t('clientOffice.bigCoins')}</span>
+              <section className="pr-card" aria-labelledby="client-activity-title">
+                <div className="pr-card-head">
+                  <div>
+                    <p className="pr-eyebrow">{t('dashboard.client.activity')}</p>
+                    <h2 className="pr-h2" id="client-activity-title">{t('clientDash.activity.title')}</h2>
                   </div>
-                ))}
-                {!transactions.length && <p className="muted">{t('clientOffice.noActivity')}</p>}
-              </div>
-            </section>
+                  <button className="pr-btn is-sm is-ghost" type="button" onClick={() => selectSection('wallet')}>{t('clientDash.activity.all')}</button>
+                </div>
+                {transactions.length ? <ul className="pr-list">{ledgerRows(4)}</ul> : <div className="pr-empty"><Clock size={20} aria-hidden="true" /><p>{t('clientDash.empty.activity')}</p></div>}
+              </section>
+            </div>
           </div>
+        </>
+      ) : null}
 
-          <div className="client-office-right client-dashboard-right-column">
-            <section className="client-office-card client-profile-summary-card" id="account">
-              <div className="profile-summary">
-                {clientProfile?.avatar_url ? <img className="client-office-profile-image" src={clientProfile.avatar_url} alt="" /> : <div className="qr-visual"><UserRound size={46} /></div>}
+      {activeSection === 'favorites' ? (
+        <section className="pr-grid" id="favorites">
+          {sectionHead('favorites', <Link className="pr-btn" to={radarPath}><RadioTower size={17} aria-hidden="true" /> {t('clientDash.openRadar')}</Link>)}
+          {!activated ? premiumLock : null}
+          <section className="pr-card">
+            <div className="pr-card-head">
+              <div>
+                <h2 className="pr-h2">{t('favorites.myFavorites')}</h2>
+                <p className="pr-muted">{t('favorites.favoritesDescription')}</p>
+              </div>
+              <span className="pr-badge is-premium is-plain pr-num">{favorites.length}</span>
+            </div>
+            {favorites.length ? (
+              <div className="pr-profile-grid">
+                {favorites.map((favorite) => <ClientFavoriteCard key={favorite.id} favorite={favorite} onRemoveFavorite={onRemoveFavorite} />)}
+              </div>
+            ) : (
+              <div className="pr-empty">
+                <Heart size={22} aria-hidden="true" />
+                <strong>{t('favorites.noFavoritesYet')}</strong>
+                <p>{t('clientDash.empty.favorites')}</p>
+                <Link className="pr-btn is-primary" to={radarPath}>{t('clientOffice.viewNearby')}</Link>
+              </div>
+            )}
+          </section>
+        </section>
+      ) : null}
+
+      {activeSection === 'bookings' ? (
+        <section className="pr-grid" id="bookings">
+          {sectionHead('bookings')}
+          {!activated ? premiumLock : null}
+          <section className="pr-card pr-embed"><ClientBookingsCard token={token} notifications={notifications} /></section>
+        </section>
+      ) : null}
+
+      {activeSection === 'messages' ? (
+        <section className="pr-grid" id="messages">
+          {sectionHead('messages')}
+          {!activated ? premiumLock : null}
+          <section className="pr-card er-chat-card" aria-labelledby="client-messages-title">
+            <div className="pr-card-head">
+              <div>
+                <h2 className="pr-h2" id="client-messages-title">{t('chat.client.title')}</h2>
+                <p className="pr-muted">{t('chat.client.subtitle')}</p>
+              </div>
+              <span className="pr-badge is-violet is-plain">{t('clientDash.messages.price')}</span>
+            </div>
+            <ChatInbox token={token} role="client" emptyText={t('chat.client.empty')} onUnreadChange={setChatUnread} />
+          </section>
+        </section>
+      ) : null}
+
+      {activeSection === 'wallet' ? (
+        <section className="pr-grid" id="wallet">
+          {sectionHead('wallet', <Link className="pr-btn is-primary" to="/coins"><Gem size={17} aria-hidden="true" /> {t('clientOffice.addCoins')}</Link>)}
+          <div className="pr-grid-main">
+            <section className="pr-card" aria-labelledby="client-ledger-title">
+              <div className="pr-card-head">
                 <div>
-                  <p className="eyebrow">{t('clientOffice.profile')}</p>
-                  <h2>{displayName}</h2>
-                  <p>{userEmail}</p>
-                  <span className={`admin-status ${activated ? 'active' : 'pending'}`}>{statusLabel}</span>
+                  <p className="pr-eyebrow">{t('clientDash.wallet.ledgerEyebrow')}</p>
+                  <h2 className="pr-h2" id="client-ledger-title">{t('clientDash.wallet.ledgerTitle')}</h2>
                 </div>
               </div>
-              <label className="button full">
-                {avatarUploading ? t('states.loading') : t('clientOffice.uploadAvatar')}
-                <input hidden type="file" accept="image/*" onChange={onAvatarUpload} />
-              </label>
-              {activation?.activated_at && <p className="muted">{t('clientOffice.activatedAt', { date: new Date(activation.activated_at).toLocaleDateString() })}</p>}
-              {!activated && <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" type="button" disabled={activationBusy} onClick={onActivate}><span>{activationBusy ? t('states.loading') : t('clientOffice.activateCta')}</span></button>}
+              {transactions.length ? <ul className="pr-list">{ledgerRows(showFullLedger ? 100 : 12)}</ul> : <div className="pr-empty"><Clock size={20} aria-hidden="true" /><p>{t('clientDash.empty.activity')}</p></div>}
+              {transactions.length > 12 ? <button className="pr-btn is-ghost" type="button" onClick={() => setShowFullLedger((value) => !value)}>{showFullLedger ? t('clientDash.wallet.showLess') : t('clientDash.wallet.showAll', { count: transactions.length })}</button> : null}
             </section>
-
-            <CommunicationPlusCard
-              state={communicationPlusState}
-              status={communicationPlusStatus}
-              purchasing={communicationPlusPurchasing}
-              purchaseError={communicationPlusError}
-              onPurchase={onPurchaseCommunicationPlus}
-              onRetry={onRetryCommunicationPlus}
-            />
-
-            <section className="client-office-card client-office-wallet client-bigcoins-wallet-card" id="wallet">
-              <div className="client-office-card-header">
-                <div>
-                  <p className="eyebrow">{t('clientOffice.coinWallet')}</p>
-                  <h2>{bigCoinsBalance.toLocaleString()} {t('clientOffice.bigCoins')}</h2>
+            <div className="pr-grid">
+              <section className="pr-card is-highlight" aria-labelledby="client-balance-title">
+                <p className="pr-eyebrow" id="client-balance-title">{t('clientDash.wallet.balance')}</p>
+                <div className="pr-balance">
+                  <span className="pr-balance-value">{balanceText}<small>BC</small></span>
+                  {bcuWallet?.public_wallet_id ? <span className="pr-muted">{t('clientDash.wallet.id', { id: bcuWallet.public_wallet_id })}</span> : null}
                 </div>
-                <Gem size={22} />
+                {bcuWallet ? (
+                  <dl className="pr-dl">
+                    <div><dt>{t('clientDash.wallet.received')}</dt><dd className="pr-num">{bcuWallet.lifetime_credit_bc} BC</dd></div>
+                    <div><dt>{t('clientDash.wallet.spent')}</dt><dd className="pr-num">{bcuWallet.lifetime_debit_bc} BC</dd></div>
+                  </dl>
+                ) : null}
+                <p className="pr-muted">{t('clientDash.wallet.closedEconomy')}</p>
+              </section>
+              <section className="pr-card" aria-labelledby="client-prices-title">
+                <h2 className="pr-h2" id="client-prices-title">{t('clientDash.features.title')}</h2>
+                <div>
+                  <div className="pr-feature-row"><div><CalendarDays size={17} aria-hidden="true" /> {t('clientDash.features.booking')}</div><span className="pr-badge is-success">0 BC</span></div>
+                  <div className="pr-feature-row"><div><Heart size={17} aria-hidden="true" /> {t('clientDash.features.favorites')}</div><span className="pr-badge is-success">0 BC</span></div>
+                  <div className="pr-feature-row"><div><MessageCircle size={17} aria-hidden="true" /> {t('clientDash.features.chat')}</div><span className="pr-badge is-premium">3 BC</span></div>
+                  <div className="pr-feature-row"><div><Gem size={17} aria-hidden="true" /> {t('clientDash.features.gifts')}</div><span className={`pr-badge ${giftsConfigured ? 'is-premium' : 'is-muted'}`}>{giftsConfigured ? t('clientDash.features.available') : t('clientDash.features.soon')}</span></div>
+                  <div className="pr-feature-row"><div><Video size={17} aria-hidden="true" /> {t('clientDash.features.video')}</div><span className="pr-badge is-muted">{t('clientDash.features.unavailable')}</span></div>
+                </div>
+              </section>
+              {communicationPlusStatus?.communication_plus_active ? (
+                <CommunicationPlusCard
+                  state={communicationPlusState}
+                  status={communicationPlusStatus}
+                  purchasing={communicationPlusPurchasing}
+                  purchaseError={communicationPlusError}
+                  onPurchase={onPurchaseCommunicationPlus}
+                  onRetry={onRetryCommunicationPlus}
+                />
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === 'referrals' ? (
+        <section className="pr-grid" id="referrals">
+          {sectionHead('referrals')}
+          {activated ? (
+            <section className="pr-card client-referral-card" aria-labelledby="client-referral-title">
+              <div className="pr-referral-layout">
+                {referralQrImageUrl ? <div className="pr-qr"><img className="client-qr-image" src={referralQrImageUrl} alt={t('referrals.qrCode')} /></div> : <div className="pr-qr-locked"><QrCode size={26} aria-hidden="true" /><span>{t('states.loading')}</span></div>}
+                <div className="pr-grid">
+                  <div>
+                    <p className="pr-eyebrow">{t('referrals.yourLink')}</p>
+                    <h2 className="pr-h2" id="client-referral-title">{t('clientDash.referrals.title')}</h2>
+                    <p className="pr-muted">{t('clientOffice.referralRewardRule', { count: CLIENT_REFERRAL_REWARD_COINS })}</p>
+                  </div>
+                  <div className="pr-copy-field">
+                    <code>{referralLink}</code>
+                    <button className="pr-btn is-sm" type="button" onClick={copyReferralLink}><Copy size={14} aria-hidden="true" /> {referralCopied ? t('referrals.copied') : t('referrals.copy')}</button>
+                    <button className="pr-btn is-sm" type="button" onClick={shareReferralLink}><LinkIcon size={14} aria-hidden="true" /> {t('referrals.share')}</button>
+                  </div>
+                  <p className="pr-muted">{t('referrals.yourCode')}: <strong className="pr-num" style={{ color: 'var(--pr-gold-soft)' }}>{referral?.referralCode || activation?.referral_code || '–'}</strong></p>
+                  <div className="pr-kpis client-referral-stats">
+                    <div className="pr-kpi"><span className="pr-icon-chip"><UserRound size={17} aria-hidden="true" /></span><span className="pr-kpi-value">{referral?.directReferralsCount || 0}</span><span className="pr-kpi-label">{t('referrals.direct')}</span></div>
+                    <div className="pr-kpi"><span className="pr-icon-chip"><BadgeCheck size={17} aria-hidden="true" /></span><span className="pr-kpi-value">{referralActivations}</span><span className="pr-kpi-label">{t('clientOffice.activations')}</span></div>
+                    <div className="pr-kpi"><span className="pr-icon-chip"><Gem size={17} aria-hidden="true" /></span><span className="pr-kpi-value">{earnedReferralCoins} BC</span><span className="pr-kpi-label">{t('clientOffice.earnedCoins')}</span></div>
+                  </div>
+                  {referral?.referredByDisplay ? <p className="pr-muted">{t('referrals.referredBy')}: {referral.referredByDisplay}</p> : null}
+                </div>
               </div>
-              <div className="client-office-mini-metrics">
-                <Metric label={t('clientOffice.coinBalance')} value={bigCoinsBalance} />
-                <Metric label={t('clientOffice.earnedCoins')} value={earnedReferralCoins} />
-              </div>
-              <Link className="button primary full er-btn er-glass-btn er-glass-btn--purple er-glass-btn--block" to="/coins"><span>{t('clientOffice.addCoins')}</span></Link>
             </section>
-
-            <section className="client-office-card referral-studio client-referral-card">
-              <div className="client-office-card-header">
-                <div>
-                  <p className="eyebrow">{t('referrals.title')}</p>
-                  <h2>{t('referrals.title')}</h2>
+          ) : (
+            <section className="pr-card client-referral-card" aria-labelledby="client-referral-locked">
+              <div className="pr-referral-layout">
+                <div className="pr-qr-locked"><Lock size={26} aria-hidden="true" /><span>{t('clientDash.referrals.lockedQr')}</span></div>
+                <div className="pr-grid">
+                  <div>
+                    <p className="pr-eyebrow">{t('referrals.title')}</p>
+                    <h2 className="pr-h2" id="client-referral-locked">{t('clientOffice.referralLocked')}</h2>
+                    <p className="pr-muted">{t('clientDash.referrals.lockedCopy', { count: CLIENT_REFERRAL_REWARD_COINS })}</p>
+                  </div>
+                  <button className="pr-btn is-primary" type="button" disabled={activationBusy} onClick={onActivate}>{activationBusy ? t('states.loading') : t('profilePremium.activate')}</button>
                 </div>
-                <QrCode size={18} />
-              </div>
-              {referralQrImageUrl ? <img className="client-qr-image" src={referralQrImageUrl} alt={t('referrals.qrCode')} /> : <QrVisual seed="CLIENT-FREE" />}
-              <dl className="referral-details">
-                <div><dt>{t('referrals.yourCode')}</dt><dd>{referral?.referralCode || activation?.referral_code || '-'}</dd></div>
-                <div><dt>{t('referrals.yourLink')}</dt><dd>{referralLink || t('clientOffice.referralLocked')}</dd></div>
-                <div><dt>{t('referrals.direct')}</dt><dd>{referral?.directReferralsCount || 0}</dd></div>
-                <div><dt>{t('referrals.subtree')}</dt><dd>{referral?.totalDescendantsCount || 0}</dd></div>
-                <div><dt>{t('referrals.referredBy')}</dt><dd>{referral?.referredByDisplay || '-'}</dd></div>
-              </dl>
-              {referralLink && <div className="referral-actions">
-                <button className="button er-btn er-glass-btn er-glass-btn--cyan" type="button" onClick={copyReferralLink}><Copy size={14} /> <span>{referralCopied ? t('referrals.copied') : t('referrals.copy')}</span></button>
-                <button className="button er-btn er-glass-btn er-glass-btn--purple" type="button" onClick={shareReferralLink}><LinkIcon size={14} /> <span>{t('referrals.share')}</span></button>
-              </div>}
-              <div className="client-referral-progress">
-                <strong>{t('clientOffice.nextRewardProgress', { count: referralActivations ? 1 : 0 })}</strong>
-                <span>{t('clientOffice.nextReward', { count: CLIENT_REFERRAL_REWARD_COINS })}</span>
-                <div className="progress-track"><span style={{ width: `${referralProgress}%` }} /></div>
-                <p>{t('clientOffice.earnedRewards')}: {earnedReferralCoins} {t('clientOffice.bigCoins')}</p>
               </div>
             </section>
+          )}
+        </section>
+      ) : null}
 
-            <section className="client-office-card client-office-settings client-settings-card" id="settings">
-              <div className="client-office-card-header">
+      {activeSection === 'settings' ? (
+        <section className="pr-grid" id="settings">
+          {sectionHead('settings')}
+          <div className="pr-grid-main">
+            <section className="pr-card" aria-labelledby="client-settings-title">
+              <div className="pr-card-head">
                 <div>
-                  <p className="eyebrow">{t('clientOffice.settings.eyebrow')}</p>
-                  <h2>{t('clientOffice.settings.title')}</h2>
+                  <p className="pr-eyebrow">{t('clientOffice.settings.eyebrow')}</p>
+                  <h2 className="pr-h2" id="client-settings-title">{t('clientOffice.settings.title')}</h2>
                 </div>
-                <span className={`client-status-badge ${isVerifiedClient ? 'verified' : 'pending'}`}>{t(`clientOffice.personal.status.${personalDraft.verification_status || 'incomplete'}`)}</span>
+                <span className={`pr-badge ${personalVerificationStatus === 'verified' ? 'is-success' : 'is-warning'}`}>{t(`clientOffice.personal.status.${personalDraft.verification_status || 'incomplete'}`)}</span>
               </div>
-              <form className="client-office-settings-form" onSubmit={(event) => {
+              <form className="pr-form client-office-settings-form" onSubmit={(event) => {
                 event.preventDefault();
                 onSavePersonalProfile(personalDraft);
               }}>
-                <label className="premium-field"><span>{t('clientOffice.settings.email')}</span><input value={userEmail} readOnly /></label>
-                <label className="premium-field"><span>{t('clientOffice.personal.phone')}</span><input value={personalDraft.phone || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, phone: event.target.value })} /></label>
-                <label className="premium-field"><span>{t('clientOffice.personal.city')}</span><input value={personalDraft.city || ''} onChange={(event) => setPersonalDraft({ ...personalDraft, city: event.target.value })} /></label>
-                <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_home_service_contact} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_home_service_contact: event.target.checked })} /> {t('clientOffice.settings.notifications')}</label>
-                <label className="premium-check client-settings-check"><input type="checkbox" checked={personalDraft.consent_verified_client_badge} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_verified_client_badge: event.target.checked })} /> {t('clientOffice.settings.privacy')}</label>
-                <button className="button primary full er-btn er-glass-btn er-glass-btn--gold er-glass-btn--block" type="submit"><span>{t('clientOffice.settings.save')}</span></button>
+                <div className="pr-form-grid">
+                  <label className="pr-field"><span>{t('clientOffice.settings.email')}</span><input value={userEmail} readOnly /></label>
+                  <label className="pr-field"><span>{t('clientOffice.personal.phone')}</span><input value={personalDraft.phone || ''} autoComplete="tel" onChange={(event) => setPersonalDraft({ ...personalDraft, phone: event.target.value })} /></label>
+                  <label className="pr-field"><span>{t('clientOffice.personal.city')}</span><input value={personalDraft.city || ''} autoComplete="address-level2" onChange={(event) => setPersonalDraft({ ...personalDraft, city: event.target.value })} /></label>
+                </div>
+                <label className="pr-toggle"><input type="checkbox" checked={personalDraft.consent_home_service_contact} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_home_service_contact: event.target.checked })} /> {t('clientOffice.settings.notifications')}</label>
+                <label className="pr-toggle"><input type="checkbox" checked={personalDraft.consent_verified_client_badge} onChange={(event) => setPersonalDraft({ ...personalDraft, consent_verified_client_badge: event.target.checked })} /> {t('clientOffice.settings.privacy')}</label>
+                <div><button className="pr-btn is-primary" type="submit" disabled={dashboardStatus === 'saving'}>{dashboardStatus === 'saving' ? t('states.loading') : t('clientOffice.settings.save')}</button></div>
               </form>
             </section>
+            <div className="pr-grid">
+              <section className="pr-card" aria-labelledby="client-profile-title">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <span className="pr-avatar is-lg">{clientProfile?.avatar_url ? <img src={clientProfile.avatar_url} alt="" /> : <UserRound size={30} aria-hidden="true" />}</span>
+                  <div style={{ display: 'grid', gap: '.25rem', minWidth: 0 }}>
+                    <h2 className="pr-h2" id="client-profile-title">{displayName}</h2>
+                    <span className="pr-muted" style={{ overflowWrap: 'anywhere' }}>{userEmail}</span>
+                  </div>
+                </div>
+                <label className="pr-btn">
+                  <UploadCloud size={16} aria-hidden="true" /> {avatarUploading ? t('states.loading') : t('clientOffice.uploadAvatar')}
+                  <input hidden type="file" accept="image/*" onChange={onAvatarUpload} />
+                </label>
+                <dl className="pr-dl">
+                  <div><dt>{t('clientDash.account.status')}</dt><dd><span className={`pr-badge ${activated ? 'is-premium' : 'is-muted'}`}>{activated ? t('clientDash.status.premium') : t('clientDash.status.free')}</span></dd></div>
+                  {activation?.activated_at ? <div><dt>{t('clientDash.account.since')}</dt><dd>{new Date(activation.activated_at).toLocaleDateString()}</dd></div> : null}
+                </dl>
+                {!activated ? <button className="pr-btn is-primary" type="button" disabled={activationBusy} onClick={onActivate}>{t('profilePremium.activate')}</button> : null}
+              </section>
+              <button className="pr-btn is-danger" type="button" onClick={onLogout}><LogOut size={16} aria-hidden="true" /> {t('buttons.logout')}</button>
+            </div>
           </div>
         </section>
-      </main>
-    </div>
+      ) : null}
+    </ClientOfficeShell>
   );
-
 }
 
-function ClientOfficeFavoriteItem({ favorite, onRemoveFavorite }: { favorite: ClientFavorite; onRemoveFavorite: (profileId: string) => void }) {
-  const { t, option } = useI18n();
-  const profile = favorite.profile;
-  if (!profile) return null;
+function ClientProfileTile({ profile }: { profile: Profile }) {
+  const { option } = useI18n();
   const imageUrl = getProfileImageUrl(profile);
   return (
-    <article className="client-office-favorite-item">
-      <Link className="client-office-favorite-media" to={`/profile/${profile.id}`}>
-        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <UserRound size={20} />}
+    <article className="pr-profile-card">
+      <Link className="pr-profile-media" to={`/profile/${profile.id}`} aria-label={profile.display_name}>
+        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <span className="pr-placeholder"><UserRound size={30} aria-hidden="true" /></span>}
+        {profile.available_now ? <span className="pr-profile-status pr-badge is-success">Online</span> : null}
+        <span className="pr-profile-overlay">
+          <strong>{profile.display_name}</strong>
+          <small><MapPin size={12} aria-hidden="true" /> {profile.work_city || profile.city}{profile.age ? ` · ${profile.age}` : ''} · {option(profile.category || 'other')}</small>
+        </span>
       </Link>
-      <div>
-        <h3>{profile.display_name}</h3>
-        <p>{profile.work_city || profile.city} · {option(profile.category || 'other')}</p>
-      </div>
-      <div className="client-office-favorite-actions">
-        <Link className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--sm" to={`/profile/${profile.id}`}><span>{t('buttons.viewProfile')}</span></Link>
-        <button className="button er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}><span>{t('favorites.removeFromFavorites')}</span></button>
-      </div>
     </article>
   );
 }
@@ -1951,20 +2068,17 @@ function ClientFavoriteCard({ favorite, onRemoveFavorite }: { favorite: ClientFa
   if (!profile) return null;
   const imageUrl = getProfileImageUrl(profile);
   return (
-    <article className="client-favorite-card favorite-card-shell">
-      <div className="client-favorite-image">
-        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <div className="image-placeholder">{t('app.name')}</div>}
-      </div>
-      <div className="client-favorite-body">
-        <div>
-          <h3>{profile.display_name}</h3>
-          <p><MapPin size={14} /> {profile.work_city || profile.city}{profile.age ? ` - ${profile.age}` : ''}</p>
-        </div>
-        <span>{option(profile.category || 'other')}</span>
-        <div className="client-favorite-actions">
-          <Link className="button primary" to={`/profile/${profile.id}`}>{t('buttons.viewProfile')}</Link>
-          <button className="button er-btn er-glass-btn er-glass-btn--red er-glass-btn--sm" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)}><span>{t('favorites.removeFromFavorites')}</span></button>
-        </div>
+    <article className="pr-profile-card client-favorite-card">
+      <Link className="pr-profile-media" to={`/profile/${profile.id}`} aria-label={profile.display_name}>
+        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <span className="pr-placeholder"><Heart size={28} aria-hidden="true" /></span>}
+        <span className="pr-profile-overlay">
+          <strong>{profile.display_name}</strong>
+          <small><MapPin size={12} aria-hidden="true" /> {profile.work_city || profile.city}{profile.age ? ` · ${profile.age}` : ''} · {option(profile.category || 'other')}</small>
+        </span>
+      </Link>
+      <div className="pr-profile-actions">
+        <Link className="pr-btn is-sm" to={`/profile/${profile.id}`}>{t('buttons.viewProfile')}</Link>
+        <button className="pr-btn is-sm is-danger" type="button" onClick={() => onRemoveFavorite(favorite.profile_id)} aria-label={`${t('favorites.removeFromFavorites')}: ${profile.display_name}`}>{t('favorites.removeFromFavorites')}</button>
       </div>
     </article>
   );
@@ -2148,7 +2262,7 @@ function LivePreviewCard({ profile }: { profile: Profile }) {
   return (
     <div className="creator-live-preview">
       <p className="eyebrow">{t('dashboard.livePreview')}</p>
-      <ProfileCard profile={profile} />
+      <ProfileCard profile={profile} showVisibilityReason />
       <div className="locked-preview-strip">
         <div><Lock size={16} /> {t('creator.lockedMedia')}</div>
         <button className="button primary er-btn er-glass-btn er-glass-btn--purple er-glass-btn--md" type="button"><span>{t('creator.unlockWithTokens')}</span></button>
@@ -2346,20 +2460,16 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps & { t
           profile={props.savedProfile}
           draft={props.profile}
           subscriptionProgress={<AdvertiserSubscriptionProgress profile={props.savedProfile || props.profile} />}
-          businessActivity={<><AdvertiserActivityCounters activity={activity} failed={activityFailed} onOpen={selectSection} /><DigitalRevenuePanel activity={activity} /></>}
+          businessActivity={<AdvertiserActivityCounters activity={activity} failed={activityFailed} onOpen={selectSection} />}
+          earningsSummary={<DigitalEarningsSummary activity={activity} onOpen={() => selectSection('earnings')} />}
           onEditProfile={() => selectSection('profile')}
           onOpenCompletionSection={selectSection}
+          onOpenSection={selectSection}
         />
       ) : null}
       {activeSection === 'profile' || activeSection === 'settings' ? (
-        <section className="advertiser-dashboard-section" aria-labelledby={`advertiser-${activeSection}-heading`}>
-          <header className="advertiser-dashboard-heading compact">
-            <div>
-              <p className="eyebrow">Escort Radar</p>
-              <h1 id={`advertiser-${activeSection}-heading`}>{t(`advertiserDashboard.section.${activeSection}`)}</h1>
-              <p>{t(`advertiserDashboard.${activeSection}.subtitle`)}</p>
-            </div>
-          </header>
+        <section className="pr-grid advertiser-dashboard-section" aria-labelledby={`advertiser-${activeSection}-heading`}>
+          <AdvertiserSectionHeading section={activeSection} />
           <AdvertiserProfileSection {...props} mode={activeSection} />
         </section>
       ) : null}
@@ -2375,9 +2485,18 @@ function AdvertiserDashboardWorkspace(props: AdvertiserProfileSectionProps & { t
       ) : null}
       {activeSection === 'messages' ? <AdvertiserMessagesSection token={props.token} onChanged={refreshActivity} /> : null}
       {activeSection === 'bookings' ? <AdvertiserBookingsSection token={props.token} onChanged={refreshActivity} /> : null}
-      {activeSection === 'wallet' ? <><AdvertiserWalletSection token={props.token} /><DigitalRevenuePanel activity={activity} /></> : null}
+      {activeSection === 'wallet' ? <AdvertiserWalletSection token={props.token} /> : null}
+      {activeSection === 'earnings' ? (
+        <section className="pr-grid" aria-labelledby="advertiser-earnings-heading">
+          <AdvertiserSectionHeading section="earnings" />
+          <DigitalRevenuePanel activity={activity} />
+        </section>
+      ) : null}
+      {activeSection === 'subscription' ? (
+        <AdvertiserSubscriptionSection profile={props.savedProfile} draft={props.profile} onActivateSubscription={props.onActivateSubscription} />
+      ) : null}
       {activeSection === 'referrals' ? <AdvertiserReferralSection token={props.token} /> : null}
-      {!['overview', 'profile', 'location', 'messages', 'bookings', 'wallet', 'referrals', 'settings'].includes(activeSection) ? (
+      {!['overview', 'profile', 'location', 'messages', 'bookings', 'wallet', 'earnings', 'subscription', 'referrals', 'settings'].includes(activeSection) ? (
         <DashboardSectionPlaceholder section={activeSection as Exclude<AdvertiserDashboardSection, 'overview' | 'profile' | 'settings'>} />
       ) : null}
     </AdvertiserDashboardShell>
@@ -3164,6 +3283,48 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
       </nav>
       <p className="one-hand-email">{userEmail}</p>
     </div>
+  );
+}
+
+/** Subscription view: real profile subscription fields only. BC renewal is not offered until it works end to end. */
+function AdvertiserSubscriptionSection({ profile, draft, onActivateSubscription }: { profile: Profile | null; draft: Partial<Profile>; onActivateSubscription: () => void }) {
+  const { t } = useI18n();
+  const source = profile || draft;
+  const status = String(source?.subscription_status || 'free');
+  const start = readDashboardSubscriptionStart(source);
+  const end = readDashboardSubscriptionEnd(source);
+  return (
+    <section className="pr-grid" aria-labelledby="advertiser-subscription-heading">
+      <AdvertiserSectionHeading section="subscription" actions={<button type="button" className="pr-btn is-primary" onClick={onActivateSubscription}><CreditCard size={16} aria-hidden="true" /> {t(status === 'active' ? 'businessCenter.subscription.extend' : 'businessCenter.subscription.activate')}</button>} />
+      <div className="pr-grid-2">
+        <section className="pr-card" aria-labelledby="advertiser-subscription-status">
+          <div className="pr-card-head">
+            <div>
+              <p className="pr-eyebrow">{t('dashboard.visibility.subscription')}</p>
+              <h2 className="pr-h2" id="advertiser-subscription-status">{t('businessCenter.subscription.current')}</h2>
+            </div>
+            <span className={`pr-badge ${status === 'active' ? 'is-premium' : 'is-warning'}`}>{t(`admin.status.${status}`)}</span>
+          </div>
+          <dl className="pr-dl">
+            <div><dt>{t('businessCenter.subscription.plan')}</dt><dd>{advertiserPlanLabel(profile)}</dd></div>
+            <div><dt>{t('businessCenter.subscription.start')}</dt><dd>{formatDashboardDateInput(start) || '–'}</dd></div>
+            <div><dt>{t('businessCenter.subscription.end')}</dt><dd>{formatDashboardDateInput(end) || '–'}</dd></div>
+          </dl>
+          <AdvertiserSubscriptionProgress profile={source} />
+        </section>
+        <section className="pr-card" aria-labelledby="advertiser-subscription-renewal">
+          <div className="pr-card-head">
+            <div>
+              <p className="pr-eyebrow">{t('businessCenter.subscription.renewalEyebrow')}</p>
+              <h2 className="pr-h2" id="advertiser-subscription-renewal">{t('businessCenter.subscription.renewalTitle')}</h2>
+            </div>
+          </div>
+          <div className="pr-feature-row"><div><CreditCard size={17} aria-hidden="true" /> {t('businessCenter.subscription.renewalPayment')}</div><span className="pr-badge is-plain">{t('businessCenter.subscription.paymentPage')}</span></div>
+          <div className="pr-feature-row"><div><Gem size={17} aria-hidden="true" /> {t('businessCenter.subscription.renewalBc')}</div><span className="pr-badge is-muted">{t('clientDash.features.unavailable')}</span></div>
+          <p className="pr-muted">{t('businessCenter.subscription.renewalNote')}</p>
+        </section>
+      </div>
+    </section>
   );
 }
 

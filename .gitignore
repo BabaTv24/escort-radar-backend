@@ -35,3 +35,6 @@ tools/profile_scraper/.build-temp-*/
 **/__pycache__/
 *.py[cod]
 *.egg-info/
+
+# Local visual review screenshots (never committed).
+.review/
