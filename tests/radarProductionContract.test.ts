@@ -20,7 +20,7 @@ import {
   stepRadarRadius
 } from '../Front/src/lib/geo.js';
 import { APPROXIMATE_RADAR_LAYOUT_SPACING_METERS, clusterRadarPoints, getApproximateRadarDisplayLocation, getRadarPoint } from '../Front/src/lib/radarLayout.js';
-import { assignRadarDisplayCoordinates, buildRadarCenterFeatureCollection, buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection, getRadarRadiusBounds } from '../Front/src/lib/radarMapData.js';
+import { assignRadarDisplayCoordinates, buildRadarCenterFeatureCollection, buildRadarGuideFeatureCollection, buildRadarProfileFeatureCollection, buildRadarRadiusFeatureCollection, getRadarRadiusBounds } from '../Front/src/lib/radarMapData.js';
 import {
   RADAR_STATUS_COLORS,
   getRadarProfileHref,
@@ -112,7 +112,11 @@ test('sweep lookup uses a viewport present in the committed RadarPanel structure
     readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../Front/src/components/RadarPanel.tsx', import.meta.url), 'utf8')
   ]);
-  assert.match(mapSource, /closest\('\.radar-map-surface'\)\?\.querySelector<HTMLElement>\('\.radar-sweep'\)/);
+  // V2 radar contract: the sweep is a MapLibre marker anchored to the search center, not a screen overlay.
+  assert.match(mapSource, /className = 'radar-geo-sweep'/);
+  assert.match(mapSource, /new maplibregl\.Marker\(\{ element, anchor: 'center' \}\)\.setLngLat\(\[center\.lng, center\.lat\]\)/);
+  assert.match(mapSource, /querySelector<HTMLElement>\('\.radar-geo-sweep__beam'\)/);
+  assert.doesNotMatch(mapSource, /map\.project\(map\.getCenter\(\)\)/);
   assert.doesNotMatch(mapSource, /closest\('\.radar-map-viewport'\)/);
   assert.match(panelSource, /className="radar-map-surface"/);
   assert.match(panelSource, /className="radar-sweep"/);
@@ -500,7 +504,9 @@ test('MapLibre wheel zoom is disabled and the explicit search center survives ra
   const mapSource = await readFile(new URL('../Front/src/components/RadarMapLibre.tsx', import.meta.url), 'utf8');
   assert.match(mapSource, /scrollZoom: false/);
   assert.match(mapSource, /searchCenter: readonly \[longitude: number, latitude: number\]/);
-  assert.doesNotMatch(mapSource, /map\.on\(['"]move/);
+  // Camera moves never change the search center; the only move handler re-sizes the geographic sweep.
+  assert.equal((mapSource.match(/map\.on\(['"]move(?:start|end)?['"]/g) || []).length, (mapSource.match(/map\.on\('move', size\)/g) || []).length);
+  assert.match(mapSource, /map\.on\('move', size\)/);
   assert.doesNotMatch(mapSource, /map\.on\(['"]dragend/);
 
   const citySource = await readFile(new URL('../Front/src/pages/CityPage.tsx', import.meta.url), 'utf8');
@@ -769,3 +775,17 @@ function haversineMeters(
     + Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(longitudeDelta / 2) ** 2;
   return 6_371_000 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
+
+test('radar guides are geographic: inner rings and spokes follow the search center and radius', () => {
+  const center = { lat: 52.52, lng: 13.405 };
+  const guides = buildRadarGuideFeatureCollection(center, 10_000);
+  const rings = guides.features.filter((feature) => feature.properties.kind === 'ring');
+  const spokes = guides.features.filter((feature) => feature.properties.kind === 'spoke');
+  assert.equal(rings.length, 2);
+  assert.equal(spokes.length, 12);
+  for (const spoke of spokes) assert.deepEqual(spoke.geometry.coordinates[0], [center.lng, center.lat]);
+  const outer = buildRadarRadiusFeatureCollection(center, 10_000).features[0].geometry.coordinates[0];
+  const outerNorth = outer[0][1] - center.lat;
+  const innerNorth = (rings[0].geometry.coordinates[0] as number[])[1] - center.lat;
+  assert.ok(Math.abs(innerNorth / outerNorth - 2 / 3) < 0.01);
+});

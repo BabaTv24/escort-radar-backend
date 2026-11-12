@@ -282,7 +282,7 @@ export function RadarPanel({ profiles, radius, status, city, radarHref, onRadius
           </Suspense>
         )}
         <div className="radar-map-viewport">
-          <div className={`${hasRadarLocation ? 'radar-visual' : 'radar-visual awaiting-location'} radar-visual-canvas`} aria-label={t('radar.title')}>
+          <div className={`${hasRadarLocation ? 'radar-visual has-geo-radar' : 'radar-visual awaiting-location'} radar-visual-canvas`} aria-label={t('radar.title')}>
             <div className="radar-sweep" aria-hidden="true" />
             <div className="radar-core" aria-hidden="true" />
             {!hasRadarLocation && (

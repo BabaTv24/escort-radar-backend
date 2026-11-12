@@ -144,6 +144,31 @@ export function buildRadarRadiusFeatureCollection(center: RadarCenter, radiusMet
   };
 }
 
+/**
+ * Radar guides drawn in geographic space (V2 contract): inner rings at 2/3 and 1/3 of the search
+ * radius plus 12 spokes from the search center. They move and scale with the map, never with the screen.
+ */
+export function buildRadarGuideFeatureCollection(center: RadarCenter, radiusMeters: number) {
+  const ring = (fraction: number) => buildRadarRadiusFeatureCollection(center, radiusMeters * fraction).features[0].geometry.coordinates[0];
+  const outer = ring(1);
+  const spokes = Array.from({ length: 12 }, (_, index) => outer[Math.round(index / 12 * (outer.length - 1))]);
+  return {
+    type: 'FeatureCollection' as const,
+    features: [
+      ...[2 / 3, 1 / 3].map((fraction) => ({
+        type: 'Feature' as const,
+        geometry: { type: 'LineString' as const, coordinates: ring(fraction) },
+        properties: { kind: 'ring' }
+      })),
+      ...spokes.map((point) => ({
+        type: 'Feature' as const,
+        geometry: { type: 'LineString' as const, coordinates: [[center.lng, center.lat], point] },
+        properties: { kind: 'spoke' }
+      }))
+    ]
+  };
+}
+
 export function getRadarRadiusBounds(center: RadarCenter, radiusMeters: number) {
   const coordinates = buildRadarRadiusFeatureCollection(center, radiusMeters).features[0].geometry.coordinates[0];
   const longitudes = coordinates.map(([longitude]) => longitude);

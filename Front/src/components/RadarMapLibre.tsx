@@ -18,6 +18,7 @@ import {
 } from '../lib/radarProfilePresentation';
 import {
   buildRadarCenterFeatureCollection,
+  buildRadarGuideFeatureCollection,
   buildRadarProfileFeatureCollection,
   buildRadarRadiusFeatureCollection,
   getRadarRadiusBounds
@@ -30,6 +31,7 @@ const EXACT_PROFILE_SOURCE = 'radar-exact-profiles';
 const APPROXIMATE_PROFILE_SOURCE = 'radar-approximate-profiles';
 const RADIUS_SOURCE = 'radar-radius';
 const CENTER_SOURCE = 'radar-center';
+const GUIDE_SOURCE = 'radar-guides';
 const RICH_MARKER_MIN_ZOOM = 11;
 const FALLBACK_MAP_STYLE = {
   version: 8,
@@ -64,6 +66,11 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
   const [mapError, setMapError] = useState(false);
   const [mapStyleName, setMapStyleName] = useState('dark');
   const [reloadKey, setReloadKey] = useState(0);
+  // V2 contract: the animated sweep is a map marker anchored to the search center and sized to the
+  // geographic radius on every move/zoom, so it can never drift away from the radius rings.
+  const sweepMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const geoRef = useRef({ center, radius });
+  geoRef.current = { center, radius };
   const richMarkerSignature = buildRichMarkerSignature(items);
   itemsRef.current = items;
 
@@ -110,11 +117,13 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
           attributionControl: false
         });
         mapRef.current = map;
+        // DEV-only handle for real-browser interaction checks (drag, zoom, radius); not part of production builds.
+        if (import.meta.env.DEV && containerRef.current) (containerRef.current as HTMLDivElement & { __radarMap?: MapLibreMap }).__radarMap = map;
         map.addControl(new maplibregl.AttributionControl({
           compact: true,
           customAttribution: '<a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>'
         }));
-        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
         let radarInitialized = false;
         const initializeRadar = () => {
           if (!map || radarInitialized || !map.getStyle().layers?.length) return;
@@ -170,6 +179,8 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
       if (initializationPoll) window.clearInterval(initializationPoll);
       observer?.disconnect();
       clearRichProfileMarkers(richMarkersRef.current);
+      sweepMarkerRef.current?.remove();
+      sweepMarkerRef.current = null;
       map?.remove();
       mapRef.current = null;
       setMapReady(false);
@@ -206,7 +217,38 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
 
   useEffect(() => {
     const map = mapRef.current;
-    const sweep = containerRef.current?.closest('.radar-map-surface')?.querySelector<HTMLElement>('.radar-sweep');
+    if (!mapReady || !map || !isValidLatLng(center.lat, center.lng)) return;
+    if (!sweepMarkerRef.current) {
+      const element = document.createElement('div');
+      element.className = 'radar-geo-sweep';
+      element.setAttribute('aria-hidden', 'true');
+      element.innerHTML = '<span class="radar-geo-sweep__beam"></span>';
+      sweepMarkerRef.current = new maplibregl.Marker({ element, anchor: 'center' }).setLngLat([center.lng, center.lat]).addTo(map);
+    } else {
+      sweepMarkerRef.current.setLngLat([center.lng, center.lat]);
+    }
+    const element = sweepMarkerRef.current.getElement();
+    const size = () => {
+      const { center: c, radius: r } = geoRef.current;
+      const centerPoint = map.project([c.lng, c.lat]);
+      const northPoint = map.project([c.lng, c.lat + (r / 1000) / 111.32]);
+      const pixels = Math.max(12, Math.hypot(northPoint.x - centerPoint.x, northPoint.y - centerPoint.y));
+      element.style.setProperty('--sweep-r', `${pixels.toFixed(1)}px`);
+    };
+    size();
+    map.on('move', size);
+    map.on('zoom', size);
+    map.on('resize', size);
+    return () => {
+      map.off('move', size);
+      map.off('zoom', size);
+      map.off('resize', size);
+    };
+  }, [latitude, longitude, radius, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const sweep = sweepMarkerRef.current?.getElement().querySelector<HTMLElement>('.radar-geo-sweep__beam');
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (!mapReady || !map || !sweep || reducedMotion.matches) {
       clearRadarSweepHighlights(richMarkersRef.current);
@@ -215,7 +257,8 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
 
     let animationFrame = 0;
     const update = () => {
-      updateRadarSweepHighlights(map, richMarkersRef.current, cssRotationAngle(getComputedStyle(sweep).transform));
+      const { center: c } = geoRef.current;
+      updateRadarSweepHighlights(map, richMarkersRef.current, cssRotationAngle(getComputedStyle(sweep).transform), map.project([c.lng, c.lat]));
       animationFrame = window.requestAnimationFrame(update);
     };
     animationFrame = window.requestAnimationFrame(update);
@@ -223,13 +266,14 @@ export function RadarMapLibre({ searchCenter, radius, items, empty, t }: RadarMa
       window.cancelAnimationFrame(animationFrame);
       clearRadarSweepHighlights(richMarkersRef.current);
     };
-  }, [mapReady, richMarkerSignature]);
+  }, [mapReady, richMarkerSignature, latitude, longitude, radius]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map || !isValidLatLng(center.lat, center.lng)) return;
     setSourceData(map, CENTER_SOURCE, buildRadarCenterFeatureCollection(center));
     setSourceData(map, RADIUS_SOURCE, buildRadarRadiusFeatureCollection(center, radius));
+    setSourceData(map, GUIDE_SOURCE, buildRadarGuideFeatureCollection(center, radius));
     recenter();
   }, [latitude, longitude, radius, mapReady]);
 
@@ -315,6 +359,13 @@ function addRadarSourcesAndLayers(map: MapLibreMap, center: { lat: number; lng: 
     type: 'line',
     source: RADIUS_SOURCE,
     paint: { 'line-color': '#f4d77f', 'line-opacity': 0.72, 'line-width': 1.5 }
+  });
+  map.addSource(GUIDE_SOURCE, { type: 'geojson', data: buildRadarGuideFeatureCollection(center, radius) });
+  map.addLayer({
+    id: 'radar-guides-line',
+    type: 'line',
+    source: GUIDE_SOURCE,
+    paint: { 'line-color': '#f4d77f', 'line-opacity': ['case', ['==', ['get', 'kind'], 'ring'], 0.32, 0.18], 'line-width': 1 }
   });
 
   map.addSource(EXACT_PROFILE_SOURCE, {
@@ -430,12 +481,13 @@ function removeRadarSourcesAndLayers(map: MapLibreMap) {
     'radar-profile-points',
     'radar-cluster-count',
     'radar-clusters',
+    'radar-guides-line',
     'radar-radius-line',
     'radar-radius-fill'
   ]) {
     if (map.getLayer(layerId)) map.removeLayer(layerId);
   }
-  for (const sourceId of [CENTER_SOURCE, APPROXIMATE_PROFILE_SOURCE, EXACT_PROFILE_SOURCE, RADIUS_SOURCE]) {
+  for (const sourceId of [CENTER_SOURCE, APPROXIMATE_PROFILE_SOURCE, EXACT_PROFILE_SOURCE, GUIDE_SOURCE, RADIUS_SOURCE]) {
     if (map.getSource(sourceId)) map.removeSource(sourceId);
   }
 }
@@ -608,9 +660,9 @@ function clearRichProfileMarkers(markers: Map<string, RichMarkerEntry>) {
 function updateRadarSweepHighlights(
   map: MapLibreMap,
   markers: Map<string, RichMarkerEntry>,
-  sweepAngle: number
+  sweepAngle: number,
+  center: { x: number; y: number }
 ) {
-  const center = map.project(map.getCenter());
   for (const entry of markers.values()) {
     const marker = map.project(entry.marker.getLngLat());
     const highlighted = !entry.element.hidden
@@ -752,6 +804,6 @@ function appendPopupLine(parent: HTMLElement, text: string, className = '') {
   parent.appendChild(line);
 }
 
-function setSourceData(map: MapLibreMap, sourceId: string, data: ReturnType<typeof buildRadarProfileFeatureCollection> | ReturnType<typeof buildRadarCenterFeatureCollection> | ReturnType<typeof buildRadarRadiusFeatureCollection>) {
+function setSourceData(map: MapLibreMap, sourceId: string, data: ReturnType<typeof buildRadarProfileFeatureCollection> | ReturnType<typeof buildRadarCenterFeatureCollection> | ReturnType<typeof buildRadarRadiusFeatureCollection> | ReturnType<typeof buildRadarGuideFeatureCollection>) {
   (map.getSource(sourceId) as GeoJSONSource | undefined)?.setData(data);
 }

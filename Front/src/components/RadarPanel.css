@@ -623,3 +623,45 @@
     min-height: 44px;
   }
 }
+
+/* V2 radar contract: with a map, rings, spokes and sweep live in geographic space (MapLibre layers and
+ * a marker anchored to the search center). The screen-fixed overlay keeps only its box for the fit padding. */
+.radar-visual-canvas.has-geo-radar {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.radar-geo-sweep {
+  --sweep-r: 120px;
+  position: relative;
+  width: calc(var(--sweep-r) * 2);
+  height: calc(var(--sweep-r) * 2);
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.radar-geo-sweep__beam {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(244, 215, 127, .34), rgba(123, 77, 255, .14) 10%, transparent 26%, transparent);
+  animation: radar-geo-sweep 4s linear infinite;
+  will-change: transform;
+}
+
+@keyframes radar-geo-sweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.radar-maplibre .maplibregl-ctrl-top-left {
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-geo-sweep__beam { animation: none; }
+}
