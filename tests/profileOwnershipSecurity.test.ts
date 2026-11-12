@@ -87,8 +87,8 @@ test('the profile listing and the single profile route share the sanitizer that 
   assert.match(sanitizer, /owner_email: _ownerEmail/);
   assert.match(sanitizer, /email: _email/);
   assert.match(sanitizer, /user_id: _userId/);
-  assert.match(source, /filteredRecords\.map\(\(profile\) => sanitizePublicProfile\(withImageUrls\(profile\)\)\)/);
-  assert.match(source, /profilesRouter\.get\('\/:id'[\s\S]*res\.json\(\{ profile: sanitizePublicProfile\(withImageUrls\(data\)\) \}\)/);
+  assert.match(source, /filteredRecords\.map\(\(profile\) => sanitizePublicProfile\(withImageUrls\(profile, undefined, 'public'\)\)\)/);
+  assert.match(source, /profilesRouter\.get\('\/:id'[\s\S]*res\.json\(\{ profile: sanitizePublicProfile\(withImageUrls\(data, undefined, 'public'\)\) \}\)/);
 });
 
 test('the radar select still carries no owner identity columns', async () => {

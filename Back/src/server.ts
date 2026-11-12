@@ -22,6 +22,9 @@ import { bcuRouter } from './routes/bcu.js';
 import { sponsoredProfilesRouter } from './routes/sponsoredProfiles.js';
 import { adminReferralsRouter, referralsRouter } from './routes/referrals.js';
 import { publicFunPageAdvertisementRouter } from './routes/funPageAdvertisement.js';
+import { assertMediaDeliveryConfig, mediaImageHandler } from './mediaDelivery.js';
+
+assertMediaDeliveryConfig();
 
 const serverBuildTime = new Date().toISOString();
 const app = express();
@@ -67,6 +70,7 @@ app.get('/api/version', (_req, res) => {
   });
 });
 
+app.get('/api/media/image', (req, res, next) => { mediaImageHandler(req, res).catch(next); });
 app.use('/api/auth', authRouter);
 app.use('/api/profiles', profilesRouter);
 app.use('/api/sitemap', sitemapRouter);

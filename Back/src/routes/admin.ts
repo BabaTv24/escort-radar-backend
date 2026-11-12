@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { createHash, randomBytes } from 'node:crypto';
 import { requireAdmin, verifyAdminJwt } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
+import { deliverableStorageUrl, storageImageUrl } from '../mediaDelivery.js';
 import {
   allowedAdminReportStatuses,
   allowedModerationStatuses,
@@ -1452,7 +1453,7 @@ adminRouter.get('/users', asyncHandler(async (_req, res) => {
       wallet_frozen: Boolean(wallet?.frozen),
       client_state: activation?.state || user.app_metadata?.client_state || user.app_metadata?.client_activation_state || 'client_free',
       client_activated_at: activation?.activated_at || null,
-      avatar_url: clientProfile?.avatar_url || null,
+      avatar_url: deliverableStorageUrl(clientProfile?.avatar_url, 'protected') || null,
       profile_count: userProfiles.length,
       is_test_account: userProfiles.some((profile) => profile.is_test_account) || String(user.email || '').includes('+test'),
       created_at: user.created_at,
@@ -1493,6 +1494,7 @@ adminRouter.get('/client-profiles', asyncHandler(async (req, res) => {
   const usersById = new Map((usersResult.users || []).map((user) => [user.id, user]));
   const client_profiles = (rows || []).map((row) => ({
     ...row,
+    avatar_url: deliverableStorageUrl(row.avatar_url, 'protected'),
     email: usersById.get(row.user_id)?.email || null
   }));
   res.json({ client_profiles });
@@ -3795,12 +3797,12 @@ function withAdminImageUrls(profile: any) {
 }
 
 function withPublicImageUrl(image: any) {
-  const { data } = supabaseAdmin.storage.from(config.storageBucket).getPublicUrl(image.storage_path);
+  const url = storageImageUrl(image.storage_path, 'protected');
   return {
     ...image,
-    public_url: data.publicUrl,
-    url: data.publicUrl,
-    image_url: data.publicUrl,
+    public_url: url,
+    url,
+    image_url: url,
     is_cover: Boolean(image.is_primary),
     is_hidden: Boolean(image.is_hidden),
     is_private: Boolean(image.is_private),

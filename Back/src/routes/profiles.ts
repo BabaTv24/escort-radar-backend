@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../supabase.js';
+import { storageImageUrl, type MediaAccess } from '../mediaDelivery.js';
 import { allowedCities, asyncHandler, normalizeOperatorStatus, normalizeProfileCategory, parseBoolean, slugify, validateProfileInput } from '../validation.js';
 import { getAuthAccountType, requireAdvertiserOnboardingAccess, verifyUser } from '../middleware/auth.js';
 import { generatePublicUserId, generateReferralCode, normalizePhone } from '../utils/identity.js';
@@ -155,8 +156,8 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
     .filter((profile) => radarMode || !categoryFilter || normalizeProfileCategory(profile.category) === categoryFilter);
   const preparedRadarPool = radarMode ? prepareRadarCandidatePool(data, pagesFetched, truncated) : null;
   const profiles = (preparedRadarPool
-    ? preparedRadarPool.candidates.map(({ profile, location }) => sanitizePublicProfile(withImageUrls(profile), location, 1))
-    : filteredRecords.map((profile) => sanitizePublicProfile(withImageUrls(profile))))
+    ? preparedRadarPool.candidates.map(({ profile, location }) => sanitizePublicProfile(withImageUrls(profile, undefined, 'public'), location, 1))
+    : filteredRecords.map((profile) => sanitizePublicProfile(withImageUrls(profile, undefined, 'public'))))
     .sort((left, right) => Number(right.radar_score || 0) - Number(left.radar_score || 0));
 
   const radarMeta = radarMode ? {
@@ -232,8 +233,8 @@ profilesRouter.get('/:id/access', verifyUser, asyncHandler(async (req, res) => {
     if (image.is_hidden || image.moderation_status !== 'approved') return false;
     return !image.is_private || Boolean(vipUnlock);
   }).map((image: any) => {
-    const { data: publicUrl } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
-    return { ...image, public_url: publicUrl.publicUrl, is_cover: Boolean(image.is_primary) };
+    const { admin_note: _adminNote, ...safeImage } = image;
+    return { ...safeImage, public_url: storageImageUrl(image.storage_path, 'protected'), is_cover: Boolean(image.is_primary) };
   });
 
   res.json({
@@ -296,7 +297,7 @@ profilesRouter.get('/:id', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Profile not found' });
   }
 
-  res.json({ profile: sanitizePublicProfile(withImageUrls(data)) });
+  res.json({ profile: sanitizePublicProfile(withImageUrls(data, undefined, 'public')) });
 }));
 
 profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHandler(async (req, res) => {
@@ -492,13 +493,12 @@ profilesRouter.delete('/:id', verifyUser, requireAdvertiserOnboardingAccess, asy
   res.status(204).send();
 }));
 
-function withImageUrls(profile: any, wallet?: any) {
+function withImageUrls(profile: any, wallet?: any, access: MediaAccess = 'protected') {
   const images = (profile.profile_images || []).filter((image: any) => {
     if (image.is_hidden || image.moderation_status !== 'approved') return false;
     return !image.is_private;
   }).map((image: any) => {
-    const { data } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
-    return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
+    return { ...image, public_url: storageImageUrl(image.storage_path, access), is_cover: Boolean(image.is_primary) };
   }).sort((left: any, right: any) => {
     if (Boolean(left.is_primary) !== Boolean(right.is_primary)) return left.is_primary ? -1 : 1;
     return Number(left.sort_order || 0) - Number(right.sort_order || 0);
@@ -541,8 +541,7 @@ function profileLocationPatch(location: AdminLocationResolution, source: 'automa
 
 function withOwnerImageUrls(profile: any, wallet?: any) {
   const images = (profile.profile_images || []).map((image: any) => {
-    const { data } = supabaseAdmin.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'profile-images').getPublicUrl(image.storage_path);
-    return { ...image, public_url: data.publicUrl, is_cover: Boolean(image.is_primary) };
+    return { ...image, public_url: storageImageUrl(image.storage_path, 'protected'), is_cover: Boolean(image.is_primary) };
   }).sort((left: any, right: any) => {
     if (Boolean(left.is_primary) !== Boolean(right.is_primary)) return left.is_primary ? -1 : 1;
     return Number(left.sort_order || 0) - Number(right.sort_order || 0);
@@ -555,8 +554,13 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
   };
 }
 
-export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile), imageLimit = 4) {
-  const { phone, primary_phone, additional_phones, whatsapp, telegram,
+/**
+ * Public (FREE / anonymous) view of a profile. Business contract V1: only the first authorized image is public;
+ * additional approved images and contact details require Premium activation (GET /:id/access).
+ */
+export const PUBLIC_PROFILE_IMAGE_LIMIT = 1;
+export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile), imageLimit = PUBLIC_PROFILE_IMAGE_LIMIT) {
+  const { phone, primary_phone, additional_phones, whatsapp, telegram, business_phone: _businessPhone,
     admin_note, subscription_note, source_url, import_source, imported_at, source_url_normalized,
     owner_email: _ownerEmail,
     email: _email,
@@ -573,9 +577,10 @@ export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEf
     location_label: _locationLabel,
     display_location: _displayLocation,
     location_input_source: _locationInputSource,
-    ...publicProfile
+    ...withInternalFields
   } = profile;
-  const visibleImages = (publicProfile.profile_images || []).slice(0, imageLimit);
+  const publicProfile: any = omitInternalProfileFields(withInternalFields);
+  const visibleImages = (publicProfile.profile_images || []).slice(0, imageLimit).map(publicImageFields);
   const visibility = normalizeEffectiveLocationVisibility(publicProfile.location_mode, publicProfile.location_visibility);
   const effectiveLocation = resolvedLocation || resolveEffectivePublicLocation({ ...publicProfile, latitude, longitude, location_visibility: visibility });
   const safeArea = safePublicArea(publicProfile.work_area || publicProfile.area);
@@ -598,6 +603,26 @@ export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEf
     images: visibleImages,
     locked_features: ['phone_number', 'whatsapp', 'telegram', 'full_gallery', 'vip_gallery', 'gifts', 'live_cam']
   };
+}
+
+// Owner, moderation, finance and referral data never belong in the FREE/anonymous payload.
+const INTERNAL_PROFILE_FIELDS = [
+  'contact_person', 'moderation_note', 'reviewed_by', 'reviewed_at', 'revenue_amount', 'tokens_balance', 'wallet_summary',
+  'referral_code', 'referred_by_code', 'referral_count', 'public_user_id', 'suspended_reason', 'suspended_at', 'blocked_at',
+  'phone_owner_identity_label', 'phone_conflict_status', 'phone_rule_confirmed', 'owner_activated_at',
+  'subscription_managed_by', 'subscription_requested_at', 'subscription_note', 'admin_priority', 'shadowbanned',
+  'is_test_account', 'business_id', 'hermes_import_id', 'claim_token', 'claimed_by'
+];
+
+function omitInternalProfileFields(profile: Record<string, any>) {
+  const result = { ...profile };
+  for (const field of INTERNAL_PROFILE_FIELDS) delete result[field];
+  return result;
+}
+
+function publicImageFields(image: Record<string, any>) {
+  const { admin_note: _adminNote, ...rest } = image || {};
+  return rest;
 }
 
 function safePublicArea(value: unknown) {
