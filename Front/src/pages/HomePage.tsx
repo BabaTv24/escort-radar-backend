@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { CalendarCheck, ChevronLeft, ChevronRight, MapPin, MessageCircle, RadioTower, ShieldCheck } from 'lucide-react';
+import { BadgeCheck, Briefcase, CalendarCheck, ChevronLeft, ChevronRight, Coins, Heart, Lock, MapPin, MessageCircle, RadioTower, ShieldCheck } from 'lucide-react';
 import { ProfileCard } from '../components/ProfileCard';
+import { PremiumProfileTile } from '../components/PremiumProfileTile';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,27 +17,14 @@ import { api, type FunPageTicker, type PublicFunPageAdvertisement, type PublicFu
 import { advertisementRotationDelayMs, nextAdvertisementIndex, safeAdvertisementHref, shouldRotateAdvertisements } from '../lib/funPageAdvertisement';
 import { homeFaq, homeJsonLd, homeSeo, localeForLanguage } from '../lib/seoMetadata';
 
-const productBenefits = [
-  {
-    icon: CalendarCheck,
-    title: 'Inteligentne rezerwacje',
-    description: 'Zbieraj i porządkuj prośby o rezerwację z jednego panelu.'
-  },
-  {
-    icon: MessageCircle,
-    title: 'Komunikacja z klientami',
-    description: 'Prowadź prywatne rozmowy i przejmuj kontakt od asystenta AI.'
-  },
-  {
-    icon: MapPin,
-    title: 'Lokalna widoczność',
-    description: 'Docieraj do klientów szukających profili w konkretnym mieście lub promieniu.'
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Prywatność i kontrola',
-    description: 'Samodzielnie wybieraj poziom widoczności profilu, lokalizacji i dostępności.'
-  }
+// Only features that work today (business contract V1); nothing here promises video chat or gifts.
+const clientBenefits = ['radar', 'free', 'premium', 'booking', 'chat'] as const;
+const businessFeatures = [
+  { key: 'bookings', Icon: CalendarCheck },
+  { key: 'messages', Icon: MessageCircle },
+  { key: 'earnings', Icon: Coins },
+  { key: 'location', Icon: MapPin },
+  { key: 'privacy', Icon: ShieldCheck }
 ] as const;
 
 export function HomePage() {
@@ -107,27 +95,35 @@ export function HomePage() {
   }
 
   return (
-    <div className="page landing-page">
+    <div className="page landing-page pr-landing">
       <Seo
         {...homeSeo}
         locale={localeForLanguage(lang)}
         alternateLocales={(['pl_PL', 'de_DE', 'en_US'] as const).filter((locale) => locale !== localeForLanguage(lang))}
         jsonLd={homeJsonLd}
       />
-      <section className="landing-section landing-hero hero">
+      <section className="landing-section landing-hero hero pr-landing-hero">
         <div className="hero-content">
-          <img className="hero-brand-mark" src="/Logo_Escort_5.png" alt="" />
-          <p className="eyebrow">Escort Radar · AI Client Office</p>
-          <h1>Panel AI do zarządzania rezerwacjami, klientami i widocznością w mieście</h1>
-          <p className="tagline">Escort Radar łączy prywatny panel klientek, inteligentne wiadomości, rezerwacje, dostępność i lokalną widoczność w jednym systemie.</p>
+          <p className="pr-eyebrow">{t('landing.eyebrow')}</p>
+          <h1>{t('landing.title')}</h1>
+          <p className="tagline">{t('landing.lead')}</p>
           <div className="hero-actions">
-            <Link to="/register?type=escort" className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><span>Utwórz profil</span></Link>
+            <Link to={radarHref} className="pr-btn is-primary"><RadioTower size={18} aria-hidden="true" /> {t('home.openRadar')}</Link>
+            <Link to="/register?type=client" className="pr-btn">{t('landing.ctaClient')}</Link>
+          </div>
+          <p className="pr-landing-advertiser-link">
+            {t('landing.advertiserPrompt')} <Link to="/register?type=escort">{t('landing.ctaAdvertiser')}</Link>
+            {' · '}
             <a
               href="#how-it-works"
-              className="button er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--md"
               onClick={() => window.setTimeout(() => document.getElementById('how-it-works')?.focus(), 0)}
-            ><span>Zobacz, jak działa</span></a>
-          </div>
+            >{t('landing.howItWorks')}</a>
+          </p>
+          <ul className="pr-landing-trust" aria-label={t('landing.trustLabel')}>
+            <li><ShieldCheck size={16} aria-hidden="true" /> {t('landing.trust.moderation')}</li>
+            <li><MapPin size={16} aria-hidden="true" /> {t('landing.trust.privacy')}</li>
+            <li><Lock size={16} aria-hidden="true" /> {t('landing.trust.premium')}</li>
+          </ul>
         </div>
         <figure className="hero-product-preview">
           <img
@@ -141,68 +137,48 @@ export function HomePage() {
         </figure>
       </section>
 
-      <section className="landing-section product-benefits-section" id="how-it-works" aria-labelledby="product-benefits-title" tabIndex={-1}>
-        <div className="section-head compact">
-          <div>
-            <p className="eyebrow">Jedno prywatne miejsce do pracy</p>
-            <h2 id="product-benefits-title">Organizuj klientów, rezerwacje i lokalną widoczność</h2>
-          </div>
+      <section className="landing-section pr-landing-audiences" id="how-it-works" aria-labelledby="product-benefits-title" tabIndex={-1}>
+        <div className="pr-landing-head">
+          <p className="pr-eyebrow">{t('landing.audiences.eyebrow')}</p>
+          <h2 id="product-benefits-title">{t('landing.audiences.title')}</h2>
         </div>
-        <div className="product-benefits-grid">
-          {productBenefits.map(({ icon: Icon, title, description }) => (
-            <article className="product-benefit-card" key={title}>
-              <Icon aria-hidden="true" size={24} />
-              <h3>{title}</h3>
-              <p>{description}</p>
-            </article>
-          ))}
+        <div className="pr-grid-2">
+          <article className="pr-card is-highlight">
+            <div className="pr-card-head">
+              <div>
+                <p className="pr-eyebrow">{t('landing.clients.eyebrow')}</p>
+                <h3 className="pr-h2">{t('landing.clients.title')}</h3>
+                <p className="pr-muted">{t('landing.clients.copy')}</p>
+              </div>
+              <span className="pr-icon-chip"><Heart size={18} aria-hidden="true" /></span>
+            </div>
+            <ul className="pr-check-list">
+              {clientBenefits.map((key) => <li key={key}><BadgeCheck size={17} aria-hidden="true" /> {t(`landing.clients.benefit.${key}`)}</li>)}
+            </ul>
+            <div className="pr-landing-card-actions">
+              <Link to="/register?type=client" className="pr-btn is-primary">{t('landing.ctaClient')}</Link>
+              <Link to={radarHref} className="pr-btn is-ghost">{t('home.openRadar')}</Link>
+            </div>
+          </article>
+          <article className="pr-card">
+            <div className="pr-card-head">
+              <div>
+                <p className="pr-eyebrow">{t('landing.business.eyebrow')}</p>
+                <h3 className="pr-h2">{t('landing.business.title')}</h3>
+                <p className="pr-muted">{t('landing.business.copy')}</p>
+              </div>
+              <span className="pr-icon-chip is-violet"><Briefcase size={18} aria-hidden="true" /></span>
+            </div>
+            <ul className="pr-check-list">
+              {businessFeatures.map(({ key, Icon }) => <li key={key}><Icon size={17} aria-hidden="true" /> {t(`landing.business.feature.${key}`)}</li>)}
+            </ul>
+            <div className="pr-landing-card-actions">
+              <Link to="/register?type=escort" className="pr-btn is-primary">{t('landing.ctaAdvertiser')}</Link>
+              <Link to="/pricing" className="pr-btn is-ghost">{t('nav.pricing')}</Link>
+            </div>
+          </article>
         </div>
       </section>
-
-      {loading && <LoadingState label={t('home.loadingProfiles')} />}
-      {error && <ErrorState message={error} onRetry={loadProfiles} />}
-      {!loading && !error && profiles.length === 0 && sponsoredProfiles.length === 0 && (
-        <EmptyState title={t('home.noProfilesTitle')} message={t('home.noProfilesText')} />
-      )}
-
-      {!loading && !error && <>
-      {sponsoredProfiles.length > 0 ? (
-        <ProfileCarouselSection
-          eyebrow={t('home.sponsoredEyebrow')}
-          title={t('home.sponsoredTitle')}
-          profiles={sponsoredProfiles}
-          actionLabel={t('home.openRadar')}
-          actionHref={radarHref}
-        />
-      ) : <EmptyState title={t('home.sponsoredTitle')} message={t('search.noProfilesForCity')} />}
-
-      {topProfiles.length > 0 && <section className="landing-section sponsored-profiles-section featured-profiles-section home-marketplace-showcase">
-        <div className="section-head compact">
-          <div>
-            <p className="eyebrow">{t('home.marketplaceEyebrow')}</p>
-            <h2>{t('home.marketplaceTitle')}</h2>
-          </div>
-          <Link to={radarHref} className="button primary er-btn er-glass-btn er-glass-btn--gold er-glass-btn--md"><RadioTower size={17} /> <span>{t('home.openRadar')}</span></Link>
-        </div>
-        <div className="avatar-carousel">
-          {topProfiles.slice(0, 10).map((profile) => {
-            const image = profile.profile_images?.find((item) => item.is_primary) || profile.profile_images?.[0];
-            return (
-              <Link to={`/profile/${profile.id}`} className="top-avatar" key={profile.id}>
-                {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{profile.display_name.slice(0, 1)}</span>}
-                <strong>{profile.display_name}</strong>
-                <small>{profile.available_now ? t('badges.availableNow') : profile.city}</small>
-              </Link>
-            );
-          })}
-        </div>
-        <div className="sort-tabs static-tabs" aria-label="Marketplace sorting preview">
-          {['home.sort.best', 'home.sort.new', 'home.sort.near', 'home.sort.online'].map((item, index) => <span className={index === 0 ? 'selected' : ''} key={item}>{t(item)}</span>)}
-        </div>
-        <div className="cards-grid marketplace-grid premium-profile-grid">
-          {topProfiles.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}
-        </div>
-      </section>}
 
       {/* Landing category tiles were removed; category routing remains in city search via activePublicCategoryOptions.map. */}
       <div className="landing-section live-radar-section" id="live-radar">
@@ -233,6 +209,13 @@ export function HomePage() {
         />
       </div>
 
+      {loading && <LoadingState label={t('home.loadingProfiles')} />}
+      {error && <ErrorState message={error} onRetry={loadProfiles} />}
+      {!loading && !error && profiles.length === 0 && sponsoredProfiles.length === 0 && (
+        <EmptyState title={t('home.noProfilesTitle')} message={t('home.noProfilesText')} />
+      )}
+
+      {!loading && !error && <>
       {nearbyProfileCards.length > 0 ? (
         <ProfileCarouselSection
           eyebrow={t('home.radarPreview')}
@@ -243,25 +226,57 @@ export function HomePage() {
           actionHref={radarHref}
           actionVariant="text"
         />
-      ) : <EmptyState title={t('home.available')} message={searcherLocation ? t('home.noProfilesWithin150') : t('radar.locationRequired')} />}
+      ) : null}
+
+      {sponsoredProfiles.length > 0 ? (
+        <ProfileCarouselSection
+          eyebrow={t('home.sponsoredEyebrow')}
+          title={t('home.sponsoredTitle')}
+          profiles={sponsoredProfiles}
+          actionLabel={t('home.openRadar')}
+          actionHref={radarHref}
+        />
+      ) : null}
+
+      {topProfiles.length > 0 && <section className="landing-section pr-landing-profiles" aria-labelledby="landing-profiles-title">
+        <div className="pr-landing-head is-row">
+          <div>
+            <p className="pr-eyebrow">{t('home.marketplaceEyebrow')}</p>
+            <h2 id="landing-profiles-title">{t('home.marketplaceTitle')}</h2>
+          </div>
+          <Link to={radarHref} className="pr-btn"><RadioTower size={17} aria-hidden="true" /> {t('home.openRadar')}</Link>
+        </div>
+        <div className="pr-profile-grid">
+          {topProfiles.map((profile) => <PremiumProfileTile key={profile.id} profile={profile} />)}
+        </div>
+      </section>}
       </>}
 
       <FunPagePromotionArea promotions={promotions} advertisementLabel={t('advertisement.label')} />
 
-      <section className="landing-section home-faq-section" aria-labelledby="home-faq-title">
-        <div className="section-head compact">
-          <div>
-            <p className="eyebrow">Escort Radar w praktyce</p>
-            <h2 id="home-faq-title">Najczęściej zadawane pytania</h2>
-          </div>
+      <section className="landing-section home-faq-section pr-landing-faq" aria-labelledby="home-faq-title">
+        <div className="pr-landing-head">
+          <p className="pr-eyebrow">{t('landing.faq.eyebrow')}</p>
+          <h2 id="home-faq-title">{t('landing.faq.title')}</h2>
         </div>
         <div className="home-faq-list">
           {homeFaq.map((item) => (
-            <article key={item.question}>
-              <h3>{item.question}</h3>
+            <details key={item.question}>
+              <summary>{item.question}</summary>
               <p>{item.answer}</p>
-            </article>
+            </details>
           ))}
+        </div>
+      </section>
+
+      <section className="landing-section pr-landing-final" aria-labelledby="landing-final-title">
+        <div>
+          <h2 id="landing-final-title">{t('landing.final.title')}</h2>
+          <p className="pr-muted">{t('landing.final.copy')}</p>
+        </div>
+        <div className="pr-landing-card-actions">
+          <Link to={radarHref} className="pr-btn is-primary"><RadioTower size={17} aria-hidden="true" /> {t('home.openRadar')}</Link>
+          <Link to="/register?type=escort" className="pr-btn">{t('landing.ctaAdvertiser')}</Link>
         </div>
       </section>
     </div>

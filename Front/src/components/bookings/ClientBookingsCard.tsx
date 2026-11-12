@@ -10,6 +10,8 @@ import './bookings.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
 
+const BOOKINGS_PAGE_SIZE = 8;
+
 /** Private Client Office: the client's own booking requests, their status history and booking notifications. */
 export function ClientBookingsCard({ token, notifications }: { token: string; notifications: RadarNotification[] }) {
   const { t, lang } = useI18n();
@@ -19,6 +21,8 @@ export function ClientBookingsCard({ token, notifications }: { token: string; no
   const [busyId, setBusyId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [readAt, setReadAt] = useState<string | null>(null);
+  // Long histories are paged so the office does not turn into one endless list.
+  const [pageSize, setPageSize] = useState(BOOKINGS_PAGE_SIZE);
 
   const load = useCallback(async () => {
     setState((current) => (current === 'ready' ? current : 'loading'));
@@ -96,7 +100,7 @@ export function ClientBookingsCard({ token, notifications }: { token: string; no
 
       <div className="er-bookings-filters" role="tablist" aria-label={t('bookings.filterLabel')}>
         {bookingFilterKeys.map((key) => (
-          <button key={key} type="button" role="tab" aria-selected={filter === key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>
+          <button key={key} type="button" role="tab" aria-selected={filter === key} className={filter === key ? 'active' : ''} onClick={() => { setFilter(key); setPageSize(BOOKINGS_PAGE_SIZE); }}>
             {t(`bookings.filter.${key}`)} <span>{counts[key]}</span>
           </button>
         ))}
@@ -120,7 +124,7 @@ export function ClientBookingsCard({ token, notifications }: { token: string; no
       ) : null}
       {state === 'ready' && visible.length ? (
         <ul className="er-bookings-list">
-          {visible.map((booking) => {
+          {visible.slice(0, pageSize).map((booking) => {
             const status = bookingStatusOf(booking);
             return (
               <li key={booking.id} className="er-bookings-row">
@@ -143,6 +147,11 @@ export function ClientBookingsCard({ token, notifications }: { token: string; no
             );
           })}
         </ul>
+      ) : null}
+      {state === 'ready' && visible.length > pageSize ? (
+        <button type="button" className="button er-btn er-glass-btn er-glass-btn--gold er-glass-btn--sm er-bookings-more" onClick={() => setPageSize((size) => size + BOOKINGS_PAGE_SIZE)}>
+          <span>{t('bookings.showMore', { shown: Math.min(pageSize, visible.length), total: visible.length })}</span>
+        </button>
       ) : null}
     </section>
   );

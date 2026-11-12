@@ -514,7 +514,7 @@
   "dashboard.client.title": "Client dashboard",
   "dashboard.client.subtitle": "Browse radar, use BC Coins, and save favorite profiles. This account does not publish listings.",
   "dashboard.client.ready": "Client account is active.",
-  "dashboard.client.createFree": "Activate Premium for €0.99",
+  "dashboard.client.createFree": "Activate Premium · EUR 0.99",
   "dashboard.client.statusEyebrow": "Account status",
   "dashboard.client.freeStatus": "Premium account inactive",
   "dashboard.client.toolsEyebrow": "Your tools",
@@ -528,7 +528,7 @@
   "clientOffice.subtitleFree": "Activate private radar access, contact unlocks, VIP galleries, and referrals.",
   "clientOffice.premiumActive": "Premium active",
   "clientOffice.clientFallback": "Client",
-  "clientOffice.activateCta": "Activate app 0.99 EUR",
+  "clientOffice.activateCta": "Activate Premium · EUR 0.99",
   "clientOffice.fullExperience": "Full Escort Radar experience",
   "clientOffice.activateTitle": "Activate premium access",
   "clientOffice.profile": "Client profile",
@@ -1193,9 +1193,9 @@
   "profile.privateGallery": "Private gallery",
   "profile.unlockGalleryText": "Unlock with Coins after client activation.",
   "profile.unlockWithCoins": "Unlock with Coins",
-  "profile.activateClient": "Activate 0.99 EUR",
+  "profile.activateClient": "Activate Premium · EUR 0.99",
   "profile.premiumFeaturesLockedTitle": "Premium profile features",
-  "profile.premiumFeaturesLockedText": "Activate your account for 0.99 EUR to unlock bookings and premium features.",
+  "profile.premiumFeaturesLockedText": "Activate Premium for a one-time EUR 0.99 to unlock free bookings and the full profile.",
   "profile.sendBookingRequest": "Send a booking request",
   "profile.nearby": "Nearby",
   "profile.similarProfiles": "Similar profiles",
@@ -1209,7 +1209,7 @@
   "profile.gift": "Gift",
   "profile.live": "Live",
   "profile.liveCamAvailable": "Live Cam is available for Premium clients.",
-  "profile.liveCamLocked": "Activate for 0.99 EUR to unlock Live Cam.",
+  "profile.liveCamLocked": "Video chat is not available yet.",
   "profile.yes": "Yes",
   "profile.pending": "Pending",
   "profile.visits": "Visits",
@@ -2359,9 +2359,9 @@
   ,"communicationPlus.loadError": "Communication Plus status could not be loaded."
   ,"communicationPlus.retry": "Try again"
   ,"communicationPlus.featuresLabel": "Package features"
-  ,"communicationPlus.liveChat": "Live Chat"
-  ,"communicationPlus.liveVideo": "Live Video"
-  ,"communicationPlus.booking": "Booking"
+  ,"communicationPlus.liveChat": "Text chat · available"
+  ,"communicationPlus.liveVideo": "Video chat"
+  ,"communicationPlus.booking": "Bookings · free"
   ,"communicationPlus.comingSoon": "coming soon"
   ,"communicationPlus.active": "Communication Plus active"
   ,"communicationPlus.activeCopy": "The package is permanently unlocked for this account."
@@ -2374,7 +2374,7 @@
   ,"communicationPlus.unlock": "Unlock Communication Plus — {{price}} BC"
   ,"communicationPlus.purchasing": "Unlocking…"
   ,"communicationPlus.purchaseError": "The purchase failed. Check the status and try again."
-  ,"communicationPlus.salesPaused": "Communication Plus purchases are paused until chat, video and booking in the package are available. No BC is charged."
+  ,"communicationPlus.salesPaused": "Communication Plus sales are paused. Text chat (3 BC per profile) and free bookings work without this package. Nothing is charged."
   ,"profile.videoChatUnavailable": "Video chat is not available yet. No BC is charged for it."
   ,"booking.error.generic": "The booking request could not be sent. Please try again."
   ,"booking.error.insufficientBc": "Not enough available BC to send the booking request."
@@ -2631,4 +2631,40 @@
   ,"profilePremium.chatDisabled": "This profile has not enabled text chat."
   ,"profilePremium.gifts": "Diamond gifts"
   ,"profilePremium.giftsSoon": "Diamond gifts become available once prices are set. Nothing is charged now."
+  ,"landing.eyebrow": "Escort Radar · LIVE Radar"
+  ,"landing.title": "Moderated profiles near you. Discreet and live."
+  ,"landing.lead": "Escort Radar shows moderated profiles live on the map while respecting location privacy. Advertisers manage bookings, messages and visibility in one Business Center."
+  ,"landing.ctaClient": "Create free account"
+  ,"landing.ctaAdvertiser": "Add a listing"
+  ,"landing.advertiserPrompt": "Running a profile?"
+  ,"landing.howItWorks": "How it works"
+  ,"landing.trustLabel": "Platform principles"
+  ,"landing.trust.moderation": "Manual moderation of profiles and photos"
+  ,"landing.trust.privacy": "Advertisers choose how precisely their location is shown"
+  ,"landing.trust.premium": "Premium one-time EUR 0.99, no subscription"
+  ,"landing.audiences.eyebrow": "Two entry points, one platform"
+  ,"landing.audiences.title": "For clients and for advertisers"
+  ,"landing.clients.eyebrow": "Clients"
+  ,"landing.clients.title": "Discover, save, book"
+  ,"landing.clients.copy": "A FREE account lets you browse the LIVE Radar. Premium unlocks full profiles."
+  ,"landing.clients.benefit.radar": "LIVE Radar with status and radius filters"
+  ,"landing.clients.benefit.free": "Free account and profile previews"
+  ,"landing.clients.benefit.premium": "Premium: full galleries and contacts for a one-time EUR 0.99"
+  ,"landing.clients.benefit.booking": "Free booking requests and favorites with Premium"
+  ,"landing.clients.benefit.chat": "Text chat: one-time 3 BC per profile"
+  ,"landing.business.eyebrow": "Advertisers"
+  ,"landing.business.title": "Business Center"
+  ,"landing.business.copy": "One panel for your profile, bookings, conversations and earnings."
+  ,"landing.business.feature.bookings": "Accept or decline booking requests"
+  ,"landing.business.feature.messages": "Messages with an AI assistant and conversation takeover"
+  ,"landing.business.feature.earnings": "Digital earnings from the BC ledger"
+  ,"landing.business.feature.location": "Location on the LIVE Radar"
+  ,"landing.business.feature.privacy": "Privacy modes: exact, area, city or hidden"
+  ,"landing.radar.title": "Profiles within your radius"
+  ,"landing.radar.copy": "Share your location or a city. The radar shows only points allowed by each profile's privacy settings."
+  ,"landing.faq.eyebrow": "Questions"
+  ,"landing.faq.title": "Frequently asked questions"
+  ,"landing.final.title": "Start with the LIVE Radar"
+  ,"landing.final.copy": "Browsing is free. Activate Premium when you are ready."
+  ,"bookings.showMore": "Show more ({{shown}} of {{total}})"
 }

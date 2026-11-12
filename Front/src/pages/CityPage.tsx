@@ -635,7 +635,7 @@ export function CityPage() {
               <Link to={`/profile/${profile.id}`} className={`top-avatar ${statusClass}`} key={profile.id}>
                 {image?.public_url ? <img src={image.public_url} alt="" /> : <span>{getInitials(profile.display_name)}</span>}
                 <strong>{profile.display_name}</strong>
-                <small>{getOperatorStatus(profile).replaceAll('_', ' ')}</small>
+                <small>{t(`dashboard.advertiser.status.${getOperatorStatus(profile)}`)}</small>
               </Link>
             );
           }) : <p className="muted">{t('city.premiumProfilesEmpty')}</p>}

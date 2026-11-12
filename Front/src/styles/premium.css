@@ -580,8 +580,11 @@ button.pr-kpi { cursor: pointer; }
   .pr-referral-layout > div { width: 100%; }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 900px) {
   /* The global mobile main padding reserves room for a two-row header; the office header is one row. */
+  .pr-office { margin-top: -2.5rem; }
+}
+@media (max-width: 520px) {
   .pr-office { margin-top: -3rem; }
 }
 
@@ -715,4 +718,234 @@ button.pr-kpi { cursor: pointer; }
   .onboarding-shell.pr-auth .onboarding-copy > p { font-size: .95rem; }
   .onboarding-shell.pr-auth .onboarding-card { padding: 1.35rem; }
   .onboarding-shell.pr-auth .account-type-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------- FanPage (Premium landing) ---------- */
+.landing-page.pr-landing { display: grid; gap: clamp(1.5rem, 3vw, 2.75rem); font-family: var(--pr-font); color: var(--pr-text); }
+.landing-page.pr-landing > .landing-section { margin: 0; }
+.pr-landing .pr-landing-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  min-height: 0;
+  padding: clamp(2rem, 5vw, 4.5rem) clamp(1.25rem, 4vw, 4rem);
+  border: 1px solid var(--pr-line);
+  border-radius: 28px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(8, 7, 10, .97) 0%, rgba(8, 7, 10, .86) 45%, rgba(8, 7, 10, .55) 100%),
+    radial-gradient(70% 90% at 85% 10%, rgba(123, 77, 255, .22), transparent 60%),
+    url("/hero-radar-background.png") center / cover no-repeat,
+    #08070a !important;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+.pr-landing .pr-landing-hero { height: auto !important; max-height: none !important; }
+.pr-landing .pr-landing-hero::before,
+.pr-landing .pr-landing-hero::after { content: none !important; }
+.pr-landing .pr-landing-hero .hero-content { position: relative; z-index: 1; display: grid; gap: 1.15rem; max-width: 640px; padding: 0; }
+.pr-landing .pr-landing-hero h1 {
+  display: block;
+  margin: 0;
+  max-width: 15ch;
+  font-family: var(--pr-font-display);
+  font-size: clamp(2.4rem, 1.4rem + 3.2vw, 4.6rem);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -.01em;
+  color: var(--pr-text);
+  text-shadow: none;
+  background: linear-gradient(180deg, #fff7e2 0%, #f4d77f 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.pr-landing .pr-landing-hero .tagline { margin: 0; max-width: 54ch; color: var(--pr-text-2); font-size: clamp(1rem, .95rem + .3vw, 1.15rem); line-height: 1.6; }
+.pr-landing .pr-landing-hero .hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin: .35rem 0 0; }
+.pr-landing .pr-landing-hero .hero-actions .pr-btn { min-height: 50px; padding: .7rem 1.4rem; font-size: 1rem; }
+.pr-landing-advertiser-link { margin: 0; color: var(--pr-muted); font-size: .95rem; }
+.pr-landing-advertiser-link a { color: var(--pr-gold); font-weight: 600; text-decoration: none; }
+.pr-landing-advertiser-link a:hover { text-decoration: underline; }
+.pr-landing-trust { display: flex; flex-wrap: wrap; gap: .5rem; margin: .4rem 0 0; padding: 0; list-style: none; }
+.pr-landing-trust li { display: inline-flex; align-items: center; gap: .45rem; min-height: 36px; padding: .4rem .85rem; border: 1px solid var(--pr-line); border-radius: 999px; background: rgba(255, 255, 255, .03); color: var(--pr-text-2); font-size: .86rem; }
+.pr-landing-trust li svg { color: var(--pr-gold); flex: 0 0 auto; }
+.pr-landing .pr-landing-hero .hero-product-preview { position: relative; z-index: 1; margin: 0; justify-self: center; width: min(100%, 440px); }
+.pr-landing .pr-landing-hero .hero-product-preview img { display: block; width: 100%; height: auto; border-radius: 20px; border: 1px solid var(--pr-line-strong); box-shadow: 0 30px 80px rgba(0, 0, 0, .6), 0 0 0 1px rgba(244, 215, 127, .08); }
+
+.pr-landing-head { display: grid; gap: .45rem; margin-bottom: 1.25rem; max-width: 760px; }
+.pr-landing-head.is-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; max-width: none; }
+.pr-landing-head.is-row > div { display: grid; gap: .45rem; }
+.pr-landing-head h2,
+.pr-landing-final h2 { display: block; margin: 0; font-family: var(--pr-font-display); font-weight: 600; font-size: clamp(1.7rem, 1.2rem + 1.4vw, 2.5rem); line-height: 1.12; color: var(--pr-text); }
+.pr-landing-head .pr-muted { font-size: 1rem; max-width: 64ch; }
+.pr-landing-audiences .pr-card { padding: clamp(1.35rem, 2.5vw, 2rem); }
+.pr-landing-card-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.pr-landing-profiles .pr-profile-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+
+.pr-landing .live-radar-section { padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--pr-line); border-radius: 26px; background: linear-gradient(180deg, rgba(20, 18, 24, .92), rgba(10, 9, 12, .96)); }
+
+.pr-landing-faq .home-faq-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.pr-landing-faq details { border: 1px solid var(--pr-line); border-radius: 16px; background: rgba(255, 255, 255, .025); padding: 0 1.1rem; }
+.pr-landing-faq summary { cursor: pointer; list-style: none; padding: 1rem 0; font: 600 1rem/1.35 var(--pr-font); color: var(--pr-text); display: flex; justify-content: space-between; gap: 1rem; }
+.pr-landing-faq summary::-webkit-details-marker { display: none; }
+.pr-landing-faq summary::after { content: "+"; color: var(--pr-gold); font-weight: 700; }
+.pr-landing-faq details[open] summary::after { content: "–"; }
+.pr-landing-faq details p { margin: 0 0 1rem; color: var(--pr-text-2); line-height: 1.6; font-size: .93rem; }
+.pr-landing-faq summary:focus-visible { outline: 2px solid var(--pr-gold); outline-offset: 2px; border-radius: 6px; }
+
+.pr-landing-final {
+  display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap;
+  padding: clamp(1.5rem, 3vw, 2.25rem) clamp(1.25rem, 3vw, 2.5rem);
+  border: 1px solid rgba(244, 215, 127, .3); border-radius: 26px;
+  background: radial-gradient(80% 140% at 100% 0%, rgba(123, 77, 255, .18), transparent 60%), linear-gradient(90deg, rgba(244, 215, 127, .1), rgba(20, 18, 24, .95));
+}
+.pr-landing-final > div:first-child { display: grid; gap: .4rem; }
+
+@media (max-width: 1000px) {
+  .pr-landing .pr-landing-hero { grid-template-columns: minmax(0, 1fr); }
+  .pr-landing .pr-landing-hero .hero-product-preview { width: min(100%, 360px); }
+  .pr-landing-faq .home-faq-list { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .pr-landing .pr-landing-hero { padding: 1.6rem 1.1rem; border-radius: 22px; }
+  .pr-landing .pr-landing-hero .hero-product-preview { display: none; }
+  .pr-landing .pr-landing-hero .hero-actions .pr-btn { flex: 1 1 100%; }
+  .pr-landing-head.is-row { flex-direction: column; align-items: stretch; }
+  .pr-landing .live-radar-section { padding: .9rem; border-radius: 20px; }
+  .pr-landing-profiles .pr-profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pr-landing-final .pr-landing-card-actions .pr-btn { flex: 1 1 100%; }
+}
+
+/* ---------- LIVE Radar presentation (MapLibre engine, markers and filters unchanged) ---------- */
+.radar-panel .radar-heading-block { display: grid; gap: .5rem; }
+.radar-panel .radar-heading-block .eyebrow,
+.radar-city-page .radar-search-title .eyebrow,
+.radar-city-page .radar-results-header .eyebrow { margin: 0; color: var(--pr-gold); font: 700 .72rem/1.2 var(--pr-font); letter-spacing: .16em; text-transform: uppercase; }
+.radar-panel .radar-heading-block h2 {
+  display: block; margin: 0; font-family: var(--pr-font-display); font-weight: 600;
+  font-size: clamp(1.6rem, 1.2rem + 1vw, 2.2rem); line-height: 1.12; color: var(--pr-text);
+  background: none; -webkit-text-fill-color: currentColor; text-shadow: none;
+}
+.radar-panel .radar-heading-block > p:not(.eyebrow) { margin: 0; color: var(--pr-text-2); font-size: .92rem; line-height: 1.5; }
+.radar-panel .safety-line { color: var(--pr-muted); font-size: .84rem; line-height: 1.45; }
+.radar-city-page .radar-search-title h1 { display: block; margin: .2rem 0 .3rem; font-family: var(--pr-font-display); font-weight: 600; font-size: clamp(1.8rem, 1.3rem + 1.4vw, 2.6rem); line-height: 1.1; color: var(--pr-text); }
+.radar-city-page .radar-search-title > p { margin: 0; color: var(--pr-muted); font-size: .92rem; }
+.radar-city-page .radar-results-header h2 { display: block; margin: .2rem 0 0; font-family: var(--pr-font-display); font-weight: 600; font-size: clamp(1.6rem, 1.2rem + 1.2vw, 2.4rem); color: var(--pr-text); }
+
+/* Shared Premium buttons inside the Radar workspace: no neon tabs, gold primary. */
+.radar-panel .er-glass-btn,
+.radar-city-page .er-glass-btn {
+  min-height: 44px; border-radius: 12px; border: 1px solid var(--pr-line-strong) !important;
+  background: rgba(255, 255, 255, .03) !important; box-shadow: none !important; color: var(--pr-text) !important;
+  font: 600 .9rem/1.1 var(--pr-font); letter-spacing: 0; text-shadow: none;
+}
+.radar-panel .er-glass-btn::before, .radar-panel .er-glass-btn::after,
+.radar-city-page .er-glass-btn::before, .radar-city-page .er-glass-btn::after { display: none !important; }
+.radar-panel .er-glass-btn--gold,
+.radar-city-page .er-glass-btn--gold,
+.radar-city-page .button.primary.er-glass-btn {
+  border-color: transparent !important;
+  background: linear-gradient(135deg, #f8e3a0, var(--pr-gold) 38%, var(--pr-gold-strong)) !important;
+  color: #1b1306 !important;
+}
+.radar-panel .er-glass-btn:focus-visible,
+.radar-city-page .er-glass-btn:focus-visible { outline: 2px solid var(--pr-gold); outline-offset: 2px; }
+
+.radar-city-page .sort-tabs { display: flex; flex-wrap: wrap; gap: .4rem; }
+.radar-city-page .sort-tabs button {
+  min-height: 40px; padding: .45rem 1rem; border: 1px solid var(--pr-line); border-radius: 999px;
+  background: rgba(255, 255, 255, .03); color: var(--pr-text-2); font: 600 .86rem/1 var(--pr-font); cursor: pointer;
+}
+.radar-city-page .sort-tabs button.selected { border-color: rgba(244, 215, 127, .5); background: rgba(244, 215, 127, .14); color: var(--pr-gold-soft); }
+.radar-city-page .top-avatar small { font-size: .74rem; letter-spacing: .02em; text-transform: none; }
+.radar-panel .radar-legend span, .radar-city-page .radar-quick-filter { font-family: var(--pr-font); }
+
+/* ---------- Business Center and client office: existing section modules in the Premium system ---------- */
+:is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-heading {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 1.25rem;
+  margin: 0; padding: 1.6rem;
+  border: 1px solid var(--pr-line); border-radius: var(--pr-radius-lg);
+  background:
+    radial-gradient(80% 160% at 100% 0%, rgba(123, 77, 255, .16), transparent 60%),
+    radial-gradient(60% 120% at 0% 0%, rgba(244, 215, 127, .1), transparent 60%),
+    linear-gradient(180deg, rgba(22, 19, 26, .96), rgba(12, 11, 14, .96));
+  box-shadow: var(--pr-shadow);
+}
+:is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-heading > div { display: grid; gap: .5rem; min-width: 0; }
+:is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-heading h1 {
+  display: block; margin: 0; font-family: var(--pr-font-display); font-weight: 600;
+  font-size: clamp(1.75rem, 1.1rem + 1.6vw, 2.5rem); line-height: 1.12; color: var(--pr-text);
+}
+:is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-heading p:not(.eyebrow) { margin: 0; color: var(--pr-text-2); line-height: 1.55; max-width: 64ch; }
+:is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-heading > svg { color: var(--pr-gold); flex: 0 0 auto; }
+:is(.advertiser-business-center, .client-office-v2) .eyebrow { margin: 0; color: var(--pr-gold); font: 700 .72rem/1.2 var(--pr-font); letter-spacing: .16em; text-transform: uppercase; }
+:is(.advertiser-business-center, .client-office-v2) .advertiser-stage-three { display: grid; gap: 1.25rem; }
+:is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-panel {
+  margin: 0; padding: 1.35rem;
+  border: 1px solid var(--pr-line); border-radius: var(--pr-radius-lg);
+  background: linear-gradient(180deg, rgba(23, 21, 27, .92), rgba(14, 13, 17, .94));
+  box-shadow: var(--pr-shadow);
+}
+:is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+:is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-panel-head h2 { display: block; margin: .25rem 0 0; font: 650 1.12rem/1.3 var(--pr-font); color: var(--pr-text); }
+:is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-panel-head p:not(.eyebrow) { margin: .25rem 0 0; color: var(--pr-muted); font-size: .9rem; }
+
+/* Buttons of the existing modules adopt the Premium button. */
+:is(.advertiser-business-center, .client-office-v2) :is(.advertiser-stage-three, .advertiser-wallet-grid, .advertiser-referral-card, .advertiser-location-section, .pr-embed, .er-chat-card) :is(.button, .er-glass-btn) {
+  display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+  min-height: 40px; padding: .5rem 1rem; border-radius: 12px;
+  border: 1px solid var(--pr-line-strong) !important; background: rgba(255, 255, 255, .03) !important;
+  box-shadow: none !important; color: var(--pr-text) !important; text-shadow: none;
+  font: 600 .88rem/1.1 var(--pr-font); letter-spacing: 0;
+}
+:is(.advertiser-business-center, .client-office-v2) :is(.advertiser-stage-three, .advertiser-wallet-grid, .advertiser-referral-card, .advertiser-location-section, .pr-embed, .er-chat-card) :is(.button, .er-glass-btn)::before,
+:is(.advertiser-business-center, .client-office-v2) :is(.advertiser-stage-three, .advertiser-wallet-grid, .advertiser-referral-card, .advertiser-location-section, .pr-embed, .er-chat-card) :is(.button, .er-glass-btn)::after { display: none !important; }
+:is(.advertiser-business-center, .client-office-v2) :is(.advertiser-stage-three, .advertiser-wallet-grid, .advertiser-referral-card, .advertiser-location-section, .pr-embed, .er-chat-card) :is(.button.primary, .er-glass-btn--gold) {
+  border-color: transparent !important;
+  background: linear-gradient(135deg, #f8e3a0, var(--pr-gold) 38%, var(--pr-gold-strong)) !important;
+  color: #1b1306 !important;
+}
+:is(.advertiser-business-center, .client-office-v2) :is(.advertiser-stage-three, .pr-embed) .er-glass-btn--red { border-color: rgba(239, 92, 109, .4) !important; color: #ffb3bd !important; background: rgba(239, 92, 109, .06) !important; }
+:is(.advertiser-business-center, .client-office-v2) :is(.button, .er-glass-btn):focus-visible { outline: 2px solid var(--pr-gold); outline-offset: 2px; }
+
+/* AI assistant / chat controls */
+:is(.advertiser-business-center, .client-office-v2) .er-chat-settings { display: grid; gap: 0; }
+:is(.advertiser-business-center, .client-office-v2) .er-chat-setting { padding: 1rem 0; border-bottom: 1px solid var(--pr-line-soft); }
+:is(.advertiser-business-center, .client-office-v2) .er-chat-setting:last-child { border-bottom: 0; }
+:is(.advertiser-business-center, .client-office-v2) .er-chat-setting strong { font: 650 .98rem/1.3 var(--pr-font); color: var(--pr-text); }
+
+/* Booking filters as Premium pills */
+:is(.advertiser-business-center, .client-office-v2) .er-bookings-filters { display: flex; flex-wrap: wrap; gap: .4rem; }
+:is(.advertiser-business-center, .client-office-v2) .er-bookings-filters button {
+  min-height: 38px; padding: .4rem .9rem; border: 1px solid var(--pr-line); border-radius: 999px;
+  background: rgba(255, 255, 255, .03); color: var(--pr-text-2); font: 600 .84rem/1 var(--pr-font);
+}
+:is(.advertiser-business-center, .client-office-v2) .er-bookings-filters button[aria-pressed="true"],
+:is(.advertiser-business-center, .client-office-v2) .er-bookings-filters button.active,
+:is(.advertiser-business-center, .client-office-v2) .er-bookings-filters button.selected { border-color: rgba(244, 215, 127, .5); background: rgba(244, 215, 127, .14); color: var(--pr-gold-soft); }
+:is(.advertiser-business-center, .client-office-v2) .er-bookings-row { border-radius: 14px; }
+
+/* Wallet and referral modules */
+:is(.advertiser-business-center) .advertiser-wallet-grid { display: grid; gap: 1.25rem; }
+:is(.advertiser-business-center) .advertiser-qr-frame { padding: 10px; border-radius: 16px; background: #fff; box-shadow: 0 0 0 1px rgba(244, 215, 127, .4), 0 16px 40px rgba(0, 0, 0, .5); }
+
+@media (max-width: 900px) {
+  :is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-heading { flex-direction: column; align-items: stretch; padding: 1.2rem; }
+  :is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-panel { padding: 1.1rem; border-radius: 18px; }
+}
+
+/* ---------- Global header, tablet widths: the account pill must not overlap the actions ---------- */
+@media (min-width: 721px) and (max-width: 1180px) {
+  .market-header .header-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: .45rem; min-width: 0; }
+  .market-header .header-account-area { display: flex; flex-wrap: nowrap; align-items: center; gap: .45rem; min-width: 0; }
+  .market-header .account-pill { display: inline-flex; align-items: center; gap: .4rem; min-width: 0; max-width: 220px; white-space: nowrap; }
+  .market-header .account-pill > span { overflow: hidden; text-overflow: ellipsis; }
+  .market-header .account-pill small { display: none; }
+  .market-header .header-actions .radar-action { white-space: nowrap; }
+  /* The LIVE Radar is in the bottom navigation at these widths; BC Coins stays reachable from the account. */
+  .market-header .header-actions .premium-header-cta,
+  .market-header .header-actions a.radar-action[href="/tokens"] { display: none; }
+  .market-header { grid-template-columns: auto minmax(0, 1fr); }
+  .market-header .header-actions { justify-content: flex-end; }
 }

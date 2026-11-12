@@ -233,7 +233,7 @@ test('premium client office redesign keeps high-end UI tokens and mobile chrome'
   assert.match(styles, /\.radar-panel/);
   assert.match(styles, /\.luxury-bottom-nav/);
   assert.match(styles, /@keyframes er-shimmer/);
-  assert.match(homeSource, /Panel AI do zarządzania rezerwacjami, klientami i widocznością w mieście/);
+  assert.match(homeSource, /<h1>\{t\('landing\.title'\)\}<\/h1>/);
   assert.match(en, /Your Private Client Office/);
 });
 

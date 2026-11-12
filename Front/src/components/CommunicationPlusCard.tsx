@@ -43,9 +43,9 @@ export function CommunicationPlusCard({ state, status, purchasing, purchaseError
       {state === 'ready' && status ? (
         <>
           <div className="communication-plus-features" aria-label={t('communicationPlus.featuresLabel')}>
-            <span><MessageCircle size={16} /> {t('communicationPlus.liveChat')} <small>{t('communicationPlus.comingSoon')}</small></span>
+            <span><MessageCircle size={16} /> {t('communicationPlus.liveChat')}</span>
             <span><Video size={16} /> {t('communicationPlus.liveVideo')} <small>{t('communicationPlus.comingSoon')}</small></span>
-            <span><CalendarDays size={16} /> {t('communicationPlus.booking')} <small>{t('communicationPlus.comingSoon')}</small></span>
+            <span><CalendarDays size={16} /> {t('communicationPlus.booking')}</span>
           </div>
 
           {status.communication_plus_active ? (

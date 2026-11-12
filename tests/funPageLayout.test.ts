@@ -23,7 +23,7 @@ test('FunPage keeps the real carousel, radar, promotions and footer in the layou
     readFile(layoutUrl, 'utf8')
   ]);
 
-  assert.match(home, /className="page landing-page"/);
+  assert.match(home, /className="page landing-page[^"]*"/);
   assert.match(home, /ProfileCarouselSection/);
   assert.match(home, /className="landing-section live-radar-section"/);
   assert.match(home, /FunPagePromotionArea/);

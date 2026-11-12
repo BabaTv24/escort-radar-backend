@@ -5,7 +5,7 @@ import { BadgeCheck, CalendarDays, Clock, Copy, CreditCard, Flame, Gem, Heart, I
 import type { Session } from '@supabase/supabase-js';
 import { clearLoginSessionHandoff, restoreLoginSessionHandoff, supabase } from '../lib/supabase';
 import { api, ApiError } from '../lib/api';
-import { waitForSupabaseSession } from '../lib/authRedirect';
+import { waitForSupabaseSession, withTimeout } from '../lib/authRedirect';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor } from '../components/AvailabilityHoursEditor';
 import {
@@ -272,8 +272,21 @@ export function DashboardPage() {
     }).catch((error) => {
       if (!mounted) return;
       if (import.meta.env.DEV) console.log('[DashboardAuth] initial-session-error', { message: error instanceof Error ? error.message : String(error) });
-      restoreLoginSessionHandoff().then(async (handoffSession) => {
-        if (!mounted) return;
+      // A slow session check (cold start) is not proof of a missing session: the auth listener may
+      // already have activated it, and a longer second check usually succeeds.
+      if (sessionActivatedRef.current) return;
+      withTimeout(supabase.auth.getSession(), 10000, 'Session check timed out').then(({ data }) => data.session).catch(() => null).then(async (lateSession) => {
+        if (!mounted || sessionActivatedRef.current) return null;
+        if (lateSession) {
+          sessionActivatedRef.current = true;
+          clearLoginJustCompletedMarker();
+          clearLoginSessionHandoff();
+          await activateSession(lateSession);
+          return null;
+        }
+        return restoreLoginSessionHandoff();
+      }).then(async (handoffSession) => {
+        if (!mounted || sessionActivatedRef.current) return;
         if (handoffSession) {
           sessionActivatedRef.current = true;
           clearLoginJustCompletedMarker();
@@ -1439,7 +1452,8 @@ function profileStatusLabel(profile: Profile | null) {
 
 function advertiserPlanLabel(profile: Profile | null) {
   if (profile?.trial_ends_at && profile.subscription_status !== 'active') return 'trial';
-  if (profile?.listing_plan === 'business_monthly') return 'Premium Business 49,99€/month';
+  // The business price differs between catalogs (manual 499.00 EUR, Stripe 499.99 EUR), so no price is shown here.
+  if (profile?.listing_plan === 'business_monthly') return 'Premium Business';
   if (profile?.listing_plan === 'escort_monthly' || profile?.subscription_status === 'active') return 'Premium Listing 49,99€/month';
   return 'trial';
 }

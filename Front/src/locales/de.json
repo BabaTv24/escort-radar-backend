@@ -514,7 +514,7 @@
   "dashboard.client.title": "Client-Dashboard",
   "dashboard.client.subtitle": "Durchsuche den Radar, nutze BC Coins und speichere Favoriten. Dieses Konto veröffentlicht keine Anzeigen.",
   "dashboard.client.ready": "Client-Konto ist aktiv.",
-  "dashboard.client.createFree": "Premium fuer 0,99 € aktivieren",
+  "dashboard.client.createFree": "Premium aktivieren · 0,99 EUR",
   "dashboard.client.statusEyebrow": "Kontostatus",
   "dashboard.client.freeStatus": "Premium-Konto inaktiv",
   "dashboard.client.toolsEyebrow": "Deine Tools",
@@ -528,7 +528,7 @@
   "clientOffice.subtitleFree": "Aktiviere privaten Radar-Zugang, Kontaktfreigaben, VIP-Galerien und Empfehlungen.",
   "clientOffice.premiumActive": "Premium aktiv",
   "clientOffice.clientFallback": "Client",
-  "clientOffice.activateCta": "App aktivieren 0,99 EUR",
+  "clientOffice.activateCta": "Premium aktivieren · 0,99 EUR",
   "clientOffice.fullExperience": "Volles Escort Radar Erlebnis",
   "clientOffice.activateTitle": "Premium-Zugang aktivieren",
   "clientOffice.profile": "Client-Profil",
@@ -1193,9 +1193,9 @@
   "profile.privateGallery": "Private Galerie",
   "profile.unlockGalleryText": "Nach Client-Aktivierung mit BC Coins freischalten.",
   "profile.unlockWithCoins": "Mit BC Coins freischalten",
-  "profile.activateClient": "0,99 EUR aktivieren",
+  "profile.activateClient": "Premium aktivieren · 0,99 EUR",
   "profile.premiumFeaturesLockedTitle": "Premium-Profilfunktionen",
-  "profile.premiumFeaturesLockedText": "Aktiviere dein Konto fuer 0,99 EUR, um Buchungen und Premium-Funktionen freizuschalten.",
+  "profile.premiumFeaturesLockedText": "Aktiviere Premium einmalig für 0,99 EUR, um kostenlose Buchungen und das volle Profil freizuschalten.",
   "profile.sendBookingRequest": "Buchungsanfrage senden",
   "profile.nearby": "In der Nähe",
   "profile.similarProfiles": "Ähnliche Profile",
@@ -1209,7 +1209,7 @@
   "profile.gift": "Gift",
   "profile.live": "Live",
   "profile.liveCamAvailable": "Live Cam ist für Premium-Clients verfügbar.",
-  "profile.liveCamLocked": "Aktiviere für 0,99 EUR, um Live Cam freizuschalten.",
+  "profile.liveCamLocked": "Videochat ist noch nicht verfügbar.",
   "profile.yes": "Ja",
   "profile.pending": "Ausstehend",
   "profile.visits": "Besuche",
@@ -2359,9 +2359,9 @@
   ,"communicationPlus.loadError": "Der Communication-Plus-Status konnte nicht geladen werden."
   ,"communicationPlus.retry": "Erneut versuchen"
   ,"communicationPlus.featuresLabel": "Enthaltene Funktionen"
-  ,"communicationPlus.liveChat": "Live Chat"
-  ,"communicationPlus.liveVideo": "Live Video"
-  ,"communicationPlus.booking": "Booking"
+  ,"communicationPlus.liveChat": "Textchat · verfügbar"
+  ,"communicationPlus.liveVideo": "Videochat"
+  ,"communicationPlus.booking": "Buchungen · kostenlos"
   ,"communicationPlus.comingSoon": "in Vorbereitung"
   ,"communicationPlus.active": "Communication Plus aktiv"
   ,"communicationPlus.activeCopy": "Das Paket ist für dieses Konto dauerhaft freigeschaltet."
@@ -2374,7 +2374,7 @@
   ,"communicationPlus.unlock": "Communication Plus freischalten — {{price}} BC"
   ,"communicationPlus.purchasing": "Wird freigeschaltet…"
   ,"communicationPlus.purchaseError": "Der Kauf ist fehlgeschlagen. Status prüfen und erneut versuchen."
-  ,"communicationPlus.salesPaused": "Der Kauf von Communication Plus ist pausiert, bis Chat, Video und Buchung im Paket verfügbar sind. Es werden keine BC abgebucht."
+  ,"communicationPlus.salesPaused": "Der Verkauf von Communication Plus ist pausiert. Textchat (3 BC pro Profil) und kostenlose Buchungen funktionieren ohne dieses Paket. Es wird nichts berechnet."
   ,"profile.videoChatUnavailable": "Videochat ist noch nicht verfügbar. Dafür werden keine BC abgebucht."
   ,"booking.error.generic": "Die Buchungsanfrage konnte nicht gesendet werden. Bitte erneut versuchen."
   ,"booking.error.insufficientBc": "Nicht genügend verfügbare BC, um die Buchungsanfrage zu senden."
@@ -2631,4 +2631,40 @@
   ,"profilePremium.chatDisabled": "Dieses Profil hat den Textchat nicht aktiviert."
   ,"profilePremium.gifts": "Diamond-Geschenke"
   ,"profilePremium.giftsSoon": "Diamond-Geschenke sind verfügbar, sobald Preise festgelegt sind. Derzeit wird nichts berechnet."
+  ,"landing.eyebrow": "Escort Radar · LIVE Radar"
+  ,"landing.title": "Moderierte Profile in deiner Nähe. Diskret und live."
+  ,"landing.lead": "Escort Radar zeigt moderierte Profile live auf der Karte und respektiert die Privatsphäre des Standorts. Inserenten verwalten Buchungen, Nachrichten und Sichtbarkeit in einem Business Center."
+  ,"landing.ctaClient": "Kostenloses Konto erstellen"
+  ,"landing.ctaAdvertiser": "Inserat erstellen"
+  ,"landing.advertiserPrompt": "Du hast ein Profil?"
+  ,"landing.howItWorks": "So funktioniert es"
+  ,"landing.trustLabel": "Plattformregeln"
+  ,"landing.trust.moderation": "Manuelle Moderation von Profilen und Fotos"
+  ,"landing.trust.privacy": "Inserenten bestimmen, wie genau der Standort sichtbar ist"
+  ,"landing.trust.premium": "Premium einmalig 0,99 EUR, kein Abo"
+  ,"landing.audiences.eyebrow": "Zwei Zugänge, eine Plattform"
+  ,"landing.audiences.title": "Für Kunden und für Inserenten"
+  ,"landing.clients.eyebrow": "Kunden"
+  ,"landing.clients.title": "Entdecken, speichern, buchen"
+  ,"landing.clients.copy": "Mit dem FREE-Konto nutzt du den LIVE Radar. Premium schaltet vollständige Profile frei."
+  ,"landing.clients.benefit.radar": "LIVE Radar mit Status- und Umkreisfiltern"
+  ,"landing.clients.benefit.free": "Kostenloses Konto und Profilvorschau"
+  ,"landing.clients.benefit.premium": "Premium: volle Galerien und Kontakte für einmalig 0,99 EUR"
+  ,"landing.clients.benefit.booking": "Kostenlose Buchungsanfragen und Favoriten mit Premium"
+  ,"landing.clients.benefit.chat": "Textchat: einmalig 3 BC pro Profil"
+  ,"landing.business.eyebrow": "Inserenten"
+  ,"landing.business.title": "Business Center"
+  ,"landing.business.copy": "Ein Panel für Profil, Buchungen, Gespräche und Einnahmen."
+  ,"landing.business.feature.bookings": "Buchungsanfragen annehmen oder ablehnen"
+  ,"landing.business.feature.messages": "Nachrichten mit KI-Assistent und Übernahme des Gesprächs"
+  ,"landing.business.feature.earnings": "Digitale Einnahmen aus dem BC-Ledger"
+  ,"landing.business.feature.location": "Standort im LIVE Radar"
+  ,"landing.business.feature.privacy": "Privatsphäre: exakt, Gebiet, Stadt oder verborgen"
+  ,"landing.radar.title": "Profile in deinem Umkreis"
+  ,"landing.radar.copy": "Gib deinen Standort oder eine Stadt an. Der Radar zeigt nur Punkte, die die Privatsphäre-Einstellungen erlauben."
+  ,"landing.faq.eyebrow": "Fragen"
+  ,"landing.faq.title": "Häufige Fragen"
+  ,"landing.final.title": "Starte mit dem LIVE Radar"
+  ,"landing.final.copy": "Stöbern ist kostenlos. Premium aktivierst du, wenn du bereit bist."
+  ,"bookings.showMore": "Mehr anzeigen ({{shown}} von {{total}})"
 }
