@@ -40,6 +40,18 @@ export function resolveEffectivePublicLocation(profile: Record<string, any>, cit
     } : null;
   }
 
+  // A postal_area profile whose stored point has address precision (exact/street) would leak the
+  // private point under an "approximate" label. Publish only the city point; the stored data stays as is.
+  if (visibility === 'postal_area' && hasValidCoordinates && isAddressPrecision(profile.location_precision)) {
+    const city = resolveCityLocation(profile.work_city) || resolveCityLocation(profile.city);
+    return city ? {
+      latitude: city.latitude,
+      longitude: city.longitude,
+      location_approximate: true,
+      location_precision: 'city'
+    } : null;
+  }
+
   if (visibility === 'postal_area' && !hasValidCoordinates && hasPostalArea(profile)) {
     const city = resolveCityLocation(profile.work_city) || resolveCityLocation(profile.city);
     return city ? {
@@ -63,6 +75,10 @@ function locationCoordinate(value: unknown) {
   if (value === null || value === undefined || value === '') return null;
   const coordinate = Number(value);
   return Number.isFinite(coordinate) ? coordinate : null;
+}
+
+function isAddressPrecision(value: unknown) {
+  return value === 'exact' || value === 'street';
 }
 
 function hasPostalArea(profile: Record<string, any>) {
