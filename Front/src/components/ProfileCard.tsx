@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { BadgeCheck, HeartHandshake, Home, Hotel, Languages, MapPin, MessageCircle, Radio, Video, LockKeyhole } from 'lucide-react';
 import type { Profile } from '../types';
 import { useI18n } from '../i18n';
-import { serviceLabel } from '../data/serviceCatalog';
+import { localizedServiceLabel } from '../data/serviceCatalog';
 import { getPublicLocationLabel } from '../lib/locationLabels';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
@@ -75,7 +75,7 @@ export function ProfileCard({ profile, isFavorite = false, onFavoriteChange, sho
           {profile.hotspot_type && <span>{profile.hotspot_type}</span>}
           {profile.radar_score ? <span>Radar {profile.radar_score}</span> : null}
         </div>
-        {profile.services?.length ? <p className="muted line-clamp">{profile.services.slice(0, 4).map(serviceLabel).join(' - ')}</p> : null}
+        {profile.services?.length ? <p className="muted line-clamp">{profile.services.slice(0, 4).map((service) => localizedServiceLabel(service, t)).join(' - ')}</p> : null}
         {/* The visibility reason is owner information; public visitors never see it. */}
         {showVisibilityReason && profile.visibility_reason && <p className={profile.visibility_reason === 'visible' ? 'success' : 'error-text'}>{t(`visibility.${profile.visibility_reason}`)}</p>}
         <p className="muted line-clamp">{profile.description || t('profile.fallbackDescription')}</p>

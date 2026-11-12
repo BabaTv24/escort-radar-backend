@@ -50,7 +50,7 @@ import {
   toggleArrayValue,
   visitTypeOptions
 } from '../data/filterOptions';
-import { serviceLabel, serviceOptions } from '../data/serviceCatalog';
+import { canonicalServiceKey, localizedServiceLabel, normalizeServiceSearch, serviceOptions } from '../data/serviceCatalog';
 import { getCitiesForCountry, getCountryByNameOrCode, getDistrictsForCity, getLegacyCitySlug, locationCatalog, normalizeLocationValue } from '../data/locationCatalog';
 import { berlinDistrictOptions, resolveBerlinPostalDistrict } from '../lib/geo';
 import {
@@ -2615,8 +2615,10 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
 
   function toggleService(key: string) {
     const current = profile.services || [];
-    const next = current.includes(key)
-      ? current.filter((item) => item !== key)
+    // Legacy values (e.g. saved Polish labels) match their canonical key, so a toggle never duplicates a service.
+    const isSelected = current.some((item) => canonicalServiceKey(item) === key);
+    const next = isSelected
+      ? current.filter((item) => canonicalServiceKey(item) !== key)
       : current.length >= 100 ? current : [...current, key];
     onProfileChange({ ...profile, services: next });
   }
@@ -2798,10 +2800,12 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
   const customWorkCity = profile.work_city && !locationCities.some((city) => normalizeLocationValue(city.name) === normalizeLocationValue(profile.work_city || '')) ? profile.work_city : '';
   const isBerlin = String(profile.work_city || profile.city || '').toLowerCase() === 'berlin';
   const locationDistricts = isBerlin ? berlinDistrictOptions : getDistrictsForCity(selectedCountry.code, profile.work_city || '');
+  const selectedServiceKeys = new Set(selectedServices.map(canonicalServiceKey));
   const filteredServices = serviceOptions.filter((service) => {
-    const query = serviceSearch.trim().toLowerCase();
+    const query = normalizeServiceSearch(serviceSearch);
     if (!query) return true;
-    return service.label.toLowerCase().includes(query) || service.category.toLowerCase().includes(query);
+    return normalizeServiceSearch(localizedServiceLabel(service.key, t)).includes(query)
+      || normalizeServiceSearch(serviceCategoryLabel(service.category, t)).includes(query);
   });
   const groupedServices = filteredServices.reduce<Record<string, typeof serviceOptions>>((groups, service) => {
     groups[service.category] = groups[service.category] || [];
@@ -3106,7 +3110,7 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
             <input placeholder={t('dashboard.advertiser.searchServices')} value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} />
             <div className="selected-service-strip">
               {selectedServices.length ? selectedServices.map((key) => (
-                <button key={key} className="service-chip is-selected" type="button" aria-pressed="true" onClick={() => toggleService(key)}>{serviceLabel(key)}</button>
+                <button key={key} className="service-chip is-selected" type="button" aria-pressed="true" onClick={() => toggleService(canonicalServiceKey(key))}>{localizedServiceLabel(key, t)}</button>
               )) : <p>{t('dashboard.advertiser.noServices')}</p>}
             </div>
             <div className="service-checklist">
@@ -3118,11 +3122,11 @@ function AdvertiserProfileSection({ profile, savedProfile, userEmail, bookingCou
                       <button
                         key={service.key}
                         type="button"
-                        className={selectedServices.includes(service.key) ? 'service-chip selected is-selected' : 'service-chip'}
-                        aria-pressed={selectedServices.includes(service.key)}
+                        className={selectedServiceKeys.has(service.key) ? 'service-chip selected is-selected' : 'service-chip'}
+                        aria-pressed={selectedServiceKeys.has(service.key)}
                         onClick={() => toggleService(service.key)}
                       >
-                        {service.label}
+                        {localizedServiceLabel(service.key, t)}
                       </button>
                     ))}
                   </div>
@@ -3646,7 +3650,7 @@ function filterServicePricing(value: Record<string, any>, selectedServices: stri
 
 function ServicePricingEditor({ selectedServices, servicePricing, currency, onChange }: { selectedServices: string[]; servicePricing: Record<string, any>; currency: string; onChange: (value: Record<string, any>) => void }) {
   const { t } = useI18n();
-  const services = selectedServices.map((key) => ({ key, label: serviceLabel(key) }));
+  const services = selectedServices.map((key) => ({ key, label: localizedServiceLabel(key, t) }));
   function update(key: string, patch: Record<string, unknown>) {
     const current = servicePricing?.[key] || { mode: 'included', extra_price: null };
     onChange({ ...servicePricing, [key]: { ...current, ...patch } });

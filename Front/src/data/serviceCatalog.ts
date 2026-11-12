@@ -139,6 +139,37 @@ export function serviceLabel(key: string) {
   return serviceLabelsByKey[key] || key;
 }
 
+/**
+ * Maps a stored service value to its canonical catalog key. Accepts canonical
+ * keys and legacy Polish labels (e.g. "Masaz tantryczny"); anything else is a
+ * custom value and is returned unchanged. Never used to rewrite stored data.
+ */
+export function canonicalServiceKey(value: string) {
+  if (serviceLabelsByKey[value]) return value;
+  const normalized = serviceKey(String(value || ''));
+  return serviceLabelsByKey[normalized] ? normalized : value;
+}
+
+/** Display label in the active UI language; custom values stay verbatim. */
+export function localizedServiceLabel(value: string, t: (key: string) => string) {
+  const key = canonicalServiceKey(value);
+  if (!serviceLabelsByKey[key]) return value;
+  const translationKey = `service.${key}`;
+  const translated = t(translationKey);
+  return translated && translated !== translationKey ? translated : serviceLabelsByKey[key];
+}
+
+/** Lowercase, diacritics-insensitive form used for service search. */
+export function normalizeServiceSearch(value: string) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/ł/g, 'l')
+    .replace(/ß/g, 'ss')
+    .trim();
+}
+
 function serviceKey(label: string) {
   return label
     .toLowerCase()

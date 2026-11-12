@@ -891,6 +891,61 @@ button.pr-kpi { cursor: pointer; }
 :is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-panel-head h2 { display: block; margin: .25rem 0 0; font: 650 1.12rem/1.3 var(--pr-font); color: var(--pr-text); }
 :is(.advertiser-business-center, .client-office-v2) .advertiser-dashboard-panel-head p:not(.eyebrow) { margin: .25rem 0 0; color: var(--pr-muted); font-size: .9rem; }
 
+/* Business Center glass buttons: restrained luxury. Keeps each button's tint and a slim
+   accent line, but drops the neon halos and the light bars that flood active buttons. */
+.advertiser-business-center .er-glass-btn {
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--er-btn-glow), transparent 88%), rgba(255, 255, 255, .06) 48%, rgba(0, 0, 0, .18)),
+    linear-gradient(135deg, var(--er-btn-bg-a), var(--er-btn-bg-b)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .1),
+    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 82%),
+    0 8px 18px rgba(0, 0, 0, .3) !important;
+}
+.advertiser-business-center .er-glass-btn:hover {
+  filter: none;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--er-btn-glow), transparent 82%), rgba(255, 255, 255, .08) 48%, rgba(0, 0, 0, .16)),
+    linear-gradient(135deg, var(--er-btn-bg-a), var(--er-btn-bg-b)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .12),
+    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 64%),
+    0 0 10px color-mix(in srgb, var(--er-btn-glow), transparent 86%),
+    0 10px 20px rgba(0, 0, 0, .32) !important;
+}
+.advertiser-business-center :is(.er-glass-btn--active, .er-glass-btn.active, .er-glass-btn.selected, .er-glass-btn[aria-pressed="true"], .er-glass-btn[aria-current="true"]) {
+  border-color: color-mix(in srgb, var(--er-btn-glow), transparent 45%) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--er-btn-glow), transparent 80%), color-mix(in srgb, var(--er-btn-glow), transparent 93%)),
+    rgba(10, 10, 12, .9) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .12),
+    0 0 0 1px color-mix(in srgb, var(--er-btn-glow), transparent 58%),
+    0 0 12px color-mix(in srgb, var(--er-btn-glow), transparent 84%) !important;
+}
+.advertiser-business-center .er-glass-btn::before,
+.advertiser-business-center .er-glass-btn::after,
+.advertiser-business-center .er-glass-btn:hover::before,
+.advertiser-business-center .er-glass-btn:hover::after,
+.advertiser-business-center :is(.er-glass-btn--active, .er-glass-btn.active, .er-glass-btn.selected, .er-glass-btn[aria-pressed="true"])::before,
+.advertiser-business-center :is(.er-glass-btn--active, .er-glass-btn.active, .er-glass-btn.selected, .er-glass-btn[aria-pressed="true"])::after {
+  width: 28px;
+  height: 2px;
+  opacity: .55;
+  animation: none;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--er-btn-glow), transparent 55%) !important;
+}
+.advertiser-business-center .er-glass-btn::before,
+.advertiser-business-center .er-glass-btn:hover::before,
+.advertiser-business-center :is(.er-glass-btn--active, .er-glass-btn.active, .er-glass-btn.selected, .er-glass-btn[aria-pressed="true"])::before { bottom: 0; }
+.advertiser-business-center .er-glass-btn::after,
+.advertiser-business-center .er-glass-btn:hover::after,
+.advertiser-business-center :is(.er-glass-btn--active, .er-glass-btn.active, .er-glass-btn.selected, .er-glass-btn[aria-pressed="true"])::after { top: 0; }
+.advertiser-business-center .er-glass-btn:hover::before,
+.advertiser-business-center .er-glass-btn:hover::after { width: 40%; opacity: .75; }
+.advertiser-business-center :is(.er-glass-btn--active, .er-glass-btn.active, .er-glass-btn.selected, .er-glass-btn[aria-pressed="true"])::before,
+.advertiser-business-center :is(.er-glass-btn--active, .er-glass-btn.active, .er-glass-btn.selected, .er-glass-btn[aria-pressed="true"])::after { width: 56%; opacity: .9; }
+
 /* Buttons of the existing modules adopt the Premium button. */
 :is(.advertiser-business-center, .client-office-v2) :is(.advertiser-stage-three, .advertiser-wallet-grid, .advertiser-referral-card, .advertiser-location-section, .pr-embed, .er-chat-card) :is(.button, .er-glass-btn) {
   display: inline-flex; align-items: center; justify-content: center; gap: .45rem;

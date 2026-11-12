@@ -27,7 +27,7 @@ import type { ExactProfileLocation, Profile, ProfileAccess, ProfileCommunication
 import { ChatThread } from '../components/chat/ChatThread';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { useI18n } from '../i18n';
-import { serviceLabel } from '../data/serviceCatalog';
+import { localizedServiceLabel } from '../data/serviceCatalog';
 import { getPublicProfiles, mapApiProfileToPublicProfile } from '../lib/publicProfiles';
 import { getPublicLocationLabel, getPublicLocationMode } from '../lib/locationLabels';
 import { profileDetailRows } from '../lib/profileDetails';
@@ -335,7 +335,7 @@ export function ProfilePage() {
           <MarketSection tab="services" activeTab={activeTab} eyebrow={t('profile.tabs.services')} title={t('profile.selectedExperiences')}>
             {selectedServices.length ? (
               <div className="tag-list premium-tags">
-                {selectedServices.map((key) => <span key={key}>{serviceLabel(key)}</span>)}
+                {selectedServices.map((key) => <span key={key}>{localizedServiceLabel(key, t)}</span>)}
               </div>
             ) : null}
             <TagList values={serviceTags} />
@@ -838,7 +838,6 @@ function getServicePricingRows(profile: Profile) {
       const item = pricing[key] || { mode: 'included', extra_price: null };
       return {
         key,
-        label: serviceLabel(key),
         mode: item.mode === 'extra' ? 'extra' : 'included',
         extra_price: Number(item.extra_price || 0)
       };
@@ -853,7 +852,7 @@ function ServicePricingList({ rows, currency }: { rows: ReturnType<typeof getSer
       <h3>{t('pricing.servicePricing')}</h3>
       {rows.map((row) => (
         <div className="service-menu-item" key={row.key}>
-          <strong>{row.label}</strong>
+          <strong>{localizedServiceLabel(row.key, t)}</strong>
           <span>{row.mode === 'extra' ? `+${row.extra_price} ${currency}` : t('pricing.includedInPrice')}</span>
         </div>
       ))}
