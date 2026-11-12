@@ -49,7 +49,7 @@ adminFunPageAdvertisementRouter.post('/advertisements', asyncHandler(async (req,
   const advertisement = createEmptyFunPageAdvertisement(settings.advertisements.length);
   const saved = await saveSettings({ ...settings, advertisements: [...settings.advertisements, advertisement] });
   await audit(req, 'funpage_advertisement_created', { advertisement_id: advertisement.id });
-  res.status(201).json({ advertisement, settings: deliverableSettings(saved) });
+  res.status(201).json({ advertisement: deliverableAdvertisement(advertisement), settings: deliverableSettings(saved) });
 }));
 
 adminFunPageAdvertisementRouter.patch('/advertisements/:id', advertisementUpload.single('image'), asyncHandler(async (req, res) => {
@@ -84,9 +84,9 @@ adminFunPageAdvertisementRouter.patch('/advertisements/:id', advertisementUpload
       && !isImageUsedElsewhere(saved, current.image.storagePath, current.id)
     ) {
       const removal = await supabaseAdmin.storage.from(config.storageBucket).remove([current.image.storagePath]);
-      if (removal.error) return res.status(200).json({ advertisement, settings: saved, warning: `Advertisement saved, but the old image could not be removed: ${removal.error.message}` });
+      if (removal.error) return res.status(200).json({ advertisement: deliverableAdvertisement(advertisement), settings: deliverableSettings(saved), warning: `Advertisement saved, but the old image could not be removed: ${removal.error.message}` });
     }
-    res.json({ advertisement, settings: deliverableSettings(saved) });
+    res.json({ advertisement: deliverableAdvertisement(advertisement), settings: deliverableSettings(saved) });
   } catch (error) {
     if (uploadedPath) await supabaseAdmin.storage.from(config.storageBucket).remove([uploadedPath]).catch(() => undefined);
     res.status(400).json({ error: error instanceof Error ? error.message : 'Advertisement could not be saved' });
@@ -186,10 +186,11 @@ async function audit(req: Request, action: string, details: Record<string, unkno
 
 /** Admin previews of stored advertisement images go through authorized media URLs (the bucket may be private). */
 function deliverableSettings<T extends { advertisements: Array<{ image?: { publicUrl: string; storagePath: string } | null }> }>(settings: T): T {
-  return {
-    ...settings,
-    advertisements: settings.advertisements.map((advertisement) => advertisement.image
-      ? { ...advertisement, image: { ...advertisement.image, publicUrl: storageImageUrl(advertisement.image.storagePath, 'public') || advertisement.image.publicUrl } }
-      : advertisement)
-  };
+  return { ...settings, advertisements: settings.advertisements.map(deliverableAdvertisement) };
+}
+
+function deliverableAdvertisement<T extends { image?: { publicUrl: string; storagePath: string } | null }>(advertisement: T): T {
+  return advertisement.image
+    ? { ...advertisement, image: { ...advertisement.image, publicUrl: storageImageUrl(advertisement.image.storagePath, 'public') || advertisement.image.publicUrl } }
+    : advertisement;
 }
