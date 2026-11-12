@@ -57,7 +57,7 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
   const radarSelect = [
     'id', 'display_name', 'slug', 'city', 'work_city', 'travel_city', 'area', 'work_area', 'work_country',
     'category', 'status', 'is_published', 'moderation_status', 'shadowbanned', 'operator_status',
-    'availability_status', 'available_now', 'latitude', 'longitude', 'location_mode', 'location_visibility',
+    'availability_status', 'available_now', 'latitude', 'longitude', 'location_mode', 'location_visibility', 'location_precision',
     'postal_code', 'work_place_label', 'created_at', 'location_updated_at', 'admin_priority', 'verified',
     'is_sponsored', 'acquisition_source', 'provider', 'price_1h', 'currency',
     'profile_images(id, storage_path, is_primary, is_hidden, is_private, moderation_status, sort_order, created_at)',
