@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useI18n } from '../i18n';
 import { supabase } from '../lib/supabase';
@@ -42,7 +42,12 @@ export function PricingPage() {
   });
   const [accessToken, setAccessToken] = useState('');
   const [accountEmail, setAccountEmail] = useState('');
-  const [productId, setProductId] = useState('client_activation');
+  const [searchParams] = useSearchParams();
+  const requestedProduct = searchParams.get('product') || '';
+  const [productId, setProductId] = useState(requestedProduct || 'client_activation');
+  // ESCORT Office Center (agency plan) is a future product. It is not offered publicly; only the existing
+  // renewal link for historical business accounts (?product=agency_30d) can still select it.
+  const orderableProducts = products.filter((item) => item.id !== 'agency_30d' || requestedProduct === 'agency_30d');
   const [provider, setProvider] = useState('bank_transfer');
   const [loading, setLoading] = useState(false);
   const [manualOrder, setManualOrder] = useState<Record<string, unknown> | null>(null);
@@ -101,12 +106,20 @@ export function PricingPage() {
         <h1>Pricing</h1>
         <p>Payments are for digital platform access, profile visibility, advertising tools and internal credits only. The platform does not process payments for physical meetings between users.</p>
         <div className="pricing-list">
-          {platformProducts.map(([, , name, price, interval]) => (
-            <article className="feature" key={name}>
-              <h2>{name}</h2>
-              <strong>{price}</strong>
-              <p>{interval}</p>
-            </article>
+          {platformProducts.map(([id, , name, price, interval]) => (
+            id === 'agency_30d' ? (
+              <article className="feature pricing-coming-soon" key={name} aria-disabled="true">
+                <h2>ESCORT Office Center</h2>
+                <strong>{t('register.path.comingSoon')}</strong>
+                <p>{t('register.path.officeText')}</p>
+              </article>
+            ) : (
+              <article className="feature" key={name}>
+                <h2>{name}</h2>
+                <strong>{price}</strong>
+                <p>{interval}</p>
+              </article>
+            )
           ))}
         </div>
         <h2>BC Coins packages</h2>
@@ -137,7 +150,7 @@ export function PricingPage() {
             <label>
               Product
               <select value={productId} onChange={(event) => setProductId(event.target.value)}>
-                {products.map((item) => <option key={item.id} value={item.id}>{item.label} - {item.price}</option>)}
+                {orderableProducts.map((item) => <option key={item.id} value={item.id}>{item.label} - {item.price}</option>)}
               </select>
             </label>
             <label>

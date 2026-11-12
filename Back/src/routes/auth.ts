@@ -74,6 +74,11 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
   if (requestedAccountType && !normalizeAuthAccountType(requestedAccountType)) {
     return res.status(400).json({ error: 'Unsupported account type' });
   }
+  // The ESCORT Office Center (business, multi-profile) is a future product: no new business accounts.
+  // Existing business accounts and roles are untouched.
+  if (authAccountType === 'business') {
+    return res.status(403).json({ error: 'ESCORT Office Center is not available yet', code: 'ESCORT_OFFICE_CENTER_NOT_AVAILABLE' });
+  }
 
   // Public sign up must go through the Supabase sign up flow with the anon key. It creates the
   // account as unconfirmed and sends the "Confirm signup" message over the configured SMTP.

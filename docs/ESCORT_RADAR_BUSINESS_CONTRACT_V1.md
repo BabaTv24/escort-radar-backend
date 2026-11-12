@@ -130,6 +130,13 @@ Sprzedaż wyłączona (409). Historyczne zakupy i zapisy księgowe zostają. Pro
 - Rzeczywista działalność musi być zgłoszona dostawcy zgodnie z prawdą.
 - Produkcyjne płatności pozostają zablokowane do potwierdzenia akceptacji. Nowy dostawca wymaga autoryzacji BOSS.
 
+## 12a. ESCORT Office Center (produkt przyszły)
+
+- **Status:** niezaimplementowany. Rejestracja pokazuje opcję jako nieaktywną („W przygotowaniu” / „In Entwicklung” / „Coming Soon”), a `POST /api/auth/register` odrzuca `auth_account_type=business` kodem `ESCORT_OFFICE_CENTER_NOT_AVAILABLE`. Istniejące konta i role `business` zostają bez zmian.
+- **Planowany model:** miesięczna subskrypcja dla operatorów zarządzających wieloma profilami. Planowane pojemności to 30, 60 i 120+ profili.
+- **Ceny: niezatwierdzone.** W kodzie są dwie sprzeczne kwoty planu agencyjnego: 499,00 EUR (`manualPayments`, cennik) i 499,99 EUR (Stripe `business_monthly`). Żadna nie jest publikowana jako cena ESCORT Office Center. Cennik pokazuje produkt jako „W przygotowaniu”.
+- **Nie mylić z ceną ogłoszeniodawcy indywidualnego:** 49,99 EUR / 30 dni (`advertiser_30d`, Stripe `escort_monthly`).
+
 ## 13. Otwarte blokady przed monetyzacją
 
 1. Akceptacja dostawcy płatności (sekcja 12). Do tego czasu nie ma produkcyjnych zakupów Premium ani BC.

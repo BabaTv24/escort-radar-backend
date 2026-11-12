@@ -93,3 +93,31 @@ test('FanPage keeps real data only and no unverified business price in the adver
     assert.doesNotMatch(landing, /\b\d{2,}\s*(\+|%|k\b)|Live Cam|wideoczat dostępny/i, language);
   }
 });
+
+test('registration offers Premium customer and individual advertiser; ESCORT Office Center is disabled everywhere', async () => {
+  const [register, auth, pricing] = await Promise.all([read('Front/src/pages/RegisterPage.tsx'), read('Back/src/routes/auth.ts'), read('Front/src/pages/PricingPage.tsx')]);
+  assert.match(register, /const selectableAccountTypes = \['client', 'escort'\] as const;/);
+  assert.match(register, /data-account-type="business"/);
+  assert.match(register, /aria-disabled="true"/);
+  assert.match(register, /requestedType === 'business'[\s\S]*setAuthAccountType\('client'\)/);
+  assert.match(auth, /authAccountType === 'business'[\s\S]*status\(403\)[\s\S]*ESCORT_OFFICE_CENTER_NOT_AVAILABLE/);
+  assert.match(pricing, /item\.id !== 'agency_30d' \|\| requestedProduct === 'agency_30d'/);
+  const labels = await Promise.all(['pl', 'de', 'en'].map(async (language) => JSON.parse(await read(`Front/src/locales/${language}.json`))['register.path.comingSoon']));
+  assert.deepEqual(labels, ['W przygotowaniu', 'In Entwicklung', 'Coming Soon']);
+  const de = JSON.parse(await read('Front/src/locales/de.json')) as Record<string, string>;
+  assert.equal(de['register.client.title'], 'Premium-Zugang einmalig 0,99 €');
+  for (const key of Object.keys(de).filter((item) => item.startsWith('register.client.'))) assert.doesNotMatch(de[key], /49[,.]99|499/, key);
+});
+
+test('Google sign-in is only started when the provider is enabled, and the customer goes to checkout once', async () => {
+  const [register, login, dashboard, providers] = await Promise.all([
+    read('Front/src/pages/RegisterPage.tsx'), read('Front/src/pages/LoginPage.tsx'), read('Front/src/pages/DashboardPage.tsx'), read('Front/src/lib/authProviders.ts')
+  ]);
+  assert.match(providers, /\/auth\/v1\/settings/);
+  assert.match(providers, /external\[provider\] === true \? 'enabled' : 'disabled'/);
+  for (const source of [register, login]) {
+    assert.match(source, /if \(googleState !== 'enabled'\) return setMessage\(t\('register\.google\.unavailable'\)\)/);
+    assert.match(source, /disabled=\{loading \|\| googleState !== 'enabled'\}/);
+  }
+  assert.match(dashboard, /localStorage\.removeItem\(PREMIUM_CHECKOUT_INTENT_KEY\);\s*if \(clientData\.activation\?\.state !== 'client_activated'\) \{\s*navigate\('\/pricing\?product=client_activation'\)/);
+});

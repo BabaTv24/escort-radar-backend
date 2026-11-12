@@ -5,6 +5,7 @@ import { LogIn, Radar } from 'lucide-react';
 import { saveLoginSessionHandoff, supabase } from '../lib/supabase';
 import { useI18n } from '../i18n';
 import { getSafeNextPath, waitForSupabaseSession, withTimeout } from '../lib/authRedirect';
+import { useOAuthProvider } from '../lib/authProviders';
 
 const rememberedEmailStorageKey = 'escortRadar.rememberedEmail';
 const loginJustCompletedStorageKey = 'escortRadar:loginJustCompleted';
@@ -17,6 +18,7 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showSlowLoginHelp, setShowSlowLoginHelp] = useState(false);
   const [confirmationNotice, setConfirmationNotice] = useState('');
+  const googleState = useOAuthProvider('google');
   const mountedRef = useRef(true);
   const loginRunId = useRef(0);
   const didRedirectRef = useRef(false);
@@ -188,11 +190,13 @@ export function LoginPage() {
 
   async function signInWithGoogle() {
     setMessage('');
+    // A disabled provider would send the browser to a raw GoTrue 400 page, so it is never started.
+    if (googleState !== 'enabled') return setMessage(t('register.google.unavailable'));
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}${nextPath}` }
     });
-    if (error) setMessage('Google login is not configured yet. Please use email login or try later.');
+    if (error) setMessage(t('register.google.unavailable'));
   }
 
   return (
@@ -230,7 +234,7 @@ export function LoginPage() {
               </button>
             )}
           </form>
-          <button className="button full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block" type="button" disabled={loading} onClick={signInWithGoogle}><span>{t('auth.continueWithGoogle')}</span></button>
+          <button className={`button full er-btn er-glass-btn er-glass-btn--cyan er-glass-btn--block register-google${googleState !== 'enabled' ? ' is-unavailable' : ''}`} type="button" disabled={loading || googleState !== 'enabled'} aria-disabled={googleState !== 'enabled'} onClick={signInWithGoogle}><span>{t('auth.continueWithGoogle')}</span>{googleState === 'disabled' ? <small> · {t('register.google.unavailableShort')}</small> : null}</button>
           <Link className="text-link" to="/register">{t('auth.needAccount')}</Link>
           {message && <p className="error-text">{message}</p>}
         </div>

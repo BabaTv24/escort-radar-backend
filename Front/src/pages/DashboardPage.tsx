@@ -6,6 +6,7 @@ import type { Session } from '@supabase/supabase-js';
 import { clearLoginSessionHandoff, restoreLoginSessionHandoff, supabase } from '../lib/supabase';
 import { api, ApiError } from '../lib/api';
 import { waitForSupabaseSession, withTimeout } from '../lib/authRedirect';
+import { PREMIUM_CHECKOUT_INTENT_KEY } from '../lib/authProviders';
 import { WorkPointMap } from '../components/WorkPointMap';
 import { AvailabilityHoursEditor } from '../components/AvailabilityHoursEditor';
 import {
@@ -513,6 +514,15 @@ export function DashboardPage() {
         ? { ...clientData.activation, ...clientData.referral }
         : clientData.activation);
       if (searchParams.get('activation_session_id')) setSearchParams({});
+      // A customer who just registered goes once to the existing 0.99 EUR checkout. An already activated
+      // customer is never sent there again, and Premium itself is granted only by verified payment.
+      if (localStorage.getItem(PREMIUM_CHECKOUT_INTENT_KEY)) {
+        localStorage.removeItem(PREMIUM_CHECKOUT_INTENT_KEY);
+        if (clientData.activation?.state !== 'client_activated') {
+          navigate('/pricing?product=client_activation');
+          return;
+        }
+      }
       setSavedProfile(null);
       setProfile({ ...emptyProfile });
       setProfileMode('create');

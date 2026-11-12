@@ -949,3 +949,33 @@ button.pr-kpi { cursor: pointer; }
   .market-header { grid-template-columns: auto minmax(0, 1fr); }
   .market-header .header-actions { justify-content: flex-end; }
 }
+
+/* ---------- Registration paths: Premium customer, individual advertiser, future Office Center ---------- */
+.pr-register .register-paths { display: grid; gap: .5rem; }
+.pr-register .register-path {
+  position: relative; display: flex; align-items: center; gap: .8rem; width: 100%; min-height: 60px;
+  padding: .75rem .9rem; border: 1px solid var(--pr-line); border-radius: 14px;
+  background: rgba(255, 255, 255, .03); color: var(--pr-text-2); text-align: left; cursor: pointer;
+  font-family: var(--pr-font); transition: border-color .18s var(--pr-ease), background .18s var(--pr-ease);
+}
+.pr-register .register-path > svg { flex: 0 0 auto; color: var(--pr-gold); }
+.pr-register .register-path > span { display: grid; gap: .15rem; min-width: 0; }
+.pr-register .register-path strong { color: var(--pr-text); font-size: .95rem; }
+.pr-register .register-path small { color: var(--pr-muted); font-size: .8rem; line-height: 1.35; }
+.pr-register .register-path:hover:not(.is-disabled) { border-color: rgba(244, 215, 127, .4); }
+.pr-register .register-path.is-selected { border-color: rgba(244, 215, 127, .6); background: linear-gradient(90deg, rgba(244, 215, 127, .14), rgba(244, 215, 127, .04)); }
+.pr-register .register-path.is-selected::after { content: ""; position: absolute; right: .9rem; top: 50%; width: 10px; height: 10px; border-radius: 50%; background: var(--pr-gold); transform: translateY(-50%); box-shadow: 0 0 0 4px rgba(244, 215, 127, .18); }
+.pr-register .register-path:focus-visible { outline: 2px solid var(--pr-gold); outline-offset: 2px; }
+.pr-register .register-path.is-disabled { cursor: not-allowed; opacity: .55; filter: grayscale(.6); border-style: dashed; }
+.pr-register .register-path.is-disabled > svg { color: var(--pr-muted); }
+.pr-register .register-path-badge {
+  margin-left: auto; flex: 0 0 auto; padding: .2rem .55rem; border: 1px solid rgba(255, 255, 255, .18); border-radius: 999px;
+  color: var(--pr-text-2); font: 700 .74rem/1.2 var(--pr-font); font-style: normal; letter-spacing: .02em; white-space: nowrap;
+}
+.pr-register .register-benefits { margin-top: .4rem; }
+.pr-register .register-free-note { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; margin: .35rem 0 0; color: var(--pr-muted); font-size: .92rem; }
+.pr-register .register-free-note svg { color: var(--pr-gold); }
+.pr-register .register-free-note a { color: var(--pr-gold); font-weight: 600; }
+.pr-auth .register-google.is-unavailable { opacity: .5; cursor: not-allowed; }
+.pr-auth .register-google small { font-weight: 500; color: var(--pr-muted); }
+.pricing-coming-soon { opacity: .6; filter: grayscale(.5); border-style: dashed !important; }
