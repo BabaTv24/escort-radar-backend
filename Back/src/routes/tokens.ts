@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireCommercialOperations } from '../commercialOperations.js';
 import { verifyUser } from '../middleware/auth.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler } from '../validation.js';
@@ -17,7 +18,7 @@ tokensRouter.get('/wallet/me', verifyUser, asyncHandler(async (req, res) => {
   res.json({ wallet });
 }));
 
-tokensRouter.post('/purchase-intent', verifyUser, asyncHandler(async (req, res) => {
+tokensRouter.post('/purchase-intent', verifyUser, requireCommercialOperations, asyncHandler(async (req, res) => {
   const packageId = String(req.body.package_id || '');
   const { data: tokenPackage } = packageId
     ? await supabaseAdmin.from('token_packages').select('*').eq('id', packageId).single()

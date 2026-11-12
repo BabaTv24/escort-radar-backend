@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { usePageTracking } from '../lib/analytics';
 import { CalendarDays, Coins, Heart, LogOut, Menu, MessageCircle, Radar, ShieldCheck, UserRound, X } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { api } from '../lib/api';
@@ -16,6 +17,7 @@ type HeaderAccount = {
 };
 
 export function Layout() {
+  usePageTracking();
   const { lang, setLang, t } = useI18n();
   const operatorName = import.meta.env.VITE_LEGAL_OPERATOR_NAME || '';
   const location = useLocation();

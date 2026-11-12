@@ -1,0 +1,43 @@
+/* Admin Traffic Intelligence — scoped to .at-root (ER-V1-PUBLIC-PREVIEW-001). Single-series charts in Admin gold. */
+.at-root { display: grid; gap: 1rem; min-width: 0; }
+.at-root h2, .at-root h3 { margin: 0 0 .35rem; }
+.at-root p { margin: 0; color: #cfc5ae; }
+.at-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.at-badge { display: inline-block; margin-top: .5rem !important; padding: .25rem .6rem; border: 1px solid rgba(247, 212, 107, .35); border-radius: 999px; color: #f7d46b !important; font-size: .8rem; }
+.at-controls { display: flex; gap: .4rem; }
+.at-controls button { min-height: 36px; padding: 0 .8rem; border: 1px solid rgba(247, 212, 107, .2); border-radius: .5rem; background: rgba(255, 255, 255, .03); color: #f5f2ed; cursor: pointer; }
+.at-controls button.active { border-color: rgba(247, 212, 107, .6); background: rgba(247, 212, 107, .12); color: #f7d46b; }
+.at-controls button:focus-visible, .at-bar-slot:focus-visible { outline: 2px solid #f7d46b; outline-offset: 2px; }
+.at-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.at-tiles .admin-stat-card { min-height: 0; }
+.at-tiles small { display: block; margin-top: .25rem; color: #a99f8a; font-size: .78rem; }
+.at-chart-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .75rem; }
+.at-chart { position: relative; height: 180px; display: flex; align-items: flex-end; gap: 2px; padding-top: .5rem; border-bottom: 1px solid rgba(247, 212, 107, .2); }
+.at-bar-slot { position: relative; flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
+.at-bar { width: 100%; border-radius: 4px 4px 0 0; background: #f7d46b; }
+.at-bar-slot:hover .at-bar, .at-bar-slot:focus-visible .at-bar { background: #ffe59a; }
+.at-tip { display: none; position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); z-index: 2; padding: .35rem .5rem; border: 1px solid rgba(247, 212, 107, .3); border-radius: .4rem; background: #121214; color: #cfc5ae; font-size: .75rem; white-space: nowrap; pointer-events: none; }
+.at-tip strong { color: #f5f2ed; }
+.at-bar-slot:hover .at-tip, .at-bar-slot:focus-visible .at-tip { display: block; }
+.at-axis { display: flex; justify-content: space-between; gap: .5rem; margin-top: .35rem; color: #a99f8a; font-size: .75rem; }
+.at-table { margin-top: .75rem; }
+.at-table summary { cursor: pointer; color: #f7d46b; }
+.at-table table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.at-table th, .at-table td { padding: .35rem .5rem; border-bottom: 1px solid rgba(255, 255, 255, .06); text-align: right; white-space: nowrap; }
+.at-table th:first-child, .at-table td:first-child { text-align: left; }
+.at-lists { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.at-rank ol { display: grid; gap: .55rem; margin: .5rem 0 0; padding: 0; list-style: none; }
+.at-rank-line { display: flex; justify-content: space-between; gap: .75rem; }
+.at-rank-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f5f2ed; }
+.at-rank-line strong { color: #f5f2ed; }
+.at-rank-track { height: 4px; margin-top: .25rem; border-radius: 4px; background: rgba(255, 255, 255, .06); }
+.at-rank-track div { height: 100%; border-radius: 4px; background: #f7d46b; }
+.at-rank small, .at-note, .at-footnote { color: #a99f8a !important; font-size: .78rem; }
+@media (max-width: 1100px) {
+  .at-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .at-lists { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .at-lists { grid-template-columns: minmax(0, 1fr); }
+  .at-chart { height: 140px; }
+}

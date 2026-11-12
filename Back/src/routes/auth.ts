@@ -5,6 +5,7 @@ import { deliverableStorageUrl } from '../mediaDelivery.js';
 import { asyncHandler } from '../validation.js';
 import { config } from '../config.js';
 import { recordClientRegistrationAttribution } from '../services/clientActivation.js';
+import { ADVERTISER_REGISTRATION_CLOSED, isCommercialOperationsEnabled } from '../commercialOperations.js';
 
 const allowedAuthAccountTypes = ['client', 'escort', 'business'] as const;
 const allowedIdentities = ['male', 'female', 'trans'] as const;
@@ -79,6 +80,10 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
   // Existing business accounts and roles are untouched.
   if (authAccountType === 'business') {
     return res.status(403).json({ error: 'ESCORT Office Center is not available yet', code: 'ESCORT_OFFICE_CENTER_NOT_AVAILABLE' });
+  }
+  // Public preview: no new advertiser accounts. Existing advertiser accounts and profiles are untouched.
+  if (authAccountType === 'escort' && !isCommercialOperationsEnabled()) {
+    return res.status(403).json({ error: 'Advertiser registration opens soon', code: ADVERTISER_REGISTRATION_CLOSED });
   }
 
   // Public sign up must go through the Supabase sign up flow with the anon key. It creates the

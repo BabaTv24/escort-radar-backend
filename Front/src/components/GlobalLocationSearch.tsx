@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { trackEvent } from '../lib/analytics';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { activePublicCategoryOptions, normalizeCategoryKey } from '../lib/categories';
@@ -72,6 +73,7 @@ export function GlobalLocationSearch({
     const params = new URLSearchParams();
     params.set('country', nextCountry);
     if (nextCategory) params.set('category', nextCategory);
+    trackEvent('city_search', { city: slug });
     navigate(`/city/${slug}?${params.toString()}`);
   }
 

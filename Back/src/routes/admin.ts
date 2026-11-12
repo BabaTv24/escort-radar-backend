@@ -33,6 +33,7 @@ import { assertPublicImportDns as secureAssertPublicImportDns, fetchPublicImport
 import { activateClientAccount, adjustTokenWalletBalance, deactivateClientAccount, getOrCreateTokenWallet } from '../services/clientActivation.js';
 import { normalizeClientPersonalVerificationStatus } from './clientPersonalProfile.js';
 import { applyManualPaymentOrder, resolveManualPaymentProduct, summarizeManualPaymentOrders } from '../manualPayments.js';
+import { isCommercialOperationsEnabled, sendCommercialOperationsDisabled } from '../commercialOperations.js';
 import { loadBcCoinPackages, normalizeBcCoinPackagePayload } from '../bcCoinPackages.js';
 import { resolveCityLocation } from '../locations.js';
 import { resolveAdminProfileSelection, validateAdminProfileSelection } from '../adminProfileSelection.js';
@@ -458,6 +459,8 @@ adminRouter.get('/manual-payment-orders', asyncHandler(async (_req, res) => {
 const MANUAL_PAYMENT_STALE_LOCK_MS = 2 * 60 * 1000;
 
 adminRouter.post('/manual-payment-orders/:id/approve', asyncHandler(async (req, res) => {
+  // Public preview: approving a payment would start commercial operations. Rejecting stays possible.
+  if (!isCommercialOperationsEnabled()) return sendCommercialOperationsDisabled(res);
   const { data: order, error } = await supabaseAdmin
     .from('manual_payment_orders')
     .select('*')
@@ -611,6 +614,14 @@ adminRouter.post('/manual-payment-orders/:id/reject', asyncHandler(async (req, r
   if (error) return res.status(400).json({ error: error.message });
   await logAdminAction(req.user?.email, 'manual_payment_order_rejected', 'manual_payment_order', req.params.id, { reason: optionalText(req.body.reason, 1000) });
   res.json({ order: data });
+}));
+
+// Traffic Intelligence: aggregated, pseudonymous figures only (no hashes or raw events leave the database).
+adminRouter.get('/traffic', asyncHandler(async (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 90);
+  const { data, error } = await supabaseAdmin.rpc('traffic_summary', { p_days: days });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ traffic: data, retention_days: 90, commercial_operations_enabled: isCommercialOperationsEnabled() });
 }));
 
 adminRouter.get('/audit-log', asyncHandler(async (_req, res) => {
@@ -3294,6 +3305,8 @@ adminRouter.get('/token-purchase-requests', asyncHandler(async (_req, res) => {
 adminRouter.patch('/token-purchase-requests/:id/status', asyncHandler(async (req, res) => {
   const status = String(req.body.status || '');
   if (!['pending', 'approved', 'failed', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid purchase status' });
+  // Public preview: approving a BC purchase credits paid coins, which is a commercial operation.
+  if (status === 'approved' && !isCommercialOperationsEnabled()) return sendCommercialOperationsDisabled(res);
 
   const { data: purchase, error: fetchError } = await supabaseAdmin
     .from('token_purchase_requests')

@@ -12,6 +12,7 @@ import {
   recordClientRegistrationAttribution
 } from '../services/clientActivation.js';
 import { createStripeCheckoutSession, sendStripeError } from '../services/stripePayments.js';
+import { requireCommercialOperations } from '../commercialOperations.js';
 import { bcuToBc, getBcuLedgerForUser, getBcuWalletForUser, getUserEntitlements } from '../services/bcuWallet.js';
 
 export const clientActivationRouter = Router();
@@ -144,7 +145,7 @@ async function loadLegacyClientActivationDashboard(userId: string) {
   };
 }
 
-clientActivationRouter.post('/checkout', asyncHandler(async (req, res) => {
+clientActivationRouter.post('/checkout', requireCommercialOperations, asyncHandler(async (req, res) => {
   if (!config.stripeEnabled || !config.stripeEscortRadarEnabled) return res.status(410).json({ error: 'Stripe checkout is disabled for Escort Radar. Use manual payment orders.' });
   try {
     const checkout = await createStripeCheckoutSession({
@@ -159,7 +160,7 @@ clientActivationRouter.post('/checkout', asyncHandler(async (req, res) => {
   }
 }));
 
-clientActivationRouter.post('/confirm', asyncHandler(async (req, res) => {
+clientActivationRouter.post('/confirm', requireCommercialOperations, asyncHandler(async (req, res) => {
   if (!config.stripeEnabled || !config.stripeEscortRadarEnabled) return res.status(410).json({ error: 'Stripe checkout is disabled for Escort Radar. Use manual payment orders.' });
   if (!config.stripeSecretKey) return res.status(503).json({ error: 'Stripe is not configured' });
   const sessionId = optionalText(req.body.checkout_session_id || req.body.session_id, 200);

@@ -4,6 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { useI18n } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { Seo } from '../components/Seo';
+import { usePlatformStatus } from '../lib/platformStatus';
 
 /**
  * Checkout for the two products sold today (bank transfer, manually verified).
@@ -33,6 +34,8 @@ const knownErrorCodes = ['ALREADY_ACTIVE', 'PROFILE_REQUIRED', 'ADVERTISER_ACCOU
 
 export function PricingPage() {
   const { t, lang } = useI18n();
+  // Public preview: the server refuses every order; the page shows the notice instead of the order button.
+  const platform = usePlatformStatus();
   const formatEur = (amount: number, currency = 'EUR') => `${amount.toLocaleString(numberLocales[lang] || 'de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
   const [searchParams] = useSearchParams();
   const requestedProduct = searchParams.get('product') || '';
@@ -178,8 +181,10 @@ export function PricingPage() {
               </div>
             ) : null}
           </div>
-          <p className="subscription-notice">{t('checkout.notPaidYet')}</p>
-          {!accessToken ? (
+          {platform.commercial_operations_enabled ? <p className="subscription-notice">{t('checkout.notPaidYet')}</p> : null}
+          {!platform.commercial_operations_enabled ? (
+            <p className="subscription-notice" role="status">{t('preview.purchasesUnavailable')}</p>
+          ) : !accessToken ? (
             <>
               <p>{t('checkout.loginRequired')}</p>
               <div className="hero-actions">

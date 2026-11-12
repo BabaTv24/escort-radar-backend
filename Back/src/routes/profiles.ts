@@ -345,7 +345,9 @@ profilesRouter.post('/', verifyUser, requireAdvertiserOnboardingAccess, asyncHan
   }
 
   const baseSlug = slugify(result.data.display_name);
-  const isTestAccount = Boolean(req.body.is_test_account) || isSafeTestEmail(req.user?.email);
+  // Test-account status (auto-approval, no payment) is never taken from the request or the e-mail address;
+  // it can only be set by an admin or the seed scripts on existing records.
+  const isTestAccount = false;
   const payload = {
     ...profileData,
     ...profileLocationPatch(locationResolution, result.data.location_input_source === 'manual' ? 'manual' : 'automatic', result.data.location_input_source === 'manual'),
@@ -793,15 +795,6 @@ async function fetchProfile(id: string) {
     .eq('id', id)
     .single();
   return data;
-}
-
-function isSafeTestEmail(email: string | undefined) {
-  const normalized = email?.toLowerCase() || '';
-  const protectedEmails = (process.env.ADMIN_EMAILS || 'admin@example.test')
-    .split(',')
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-  return normalized.includes('+test') && !protectedEmails.includes(normalized);
 }
 
 function logProfileDebug(message: string, req: any, extra: Record<string, unknown> = {}) {

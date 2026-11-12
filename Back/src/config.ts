@@ -58,6 +58,10 @@ type Config = {
   manualBankTransferReferenceTemplate: string;
   manualCryptoEnabled: boolean;
   bcuWalletEnabled: boolean;
+  /** Public preview gate: no purchases, payment callbacks or paid entitlements while false. Missing = false. */
+  commercialOperationsEnabled: boolean;
+  /** Origins whose page views are counted (production site only by default). */
+  analyticsAllowedOrigins: string[];
   hermesAnalyzeProfileUrl: string;
   hermesWebhookSecret: string;
   openAiApiKey: string;
@@ -142,6 +146,8 @@ export const config: Config = {
   manualBankTransferReferenceTemplate: process.env.MANUAL_BANK_TRANSFER_REFERENCE_TEMPLATE || 'ER-{orderId}-{userEmail}',
   manualCryptoEnabled: envBoolean('MANUAL_CRYPTO_ENABLED', true),
   bcuWalletEnabled: envBoolean('BCU_WALLET_ENABLED', false),
+  commercialOperationsEnabled: envBoolean('COMMERCIAL_OPERATIONS_ENABLED', false),
+  analyticsAllowedOrigins: (process.env.ANALYTICS_ALLOWED_ORIGINS || 'https://escort-radar.fun,https://www.escort-radar.fun').split(',').map((item) => item.trim()).filter(Boolean),
   hermesAnalyzeProfileUrl: process.env.HERMES_ANALYZE_PROFILE_URL || '',
   hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET || '',
   openAiApiKey: process.env.OPENAI_API_KEY || '',

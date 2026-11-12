@@ -30,6 +30,22 @@ export type BulkProfilePhotoApprovalResponse = {
 type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
 export type LocationGeocodeResult = Pick<Profile, 'work_country' | 'work_city' | 'work_area' | 'postal_code' | 'exact_address' | 'work_place_label' | 'latitude' | 'longitude' | 'location_precision'> & { street?: string; house_number?: string; precision: 'exact' | 'street' | 'postal_area' | 'city'; geocoded: boolean };
 
+export type TrafficDay = { day: string; page_views: number; visitors: number; radar_views: number; city_searches: number; profile_views: number; premium_cta: number; advertiser_cta: number };
+export type TrafficWindow = {
+  page_views: number; page_views_previous: number; visitor_days: number; visitor_days_previous: number;
+  radar_views: number; city_searches: number; profile_views: number; premium_cta: number; advertiser_cta: number;
+  new_client_accounts: number; new_advertiser_accounts: number;
+};
+export type TrafficSummary = {
+  days: number; first_day: string; last_day: string; daily: TrafficDay[];
+  trends: { '7d': TrafficWindow; '30d': TrafficWindow };
+  top_cities: { city: string; searches: number; views: number }[];
+  top_profiles: { profile_ref: string; views: number; visitors: number; profile_id: string | null; display_name: string | null; city: string | null }[];
+  sources: { source: string; page_views: number }[];
+  devices: { device: string; page_views: number }[];
+  countries: { country: string; page_views: number }[];
+};
+
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly payload?: Record<string, unknown>) {
     super(`HTTP ${status}: ${message}`);
@@ -700,6 +716,7 @@ export const api = {
   adminWallets: (token: string) => request<{ wallets: Wallet[] }>('/api/admin/wallets', { token }),
   adminTokenTransactions: (token: string) => request<{ transactions: TokenTransaction[] }>('/api/admin/token-transactions', { token }),
   adminClientActivationPayments: (token: string) => request<{ client_activation_payments: Record<string, unknown>[] }>('/api/admin/client-activation-payments', { token }),
+  adminTraffic: (token: string, days: number) => request<{ traffic: TrafficSummary; retention_days: number; commercial_operations_enabled: boolean }>(`/api/admin/traffic?days=${days}`, { token }),
   adminManualPaymentOrders: (token: string) => request<{ orders: Record<string, unknown>[]; summary?: Record<string, number> }>('/api/admin/manual-payment-orders', { token }),
   approveManualPaymentOrder: (token: string, id: string, confirmation: { received_amount_eur: number; bank_reference?: string }) => request<{ order: Record<string, unknown>; already_applied?: boolean }>(`/api/admin/manual-payment-orders/${id}/approve`, {
     method: 'POST',

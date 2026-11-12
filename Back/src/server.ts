@@ -7,6 +7,8 @@ import { sitemapRouter } from './routes/sitemap.js';
 import { uploadsRouter } from './routes/uploads.js';
 import { reportsRouter } from './routes/reports.js';
 import { adminRouter } from './routes/admin.js';
+import { analyticsRouter } from './routes/analytics.js';
+import { publicPlatformStatus } from './commercialOperations.js';
 import { paymentsRouter } from './routes/payments.js';
 import { bookingRequestsRouter } from './routes/bookingRequests.js';
 import { tokensRouter } from './routes/tokens.js';
@@ -72,6 +74,12 @@ app.get('/api/version', (_req, res) => {
   });
 });
 
+// Public preview state for the frontend; enforcement itself is server-side on every commercial route.
+app.get('/api/platform/status', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(publicPlatformStatus());
+});
+app.use('/api/analytics', analyticsRouter);
 app.get('/api/media/image', (req, res, next) => { mediaImageHandler(req, res).catch(next); });
 app.use('/api/auth', authRouter);
 app.use('/api/profiles', profilesRouter);

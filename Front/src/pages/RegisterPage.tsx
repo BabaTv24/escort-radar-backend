@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { usePlatformStatus } from '../lib/platformStatus';
 import { Link, useSearchParams } from 'react-router-dom';
 import { BadgeCheck, Building2, Crown, Lock, MailCheck, RadioTower, ShieldCheck, UserRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -35,6 +36,17 @@ export function RegisterPage() {
   const googleState = useOAuthProvider('google');
   const { t } = useI18n();
   const isCustomer = authAccountType === 'client';
+  // Public preview: new advertiser accounts are refused by the server (ADVERTISER_REGISTRATION_CLOSED).
+  const platform = usePlatformStatus();
+  const advertiserRegistrationOpen = platform.advertiser_registration_open;
+  const [advertiserClosedNotice, setAdvertiserClosedNotice] = useState(false);
+
+  useEffect(() => {
+    if (platform.loaded && !advertiserRegistrationOpen && authAccountType === 'escort') {
+      setAuthAccountType('client');
+      setAdvertiserClosedNotice(true);
+    }
+  }, [platform.loaded, advertiserRegistrationOpen, authAccountType]);
 
   useEffect(() => {
     const requestedType = searchParams.get('type');
@@ -177,10 +189,18 @@ export function RegisterPage() {
               <Crown size={18} aria-hidden="true" />
               <span><strong>{t('register.path.client')}</strong><small>{t('register.path.clientText')}</small></span>
             </button>
-            <button type="button" role="radio" aria-checked={authAccountType === 'escort'} className={`register-path${authAccountType === 'escort' ? ' is-selected' : ''}`} onClick={() => selectAccountType('escort')}>
-              <UserRound size={18} aria-hidden="true" />
-              <span><strong>{t('register.path.advertiser')}</strong><small>{t('register.path.advertiserText')}</small></span>
-            </button>
+            {advertiserRegistrationOpen ? (
+              <button type="button" role="radio" aria-checked={authAccountType === 'escort'} className={`register-path${authAccountType === 'escort' ? ' is-selected' : ''}`} onClick={() => selectAccountType('escort')}>
+                <UserRound size={18} aria-hidden="true" />
+                <span><strong>{t('register.path.advertiser')}</strong><small>{t('register.path.advertiserText')}</small></span>
+              </button>
+            ) : (
+              <div className="register-path is-disabled" role="radio" aria-checked="false" aria-disabled="true" data-account-type="escort">
+                <UserRound size={18} aria-hidden="true" />
+                <span><strong>{t('register.path.advertiser')}</strong><small>{t('register.advertiserClosed')}</small></span>
+                <em className="register-path-badge">{t('register.path.comingSoon')}</em>
+              </div>
+            )}
             <div className="register-path is-disabled" role="radio" aria-checked="false" aria-disabled="true" data-account-type="business">
               <Building2 size={18} aria-hidden="true" />
               <span><strong>{t('register.path.office')}</strong><small>{t('register.path.officeText')}</small></span>
@@ -188,9 +208,12 @@ export function RegisterPage() {
             </div>
           </div>
           {officeCenterRequested ? <p className="subscription-notice" role="status"><Building2 size={16} /> {t('register.officeNotice')}</p> : null}
+          {advertiserClosedNotice ? <p className="subscription-notice" role="status"><UserRound size={16} /> {t('register.advertiserClosed')}</p> : null}
           <p className="subscription-notice register-price-notice">
             <ShieldCheck size={16} />
-            {t(isCustomer ? 'register.client.priceNotice' : 'register.advertiser.priceNotice')}
+            {isCustomer && platform.loaded && !platform.commercial_operations_enabled
+              ? t('preview.purchasesUnavailable')
+              : t(isCustomer ? 'register.client.priceNotice' : 'register.advertiser.priceNotice')}
           </p>
           {!isCustomer && (
             <select value={identity} aria-label={t('register.identityLabel')} onChange={(event) => setIdentity(event.target.value as typeof identityOptions[number])}>

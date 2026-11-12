@@ -27,6 +27,7 @@ import type { ExactProfileLocation, Profile, ProfileAccess, ProfileCommunication
 import { ChatThread } from '../components/chat/ChatThread';
 import { ErrorState, LoadingState } from '../components/LoadingState';
 import { useI18n } from '../i18n';
+import { trackEvent } from '../lib/analytics';
 import { localizedServiceLabel } from '../data/serviceCatalog';
 import { getPublicProfiles, mapApiProfileToPublicProfile } from '../lib/publicProfiles';
 import { getPublicLocationLabel, getPublicLocationMode } from '../lib/locationLabels';
@@ -548,6 +549,8 @@ export function ProfilePage() {
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token;
     if (!token) {
+      // Anonymous Premium interest does not navigate, so it is counted here (logged-in clicks count on /pricing).
+      trackEvent('premium_cta_click', { path: '/profile/:id' });
       setAccessMessage(t('profile.loginToActivate'));
       return;
     }

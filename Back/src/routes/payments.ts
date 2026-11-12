@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { getAuthAccountType, verifyUser } from '../middleware/auth.js';
+import { isCommercialOperationsEnabled, requireCommercialOperations } from '../commercialOperations.js';
 import { config } from '../config.js';
 import { supabaseAdmin } from '../supabase.js';
 import { asyncHandler, optionalText } from '../validation.js';
@@ -37,7 +38,7 @@ paymentsRouter.get('/plans', (_req, res) => {
   });
 });
 
-paymentsRouter.post('/client-activation/checkout', verifyUser, asyncHandler(async (req, res) => {
+paymentsRouter.post('/client-activation/checkout', verifyUser, requireCommercialOperations, asyncHandler(async (req, res) => {
   if (!config.stripeEnabled || !config.stripeEscortRadarEnabled) return stripeDisabled(res);
   try {
     const checkout = await createStripeCheckoutSession({
@@ -52,7 +53,7 @@ paymentsRouter.post('/client-activation/checkout', verifyUser, asyncHandler(asyn
   }
 }));
 
-paymentsRouter.post('/escort-subscription/checkout', verifyUser, asyncHandler(async (req, res) => {
+paymentsRouter.post('/escort-subscription/checkout', verifyUser, requireCommercialOperations, asyncHandler(async (req, res) => {
   if (!config.stripeEnabled || !config.stripeEscortRadarEnabled) return stripeDisabled(res);
   try {
     const checkout = await createStripeCheckoutSession({
@@ -67,7 +68,7 @@ paymentsRouter.post('/escort-subscription/checkout', verifyUser, asyncHandler(as
   }
 }));
 
-paymentsRouter.post('/business-subscription/checkout', verifyUser, asyncHandler(async (req, res) => {
+paymentsRouter.post('/business-subscription/checkout', verifyUser, requireCommercialOperations, asyncHandler(async (req, res) => {
   if (!config.stripeEnabled || !config.stripeEscortRadarEnabled) return stripeDisabled(res);
   try {
     const checkout = await createStripeCheckoutSession({
@@ -83,7 +84,7 @@ paymentsRouter.post('/business-subscription/checkout', verifyUser, asyncHandler(
   }
 }));
 
-paymentsRouter.post('/coins/checkout', verifyUser, asyncHandler(async (req, res) => {
+paymentsRouter.post('/coins/checkout', verifyUser, requireCommercialOperations, asyncHandler(async (req, res) => {
   if (!config.stripeEnabled || !config.stripeEscortRadarEnabled) return stripeDisabled(res);
   try {
     const checkout = await createStripeCheckoutSession({
@@ -99,10 +100,12 @@ paymentsRouter.post('/coins/checkout', verifyUser, asyncHandler(async (req, res)
 }));
 
 paymentsRouter.get('/manual-products', asyncHandler(async (_req, res) => {
-  // Only products and payment methods a customer can complete today are offered.
-  const products = manualPaymentProducts.filter((product) => isCustomerOrderableProduct(product.id));
-  const bankTransferReady = isBankTransferConfigured();
+  // Only products and payment methods a customer can complete today are offered; none during the public preview.
+  const commercial = isCommercialOperationsEnabled();
+  const products = commercial ? manualPaymentProducts.filter((product) => isCustomerOrderableProduct(product.id)) : [];
+  const bankTransferReady = commercial && isBankTransferConfigured();
   res.json({
+    commercial_operations_enabled: commercial,
     products,
     providers: {
       manual: false,
@@ -251,8 +254,8 @@ async function createManualPaymentOrder(req: Request, res: Response) {
   res.status(201).json(orderResponse({ ...data, instructions, metadata: finalMetadata }, false));
 }
 
-paymentsRouter.post('/manual-orders', verifyUser, asyncHandler(createManualPaymentOrder));
-paymentsRouter.post('/create-order', verifyUser, asyncHandler(createManualPaymentOrder));
+paymentsRouter.post('/manual-orders', verifyUser, requireCommercialOperations, asyncHandler(createManualPaymentOrder));
+paymentsRouter.post('/create-order', verifyUser, requireCommercialOperations, asyncHandler(createManualPaymentOrder));
 
 paymentsRouter.get('/my-orders', verifyUser, asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
