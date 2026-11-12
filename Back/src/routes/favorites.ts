@@ -9,6 +9,7 @@ import { isPublicProfile } from '../publicProfiles.js';
 import { isActivePublicCategory } from '../categories.js';
 import { bcuToBc, getBcuWalletForUser } from '../services/bcuWallet.js';
 import { notifyUser } from '../services/inAppNotifications.js';
+import { publicProfilePayload } from './profiles.js';
 
 export const favoritesRouter = Router();
 
@@ -28,7 +29,8 @@ favoritesRouter.get('/', asyncHandler(async (req, res) => {
       id: row.id,
       profile_id: row.profile_id,
       created_at: row.created_at,
-      profile: row.profiles
+      // Same public payload as the catalog: no owner, contact or internal fields. Premium contacts come from /access.
+      profile: row.profiles ? publicProfilePayload(row.profiles) : null
     })),
     wallet
   });

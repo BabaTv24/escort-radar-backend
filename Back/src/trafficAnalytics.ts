@@ -44,15 +44,28 @@ export function countryFromHeaders(headers: Record<string, string | string[] | u
   return null;
 }
 
-/** Client address used only as hash input, never stored. */
-export function clientAddressFromHeaders(headers: Record<string, string | string[] | undefined>, fallback: string | undefined) {
-  for (const name of ['cf-connecting-ip', 'true-client-ip']) {
-    const raw = headers[name];
+/**
+ * Client address used only as hash/limit input, never stored.
+ * X-Forwarded-For entries left of the trusted proxies are supplied by the client and can be forged, so the address
+ * is read at the position written by the nearest trusted proxy (hops from the right). An edge header such as
+ * cf-connecting-ip is used only when explicitly configured.
+ */
+export function clientAddressFromHeaders(
+  headers: Record<string, string | string[] | undefined>,
+  socketAddress: string | undefined,
+  options: { trustedProxyHops?: number; clientIpHeader?: string } = {}
+) {
+  const header = (options.clientIpHeader || '').toLowerCase();
+  if (header) {
+    const raw = headers[header];
     const value = String(Array.isArray(raw) ? raw[0] : raw || '').trim();
     if (value) return value;
   }
-  const forwarded = String(headers['x-forwarded-for'] || '').split(',')[0]?.trim();
-  return forwarded || fallback || '';
+  const hops = Math.max(0, Math.trunc(options.trustedProxyHops ?? 1));
+  if (hops === 0) return socketAddress || '';
+  const chain = String(headers['x-forwarded-for'] || '').split(',').map((item) => item.trim()).filter(Boolean);
+  // With N trusted proxies, the N-th entry from the right was appended by our own edge and cannot be forged.
+  return chain.length >= hops ? chain[chain.length - hops] : (socketAddress || '');
 }
 
 const PATH_PATTERN = /^\/[a-z0-9\-/:]{0,119}$/;
@@ -105,6 +118,29 @@ export function newDailySalt() {
 
 export function visitorHash(salt: string, address: string, userAgent: string) {
   return createHash('sha256').update(`${salt}\u0000${address}\u0000${userAgent}`).digest('hex').slice(0, 32);
+}
+
+/** Raw event retention in days (covers the 30-day view and its previous 30-day comparison). */
+export const TRAFFIC_RETENTION_DAYS = 60;
+
+/**
+ * Caps how many different pseudonymous visitors one network address can produce per day, so rotating the
+ * User-Agent cannot inflate unique visitors. Kept in memory only, keyed by a salted digest of the address.
+ */
+export class DistinctVisitorCap {
+  private readonly seen = new Map<string, Set<string>>();
+  private day = '';
+  constructor(private readonly maxPerAddress = 5) {}
+
+  allow(day: string, addressKey: string, visitor: string) {
+    if (day !== this.day) { this.seen.clear(); this.day = day; }
+    let visitors = this.seen.get(addressKey);
+    if (!visitors) { visitors = new Set(); this.seen.set(addressKey, visitors); }
+    if (visitors.has(visitor)) return true;
+    if (visitors.size >= this.maxPerAddress) return false;
+    visitors.add(visitor);
+    return true;
+  }
 }
 
 /** Simple in-memory limiter so a single client cannot inflate the numbers. */

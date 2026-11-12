@@ -618,10 +618,10 @@ adminRouter.post('/manual-payment-orders/:id/reject', asyncHandler(async (req, r
 
 // Traffic Intelligence: aggregated, pseudonymous figures only (no hashes or raw events leave the database).
 adminRouter.get('/traffic', asyncHandler(async (req, res) => {
-  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 90);
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 60);
   const { data, error } = await supabaseAdmin.rpc('traffic_summary', { p_days: days });
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ traffic: data, retention_days: 90, commercial_operations_enabled: isCommercialOperationsEnabled() });
+  res.json({ traffic: data, retention_days: 60, analytics_collection_enabled: config.analyticsCollectionEnabled, commercial_operations_enabled: isCommercialOperationsEnabled() });
 }));
 
 adminRouter.get('/audit-log', asyncHandler(async (_req, res) => {

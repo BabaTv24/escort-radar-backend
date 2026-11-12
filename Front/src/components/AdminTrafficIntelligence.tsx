@@ -17,6 +17,7 @@ export function AdminTrafficIntelligence({ token }: { token: string }) {
   const [data, setData] = useState<TrafficSummary | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [preview, setPreview] = useState(true);
+  const [collecting, setCollecting] = useState(false);
   const [reload, setReload] = useState(0);
   const fmt = (value: number) => Number(value || 0).toLocaleString(numberLocales[lang] || 'de-DE');
 
@@ -28,6 +29,7 @@ export function AdminTrafficIntelligence({ token }: { token: string }) {
         if (!active) return;
         setData(response.traffic);
         setPreview(!response.commercial_operations_enabled);
+        setCollecting(response.analytics_collection_enabled === true);
         setState('ready');
       })
       .catch(() => { if (active) setState('error'); });
@@ -66,6 +68,7 @@ export function AdminTrafficIntelligence({ token }: { token: string }) {
           <h2>{t('admin.traffic.title')}</h2>
           <p>{t('admin.traffic.privacyNote')}</p>
           {preview ? <p className="at-badge">{t('admin.traffic.previewMode')}</p> : null}
+          {!collecting ? <p className="at-badge" role="status">{t('admin.traffic.collectionDisabled')}</p> : null}
         </div>
         <div className="at-controls" role="group" aria-label={t('admin.traffic.period')}>
           {([7, 30] as const).map((value) => (
@@ -117,7 +120,7 @@ export function AdminTrafficIntelligence({ token }: { token: string }) {
 
       <div className="at-lists">
         <RankList title={t('admin.traffic.topCities')} empty={t('admin.traffic.empty')} rows={data.top_cities.map((row) => ({ label: row.city, value: row.searches + row.views, detail: t('admin.traffic.cityDetail', { searches: fmt(row.searches), views: fmt(row.views) }) }))} fmt={fmt} />
-        <RankList title={t('admin.traffic.topProfiles')} empty={t('admin.traffic.empty')} rows={data.top_profiles.map((row) => ({ label: row.display_name ? `${row.display_name}${row.city ? ` · ${row.city}` : ''}` : row.profile_ref, value: row.views, detail: t('admin.traffic.profileDetail', { visitors: fmt(row.visitors) }) }))} fmt={fmt} />
+        <RankList title={t('admin.traffic.topProfiles')} empty={t('admin.traffic.empty')} rows={data.top_profiles.map((row) => ({ label: row.display_name ? `${row.display_name}${row.city ? ` · ${row.city}` : ''}` : row.profile_ref, value: row.views }))} fmt={fmt} />
         <RankList title={t('admin.traffic.sources')} empty={t('admin.traffic.empty')} rows={data.sources.map((row) => ({ label: row.source === 'direct' ? t('admin.traffic.direct') : row.source, value: row.page_views }))} fmt={fmt} />
         <RankList title={t('admin.traffic.devices')} empty={t('admin.traffic.empty')} rows={data.devices.map((row) => ({ label: t(`admin.traffic.device.${row.device}`), value: row.page_views }))} fmt={fmt} />
         <RankList title={t('admin.traffic.countries')} empty={t('admin.traffic.empty')} note={t('admin.traffic.countriesNote')} rows={data.countries.map((row) => ({ label: row.country === 'unknown' ? t('admin.traffic.unknown') : row.country, value: row.page_views }))} fmt={fmt} />

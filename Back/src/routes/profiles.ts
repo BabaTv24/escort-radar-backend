@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { redactPublicProfileText } from '../publicContactRedaction.js';
 import { supabaseAdmin } from '../supabase.js';
 import { storageImageUrl, type MediaAccess } from '../mediaDelivery.js';
 import { allowedCities, asyncHandler, normalizeOperatorStatus, normalizeProfileCategory, parseBoolean, slugify, validateProfileInput } from '../validation.js';
@@ -576,6 +577,11 @@ function withOwnerImageUrls(profile: any, wallet?: any) {
  * additional approved images and contact details require Premium activation (GET /:id/access).
  */
 export const PUBLIC_PROFILE_IMAGE_LIMIT = 1;
+/** Public (anonymous/FREE) payload of one profile row: same sanitiser as the list, Radar and profile endpoints. */
+export function publicProfilePayload(profile: any) {
+  return sanitizePublicProfile(withImageUrls(profile, undefined, 'public'));
+}
+
 export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEffectivePublicLocation(profile), imageLimit = PUBLIC_PROFILE_IMAGE_LIMIT) {
   const { phone, primary_phone, additional_phones, whatsapp, telegram, business_phone: _businessPhone,
     admin_note, subscription_note, source_url, import_source, imported_at, source_url_normalized,
@@ -596,7 +602,8 @@ export function sanitizePublicProfile(profile: any, resolvedLocation = resolveEf
     location_input_source: _locationInputSource,
     ...withInternalFields
   } = profile;
-  const publicProfile: any = omitInternalProfileFields(withInternalFields);
+  // Typed contact details in free text are masked for anonymous/FREE output; the stored text is unchanged.
+  const publicProfile: any = redactPublicProfileText(omitInternalProfileFields(withInternalFields));
   const visibleImages = (publicProfile.profile_images || []).slice(0, imageLimit).map(publicImageFields);
   const visibility = normalizeEffectiveLocationVisibility(publicProfile.location_mode, publicProfile.location_visibility);
   const effectiveLocation = resolvedLocation || resolveEffectivePublicLocation({ ...publicProfile, latitude, longitude, location_visibility: visibility });

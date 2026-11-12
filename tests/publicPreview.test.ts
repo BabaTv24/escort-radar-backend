@@ -14,7 +14,7 @@ test('commercial operations default to off when the flag is missing', async () =
   const { publicPlatformStatus } = await import('../Back/src/commercialOperations.ts');
   if (previous === undefined) {
     assert.equal(config.commercialOperationsEnabled, false);
-    assert.deepEqual(publicPlatformStatus(), { mode: 'public_preview', commercial_operations_enabled: false, advertiser_registration_open: false, purchases_enabled: false });
+    assert.deepEqual(publicPlatformStatus(), { mode: 'public_preview', commercial_operations_enabled: false, advertiser_registration_open: false, purchases_enabled: false, analytics_enabled: false });
   }
   const source = await read('../Back/src/config.ts');
   assert.match(source, /commercialOperationsEnabled: envBoolean\('COMMERCIAL_OPERATIONS_ENABLED', false\)/);
@@ -82,7 +82,7 @@ test('bots, devices, countries and hashing', async () => {
   assert.equal(countryFromHeaders({ 'cf-ipcountry': 'de' }), 'DE');
   assert.equal(countryFromHeaders({ 'cf-ipcountry': 'XX' }), null);
   assert.equal(countryFromHeaders({}), null);
-  assert.equal(clientAddressFromHeaders({ 'x-forwarded-for': '203.0.113.1, 10.0.0.1' }, '10.0.0.2'), '203.0.113.1');
+  assert.equal(clientAddressFromHeaders({ 'x-forwarded-for': '203.0.113.1, 10.0.0.1' }, '10.0.0.2'), '10.0.0.1', 'rightmost entry = written by the trusted proxy');
   const a = visitorHash('salt-one', '203.0.113.1', 'UA');
   assert.match(a, /^[0-9a-f]{32}$/);
   assert.equal(visitorHash('salt-one', '203.0.113.1', 'UA'), a);
@@ -106,11 +106,12 @@ test('frontend tracking sends route templates only, never query strings or ident
   assert.match(source, /PRODUCTION_HOSTS = \['escort-radar\.fun', 'www\.escort-radar\.fun'\]/);
   assert.match(source, /nav\.webdriver/);
   assert.match(source, /doNotTrack === '1' \|\| nav\.globalPrivacyControl === true/);
+  assert.match(source, /if \(status\.analytics_enabled\) sendEvent/);
   assert.match(source, /credentials: 'omit'/);
   assert.doesNotMatch(source, /localStorage|sessionStorage|document\.cookie/);
 });
 
-test('analytics storage is pseudonymous, retained 90 days and closed to clients', async () => {
+test('analytics storage is pseudonymous, retained 60 days and closed to clients', async () => {
   const migration = await read('../supabase/migrations/062_traffic_analytics.sql');
   const tableColumns = migration.slice(migration.indexOf('create table if not exists public.traffic_events'), migration.indexOf('create index'));
   assert.doesNotMatch(tableColumns, /\bip\b|user_agent|email|user_id/i);
@@ -118,7 +119,7 @@ test('analytics storage is pseudonymous, retained 90 days and closed to clients'
   assert.match(migration, /revoke all on public\.traffic_salts from anon, authenticated;/);
   assert.match(migration, /revoke all on function public\.traffic_summary\(integer\) from public, anon, authenticated;/);
   assert.match(migration, /grant execute on function public\.traffic_summary\(integer\) to service_role;/);
-  assert.match(migration, /p_retention_days integer default 90/);
+  assert.match(migration, /p_retention_days integer default 60/);
   assert.match(migration, /delete from public\.traffic_salts/);
 });
 

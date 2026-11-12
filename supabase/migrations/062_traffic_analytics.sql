@@ -1,12 +1,15 @@
 -- ER-V1-PUBLIC-PREVIEW-001: privacy-conscious traffic analytics.
 --
--- Nothing here identifies a person:
+-- Pseudonymous, not anonymous (GDPR Art. 4(5)): while the daily salt exists, the backend could recompute a
+-- visitor_hash from an address and user agent. Measures:
 --   * no IP address, user agent, cookie, account id or e-mail is stored;
 --   * visitor_hash = SHA-256(daily salt + client address + user agent), truncated. The salt is random per
---     Berlin calendar day and deleted after the following day, so hashes cannot be recomputed or linked
---     across days. Unique visitors are therefore estimated per day only.
---   * raw events are deleted after 90 days (prune_traffic_analytics, called by the backend daily).
--- Only the backend (service_role) can read or write these tables and functions.
+--     Berlin calendar day and destroyed after the following day; afterwards hashes can no longer be recomputed
+--     or linked across days. Unique visitors are therefore estimated per day only.
+--   * profile views carry no visitor_hash and an hour-level timestamp: views of a specific advertiser are
+--     counted per profile and cannot be linked to a visitor's other events;
+--   * raw events are deleted after 60 days (prune_traffic_analytics, run by the backend every 6 hours).
+-- Collection is off unless ANALYTICS_COLLECTION_ENABLED=true. Only the backend (service_role) has access.
 
 create table if not exists public.traffic_events (
   id bigint generated always as identity primary key,
@@ -19,7 +22,17 @@ create table if not exists public.traffic_events (
   source text check (source is null or char_length(source) <= 80),
   device text check (device is null or device in ('mobile', 'tablet', 'desktop')),
   country text check (country is null or country ~ '^[A-Z]{2}$'),
-  visitor_hash text not null check (char_length(visitor_hash) = 32)
+  visitor_hash text
+);
+
+-- Idempotent shape rules (also upgrade a pre-release copy of this table).
+alter table public.traffic_events alter column visitor_hash drop not null;
+update public.traffic_events set visitor_hash = null where event_type = 'profile_view' and visitor_hash is not null;
+alter table public.traffic_events drop constraint if exists traffic_events_visitor_hash_check;
+alter table public.traffic_events drop constraint if exists traffic_events_visitor_hash_rule;
+alter table public.traffic_events add constraint traffic_events_visitor_hash_rule check (
+  (event_type = 'profile_view' and visitor_hash is null)
+  or (event_type <> 'profile_view' and visitor_hash ~ '^[0-9a-f]{32}$')
 );
 
 create index if not exists traffic_events_day_type_idx on public.traffic_events (event_day, event_type);
@@ -37,7 +50,7 @@ create table if not exists public.traffic_salts (
 alter table public.traffic_salts enable row level security;
 revoke all on public.traffic_salts from anon, authenticated;
 
-create or replace function public.prune_traffic_analytics(p_retention_days integer default 90)
+create or replace function public.prune_traffic_analytics(p_retention_days integer default 60)
 returns integer
 language plpgsql
 set search_path = public
@@ -66,7 +79,7 @@ as $$
   with bounds as (
     select
       ((now() at time zone 'Europe/Berlin')::date) as today,
-      ((now() at time zone 'Europe/Berlin')::date - (least(greatest(p_days, 1), 90) - 1)) as first_day
+      ((now() at time zone 'Europe/Berlin')::date - (least(greatest(p_days, 1), 60) - 1)) as first_day
   ),
   days as (
     select generate_series(b.first_day, b.today, interval '1 day')::date as day from bounds b
@@ -88,7 +101,7 @@ as $$
     left join scoped s on s.event_day = d.day
     group by d.day
   ),
-  -- 7/30-day windows and the equal-length windows before them, for trends (raw retention is 90 days).
+  -- 7/30-day windows and the equal-length windows before them, for trends (raw retention is 60 days).
   windows as (
     select w.name, w.len, b.today - (w.len - 1) as cur_from, b.today as cur_to,
            b.today - (2 * w.len - 1) as prev_from, b.today - w.len as prev_to
@@ -114,7 +127,7 @@ as $$
     from windows w
   )
   select jsonb_build_object(
-    'days', least(greatest(p_days, 1), 90),
+    'days', least(greatest(p_days, 1), 60),
     'first_day', (select first_day from bounds),
     'last_day', (select today from bounds),
     'daily', coalesce((select jsonb_agg(to_jsonb(d) order by d.day) from daily d), '[]'::jsonb),
@@ -129,7 +142,7 @@ as $$
       ) c), '[]'::jsonb),
     'top_profiles', coalesce((
       select jsonb_agg(t order by t.views desc) from (
-        select s.profile_ref, count(*) as views, count(distinct s.visitor_hash) as visitors,
+        select s.profile_ref, count(*) as views,
                p.id as profile_id, p.display_name, p.city
         from scoped s
         left join public.profiles p on p.id::text = s.profile_ref or p.slug = s.profile_ref

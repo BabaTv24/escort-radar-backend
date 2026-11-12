@@ -7,7 +7,7 @@ import { sitemapRouter } from './routes/sitemap.js';
 import { uploadsRouter } from './routes/uploads.js';
 import { reportsRouter } from './routes/reports.js';
 import { adminRouter } from './routes/admin.js';
-import { analyticsRouter } from './routes/analytics.js';
+import { analyticsRouter, startTrafficRetention } from './routes/analytics.js';
 import { publicPlatformStatus } from './commercialOperations.js';
 import { paymentsRouter } from './routes/payments.js';
 import { bookingRequestsRouter } from './routes/bookingRequests.js';
@@ -115,4 +115,6 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 
 app.listen(config.port, () => {
   console.log(`Escort Radar API listening on :${config.port}`);
+  // Retention runs even while collection is disabled, so stored analytics never outlive their limit.
+  startTrafficRetention();
 });

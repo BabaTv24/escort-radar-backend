@@ -2,6 +2,9 @@
 
 Stan na 2026-11-12. Gałąź `feature/v1-public-preview` (bazuje na `cb36d79`). Bez sekretów i danych osobowych.
 
+> Zaktualizowane przez `PUBLIC_PREVIEW_002_RELEASE.md`: zbieranie analityki domyślnie wyłączone, retencja 60 dni,
+> profile_view bez pseudonimu, maskowanie kontaktów w danych publicznych. Tam aktualne instrukcje wdrożenia.
+
 ## 1. Flaga `COMMERCIAL_OPERATIONS_ENABLED`
 
 - Odczyt: `Back/src/config.ts`; brak zmiennej = `false` = PUBLIC PREVIEW. Egzekwowanie wyłącznie na serwerze (`Back/src/commercialOperations.ts`).

@@ -40,7 +40,7 @@ export type TrafficSummary = {
   days: number; first_day: string; last_day: string; daily: TrafficDay[];
   trends: { '7d': TrafficWindow; '30d': TrafficWindow };
   top_cities: { city: string; searches: number; views: number }[];
-  top_profiles: { profile_ref: string; views: number; visitors: number; profile_id: string | null; display_name: string | null; city: string | null }[];
+  top_profiles: { profile_ref: string; views: number; profile_id: string | null; display_name: string | null; city: string | null }[];
   sources: { source: string; page_views: number }[];
   devices: { device: string; page_views: number }[];
   countries: { country: string; page_views: number }[];
@@ -716,7 +716,7 @@ export const api = {
   adminWallets: (token: string) => request<{ wallets: Wallet[] }>('/api/admin/wallets', { token }),
   adminTokenTransactions: (token: string) => request<{ transactions: TokenTransaction[] }>('/api/admin/token-transactions', { token }),
   adminClientActivationPayments: (token: string) => request<{ client_activation_payments: Record<string, unknown>[] }>('/api/admin/client-activation-payments', { token }),
-  adminTraffic: (token: string, days: number) => request<{ traffic: TrafficSummary; retention_days: number; commercial_operations_enabled: boolean }>(`/api/admin/traffic?days=${days}`, { token }),
+  adminTraffic: (token: string, days: number) => request<{ traffic: TrafficSummary; retention_days: number; analytics_collection_enabled: boolean; commercial_operations_enabled: boolean }>(`/api/admin/traffic?days=${days}`, { token }),
   adminManualPaymentOrders: (token: string) => request<{ orders: Record<string, unknown>[]; summary?: Record<string, number> }>('/api/admin/manual-payment-orders', { token }),
   approveManualPaymentOrder: (token: string, id: string, confirmation: { received_amount_eur: number; bank_reference?: string }) => request<{ order: Record<string, unknown>; already_applied?: boolean }>(`/api/admin/manual-payment-orders/${id}/approve`, {
     method: 'POST',

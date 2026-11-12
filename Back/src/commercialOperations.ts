@@ -31,6 +31,7 @@ export function publicPlatformStatus() {
     mode: commercial ? 'commercial' : 'public_preview',
     commercial_operations_enabled: commercial,
     advertiser_registration_open: commercial,
-    purchases_enabled: commercial
+    purchases_enabled: commercial,
+    analytics_enabled: config.analyticsCollectionEnabled === true
   };
 }

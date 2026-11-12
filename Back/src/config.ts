@@ -62,6 +62,12 @@ type Config = {
   commercialOperationsEnabled: boolean;
   /** Origins whose page views are counted (production site only by default). */
   analyticsAllowedOrigins: string[];
+  /** Traffic analytics collection. Missing = false until the privacy review approves it. */
+  analyticsCollectionEnabled: boolean;
+  /** Number of trusted reverse proxies in front of the API; the client address is read at that X-Forwarded-For position. */
+  analyticsTrustedProxyHops: number;
+  /** Optional edge header that carries a verified client address (only if every request passes that edge). */
+  analyticsClientIpHeader: string;
   hermesAnalyzeProfileUrl: string;
   hermesWebhookSecret: string;
   openAiApiKey: string;
@@ -148,6 +154,9 @@ export const config: Config = {
   bcuWalletEnabled: envBoolean('BCU_WALLET_ENABLED', false),
   commercialOperationsEnabled: envBoolean('COMMERCIAL_OPERATIONS_ENABLED', false),
   analyticsAllowedOrigins: (process.env.ANALYTICS_ALLOWED_ORIGINS || 'https://escort-radar.fun,https://www.escort-radar.fun').split(',').map((item) => item.trim()).filter(Boolean),
+  analyticsCollectionEnabled: envBoolean('ANALYTICS_COLLECTION_ENABLED', false),
+  analyticsTrustedProxyHops: Math.min(Math.max(Math.trunc(envNumber('ANALYTICS_TRUSTED_PROXY_HOPS', 1)), 0), 5),
+  analyticsClientIpHeader: String(process.env.ANALYTICS_CLIENT_IP_HEADER || '').trim().toLowerCase(),
   hermesAnalyzeProfileUrl: process.env.HERMES_ANALYZE_PROFILE_URL || '',
   hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET || '',
   openAiApiKey: process.env.OPENAI_API_KEY || '',

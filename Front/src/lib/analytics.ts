@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { API_URL } from './apiBase';
+import { loadPlatformStatus } from './platformStatus';
 
 /**
  * Privacy-conscious analytics: no cookies, no browser storage, no identifiers.
@@ -21,6 +22,13 @@ function trackingAllowed() {
 
 export function trackEvent(type: TrafficEventType, data: { path?: string; city?: string; profile_ref?: string; source?: string } = {}) {
   if (!trackingAllowed()) return;
+  // Nothing is sent unless the server reports analytics collection as enabled (off until the privacy review).
+  void loadPlatformStatus().then((status) => {
+    if (status.analytics_enabled) sendEvent(type, data);
+  });
+}
+
+function sendEvent(type: TrafficEventType, data: { path?: string; city?: string; profile_ref?: string; source?: string }) {
   try {
     void fetch(`${API_URL}/api/analytics/collect`, {
       method: 'POST',
