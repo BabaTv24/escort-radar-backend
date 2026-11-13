@@ -76,6 +76,10 @@ type Config = {
   waitlistSmtp: { host: string; port: number; secure: boolean; user: string; pass: string; from: string; replyTo: string };
   /** Secret for stable unsubscribe links (HMAC). At least 32 characters. */
   waitlistTokenSecret: string;
+  /** Mail transport for the interest list: 'smtp' (local DEV) or 'hostinger_api' (HTTPS; production, SMTP is blocked on Render FREE). */
+  waitlistMailTransport: 'smtp' | 'hostinger_api';
+  /** Hostinger Mail API (token scoped to one order, mailbox resource id "AC…"). Backend environment only. */
+  hostingerMail: { baseUrl: string; token: string; mailboxId: string; senderAddress: string; displayName: string };
   hermesAnalyzeProfileUrl: string;
   hermesWebhookSecret: string;
   openAiApiKey: string;
@@ -177,6 +181,14 @@ export const config: Config = {
     replyTo: String(process.env.WAITLIST_MAIL_REPLY_TO || '').trim()
   },
   waitlistTokenSecret: process.env.WAITLIST_TOKEN_SECRET || '',
+  waitlistMailTransport: String(process.env.WAITLIST_MAIL_TRANSPORT || 'smtp').trim().toLowerCase() === 'hostinger_api' ? 'hostinger_api' : 'smtp',
+  hostingerMail: {
+    baseUrl: String(process.env.HOSTINGER_MAIL_API_URL || 'https://api.mail.hostinger.com').trim(),
+    token: String(process.env.HOSTINGER_MAIL_API_TOKEN || '').trim(),
+    mailboxId: String(process.env.HOSTINGER_MAIL_MAILBOX_ID || '').trim(),
+    senderAddress: String(process.env.HOSTINGER_MAIL_SENDER || '').trim().toLowerCase(),
+    displayName: String(process.env.WAITLIST_MAIL_DISPLAY_NAME || 'Escort-Radar').trim()
+  },
   hermesAnalyzeProfileUrl: process.env.HERMES_ANALYZE_PROFILE_URL || '',
   hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET || '',
   openAiApiKey: process.env.OPENAI_API_KEY || '',

@@ -40,12 +40,13 @@ Adres IP jest używany wyłącznie w pamięci do limitów (5 zgłoszeń / godz. 
 
 Wyłącznie: (1) e-mail potwierdzający, (2) krótka informacja „adres już potwierdzony” przy ponownym zgłoszeniu, (3) jednorazowa informacja
 o starcie segmentu (`WAITLIST_LAUNCH_SEND_ENABLED`, osobna flaga, wyłączona; jedna wysyłka na segment, link wypisania + nagłówek `List-Unsubscribe`).
-Żadnych innych kampanii. Nadawca: dedykowane konto SMTP firmy (nie prywatny Gmail, nie systemy BABA-AI niezwiązane z projektem).
+Żadnych innych kampanii. Nadawca: firmowa skrzynka `kontakt@support.escort-radar.fun` (Hostinger) przez Hostinger Mail API (HTTPS) — nie prywatny Gmail, nie systemy
+BABA-AI niezwiązane z projektem. API nie obsługuje nagłówka `List-Unsubscribe`; link wypisania jest w treści każdej wiadomości.
 
 ## 5. Do decyzji / weryfikacji prawnej
 
 - Dane administratora (BABA-AI Agency po rejestracji działalności w Berlinie) — **nie wpisano, brak danych**.
-- Dostawca e-mail (nazwa, siedziba, AVV, region) — **nie wybrano**.
+- Dostawca e-mail: Hostinger (skrzynka `kontakt@support.escort-radar.fun`) — dokładna firma, siedziba, AVV i region przetwarzania **do uzupełnienia z umowy Hostinger**.
 - Dowód zgody: zapisywane są czas zgłoszenia, wersja tekstu zgody i czas potwierdzenia; **IP nie jest zapisywane** (minimalizacja).
   Prawnik powinien potwierdzić, że to wystarcza jako dowód double opt-in (część orzecznictwa oczekuje także IP).
 - Kompatybilność z Einstiegsgeld / §16c SGB II i terminem rozpoczęcia działalności (Jobcenter) — przed publikacją formularza.

@@ -3037,4 +3037,13 @@
   ,"admin.leads.announcements": "Start-Benachrichtigungen"
   ,"admin.leads.failed": "Fehlgeschlagen"
   ,"admin.leads.methodNote": "Aufbewahrung: unbestätigte Einträge {{pending}} Tage, abgemeldete Adressen werden nach {{unsubscribed}} Tagen gelöscht (nur die Zählung bleibt), bestätigte höchstens {{confirmed}} Tage. Keine Zahlen werden geschätzt oder hochgerechnet."
+  ,"waitlist.error.uncertain": "Der Versand konnte nicht bestätigt werden. Bitte prüfe in einigen Minuten dein Postfach; falls keine E-Mail ankommt, versuche es in 10 Minuten erneut."
+  ,"admin.leads.transport": "Versand: {{transport}}"
+  ,"admin.leads.providerPaused": "Versand pausiert ({{reason}}) bis {{until}} UTC"
+  ,"admin.leads.mailProvider": "E-Mail-Anbieter"
+  ,"admin.leads.mailCheck": "Mail-API prüfen (sendet nichts)"
+  ,"admin.leads.mailCheckOk": "Mail-API erreichbar, Postfach {{address}} freigegeben."
+  ,"admin.leads.mailCheckProblem": "Mail-API nicht einsatzbereit: {{reason}}"
+  ,"admin.leads.mailCheckSmtp": "Transport SMTP (konfiguriert: {{configured}})."
+  ,"admin.leads.mailCheckFailed": "Prüfung fehlgeschlagen."
 }

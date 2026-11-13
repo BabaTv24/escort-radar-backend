@@ -55,6 +55,9 @@ Zrzuty: `.artifacts/public-preview-003/waitlist/`.
 
 ## 5. Przyszła aktywacja (tylko po autoryzacji BOSS)
 
+> Od ER-V1-LEADS-HOSTINGER-MAIL-API-004 produkcja wysyła przez **Hostinger Mail API (HTTPS)** — Render FREE blokuje SMTP.
+> Zmienne i token: `HOSTINGER_MAIL_API.md`. Pkt 3–4 poniżej (SMTP) dotyczą tylko DEV.
+
 1. Wyjaśnić z Jobcenter (Einstiegsgeld / §16c SGB II) zgodność publikacji formularza z planowanym startem działalności.
 2. Uzupełnić dane administratora i dostawcy e-mail; prawnik zatwierdza `WAITLIST_PRIVACY.md` §6; opublikować sekcję w Datenschutzerklärung.
 3. Wybrać firmowego dostawcę SMTP (AVV, najlepiej region UE), skonfigurować SPF/DKIM/DMARC dla domeny nadawcy.

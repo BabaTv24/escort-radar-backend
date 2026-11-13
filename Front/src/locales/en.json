@@ -3037,4 +3037,13 @@
   ,"admin.leads.announcements": "Launch notifications"
   ,"admin.leads.failed": "Failed"
   ,"admin.leads.methodNote": "Retention: unconfirmed records {{pending}} days, unsubscribed addresses are deleted after {{unsubscribed}} days (only the count remains), confirmed at most {{confirmed}} days. No figures are estimated."
+  ,"waitlist.error.uncertain": "Sending could not be confirmed. Please check your inbox in a few minutes; if no e-mail arrives, try again in 10 minutes."
+  ,"admin.leads.transport": "Delivery: {{transport}}"
+  ,"admin.leads.providerPaused": "Sending paused ({{reason}}) until {{until}} UTC"
+  ,"admin.leads.mailProvider": "Mail provider"
+  ,"admin.leads.mailCheck": "Check Mail API (sends nothing)"
+  ,"admin.leads.mailCheckOk": "Mail API reachable, mailbox {{address}} authorised."
+  ,"admin.leads.mailCheckProblem": "Mail API not ready: {{reason}}"
+  ,"admin.leads.mailCheckSmtp": "SMTP transport (configured: {{configured}})."
+  ,"admin.leads.mailCheckFailed": "Check failed."
 }

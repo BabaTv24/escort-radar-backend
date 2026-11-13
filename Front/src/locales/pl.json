@@ -3037,4 +3037,13 @@
   ,"admin.leads.announcements": "Powiadomienia o starcie"
   ,"admin.leads.failed": "Nieudane"
   ,"admin.leads.methodNote": "Przechowywanie: niepotwierdzone wpisy {{pending}} dni, adresy wypisanych usuwane po {{unsubscribed}} dniach (zostaje tylko licznik), potwierdzone maksymalnie {{confirmed}} dni. Żadne liczby nie są szacowane."
+  ,"waitlist.error.uncertain": "Nie udało się potwierdzić wysyłki. Sprawdź skrzynkę za kilka minut; jeśli wiadomość nie dotrze, spróbuj ponownie za 10 minut."
+  ,"admin.leads.transport": "Wysyłka: {{transport}}"
+  ,"admin.leads.providerPaused": "Wysyłka wstrzymana ({{reason}}) do {{until}} UTC"
+  ,"admin.leads.mailProvider": "Dostawca e-mail"
+  ,"admin.leads.mailCheck": "Sprawdź Mail API (bez wysyłki)"
+  ,"admin.leads.mailCheckOk": "Mail API działa, skrzynka {{address}} dostępna."
+  ,"admin.leads.mailCheckProblem": "Mail API niegotowe: {{reason}}"
+  ,"admin.leads.mailCheckSmtp": "Transport SMTP (skonfigurowany: {{configured}})."
+  ,"admin.leads.mailCheckFailed": "Sprawdzenie nie powiodło się."
 }

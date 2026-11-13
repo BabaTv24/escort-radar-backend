@@ -16,6 +16,8 @@ const errorKeys: Record<string, string> = {
   WAITLIST_CONSENT_REQUIRED: 'waitlist.error.consent',
   WAITLIST_RATE_LIMITED: 'waitlist.error.rateLimited',
   WAITLIST_MAIL_FAILED: 'waitlist.error.mailFailed',
+  WAITLIST_MAIL_BUSY: 'waitlist.error.rateLimited',
+  WAITLIST_MAIL_UNCERTAIN: 'waitlist.error.uncertain',
   WAITLIST_MAIL_UNAVAILABLE: 'waitlist.error.unavailable',
   WAITLIST_DISABLED: 'waitlist.error.unavailable'
 };

@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { config } from './config.js';
+import { MailTransportError, hostingerCheck, hostingerSend, isAllowedBaseUrl, isValidMailboxId } from './hostingerMail.js';
 
 /**
  * Pre-launch interest list (ER-V1-PUBLIC-PREVIEW-003). Double opt-in, no accounts, no payments.
@@ -83,10 +84,15 @@ export function verifyUnsubscribeToken(leadId: unknown, token: unknown, secret =
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
-/** Mail delivery needs a dedicated SMTP host, a sender address and a token secret; otherwise the list stays closed. */
+/** Mail delivery needs a configured transport and a token secret; otherwise the list stays closed. */
 export function waitlistMailConfigured() {
+  if (config.waitlistTokenSecret.length < 32) return false;
+  if (config.waitlistMailTransport === 'hostinger_api') {
+    const mail = config.hostingerMail;
+    return Boolean(mail.token && isValidMailboxId(mail.mailboxId) && isAllowedBaseUrl(mail.baseUrl, config.nodeEnv === 'production'));
+  }
   const smtp = config.waitlistSmtp;
-  return Boolean(smtp.host && smtp.from && config.waitlistTokenSecret.length >= 32);
+  return Boolean(smtp.host && smtp.from);
 }
 
 export function waitlistCollectionOpen() {
@@ -110,17 +116,73 @@ function mailTransport() {
 
 export type WaitlistMail = { to: string; subject: string; text: string; html: string; unsubscribeUrl?: string };
 
+// Provider back-off: after a rate limit or a rejected token the provider is not called again for a while,
+// so repeated submissions cannot get the server address blocked (the Hostinger API may block IPs that keep exceeding limits).
+let providerPausedUntil = 0;
+let providerPauseReason: string | null = null;
+export function mailProviderPause() {
+  return providerPausedUntil > Date.now() ? { until: new Date(providerPausedUntil).toISOString(), reason: providerPauseReason } : null;
+}
+export function resetMailProviderPause() {
+  providerPausedUntil = 0;
+  providerPauseReason = null;
+}
+
+/**
+ * Sends one message through the configured transport. Throws MailTransportError:
+ * notAccepted=false (timeout, 504) means the outcome is unknown and the caller must not resend right away.
+ */
 export async function sendWaitlistMail(mail: WaitlistMail) {
-  if (!waitlistMailConfigured()) throw new Error('WAITLIST_MAIL_UNAVAILABLE');
-  await mailTransport().sendMail({
-    from: config.waitlistSmtp.from,
-    replyTo: config.waitlistSmtp.replyTo || undefined,
-    to: mail.to,
-    subject: mail.subject,
-    text: mail.text,
-    html: mail.html,
-    headers: mail.unsubscribeUrl ? { 'List-Unsubscribe': `<${mail.unsubscribeUrl}>` } : undefined
-  });
+  if (!waitlistMailConfigured()) throw new MailTransportError('MAIL_NOT_CONFIGURED', null);
+  if (providerPausedUntil > Date.now()) throw new MailTransportError('MAIL_RATE_LIMITED', null, providerPausedUntil - Date.now(), providerPauseReason);
+  if (config.waitlistMailTransport === 'hostinger_api') {
+    try {
+      await hostingerSend({ ...config.hostingerMail, timeoutMs: 15_000 }, mail);
+    } catch (error) {
+      if (error instanceof MailTransportError && (error.code === 'MAIL_RATE_LIMITED' || error.code === 'MAIL_AUTH_FAILED' || error.code === 'MAIL_FORBIDDEN')) {
+        const pauseMs = error.code === 'MAIL_RATE_LIMITED' ? Math.min(Math.max(error.retryAfterMs ?? 60_000, 30_000), 15 * 60_000) : 5 * 60_000;
+        providerPausedUntil = Date.now() + pauseMs;
+        providerPauseReason = error.code;
+      }
+      throw error;
+    }
+    return;
+  }
+  try {
+    await mailTransport().sendMail({
+      from: config.waitlistSmtp.from,
+      replyTo: config.waitlistSmtp.replyTo || undefined,
+      to: mail.to,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+      headers: mail.unsubscribeUrl ? { 'List-Unsubscribe': `<${mail.unsubscribeUrl}>` } : undefined
+    });
+  } catch (error) {
+    const code = String((error as { code?: string }).code || '');
+    if (code === 'EAUTH') throw new MailTransportError('MAIL_AUTH_FAILED', null, null, code);
+    // SMTP reports failures before the message is queued; treat them as not accepted.
+    throw new MailTransportError('MAIL_UNAVAILABLE', 0, null, code || null);
+  }
+}
+
+/** Read-only provider check for the admin (sends nothing). */
+export async function waitlistMailCheck() {
+  if (config.waitlistMailTransport !== 'hostinger_api') return { transport: 'smtp', configured: waitlistMailConfigured() };
+  const mail = config.hostingerMail;
+  const base = {
+    transport: 'hostinger_api',
+    configured: waitlistMailConfigured(),
+    api_url_https: isAllowedBaseUrl(mail.baseUrl, true),
+    mailbox_id_format_ok: isValidMailboxId(mail.mailboxId),
+    expected_sender: mail.senderAddress || null
+  };
+  try {
+    const result = await hostingerCheck(mail);
+    return { ...base, ok: result.mailbox_found && (!mail.senderAddress || result.mailbox_address?.toLowerCase() === mail.senderAddress), ...result, sender_matches: mail.senderAddress ? result.mailbox_address?.toLowerCase() === mail.senderAddress : null };
+  } catch (error) {
+    return { ...base, ok: false, error: error instanceof MailTransportError ? error.code : 'MAIL_UNAVAILABLE', status: error instanceof MailTransportError ? error.status : null };
+  }
 }
 
 function appBase() {

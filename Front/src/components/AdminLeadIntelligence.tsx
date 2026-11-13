@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Eye, RefreshCw, Send } from 'lucide-react';
+import { Download, Eye, PlugZap, RefreshCw, Send } from 'lucide-react';
 import { ApiError, api, type AdminLeadSummaryResponse, type WaitlistInterestType } from '../lib/api';
 import { API_URL } from '../lib/apiBase';
 import { useI18n } from '../i18n';
@@ -61,6 +61,17 @@ export function AdminLeadIntelligence({ token }: { token: string }) {
     }
   }
 
+  async function checkMail() {
+    setNotice('');
+    const response = await fetch(`${API_URL}/api/admin/leads/mail-check`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return setNotice(t('admin.leads.mailCheckFailed'));
+    if (body.transport !== 'hostinger_api') return setNotice(t('admin.leads.mailCheckSmtp', { configured: String(Boolean(body.configured)) }));
+    setNotice(body.ok
+      ? t('admin.leads.mailCheckOk', { address: body.mailbox_address || '–' })
+      : t('admin.leads.mailCheckProblem', { reason: body.error || (body.mailbox_found ? 'SENDER_MISMATCH' : 'MAILBOX_NOT_FOUND') }));
+  }
+
   async function send(type: WaitlistInterestType) {
     const phrase = `SEND ${type}`;
     if (window.prompt(t('admin.leads.sendConfirm', { phrase })) !== phrase) return;
@@ -80,6 +91,8 @@ export function AdminLeadIntelligence({ token }: { token: string }) {
       <p className="at-badge" role="status">{t(data.collection_enabled ? 'admin.leads.collectionOn' : 'admin.leads.collectionOff')}</p>
       {!data.mail_configured ? <p className="at-badge" role="status">{t('admin.leads.mailMissing')}</p> : null}
       <p className="at-badge">{t(data.launch_send_enabled ? 'admin.leads.sendOn' : 'admin.leads.sendOff')}</p>
+      <p className="at-badge">{t('admin.leads.transport', { transport: data.mail_transport === 'hostinger_api' ? 'Hostinger Mail API' : 'SMTP' })}</p>
+      {data.mail_provider_pause ? <p className="at-badge" role="status">{t('admin.leads.providerPaused', { reason: data.mail_provider_pause.reason || '', until: data.mail_provider_pause.until.slice(11, 16) })}</p> : null}
     </>
   );
 
@@ -156,6 +169,10 @@ export function AdminLeadIntelligence({ token }: { token: string }) {
         <section className="admin-card at-rank">
           <h3>{t('admin.leads.actions')}</h3>
           <p className="at-note">{t('admin.leads.actionsNote')}</p>
+          <div className="at-lead-actions">
+            <strong>{t('admin.leads.mailProvider')}</strong>
+            <div><button type="button" className="button" onClick={checkMail}><PlugZap size={14} /> {t('admin.leads.mailCheck')}</button></div>
+          </div>
           {segments.map((type) => (
             <div className="at-lead-actions" key={type}>
               <strong>{t(`admin.leads.segment.${type}`)}</strong>

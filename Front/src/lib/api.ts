@@ -80,6 +80,8 @@ export type AdminLeadSummaryResponse = {
   collection_enabled: boolean;
   mail_configured: boolean;
   launch_send_enabled: boolean;
+  mail_transport?: 'smtp' | 'hostinger_api';
+  mail_provider_pause?: { until: string; reason: string | null } | null;
   consent_version: string;
   retention: { pendingDays: number; unsubscribedDays: number; confirmedDays: number };
   summary?: AdminLeadSummary;

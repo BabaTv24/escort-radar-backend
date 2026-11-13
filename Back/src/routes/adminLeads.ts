@@ -4,6 +4,7 @@ import { asyncHandler } from '../validation.js';
 import { config } from '../config.js';
 import { supabaseAdmin } from '../supabase.js';
 import { writeAdminAuditLog } from '../services/adminAudit.js';
+import { MailTransportError } from '../hostingerMail.js';
 import {
   WAITLIST_CONSENT_VERSION,
   WAITLIST_INTEREST_TYPES,
@@ -11,7 +12,9 @@ import {
   WAITLIST_LAUNCH_TEMPLATE_VERSION,
   WAITLIST_RETENTION,
   launchMail,
+  mailProviderPause,
   sendWaitlistMail,
+  waitlistMailCheck,
   summarizeLeads,
   waitlistMailConfigured,
   type LeadRow,
@@ -64,10 +67,20 @@ function state() {
     collection_enabled: config.waitlistCollectionEnabled,
     mail_configured: waitlistMailConfigured(),
     launch_send_enabled: config.waitlistLaunchSendEnabled,
+    mail_transport: config.waitlistMailTransport,
+    mail_provider_pause: mailProviderPause(),
     consent_version: WAITLIST_CONSENT_VERSION,
     retention: WAITLIST_RETENTION
   };
 }
+
+// Read-only check of the mail provider (token valid, mailbox managed, sender address). Sends nothing.
+adminLeadsRouter.get('/mail-check', asyncHandler(async (req, res) => {
+  const result = await waitlistMailCheck();
+  await writeAdminAuditLog(adminEmail(req), 'waitlist_mail_check', 'waitlist_mail', null, { transport: result.transport, ok: 'ok' in result ? result.ok : null });
+  res.set('Cache-Control', 'no-store');
+  res.json(result);
+}));
 
 // Export of confirmed, still-subscribed addresses for one segment. Every export is written to the audit log.
 adminLeadsRouter.get('/export', asyncHandler(async (req, res) => {
@@ -123,17 +136,27 @@ adminLeadsRouter.post('/announcements/send', asyncHandler(async (req, res) => {
   if (!isInterestType(type)) return res.status(400).json({ error: 'interest_type required' });
   if (confirm !== `SEND ${type}`) return res.status(400).json({ error: `Type "SEND ${type}" to confirm`, code: 'WAITLIST_CONFIRMATION_REQUIRED' });
 
-  // The unique index allows exactly one announcement per segment: a second attempt is refused.
-  const { data: announcement, error: createError } = await supabaseAdmin.from('waitlist_announcements')
+  // The unique index allows exactly one announcement per segment. A completed one is never repeated; one that was
+  // interrupted (provider rate limit) is resumed and skips every recipient that already has a delivery record.
+  let announcement: { id: string };
+  const { data: created, error: createError } = await supabaseAdmin.from('waitlist_announcements')
     .insert({ interest_type: type, template_version: WAITLIST_LAUNCH_TEMPLATE_VERSION, status: 'sending', created_by: adminEmail(req) || null })
     .select('id').single();
-  if (createError?.code === '23505') return res.status(409).json({ error: 'Announcement already sent for this segment', code: 'WAITLIST_ANNOUNCEMENT_EXISTS' });
-  if (createError || !announcement) return res.status(500).json({ error: 'Announcement failed' });
+  if (createError?.code === '23505') {
+    const { data: existing } = await supabaseAdmin.from('waitlist_announcements').select('id,status').eq('interest_type', type).maybeSingle();
+    if (!existing || existing.status !== 'sending') return res.status(409).json({ error: 'Announcement already sent for this segment', code: 'WAITLIST_ANNOUNCEMENT_EXISTS' });
+    announcement = { id: existing.id };
+  } else if (createError || !created) {
+    return res.status(500).json({ error: 'Announcement failed' });
+  } else {
+    announcement = created;
+  }
 
   const recipients = await launchRecipients(type);
   await writeAdminAuditLog(adminEmail(req), 'waitlist_announcement_start', 'waitlist_announcements', announcement.id, { interest_type: type, recipients: recipients.length });
   let sent = 0;
   let failed = 0;
+  let stopped: string | null = null;
   for (const recipient of recipients) {
     // Re-check right before sending: an address withdrawn meanwhile is skipped.
     const { data: current } = await supabaseAdmin.from('waitlist_leads').select('status').eq('id', recipient.id).maybeSingle();
@@ -147,16 +170,29 @@ adminLeadsRouter.post('/announcements/send', asyncHandler(async (req, res) => {
       await sendWaitlistMail(launchMail({ to: recipient.email, leadId: recipient.id, type, language: recipient.preferred_language }));
       sent += 1;
     } catch (error) {
+      const failure = error instanceof MailTransportError ? error : new MailTransportError('MAIL_UNAVAILABLE', 0);
+      if (failure.code === 'MAIL_RATE_LIMITED' || failure.code === 'MAIL_AUTH_FAILED' || failure.code === 'MAIL_FORBIDDEN' || failure.code === 'MAIL_NOT_CONFIGURED') {
+        // Not accepted and pointless to continue now: release this recipient for a later resume and stop.
+        await supabaseAdmin.from('waitlist_deliveries').delete().eq('announcement_id', announcement.id).eq('lead_id', recipient.id);
+        stopped = failure.code;
+        break;
+      }
       status = 'failed';
-      errorCode = String((error as { code?: string }).code || 'send_failed').slice(0, 80);
+      // MAIL_TIMEOUT means the outcome is unknown; it stays recorded and is not resent automatically (no duplicates).
+      errorCode = failure.code;
       failed += 1;
     }
     await supabaseAdmin.from('waitlist_deliveries').update({ status, error_code: errorCode, attempted_at: new Date().toISOString() })
       .eq('announcement_id', announcement.id).eq('lead_id', recipient.id);
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
+  const { data: totals } = await supabaseAdmin.from('waitlist_deliveries').select('status').eq('announcement_id', announcement.id);
+  const totalSent = (totals || []).filter((row) => row.status === 'sent').length;
+  const totalFailed = (totals || []).filter((row) => row.status === 'failed').length;
   await supabaseAdmin.from('waitlist_announcements')
-    .update({ status: 'sent', completed_at: new Date().toISOString(), recipients: recipients.length, sent, failed })
+    .update({ status: stopped ? 'sending' : 'sent', completed_at: stopped ? null : new Date().toISOString(), recipients: recipients.length, sent: totalSent, failed: totalFailed })
     .eq('id', announcement.id);
-  await writeAdminAuditLog(adminEmail(req), 'waitlist_announcement_done', 'waitlist_announcements', announcement.id, { interest_type: type, sent, failed });
+  await writeAdminAuditLog(adminEmail(req), stopped ? 'waitlist_announcement_paused' : 'waitlist_announcement_done', 'waitlist_announcements', announcement.id, { interest_type: type, sent, failed, stopped });
+  if (stopped) return res.status(503).json({ ok: false, code: 'WAITLIST_ANNOUNCEMENT_PAUSED', reason: stopped, interest_type: type, sent, failed, resumable: true });
   res.json({ ok: true, interest_type: type, recipients: recipients.length, sent, failed });
 }));

@@ -4,6 +4,7 @@ import { asyncHandler } from '../validation.js';
 import { config } from '../config.js';
 import { supabaseAdmin } from '../supabase.js';
 import { TrafficRateLimiter, clientAddressFromHeaders } from '../trafficAnalytics.js';
+import { MailTransportError } from '../hostingerMail.js';
 import {
   WAITLIST_MAX_SENDS_PER_RECORD,
   WAITLIST_RESEND_COOLDOWN_MS,
@@ -123,11 +124,19 @@ waitlistRouter.post('/interest', asyncHandler(async (req, res) => {
   try {
     await sendWaitlistMail(mail);
   } catch (error) {
-    console.error('[waitlist] confirmation mail failed', { code: (error as { code?: string })?.code || 'unknown' });
-    // Nothing unverified is kept for a failed first mail; an existing record keeps its state but loses the
-    // cool-down so that a retry really sends. Pending records are never counted as leads.
+    const failure = error instanceof MailTransportError ? error : new MailTransportError('MAIL_UNAVAILABLE', 0);
+    // Codes and HTTP status only; never the address, the token or provider credentials.
+    console.error('[waitlist] confirmation mail failed', { code: failure.code, status: failure.status, provider: failure.providerCode });
+    if (!failure.notAccepted) {
+      // Outcome unknown (timeout / 504): the message may already be on its way. Keep the pending record and its
+      // cool-down so that an immediate retry cannot produce a duplicate confirmation e-mail.
+      return res.status(502).json({ error: 'Sending could not be confirmed', code: 'WAITLIST_MAIL_UNCERTAIN' });
+    }
+    // Certainly not sent: nothing unverified is kept for a failed first mail; an existing record keeps its state but
+    // loses the cool-down so that a later retry really sends. Pending records are never counted as leads.
     if (!existing) await supabaseAdmin.from('waitlist_leads').delete().eq('id', leadId).eq('status', 'pending');
     else await supabaseAdmin.from('waitlist_leads').update({ confirmation_sent_at: null, confirmation_send_count: existing.confirmation_send_count }).eq('id', leadId);
+    if (failure.code === 'MAIL_RATE_LIMITED') return res.status(503).json({ error: 'Please try again later', code: 'WAITLIST_MAIL_BUSY' });
     return res.status(502).json({ error: 'The confirmation e-mail could not be sent', code: 'WAITLIST_MAIL_FAILED' });
   }
   res.status(202).json(NEUTRAL);
