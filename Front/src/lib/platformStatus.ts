@@ -4,6 +4,7 @@ import { API_URL } from './apiBase';
 export type PlatformStatus = {
   mode: 'public_preview' | 'commercial';
   commercial_operations_enabled: boolean;
+  registration_open: boolean;
   advertiser_registration_open: boolean;
   purchases_enabled: boolean;
   analytics_enabled: boolean;
@@ -13,6 +14,7 @@ export type PlatformStatus = {
 export const PUBLIC_PREVIEW_STATUS: PlatformStatus = {
   mode: 'public_preview',
   commercial_operations_enabled: false,
+  registration_open: false,
   advertiser_registration_open: false,
   purchases_enabled: false,
   analytics_enabled: false

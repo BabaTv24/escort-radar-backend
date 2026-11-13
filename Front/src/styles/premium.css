@@ -1031,6 +1031,17 @@ button.pr-kpi { cursor: pointer; }
 .pr-register .register-free-note { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; margin: .35rem 0 0; color: var(--pr-muted); font-size: .92rem; }
 .pr-register .register-free-note svg { color: var(--pr-gold); }
 .pr-register .register-free-note a { color: var(--pr-gold); font-weight: 600; }
+/* Public preview: registration closed, Premium and the advertiser listing shown as upcoming products. */
+.pr-register .register-preview-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.1rem; margin-top: 1.2rem; }
+.pr-register .register-preview-offers { display: grid; grid-template-columns: minmax(0, 1fr); gap: .85rem; }
+.pr-register .register-preview-offer { display: grid; grid-template-columns: minmax(0, 1fr); gap: .3rem; min-width: 0; padding: .95rem 1rem; border: 1px solid var(--pr-line); border-radius: 14px; background: rgba(255, 255, 255, .03); }
+.pr-register .register-preview-offer-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .35rem .6rem; }
+.onboarding-shell.pr-auth .register-preview-offer h2 { flex: 1 1 auto; width: auto; min-width: 0; font-size: 1.35rem; }
+.pr-register .register-preview-offer h2 > svg { flex: 0 0 auto; color: var(--pr-gold); }
+.pr-register .register-preview-offer-head .register-path-badge { margin-left: 0; }
+@media (max-width: 520px) { .onboarding-shell.pr-auth .register-preview-offer h2 { font-size: 1.18rem; } }
+.pr-register .register-preview-price { margin: 0; color: var(--pr-gold); font-weight: 700; }
+.pr-register .register-preview-offer .register-benefits { margin-top: .2rem; }
 .pr-auth .register-google.is-unavailable { opacity: .5; cursor: not-allowed; }
 .pr-auth .register-google small { font-weight: 500; color: var(--pr-muted); }
 .pricing-coming-soon { opacity: .6; filter: grayscale(.5); border-style: dashed !important; }

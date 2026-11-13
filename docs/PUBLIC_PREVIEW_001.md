@@ -19,7 +19,7 @@ Stan na 2026-11-12. Gałąź `feature/v1-public-preview` (bazuje na `cb36d79`). 
 ## 2. Rejestracja
 
 - `POST /api/auth/register` z `auth_account_type=escort` → 403 `ADVERTISER_REGISTRATION_CLOSED` (konto nie powstaje). `business` jak dotąd 403.
-- Rejestracja klientów działa. Istniejące konta i profile ogłoszeniodawców bez zmian; tylko admin/claim mogą nadać typ ogłoszeniodawcy.
+- ~~Rejestracja klientów działa.~~ Od 003 zamknięta w podglądzie (`REGISTRATION_CLOSED`), zob. `PUBLIC_PREVIEW_003_REGISTRATION.md`. Istniejące konta i profile ogłoszeniodawców bez zmian; tylko admin/claim mogą nadać typ ogłoszeniodawcy.
 - **Naprawiona eskalacja uprawnień:** `POST /api/profiles` czytał `is_test_account` z body oraz traktował każdy adres z `+test` jako konto testowe
   → profil od razu `active`, `verified`, `moderation_status=approved` (publiczny bez moderacji i płatności). Teraz status testowy nadaje wyłącznie admin.
 - Komunikaty: DE „Registrierung für Inserenten startet in Kürze.”, PL „Rejestracja ogłoszeniodawców już wkrótce.”, EN „Advertiser registration opens soon.”

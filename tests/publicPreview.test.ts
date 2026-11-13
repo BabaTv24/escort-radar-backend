@@ -14,7 +14,7 @@ test('commercial operations default to off when the flag is missing', async () =
   const { publicPlatformStatus } = await import('../Back/src/commercialOperations.ts');
   if (previous === undefined) {
     assert.equal(config.commercialOperationsEnabled, false);
-    assert.deepEqual(publicPlatformStatus(), { mode: 'public_preview', commercial_operations_enabled: false, advertiser_registration_open: false, purchases_enabled: false, analytics_enabled: false });
+    assert.deepEqual(publicPlatformStatus(), { mode: 'public_preview', commercial_operations_enabled: false, registration_open: false, advertiser_registration_open: false, purchases_enabled: false, analytics_enabled: false });
   }
   const source = await read('../Back/src/config.ts');
   assert.match(source, /commercialOperationsEnabled: envBoolean\('COMMERCIAL_OPERATIONS_ENABLED', false\)/);
@@ -41,7 +41,7 @@ test('every purchase, callback and payment approval is gated on the server', asy
   const approve = admin.slice(admin.indexOf("adminRouter.post('/manual-payment-orders/:id/approve'"));
   assert.match(approve.slice(0, 400), /if \(!isCommercialOperationsEnabled\(\)\) return sendCommercialOperationsDisabled\(res\);/);
   assert.match(admin, /if \(status === 'approved' && !isCommercialOperationsEnabled\(\)\) return sendCommercialOperationsDisabled\(res\);/);
-  assert.match(auth, /authAccountType === 'escort' && !isCommercialOperationsEnabled\(\)[\s\S]{0,200}ADVERTISER_REGISTRATION_CLOSED/);
+  assert.match(auth, /if \(!isRegistrationOpen\(\)\) \{\s*return res\.status\(403\)\.json\(\{[^}]*code: REGISTRATION_CLOSED/);
 });
 
 test('profile creation cannot take test-account status from the request or the e-mail address', async () => {

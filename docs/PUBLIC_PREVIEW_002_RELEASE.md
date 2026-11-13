@@ -51,7 +51,7 @@ Szczegóły i projekt sekcji Datenschutzerklärung: `docs/ANALYTICS_PRIVACY.md`.
 | A4 | `GET /api/payments/manual-products` | `products: []` |
 | A5 | `node scripts/publicContactScan.mjs` | `profiles_with_contact_exposure: 0`, `failed: 0`, liczba profili = zapisana w kroku 1 |
 | A6 | Strona główna, Radar, miasto, profil (anonimowo) | działa; 1 zdjęcie; brak telefonu; opis z `[…]` dla 7 profili |
-| A7 | `/register?type=escort` | „Registrierung für Inserenten startet in Kürze.”, opcja nieaktywna |
+| A7 | `/register?type=escort` | od 003: ekran „Registrierung startet in Kürze”, brak formularza (zob. `PUBLIC_PREVIEW_003_REGISTRATION.md`) |
 | A8 | `/pricing` | komunikat o podglądzie, brak przycisku zamówienia |
 | A9 | Admin → Traffic Intelligence | ładuje się, odznaka „Erfassung deaktiviert” |
 | A10 | Admin → Profile / Moderacja | działa jak dotąd |

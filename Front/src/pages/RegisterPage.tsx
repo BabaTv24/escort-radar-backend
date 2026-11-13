@@ -38,6 +38,9 @@ export function RegisterPage() {
   const isCustomer = authAccountType === 'client';
   // Public preview: new advertiser accounts are refused by the server (ADVERTISER_REGISTRATION_CLOSED).
   const platform = usePlatformStatus();
+  // Public preview: no new accounts at all (server answers REGISTRATION_CLOSED). Until the server status
+  // arrives the page assumes the preview, so no account form is ever offered while registration is closed.
+  const registrationOpen = platform.loaded && platform.registration_open;
   const advertiserRegistrationOpen = platform.advertiser_registration_open;
   const [advertiserClosedNotice, setAdvertiserClosedNotice] = useState(false);
 
@@ -132,6 +135,8 @@ export function RegisterPage() {
     setOfficeCenterRequested(false);
     setMessage('');
   }
+
+  if (!registrationOpen) return <RegistrationPreview />;
 
   return (
     <div className="onboarding-shell pr-auth pr-register">
@@ -242,6 +247,59 @@ export function RegisterPage() {
           {message && <p className="error-text">{message}</p>}
         </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+/**
+ * PUBLIC PREVIEW (ER-V1-PUBLIC-PREVIEW-003): browsing needs no account and no account can be created.
+ * FREE is only the status of a registered customer before the 0.99 EUR activation, so it is not offered here.
+ * Premium and the advertiser listing are shown as upcoming products, without any form or purchase action.
+ */
+function RegistrationPreview() {
+  const { t } = useI18n();
+  return (
+    <div className="onboarding-shell pr-auth pr-register register-preview" data-registration="closed">
+      <div className="onboarding-bg" />
+      <section className="onboarding-hero">
+        <div className="onboarding-copy">
+          <p className="eyebrow">{t('register.preview.eyebrow')}</p>
+          <h1>{t('register.preview.title')}</h1>
+          <p>{t('register.preview.message')}</p>
+          <div className="register-preview-actions">
+            <Link to="/city/berlin" className="pr-btn is-primary"><RadioTower size={18} aria-hidden="true" /> {t('register.preview.cta')}</Link>
+            <Link className="text-link" to="/login">{t('register.preview.existingAccount')}</Link>
+          </div>
+        </div>
+        <div className="onboarding-card register-preview-offers">
+          <p className="eyebrow">{t('register.preview.offersEyebrow')}</p>
+          <article className="register-preview-offer" data-offer="premium">
+            <div className="register-preview-offer-head">
+              <h2><Crown size={20} aria-hidden="true" /> {t('register.path.client')}</h2>
+              <em className="register-path-badge">{t('register.preview.soon')}</em>
+            </div>
+            <p className="register-preview-price">{t('register.path.clientText')}</p>
+            <ul className="pr-check-list register-benefits">
+              {customerBenefits.map((key) => <li key={key}><BadgeCheck size={17} aria-hidden="true" /> {t(`register.client.benefit.${key}`)}</li>)}
+            </ul>
+          </article>
+          <article className="register-preview-offer" data-offer="advertiser">
+            <div className="register-preview-offer-head">
+              <h2><UserRound size={20} aria-hidden="true" /> {t('register.path.advertiser')}</h2>
+              <em className="register-path-badge">{t('register.preview.soon')}</em>
+            </div>
+            <p className="register-preview-price">{t('register.advertiser.benefit.subscription')}</p>
+            <ul className="pr-check-list register-benefits">
+              {advertiserBenefits.filter((key) => key !== 'subscription').map((key) => <li key={key}><BadgeCheck size={17} aria-hidden="true" /> {t(`register.advertiser.benefit.${key}`)}</li>)}
+            </ul>
+          </article>
+          <div className="register-path is-disabled" aria-disabled="true" data-account-type="business">
+            <Building2 size={18} aria-hidden="true" />
+            <span><strong>{t('register.path.office')}</strong><small>{t('register.path.officeText')}</small></span>
+            <em className="register-path-badge">{t('register.path.comingSoon')}</em>
+          </div>
+        </div>
       </section>
     </div>
   );
