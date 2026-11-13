@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { config } from './config.js';
+import { waitlistCollectionOpen } from './waitlist.js';
 
 /**
  * PUBLIC PREVIEW gate (ER-V1-PUBLIC-PREVIEW-001).
@@ -43,6 +44,8 @@ export function publicPlatformStatus() {
     registration_open: commercial,
     advertiser_registration_open: commercial,
     purchases_enabled: commercial,
-    analytics_enabled: config.analyticsCollectionEnabled === true
+    analytics_enabled: config.analyticsCollectionEnabled === true,
+    // Interest list: independent flag; also false while the mail service is not configured.
+    waitlist_enabled: waitlistCollectionOpen()
   };
 }

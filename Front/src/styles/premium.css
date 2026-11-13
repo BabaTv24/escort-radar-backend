@@ -1040,6 +1040,39 @@ button.pr-kpi { cursor: pointer; }
 .pr-register .register-preview-offer h2 > svg { flex: 0 0 auto; color: var(--pr-gold); }
 .pr-register .register-preview-offer-head .register-path-badge { margin-left: 0; }
 @media (max-width: 520px) { .onboarding-shell.pr-auth .register-preview-offer h2 { font-size: 1.18rem; } }
+.pr-register .register-preview-interest { justify-self: start; margin-top: .35rem; white-space: normal; text-align: left; }
+
+/* Pre-launch interest list (public preview): button, modal and confirmation pages. */
+.waitlist-inline-link { padding: 0; border: 0; background: none; color: var(--pr-gold); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.waitlist-inline-link:focus-visible { outline: 2px solid var(--pr-gold); outline-offset: 2px; border-radius: 4px; }
+.waitlist-backdrop { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 16px; background: rgba(4, 3, 6, .78); backdrop-filter: blur(6px); overflow-y: auto; }
+.waitlist-modal { position: relative; width: min(100%, 480px); max-height: calc(100dvh - 32px); overflow-y: auto; gap: .7rem; padding: 1.5rem 1.35rem 1.25rem; border-color: rgba(244, 215, 127, .3); font-family: var(--pr-font); color: var(--pr-text); }
+.waitlist-modal .pr-eyebrow { margin: 0; color: var(--pr-gold); letter-spacing: .16em; font-size: .72rem; font-weight: 700; text-transform: uppercase; }
+.waitlist-close { position: absolute; top: .75rem; right: .75rem; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--pr-line); border-radius: 10px; background: rgba(255, 255, 255, .03); color: var(--pr-text-2); cursor: pointer; }
+.waitlist-close:hover { border-color: var(--pr-line-strong); color: var(--pr-text); }
+.waitlist-title { display: flex; align-items: center; gap: .55rem; margin: 0; padding-right: 2.5rem; font: 600 1.45rem/1.2 var(--pr-font-display); }
+.waitlist-title > svg { flex: 0 0 auto; color: var(--pr-gold); }
+.waitlist-price { margin: 0; color: var(--pr-gold); font-weight: 700; }
+.waitlist-form, .waitlist-done { display: grid; gap: .75rem; }
+.waitlist-form .pr-muted, .waitlist-done .pr-muted { margin: 0; color: var(--pr-muted); line-height: 1.5; }
+.waitlist-done p { margin: 0; display: flex; align-items: flex-start; gap: .45rem; line-height: 1.5; }
+.waitlist-done p > svg { flex: 0 0 auto; margin-top: .15rem; color: var(--pr-gold); }
+.waitlist-notices { display: grid; gap: .3rem; margin: 0; padding: .7rem .8rem; list-style: none; border: 1px solid var(--pr-line-soft); border-radius: 12px; background: rgba(255, 255, 255, .025); color: var(--pr-text-2); font-size: .84rem; line-height: 1.4; }
+.waitlist-notices li { display: flex; align-items: flex-start; gap: .45rem; }
+.waitlist-notices svg { flex: 0 0 auto; margin-top: .1rem; color: var(--pr-gold); }
+.waitlist-field { display: grid; gap: .35rem; color: var(--pr-text-2); font-size: .86rem; font-weight: 600; }
+.waitlist-field input { width: 100%; min-height: 46px; padding: .7rem .85rem; border: 1px solid var(--pr-line); border-radius: 12px; background: rgba(255, 255, 255, .04); color: var(--pr-text); font: 500 1rem/1.2 var(--pr-font); }
+.waitlist-field input:focus { outline: none; border-color: rgba(244, 215, 127, .6); box-shadow: 0 0 0 3px rgba(244, 215, 127, .12); }
+.waitlist-hp { position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; }
+.waitlist-consent { display: flex; align-items: flex-start; gap: .6rem; color: var(--pr-text-2); font-size: .84rem; line-height: 1.45; cursor: pointer; }
+.waitlist-consent input { flex: 0 0 auto; width: 18px; height: 18px; margin-top: .1rem; accent-color: var(--pr-gold); }
+.waitlist-consent a { color: var(--pr-gold); }
+.waitlist-submit { width: 100%; white-space: normal; }
+.waitlist-fineprint { margin: 0; color: var(--pr-muted-2); font-size: .76rem; line-height: 1.45; }
+.waitlist-page .waitlist-page-hero { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+.waitlist-page .onboarding-card { display: grid; gap: .9rem; }
+.waitlist-page .onboarding-card .pr-btn { justify-self: start; }
+.waitlist-page .onboarding-card h2 > svg { color: var(--pr-gold); flex: 0 0 auto; }
 .pr-register .register-preview-price { margin: 0; color: var(--pr-gold); font-weight: 700; }
 .pr-register .register-preview-offer .register-benefits { margin-top: .2rem; }
 .pr-auth .register-google.is-unavailable { opacity: .5; cursor: not-allowed; }

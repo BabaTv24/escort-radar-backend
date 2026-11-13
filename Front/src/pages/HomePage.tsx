@@ -4,6 +4,7 @@ import { ProfileCard } from '../components/ProfileCard';
 import { PremiumProfileTile } from '../components/PremiumProfileTile';
 import { useI18n } from '../i18n';
 import { RadarPanel } from '../components/RadarPanel';
+import { WaitlistInterestButton } from '../components/WaitlistInterest';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GeoPoint } from '../lib/geo';
 import { readSavedRadarRadius, readSavedSearchLocation, saveRadarRadius } from '../lib/geo';
@@ -109,10 +110,10 @@ export function HomePage() {
           <p className="tagline">{t('landing.lead')}</p>
           <div className="hero-actions">
             <Link to={radarHref} className="pr-btn is-primary"><RadioTower size={18} aria-hidden="true" /> {t('home.openRadar')}</Link>
-            <Link to="/register?type=client" className="pr-btn">{t('landing.ctaClient')}</Link>
+            <WaitlistInterestButton type="client_premium" source="fanpage" className="pr-btn" fallback={<Link to="/register?type=client" className="pr-btn">{t('landing.ctaClient')}</Link>} />
           </div>
           <p className="pr-landing-advertiser-link">
-            {t('landing.advertiserPrompt')} <Link to="/register?type=escort">{t('landing.ctaAdvertiser')}</Link>
+            {t('landing.advertiserPrompt')} <WaitlistInterestButton type="advertiser" source="fanpage" className="waitlist-inline-link" fallback={<Link to="/register?type=escort">{t('landing.ctaAdvertiser')}</Link>}>{t('waitlist.button.advertiser')}</WaitlistInterestButton>
             {' · '}
             <a
               href="#how-it-works"
@@ -156,7 +157,7 @@ export function HomePage() {
               {clientBenefits.map((key) => <li key={key}><BadgeCheck size={17} aria-hidden="true" /> {t(`landing.clients.benefit.${key}`)}</li>)}
             </ul>
             <div className="pr-landing-card-actions">
-              <Link to="/register?type=client" className="pr-btn is-primary">{t('landing.ctaClient')}</Link>
+              <WaitlistInterestButton type="client_premium" source="fanpage" fallback={<Link to="/register?type=client" className="pr-btn is-primary">{t('landing.ctaClient')}</Link>} />
               <Link to={radarHref} className="pr-btn is-ghost">{t('home.openRadar')}</Link>
             </div>
           </article>
@@ -173,7 +174,7 @@ export function HomePage() {
               {businessFeatures.map(({ key, Icon }) => <li key={key}><Icon size={17} aria-hidden="true" /> {t(`landing.business.feature.${key}`)}</li>)}
             </ul>
             <div className="pr-landing-card-actions">
-              <Link to="/register?type=escort" className="pr-btn is-primary">{t('landing.ctaAdvertiser')}</Link>
+              <WaitlistInterestButton type="advertiser" source="fanpage" fallback={<Link to="/register?type=escort" className="pr-btn is-primary">{t('landing.ctaAdvertiser')}</Link>} />
               <Link to="/pricing" className="pr-btn is-ghost">{t('nav.pricing')}</Link>
             </div>
           </article>
@@ -276,7 +277,7 @@ export function HomePage() {
         </div>
         <div className="pr-landing-card-actions">
           <Link to={radarHref} className="pr-btn is-primary"><RadioTower size={17} aria-hidden="true" /> {t('home.openRadar')}</Link>
-          <Link to="/register?type=escort" className="pr-btn">{t('landing.ctaAdvertiser')}</Link>
+          <WaitlistInterestButton type="advertiser" source="fanpage" className="pr-btn" fallback={<Link to="/register?type=escort" className="pr-btn">{t('landing.ctaAdvertiser')}</Link>} />
         </div>
       </section>
     </div>

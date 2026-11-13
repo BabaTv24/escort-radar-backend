@@ -16,6 +16,7 @@ import { TokenShopPage } from './pages/TokenShopPage';
 import { CoinWalletPage } from './pages/CoinWalletPage';
 import { ReferralPage } from './pages/ReferralPage';
 import { InstallAppPage } from './pages/InstallAppPage';
+import { WaitlistConfirmPage, WaitlistUnsubscribePage } from './pages/WaitlistPage';
 import { AgeGate } from './components/AgeGate';
 import { RouteSeo } from './components/RouteSeo';
 
@@ -50,6 +51,8 @@ export function App() {
           <Route path="/imprint" element={<LegalPage />} />
           <Route path="/legal-notice" element={<LegalPage />} />
           <Route path="/r/:referralCode" element={<ReferralPage />} />
+          <Route path="/waitlist/confirm" element={<WaitlistConfirmPage />} />
+          <Route path="/waitlist/unsubscribe" element={<WaitlistUnsubscribePage />} />
           <Route path="/legal/:page" element={<LegalPage />} />
         </Route>
       </Routes>

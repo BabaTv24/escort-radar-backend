@@ -8,6 +8,7 @@ export type PlatformStatus = {
   advertiser_registration_open: boolean;
   purchases_enabled: boolean;
   analytics_enabled: boolean;
+  waitlist_enabled: boolean;
 };
 
 /** Until the server answers, the UI assumes the public preview (the server default). Enforcement is server-side. */
@@ -17,7 +18,8 @@ export const PUBLIC_PREVIEW_STATUS: PlatformStatus = {
   registration_open: false,
   advertiser_registration_open: false,
   purchases_enabled: false,
-  analytics_enabled: false
+  analytics_enabled: false,
+  waitlist_enabled: false
 };
 
 let pending: Promise<PlatformStatus> | null = null;

@@ -18,6 +18,7 @@ type HermesImportPreview = HermesProfilePreview & {
 import { useI18n } from '../i18n';
 import { AdminReferralTree } from '../components/AdminReferralTree';
 import { AdminTrafficIntelligence } from '../components/AdminTrafficIntelligence';
+import { AdminLeadIntelligence } from '../components/AdminLeadIntelligence';
 import { AdminWindow, AdminWindowProvider } from '../components/AdminWindow';
 import { AdminSelectionCheckbox } from '../components/AdminSelectionCheckbox';
 import { AdminProfileExportReady } from '../components/AdminProfileExportReady';
@@ -215,6 +216,7 @@ const sections = [
       ['subscriptions', '/admin/subscriptions', Coins, 'admin.nav.subscriptions'],
       ['revenue', '/admin/revenue', BarChart3, 'admin.nav.revenue'],
       ['traffic', '/admin/traffic', BarChart3, 'admin.nav.traffic'],
+      ['leads', '/admin/leads', Mail, 'admin.nav.leads'],
       ['payments', '/admin/payments', WalletCards, 'admin.nav.transactions'],
       ['manual-payment-orders', '/admin/manual-payment-orders', WalletCards, 'admin.nav.manualPaymentOrders']
     ]
@@ -3165,6 +3167,7 @@ export function AdminPage() {
   function renderView() {
     if (view === 'referral-tree') return <AdminReferralTree token={token} />;
     if (view === 'traffic') return <AdminTrafficIntelligence token={token} />;
+    if (view === 'leads') return <AdminLeadIntelligence token={token} />;
     if (view === 'dashboard') {
       const registeredClients = stats.registered_clients || users.filter((user) => user.account_type === 'client').length;
       const activatedClients = stats.activated_clients || 0;

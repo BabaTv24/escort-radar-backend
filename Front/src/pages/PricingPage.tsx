@@ -5,6 +5,7 @@ import { useI18n } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { Seo } from '../components/Seo';
 import { usePlatformStatus } from '../lib/platformStatus';
+import { WaitlistInterestButton } from '../components/WaitlistInterest';
 
 /**
  * Checkout for the two products sold today (bank transfer, manually verified).
@@ -183,7 +184,10 @@ export function PricingPage() {
           </div>
           {platform.commercial_operations_enabled ? <p className="subscription-notice">{t('checkout.notPaidYet')}</p> : null}
           {!platform.commercial_operations_enabled ? (
-            <p className="subscription-notice" role="status">{t('preview.purchasesUnavailable')}</p>
+            <>
+              <p className="subscription-notice" role="status">{t('preview.purchasesUnavailable')}</p>
+              <WaitlistInterestButton type={productId === 'advertiser_30d' ? 'advertiser' : 'client_premium'} source="pricing" className="pr-btn is-primary" />
+            </>
           ) : !accessToken ? (
             <>
               <p>{t('checkout.loginRequired')}</p>

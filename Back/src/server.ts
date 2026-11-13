@@ -8,6 +8,7 @@ import { uploadsRouter } from './routes/uploads.js';
 import { reportsRouter } from './routes/reports.js';
 import { adminRouter } from './routes/admin.js';
 import { analyticsRouter, startTrafficRetention } from './routes/analytics.js';
+import { startWaitlistRetention, waitlistRouter } from './routes/waitlist.js';
 import { publicPlatformStatus } from './commercialOperations.js';
 import { paymentsRouter } from './routes/payments.js';
 import { bookingRequestsRouter } from './routes/bookingRequests.js';
@@ -80,6 +81,7 @@ app.get('/api/platform/status', (_req, res) => {
   res.json(publicPlatformStatus());
 });
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/waitlist', waitlistRouter);
 app.get('/api/media/image', (req, res, next) => { mediaImageHandler(req, res).catch(next); });
 app.use('/api/auth', authRouter);
 app.use('/api/profiles', profilesRouter);
@@ -117,4 +119,5 @@ app.listen(config.port, () => {
   console.log(`Escort Radar API listening on :${config.port}`);
   // Retention runs even while collection is disabled, so stored analytics never outlive their limit.
   startTrafficRetention();
+  startWaitlistRetention();
 });

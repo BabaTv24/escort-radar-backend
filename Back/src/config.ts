@@ -68,6 +68,14 @@ type Config = {
   analyticsTrustedProxyHops: number;
   /** Optional edge header that carries a verified client address (only if every request passes that edge). */
   analyticsClientIpHeader: string;
+  /** Pre-launch interest list (double opt-in). Missing = false; independent of commercialOperationsEnabled. */
+  waitlistCollectionEnabled: boolean;
+  /** Future launch announcement to confirmed leads. Missing = false; the admin send endpoint refuses while false. */
+  waitlistLaunchSendEnabled: boolean;
+  /** Dedicated SMTP account for interest-list mail. Without host, sender and token secret the list stays closed. */
+  waitlistSmtp: { host: string; port: number; secure: boolean; user: string; pass: string; from: string; replyTo: string };
+  /** Secret for stable unsubscribe links (HMAC). At least 32 characters. */
+  waitlistTokenSecret: string;
   hermesAnalyzeProfileUrl: string;
   hermesWebhookSecret: string;
   openAiApiKey: string;
@@ -157,6 +165,18 @@ export const config: Config = {
   analyticsCollectionEnabled: envBoolean('ANALYTICS_COLLECTION_ENABLED', false),
   analyticsTrustedProxyHops: Math.min(Math.max(Math.trunc(envNumber('ANALYTICS_TRUSTED_PROXY_HOPS', 1)), 0), 5),
   analyticsClientIpHeader: String(process.env.ANALYTICS_CLIENT_IP_HEADER || '').trim().toLowerCase(),
+  waitlistCollectionEnabled: envBoolean('WAITLIST_COLLECTION_ENABLED', false),
+  waitlistLaunchSendEnabled: envBoolean('WAITLIST_LAUNCH_SEND_ENABLED', false),
+  waitlistSmtp: {
+    host: String(process.env.WAITLIST_SMTP_HOST || '').trim(),
+    port: Math.trunc(envNumber('WAITLIST_SMTP_PORT', 587)),
+    secure: envBoolean('WAITLIST_SMTP_SECURE', false),
+    user: String(process.env.WAITLIST_SMTP_USER || '').trim(),
+    pass: process.env.WAITLIST_SMTP_PASS || '',
+    from: String(process.env.WAITLIST_MAIL_FROM || '').trim(),
+    replyTo: String(process.env.WAITLIST_MAIL_REPLY_TO || '').trim()
+  },
+  waitlistTokenSecret: process.env.WAITLIST_TOKEN_SECRET || '',
   hermesAnalyzeProfileUrl: process.env.HERMES_ANALYZE_PROFILE_URL || '',
   hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET || '',
   openAiApiKey: process.env.OPENAI_API_KEY || '',

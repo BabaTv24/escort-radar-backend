@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { ApiError, api } from '../lib/api';
 import { PREMIUM_CHECKOUT_INTENT_KEY, useOAuthProvider } from '../lib/authProviders';
 import { useI18n } from '../i18n';
+import { WaitlistInterestButton } from '../components/WaitlistInterest';
 
 // Business contract V1: customers register for Premium, individual advertisers register a listing.
 // The ESCORT Office Center (business, multi-profile) is a future product and cannot be selected.
@@ -283,6 +284,7 @@ function RegistrationPreview() {
             <ul className="pr-check-list register-benefits">
               {customerBenefits.map((key) => <li key={key}><BadgeCheck size={17} aria-hidden="true" /> {t(`register.client.benefit.${key}`)}</li>)}
             </ul>
+            <WaitlistInterestButton type="client_premium" source="register" className="pr-btn is-primary register-preview-interest" />
           </article>
           <article className="register-preview-offer" data-offer="advertiser">
             <div className="register-preview-offer-head">
@@ -293,6 +295,7 @@ function RegistrationPreview() {
             <ul className="pr-check-list register-benefits">
               {advertiserBenefits.filter((key) => key !== 'subscription').map((key) => <li key={key}><BadgeCheck size={17} aria-hidden="true" /> {t(`register.advertiser.benefit.${key}`)}</li>)}
             </ul>
+            <WaitlistInterestButton type="advertiser" source="register" className="pr-btn register-preview-interest" />
           </article>
           <div className="register-path is-disabled" aria-disabled="true" data-account-type="business">
             <Building2 size={18} aria-hidden="true" />

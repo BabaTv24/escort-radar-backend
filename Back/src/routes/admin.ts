@@ -24,6 +24,7 @@ import {
 } from '../validation.js';
 import { normalizePhone } from '../utils/identity.js';
 import { writeAdminAuditLog } from '../services/adminAudit.js';
+import { adminLeadsRouter } from './adminLeads.js';
 import { config } from '../config.js';
 import { signAdminToken } from '../utils/adminJwt.js';
 import { allowedServiceKeys } from '../serviceCatalog.js';
@@ -210,6 +211,7 @@ adminRouter.post('/login', asyncHandler(async (req, res) => {
 
 adminRouter.use(verifyAdminJwt, requireAdmin);
 adminRouter.use('/funpage-advertisement', adminFunPageAdvertisementRouter);
+adminRouter.use('/leads', adminLeadsRouter);
 
 adminRouter.post('/location/reverse-geocode', asyncHandler(async (req, res) => {
   try {

@@ -46,6 +46,46 @@ export type TrafficSummary = {
   countries: { country: string; page_views: number }[];
 };
 
+export type WaitlistInterestType = 'client_premium' | 'advertiser';
+export type WaitlistInterestRequest = {
+  email: string;
+  interest_type: WaitlistInterestType;
+  language: string;
+  consent: true;
+  consent_version: string;
+  source_page: string;
+  website: string;
+};
+export type LeadCount = { name: string; count: number };
+export type AdminLeadSummary = {
+  confirmed_people: number;
+  confirmed_total: number;
+  confirmed_client_premium: number;
+  confirmed_advertiser: number;
+  pending: number;
+  pending_expired: number;
+  new_confirmed_7d: number;
+  new_confirmed_30d: number;
+  submissions: number;
+  confirmation_rate: number | null;
+  unsubscribed: number;
+  languages: LeadCount[];
+  sources: LeadCount[];
+  submission_sources: LeadCount[];
+  daily: { day: string; client_premium: number; advertiser: number; submitted: number }[];
+};
+export type AdminLeadSummaryResponse = {
+  available: boolean;
+  reason?: string;
+  collection_enabled: boolean;
+  mail_configured: boolean;
+  launch_send_enabled: boolean;
+  consent_version: string;
+  retention: { pendingDays: number; unsubscribedDays: number; confirmedDays: number };
+  summary?: AdminLeadSummary;
+  announcements?: { interest_type: WaitlistInterestType; status: string; created_at: string; completed_at: string | null; recipients: number; sent: number; failed: number }[];
+};
+
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly payload?: Record<string, unknown>) {
     super(`HTTP ${status}: ${message}`);
@@ -716,6 +756,11 @@ export const api = {
   adminWallets: (token: string) => request<{ wallets: Wallet[] }>('/api/admin/wallets', { token }),
   adminTokenTransactions: (token: string) => request<{ transactions: TokenTransaction[] }>('/api/admin/token-transactions', { token }),
   adminClientActivationPayments: (token: string) => request<{ client_activation_payments: Record<string, unknown>[] }>('/api/admin/client-activation-payments', { token }),
+  // Pre-launch interest list (double opt-in). No account, no order, no payment.
+  waitlistInterest: (body: WaitlistInterestRequest) => request<{ ok: true; status: 'check_inbox' }>('/api/waitlist/interest', { method: 'POST', body: JSON.stringify(body) }),
+  waitlistConfirm: (token: string) => request<{ ok: true; status: 'confirmed'; interest_type: WaitlistInterestType }>('/api/waitlist/confirm', { method: 'POST', body: JSON.stringify({ token }) }),
+  waitlistUnsubscribe: (id: string, token: string) => request<{ ok: true; status: 'unsubscribed' }>('/api/waitlist/unsubscribe', { method: 'POST', body: JSON.stringify({ id, token }) }),
+  adminLeadSummary: (token: string, days = 30) => request<AdminLeadSummaryResponse>(`/api/admin/leads/summary?days=${days}`, { token }),
   adminTraffic: (token: string, days: number) => request<{ traffic: TrafficSummary; retention_days: number; analytics_collection_enabled: boolean; commercial_operations_enabled: boolean }>(`/api/admin/traffic?days=${days}`, { token }),
   adminManualPaymentOrders: (token: string) => request<{ orders: Record<string, unknown>[]; summary?: Record<string, number> }>('/api/admin/manual-payment-orders', { token }),
   approveManualPaymentOrder: (token: string, id: string, confirmation: { received_amount_eur: number; bank_reference?: string }) => request<{ order: Record<string, unknown>; already_applied?: boolean }>(`/api/admin/manual-payment-orders/${id}/approve`, {
